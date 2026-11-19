@@ -26,6 +26,7 @@ import webbrowser
 from comum import ROOT, dentro, ler_json, sha256
 from cadastrar_documentos import cadastrar, inventario, preparar_pdfs
 from ambiente import diagnostico
+import fontes_web
 import indice_achados
 import revisao_humana
 import caderno
@@ -111,7 +112,8 @@ def receber_documentos(root, data):
         if data.get('novo') and not case:
             case = 'apuracao_' + uuid.uuid4().hex
         return cadastrar(root, case, sources, titulo=data.get('titulo'),
-                         natureza=data.get('natureza', 'nao_informada'), novo=data.get('novo', False))
+                         natureza=data.get('natureza', 'nao_informada'), novo=data.get('novo', False),
+                         modo_fontes=data.get('modo_fontes'), dominio_web=data.get('dominio_web'))
 
 
 def catalogo(root):
@@ -213,6 +215,11 @@ def executar(root, operation, data, conta=None, originais_abertos=None):
         return receber_documentos(root, data)
     if operation == 'inventario':
         return inventario(root, data.get('caso'))
+    if operation == 'fontes-web-listar':
+        return fontes_web.listar(root, data.get('caso'))
+    if operation == 'fontes-web-capturar':
+        # Network access only for cases created in the "documentos + web" mode, on their single domain.
+        return fontes_web.capturar(root, data.get('caso'), data.get('url'), observacao=data.get('observacao'))
     if operation == 'preparar-pdfs':
         if not diagnostico()['extracao_pdf']['disponivel']:
             raise ValueError('O extrator de PDF não está disponível nesta instância. Encerre a Mesa e abra pelo iniciador atualizado.')
@@ -642,6 +649,7 @@ class Handler(BaseHTTPRequestHandler):
                             'codex-perguntar', 'codex-retomar', 'codex-eventos', 'codex-cancelar', 'codex-original',
                             'codex-desligar', 'codex-observacoes', 'codex-corpus-previa', 'codex-documentos-cadastrar', 'codex-caderno-previa', 'codex-diligencias-previa')
         if operation not in (*codex_operations, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES, *DILIGENCIAS_OPERACOES, 'analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario',
+                             'fontes-web-listar', 'fontes-web-capturar',
                              'ambiente', 'preparar-pdfs',
                              'gerenciar-listar', 'excluir', 'restaurar', 'lixeira-alcance', 'lixeira-apagar', *IA_OPERACOES, *CONTAS_OPERACOES, 'sessao-sair',
                              'achados-revisao-salvar',

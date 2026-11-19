@@ -20,6 +20,7 @@ from criar_caso import EXTENSOES
 import ocr
 from extrair_pdf import extrair_pdf
 from lixeira import conferir_disponivel
+import fontes_web as fontes_web_mod
 
 
 @contextmanager
@@ -76,18 +77,24 @@ def inventario(root, caso):
                             'derivados': len(d.get('derivados', [])),
                             'extracao_pdf': d.get('extracao_pdf')} for d in manifest['documentos']],
             'recibos': manifest.get('registros_cadastro', []),
+            'fontes_web': fontes_web_mod.modo_do_caso(manifest),
+            'capturas_web': len(manifest.get('capturas_web', [])),
             'estado': 'cadastrado_aguardando_pergunta'}
 
 
-def cadastrar(root, caso, sources, *, titulo=None, natureza='nao_informada', novo=False):
+def cadastrar(root, caso, sources, *, titulo=None, natureza='nao_informada', novo=False,
+              modo_fontes=None, dominio_web=None):
     if not isinstance(caso, str) or not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}', caso):
         raise ValueError('ID do caso: letras minúsculas, números, hífen ou underscore; até 64 caracteres.')
     if natureza not in ('publicos', 'sinteticos', 'nao_informada'):
         raise ValueError('Natureza documental inválida.')
     if not sources:
         raise ValueError('Envie pelo menos um arquivo.')
+    if not novo and (modo_fontes or dominio_web):
+        raise ValueError('O modo de fontes (somente documentos ou documentos + web) só é escolhido na criação do caso.')
+    fontes_web = fontes_web_mod.definir_modo(modo_fontes, dominio_web) if novo else None
     with _trava(root):
-        return _cadastrar(root, caso, sources, titulo, natureza, novo)
+        return _cadastrar(root, caso, sources, titulo, natureza, novo, fontes_web=fontes_web)
 
 
 def preparar_pdfs(root, caso):
@@ -125,7 +132,7 @@ def _resumo_pdfs(pdfs, processed):
             'protegidos': sum(bool(i.get('protegido')) for i in infos)}
 
 
-def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_documentos'):
+def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_documentos', fontes_web=None):
     conferir_disponivel(root, caso)
     destination = dentro(root, f'casos/{caso}')
     catalog_path = dentro(root, 'casos/catalogo.json')
@@ -141,6 +148,7 @@ def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_do
         manifest_before = None
         manifest = {'versao': '1.0.0', 'caso_id': caso, 'titulo': title.strip(),
                     'natureza_informada': nature, 'corpus_id': f'{caso}_v1',
+                    'fontes_web': fontes_web or fontes_web_mod.definir_modo(),
                     'estado': 'preparado_sem_piloto_de_apuracao',
                     'protocolo': {'piloto_estabilizado': False, 'teste_principal_autorizado': False},
                     'documentos': [], 'registros_cadastro': []}
@@ -293,6 +301,9 @@ def main():
     parser.add_argument('--novo', action='store_true')
     parser.add_argument('--titulo')
     parser.add_argument('--natureza', choices=['publicos', 'sinteticos', 'nao_informada'], default='nao_informada')
+    parser.add_argument('--modo-fontes', choices=fontes_web_mod.MODOS, default=None,
+                        help='Só com --novo: somente_documentos (padrão) ou documentos_e_web.')
+    parser.add_argument('--dominio-web', help='Só com --modo-fontes documentos_e_web: domínio único permitido.')
     args = parser.parse_args()
     if args.preparar_pdfs:
         if args.novo or args.titulo:
@@ -300,7 +311,8 @@ def main():
         result = preparar_pdfs(ROOT, args.caso)
     else:
         result = cadastrar(ROOT, args.caso, [Path(p) for p in args.documentos], titulo=args.titulo,
-                           natureza=args.natureza, novo=args.novo)
+                           natureza=args.natureza, novo=args.novo,
+                           modo_fontes=args.modo_fontes, dominio_web=args.dominio_web)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

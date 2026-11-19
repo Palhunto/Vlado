@@ -15,6 +15,7 @@ import uuid
 from comum import dentro, escrever_json, ler_json, sha256
 from cadastrar_documentos import _atomico, _bytes, _trava, inventario
 from inferencia_api import CHAVES, ErroIA, ServidorAPI, seguro
+from fontes_web import documentos_e_capturas
 from indice_sqlite import _entradas, construir_snapshot, cobertura, ler_passagem, pesquisar
 from nova_rodada import _criar_rodada, preparar_pasta_rodada
 from fluxo_codex import Fluxo, ETAPAS
@@ -321,7 +322,9 @@ class Conversas:
     def _apresentacao(manifest):
         return {'titulo': manifest.get('titulo'), 'corpus_id': manifest['corpus_id'],
                 'documentos': [{k: d.get(k) for k in ('id', 'nome_recebido', 'arquivo', 'paginas_pdf', 'extracao_pdf')}
-                              for d in manifest['documentos']]}
+                              for d in manifest['documentos']],
+                'capturas_web': [{k: c.get(k) for k in ('id', 'url_final', 'acessado_em_utc', 'sha256')}
+                                 for c in manifest.get('capturas_web', [])]}
 
     def observacoes(self, data):
         """Preview validated feedback and resolve its original conversation, if any."""
@@ -1167,7 +1170,7 @@ class Conversas:
             self._reference(identifier, {**hit, 'rodada': round_id, 'geracao': 'v1',
                             'indice_id': result['indice_id'], 'banco_sha256': result['banco_sha256']})
         elif action in ('texto', 'imagem'):
-            document = next((d for d in manifest['documentos'] if d['id'] == args.get('documento')), None)
+            document = next((d for d in documentos_e_capturas(manifest) if d['id'] == args.get('documento')), None)
             if not document:
                 raise ValueError('Documento fora do corpus.')
             path = dentro(run, 'entradas/' + document['arquivo'])
@@ -1239,7 +1242,7 @@ class Conversas:
 
     def _reference(self, identifier, hit):
         manifest = self.contexts[identifier].get('manifest', {})
-        document = next((d for d in manifest.get('documentos', []) if d['id'] == hit['documento_id']), None)
+        document = next((d for d in documentos_e_capturas(manifest) if d['id'] == hit['documento_id']), None)
         if document:
             hit['nome_documento'] = document.get('nome_recebido') or Path(document['arquivo']).name
         self.contexts[identifier]['references'][hit['referencia']] = hit

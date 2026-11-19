@@ -9,6 +9,7 @@ import shutil
 from comum import (ROOT, arquivos_do_corpus, arquivos_do_cadastro, carregar_corpus, conferir_projeto,
                    escrever_json, sha256, VERSAO_PROMPTS, pasta_preparacao)
 from cadastrar_documentos import _trava
+from fontes_web import arquivos_web, modo_do_caso
 
 
 @contextmanager
@@ -70,6 +71,9 @@ def _criar_rodada(root: Path, identifier: str, question: str, *, tipo='piloto', 
         inputs.mkdir(parents=True)
         paths = list(arquivos_do_corpus(root, manifest))
         paths += list(arquivos_do_cadastro(root, manifest))
+        # Web captures exist only in cases created in the "documentos + web" mode.
+        web = list(arquivos_web(root, manifest))
+        paths += web
         paths += [(str(manifest_path.relative_to(root)), manifest_path)]
         paths += [('AGENTS.md', root / 'AGENTS.md'), ('configuracao.json', root / 'configuracao.json')]
         if (root / 'README.md').is_file():
@@ -96,7 +100,11 @@ def _criar_rodada(root: Path, identifier: str, question: str, *, tipo='piloto', 
             'criada_em_utc': datetime.now(timezone.utc).isoformat(),
             'corpus_id': manifest['corpus_id'], 'versao_prompts': VERSAO_PROMPTS,
             'modelo_informado': modelo, 'modelo_observado_pelo_agente': None,
-            'ferramentas_usadas': [], 'web_usada': False, 'conferencia_humana': 'nao_realizada',
+            'ferramentas_usadas': [], 'web_usada': bool(manifest.get('capturas_web')),
+            'modo_fontes': modo_do_caso(manifest)['modo'],
+            'dominio_web_permitido': modo_do_caso(manifest).get('dominio_permitido'),
+            'capturas_web_congeladas': len(manifest.get('capturas_web', [])),
+            'conferencia_humana': 'nao_realizada',
             'etapas_concluidas': [], 'contaminacao_conhecida': None,
             'observacao': 'Snapshot de arquivos; nao captura automaticamente a conversa nem comprova inferencia.',
         }

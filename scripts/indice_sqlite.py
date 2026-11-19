@@ -11,6 +11,7 @@ import sqlite3
 import uuid
 
 from comum import dentro, escrever_json, ler_json, sha256, pasta_preparacao
+from fontes_web import documentos_e_capturas
 
 ESQUEMA = 1
 IMPLEMENTACAO = '1.0.0'
@@ -118,9 +119,9 @@ def _entradas(run: Path, caso: str, rodada: str):
     manifest = ler_json(manifest_path)
     if manifest.get('caso_id') != caso:
         raise ValueError('Caso diverge do manifesto congelado.')
-    documents = manifest.get('documentos', [])
-    if not documents:
+    if not manifest.get('documentos'):
         raise ValueError('Manifesto documental vazio.')
+    documents = documentos_e_capturas(manifest)
     sources, identifiers, paths = [], set(), set()
     for document in documents:
         identifier = document['id']
@@ -255,14 +256,15 @@ def construir_snapshot(run: Path, caso: str, rodada: str, geracao='v1') -> dict:
             con.executescript(DDL)
             with con:
                 con.execute('INSERT INTO metadados VALUES (?,?)', ('descriptor', _json(descriptor)))
-                for document in sorted(manifest['documentos'], key=lambda x: x['id']):
+                documents = documentos_e_capturas(manifest)
+                for document in sorted(documents, key=lambda x: x['id']):
                     con.execute('INSERT INTO documentos VALUES (?,?,?,?,?)',
                                 (document['id'], Path(document['arquivo']).as_posix(), document['sha256'],
                                  document.get('nome_recebido') or Path(document['arquivo']).name,
                                  _json(document.get('origem_informada'))))
                 for source in descriptor['fontes']:
                     path = dentro(run, f"entradas/{source['arquivo']}")
-                    document = next(x for x in manifest['documentos'] if x['id'] == source['documento_id'])
+                    document = next(x for x in documents if x['id'] == source['documento_id'])
                     adapter, method, units = _adaptar(path, document['id'], document['sha256'], source['tipo'])
                     source_id = _identidade(source)
                     con.execute('INSERT INTO fontes VALUES (?,?,?,?,?,?,?)',
