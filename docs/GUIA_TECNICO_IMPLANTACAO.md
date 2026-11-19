@@ -29,28 +29,29 @@ A interface mostra uma faixa "Homologação — dados sintéticos" ou "Demonstra
 cp deploy/ambientes/editorial.env.example deploy/ambientes/editorial.env
 ```
 
-Edite o arquivo (domínio, versão). Depois suba:
+Edite o domínio e a tag da imagem. Para uma primeira publicação com convidados e documentos públicos ou sintéticos, use o exemplo de `demonstracao` e mantenha os volumes dessa instância separados. Reserve um servidor Linux com Docker Compose v2, confirme o IP público e aponte o DNS para ele. Publique as portas 80 e 443 do Caddy e acesse pelo domínio para validar o certificado. Para um acervo pequeno, o ponto de partida é 2 vCPU, 4 GB de RAM e pelo menos 20 GB de disco.
+
+Em toda operação, passe o mesmo nome de projeto e o mesmo arquivo de ambiente. O primeiro comando abaixo valida a configuração sem mostrar chaves do provedor.
 
 ```bash
+docker compose -p vlado-editorial --env-file deploy/ambientes/editorial.env config --quiet
 docker compose -p vlado-editorial --env-file deploy/ambientes/editorial.env up -d --build
 ```
 
-O `-p` prefixa os volumes (`vlado-editorial_casos`, …). Troque `editorial` por `homologacao` ou `demonstracao` para os outros. Para homologar na própria máquina: `VLADO_DOMINIO=localhost`, `VLADO_CADDYFILE=deploy/Caddyfile.interno`, `VLADO_PORTA_HTTP=8080`, `VLADO_PORTA_HTTPS=8443` (CA interna do Caddy; o navegador precisa confiar no certificado raiz).
+O `-p` prefixa os volumes (`vlado-editorial_casos`, …). Troque `editorial` por `homologacao` ou `demonstracao` para os outros. Para homologar só na própria máquina, configure `VLADO_DOMINIO=localhost`, `VLADO_CADDYFILE=deploy/Caddyfile.interno`, `VLADO_PORTA_HTTP=127.0.0.1:8080`, `VLADO_PORTA_HTTPS=127.0.0.1:8443` e `VLADO_ORIGEM=https://localhost:8443`. Abra diretamente a URL HTTPS e use a CA da instância para verificar o certificado. No servidor com HTTPS padrão (443), deixe `VLADO_ORIGEM` ausente.
 
 Semear dados sintéticos (só homologação e demonstração; o script recusa o editorial):
 
 ```bash
-docker compose -p vlado-demonstracao exec vlado python scripts/semear_ambiente.py --origem https://SEU_DOMINIO_DEMO --saida /app/acesso/links_demo.txt
+docker compose -p vlado-demonstracao --env-file deploy/ambientes/demonstracao.env exec vlado python scripts/semear_ambiente.py --origem https://SEU_DOMINIO_DEMO --saida /app/acesso/links_demo.txt
 ```
 
 Os links de ativação das contas `demo.admin`, `demo.convidado1` e `demo.convidado2` ficam nesse arquivo 0600; entregue-os e apague o arquivo.
 
-Requisitos: Docker com Compose v2; portas 80/443 alcançáveis (certificado automático); DNS do domínio apontando para o servidor; 2 vCPU, 4 GB de RAM e 20 GB de disco bastam para um acervo pequeno.
-
 ## 2. Conferir depois de subir
 
 ```bash
-docker compose -p vlado-editorial ps
+docker compose -p vlado-editorial --env-file deploy/ambientes/editorial.env ps
 ```
 
 O serviço `vlado` deve estar `healthy`. Depois, de fora do servidor:
@@ -67,12 +68,16 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://SEU_DOMINIO/api/catalogo
 
 Esperado: `401`. Confira também o certificado (cadeado válido) e o cabeçalho `Strict-Transport-Security`.
 
+Antes de distribuir os convites, use um corpus público ou sintético para conferir o login, o acesso aos casos por conta, o cadastro e a abertura de um PDF. Reinicie os contêineres e confira que os dados continuam disponíveis. Faça um backup e teste a restauração em volumes de homologação separados. Configure a chave no servidor e os limites de uso antes da primeira pergunta pela API.
+
+Em 15/11/2026, a homologação local da base `9b8f38e` com os ajustes de implantação confirmou o build, HTTPS com CA interna validada, HSTS, recusa do catálogo sem sessão e o login de três contas sintéticas. Cada convidado viu apenas seu caso. As contas e os casos persistiram após reiniciar o serviço. O backup sintético estava legível e excluiu segredos. O teste rodou com portas restritas a `127.0.0.1`. DNS, certificado público e operação fora da máquina serão conferidos no servidor escolhido.
+
 ## 3. Primeiro administrador
 
 Só a administração cria contas. O primeiro administrador é criado no servidor, e o link de ativação sai **uma única vez**:
 
 ```bash
-docker compose -p vlado-editorial exec vlado python scripts/acesso.py criar-admin --nome "Nome da pessoa" --login nome.sobrenome --origem https://SEU_DOMINIO
+docker compose -p vlado-editorial --env-file deploy/ambientes/editorial.env exec vlado python scripts/acesso.py criar-admin --nome "Nome da pessoa" --login nome.sobrenome --origem https://SEU_DOMINIO
 ```
 
 - Entregue o link por canal seguro (pessoalmente ou mensageiro com criptografia de ponta a ponta), nunca por e-mail aberto, chamado, planilha ou captura de tela.
@@ -85,11 +90,11 @@ docker compose -p vlado-editorial exec vlado python scripts/acesso.py criar-admi
 Pela Mesa (área **Apurações e lixeira › Contas**) ou pela linha de comando:
 
 ```bash
-docker compose -p vlado-editorial exec vlado python scripts/acesso.py criar-conta --nome "Convidada" --login convidada.a --casos caso_x --cota 20 --origem https://SEU_DOMINIO
+docker compose -p vlado-editorial --env-file deploy/ambientes/editorial.env exec vlado python scripts/acesso.py criar-conta --nome "Convidada" --login convidada.a --casos caso_x --cota 20 --origem https://SEU_DOMINIO
 ```
 
 ```bash
-docker compose -p vlado-editorial exec vlado python scripts/acesso.py listar
+docker compose -p vlado-editorial --env-file deploy/ambientes/editorial.env exec vlado python scripts/acesso.py listar
 ```
 
 | Papel | Pode |
@@ -106,7 +111,7 @@ docker compose -p vlado-editorial exec vlado python scripts/acesso.py listar
 Senha esquecida, link vencido ou suspeita de vazamento:
 
 ```bash
-docker compose -p vlado-editorial exec vlado python scripts/acesso.py recuperar ID --origem https://SEU_DOMINIO
+docker compose -p vlado-editorial --env-file deploy/ambientes/editorial.env exec vlado python scripts/acesso.py recuperar ID --origem https://SEU_DOMINIO
 ```
 
 Isso encerra todas as sessões da conta, apaga a senha e emite um link novo (mesmas regras de entrega do item 3). Se a única conta de administração se perder, a recuperação acima pelo servidor é o caminho.
@@ -122,13 +127,13 @@ Na Mesa, **Perguntar à IA › Conexão e opções**: provedor, modelo (opcional
 O backup leva casos, conversas, rodadas, lixeira, entrada, contas (`acesso/`, com os hashes de senha) e ajustes. As chaves de API só entram com `--incluir-segredos`. **O arquivo é sensível**: contém material de reportagem e os hashes de senha; guarde-o cifrado e fora do servidor.
 
 ```bash
-docker compose -p vlado-editorial exec -T vlado python scripts/backup.py criar --destino - > vlado-editorial-AAAAMMDD.tar.gz
+docker compose -p vlado-editorial --env-file deploy/ambientes/editorial.env exec -T vlado python scripts/backup.py criar --destino - > vlado-editorial-AAAAMMDD.tar.gz
 ```
 
 Restaurar (pare o uso durante a restauração; ela troca o conteúdo **dentro** de cada pasta, então funciona com volumes Docker montados, inclusive volumes novos):
 
 ```bash
-docker compose -p vlado-editorial exec -T vlado python scripts/backup.py restaurar - --substituir < vlado-editorial-AAAAMMDD.tar.gz
+docker compose -p vlado-editorial --env-file deploy/ambientes/editorial.env exec -T vlado python scripts/backup.py restaurar - --substituir < vlado-editorial-AAAAMMDD.tar.gz
 ```
 
 - A restauração apaga as sessões (todos entram de novo) e restaura contas e senhas do momento do backup.

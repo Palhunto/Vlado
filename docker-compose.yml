@@ -12,6 +12,8 @@ services:
     restart: unless-stopped
     environment:
       VLADO_DOMINIO: ${VLADO_DOMINIO:?defina VLADO_DOMINIO no arquivo .env}
+      # Set only when the client-visible HTTPS origin includes a nonstandard port.
+      VLADO_ORIGEM: ${VLADO_ORIGEM:-}
       VLADO_AMBIENTE: ${VLADO_AMBIENTE:?defina VLADO_AMBIENTE (homologacao, editorial ou demonstracao)}
       # The app sits behind this Caddy only: trust the last X-Forwarded-For hop for login rate limits.
       VLADO_CONFIAR_PROXY: "1"

@@ -2,6 +2,12 @@
 .gitignore
 .dockerignore
 .venv
+.ferramentas
+build
+dist
+entrega_intercept
+entrega_intercept.*
+android/saidas
 .claude-flow
 **/__pycache__
 *.py[cod]
@@ -9,6 +15,9 @@
 .env
 .env.*
 !.env.example
+deploy/ambientes/*.env
+**/*.pem
+**/*.key
 node_modules
 testes
 referencia_original
