@@ -249,3 +249,33 @@ Uma única execução completa limpa não prova a ausência de intermitência. A
 ### Para o commit
 
 As correções são só de teste (`testes/test_continuar_documentos.py` e `testes/test_retomada_codex.py`) e entram no commit `fix:` próprio previsto na tarefa de commits, separado das correções Windows 2.0.4. Sugestão de mensagem: `fix: testes esperam o fim da execução pela trava do gerenciador`. O roteiro de reprodução fica em `.maestro/` e não entra em commit.
+
+## Cobertura do aplicativo empacotado
+
+Levantamento feito em 2026-11-19, sem chaves de API no ambiente (`env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY`) e com o Python do `.venv` (3.12). Nenhuma chamada de rede ou paga.
+
+### O que já existe
+
+Procurei por `vlado_lancador`, `PyInstaller`, `sys._MEIPASS`, `frozen`, `--verificar-https` e provedores simulados em `testes/`, `scripts/` e `docs/INSTALADOR_WINDOWS.md`. Não existe teste que execute o `Vlado.exe` congelado. A cobertura atual é indireta:
+
+| Item | Onde | Como exercita | Resultado observado |
+| --- | --- | --- | --- |
+| Esquema de achados lido de `sys._MEIPASS` | `testes/test_achados.py::test_schema_carregado_do_pacote_windows` | simula `_MEIPASS` com `patch.object` e recarrega `registros_achados.py` | `test_achados`: 13 testes, OK |
+| Primeira pergunta e complemento (R001→R002) com limite de caminho Win32 | `testes/test_extracao_cadastro_pdf.py::test_primeira_pergunta_e_complemento_com_limite_de_caminho_do_windows` | simula o limite de 248/259 caracteres numa raiz `AppData\Local\Vlado` fictícia, com `FakeServer` | `test_extracao_cadastro_pdf`: 10 testes, OK |
+| Retomada após falha na mesma rodada | `testes/test_retomada_codex.py` | provedor falso, sem chamadas de modelo | 14 testes, OK |
+| Continuação com novos documentos (R002) | `testes/test_continuar_documentos.py` | provedor falso | 7 testes, OK |
+| Clientes HTTPS no modo de desenvolvimento | `scripts/vlado_lancador.py --verificar-https` | conferi no código antes de rodar: `_verificar_https` só constrói `openai.OpenAI` e `anthropic.Anthropic` com a chave fictícia `vlado-build-test-key` e chama `close()`. Não faz requisição | código de saída 0 |
+| Clientes HTTPS no executável congelado | `build/instalador/pyinstaller/Vlado/Vlado.exe --verificar-https` | mesmo modo, no executável PyInstaller já existente em `build/` (fora do git) | código de saída 0 |
+| Esquema empacotado | `build/.../_internal/modelo_dados/modelos/ACHADOS.schema.json` | SHA-256 comparado com `modelos/ACHADOS.schema.json` | idênticos |
+
+Ressalva sobre o executável: não gerei um build novo. O `Vlado.exe` em `build/` tem data de 2026-11-16 14:55. Todos os arquivos-fonte do diff 2.0.4 foram modificados antes disso (o último foi `scripts/registros_achados.py`, às 14:50). Pelas datas, o executável corresponde ao código commitado, mas isso não foi comprovado por hash de conteúdo. O PyInstaller 6.16.0 está instalado no `.venv`. O Inno Setup (`ISCC`) não foi encontrado no PATH nem em `Program Files (x86)`, então `scripts/gerar_instalador.py` completo não roda nesta máquina. O `dist/Vlado-Setup.exe` existente (2026-11-16 14:59) não foi instalado nem executado.
+
+### Lacunas para as fases seguintes
+
+- **Executável congelado com provedor simulado:** nenhum teste sobe o `Vlado.exe` e executa uma pergunta contra um provedor falso. Os testes atuais rodam os módulos Python a partir do repositório.
+- **R001→R002 no executável:** o limite de caminho do Windows é testado por simulação sobre `pathlib`/`shutil`. Falta validar numa instalação real, em `%LOCALAPPDATA%\Vlado`, com um nome de usuário longo.
+- **Retomada após falha no executável:** está coberta só em modo de desenvolvimento (`test_retomada_codex`). Falta exercitar o fechamento e a reabertura do aplicativo instalado (`InstanciaUnica`, `reabrir_instancia`) no meio de uma execução.
+- **Esquema de achados no executável:** o carregamento de `_MEIPASS` é simulado. Falta publicar achados pelo aplicativo congelado.
+- **Cliente HTTPS dos dois provedores:** `--verificar-https` confirma apenas a construção dos clientes (TLS e certificados empacotados). Uma conexão real exige chave e pode gerar custo. Falta um teste de handshake TLS contra um servidor local com certificado de teste, ou uma verificação manual autorizada.
+- **Build reproduzível:** falta gerar o instalador de novo a partir dos commits desta branch, registrar o SHA-256 e comparar com `dist/Vlado-Setup.exe.sha256`. Isso depende do Inno Setup.
+- **OCR empacotado:** `configurar_ocr` e o desvio `-m ocrmypdf` do lançador (os workers do OCRmyPDF entram de novo no executável) não têm teste no executável.
