@@ -37,7 +37,10 @@ SO_ADMIN = (
     'hipoteses-listar', 'hipoteses-detalhe', 'hipoteses-quadro', 'hipoteses-criar', 'hipoteses-atualizar',
     'linha-tempo-listar', 'linha-tempo-detalhe', 'linha-tempo-criar', 'linha-tempo-atualizar',
     'comparar-evidencias', 'comparar-documentos', 'mapa-ver', 'mapa-homonimos', 'mapa-entidade-criar',
-    'mapa-entidade-atualizar', 'mapa-relacao-criar', 'mapa-relacao-atualizar')
+    'mapa-entidade-atualizar', 'mapa-relacao-criar', 'mapa-relacao-atualizar',
+    # Investigation tables (scripts/rotas_tabelas.py): admin only.
+    'tabelas-listar', 'tabelas-detalhe', 'tabelas-historico-celula', 'tabelas-calcular', 'tabelas-criar',
+    'tabelas-atualizar', 'tabelas-corrigir', 'tabelas-exportar')
 
 
 class Http(unittest.TestCase):

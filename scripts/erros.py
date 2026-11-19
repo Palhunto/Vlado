@@ -83,6 +83,27 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('evidencia_fora_da_revisao', r'^Evidência não pertence a esta revisão'),
     ('documento_sem_original', r'^Documento sem original congelado nesta rodada'),
     ('documento_sem_texto', r'^(?P<documento>[A-Za-z0-9][A-Za-z0-9_-]{0,63}) não tem texto utilizável nesta rodada'),
+    # Investigation tables (tabelas_apuracao via rotas_tabelas): cells, corrections and calculations.
+    ('tabela_coluna_invalida', r'^Coluna inválida'),
+    ('tabela_colunas_registradas', r'^As colunas já registradas não mudam'),
+    ('tabela_linha_invalida', r'^Linha inválida'),
+    ('tabela_celula_invalida', r'^Célula inválida'),
+    ('tabela_celula_inexistente', r'^Célula inexistente nesta tabela'),
+    ('tabela_celula_registrada', r'^Célula já registrada \((?P<celula>[^)]{1,60})\)'),
+    ('tabela_valor_invalido', r'^Valor inválido em (?P<celula>\S{1,60}):'),
+    ('tabela_fonte_invalida', r'^Fonte da célula'),
+    ('tabela_fonte_em_uso', r'^Evidência ainda é fonte de célula'),
+    ('tabela_fonte_indisponivel', r'^Fonte indicada indisponível \(evidência (?P<evidencia>\d+)\)'),
+    ('tabela_grande_demais', r'^Tabela grande demais'),
+    ('tabela_versao_inexistente', r'^Versão da tabela inexistente'),
+    ('correcao_sem_justificativa', r'^Para corrigir uma célula, informe a justificativa \((?P<celula>[^)]{1,60})\)'),
+    ('correcao_invalida', r'^Correção inválida'),
+    ('calculo_unidades_incompativeis', r'^Cálculo recusado: unidades ou moedas diferentes'),
+    ('calculo_celula_sem_valor', r'^Cálculo recusado: célula sem valor'),
+    ('calculo_recusado', r'^Cálculo recusado'),
+    ('calculo_invalido', r'^Cálculo inválido'),
+    ('calculo_inexistente', r'^Cálculo não encontrado nesta tabela'),
+    ('exportacao_formato_invalido', r'^Formato de exportação inválido'),
 )
 _COMPILADOS = tuple((codigo, re.compile(padrao)) for codigo, padrao in PADROES)
 

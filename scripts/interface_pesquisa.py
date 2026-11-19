@@ -33,6 +33,7 @@ import apuracao
 import exportar_apuracao
 import diligencias
 import rotas_evidencia
+import rotas_tabelas
 import erros
 from codex_apuracao import Conversas
 from inferencia_api import resumo_inferencia, salvar_inferencia
@@ -216,6 +217,9 @@ def executar(root, operation, data, conta=None, originais_abertos=None, casos=No
     if operation in rotas_evidencia.OPERACOES:
         # Evidence boards: field whitelist and case checks live in rotas_evidencia; no model or network.
         return rotas_evidencia.executar(root, operation, data, conta, casos)
+    if operation in rotas_tabelas.OPERACOES:
+        # Investigation tables: cells point to evidence; same case checks as the boards; no model or network.
+        return rotas_tabelas.executar(root, operation, data, conta, casos)
     if operation == 'cadastrar':
         return receber_documentos(root, data)
     if operation == 'inventario':
@@ -522,7 +526,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {'codex': True, 'protocolo_interface': 1, 'gerenciamento': True,
                              'apresentacao_editorial': True, 'preparacao_pdfs': True,
                              'revisao_humana': True, 'continuar_observacoes': True, 'continuar_documentos': True, 'caderno_humano': True, 'diligencias': True, 'quadros_evidencia': True,
-                             'extracao_pdf': self.server.ambiente['extracao_pdf']})
+                             'tabelas_apuracao': True, 'extracao_pdf': self.server.ambiente['extracao_pdf']})
             return
         if path == '/api/catalogo':
             try:
@@ -622,7 +626,8 @@ class Handler(BaseHTTPRequestHandler):
             # Guests only call small JSON operations: never read a large body before the role check.
             maximum = (32768 if principal is not None and principal['papel'] != 'admin'
                        else 72 * 1024 * 1024 if operation in ('cadastrar', 'codex-documentos-cadastrar')
-                       else 2 * 1024 * 1024 if operation in (*apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS)
+                       else 2 * 1024 * 1024 if operation in (*apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS,
+                                                             *rotas_tabelas.SALVAR)
                        else 128 * 1024 if operation in ('caderno-salvar', 'diligencias-criar', 'diligencias-atualizar', 'diligencias-responder',
                                                      *rotas_evidencia.SALVAR) else 32768)
             if not 0 < length <= maximum:
@@ -649,7 +654,7 @@ class Handler(BaseHTTPRequestHandler):
         codex_operations = ('codex-status', 'codex-listar',
                             'codex-perguntar', 'codex-retomar', 'codex-eventos', 'codex-cancelar', 'codex-original',
                             'codex-desligar', 'codex-observacoes', 'codex-corpus-previa', 'codex-documentos-cadastrar', 'codex-caderno-previa', 'codex-diligencias-previa')
-        if operation not in (*codex_operations, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES, *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, 'analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario',
+        if operation not in (*codex_operations, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES, *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, 'analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario',
                              'ambiente', 'preparar-pdfs',
                              'gerenciar-listar', 'excluir', 'restaurar', 'lixeira-alcance', 'lixeira-apagar', *IA_OPERACOES, *CONTAS_OPERACOES, 'sessao-sair',
                              'achados-revisao-salvar',
@@ -692,6 +697,12 @@ class Handler(BaseHTTPRequestHandler):
                     state = apuracao.listar(self.server.root, data.get('caso'))
                 content, mime = exportar_apuracao.exportar(state, data.get('formato'))
                 self._send(200, content, mime, {'Content-Disposition': f'attachment; filename="caderno.{data["formato"]}"'})
+                return
+            elif operation == rotas_tabelas.EXPORTAR:
+                with self.server.cadastro_lock:
+                    name, content = rotas_tabelas.exportar(self.server.root, data, casos=principal['casos'])
+                self._send(200, content, 'text/csv; charset=utf-8',
+                           {'Content-Disposition': f'attachment; filename="{name}"'})
                 return
             elif operation == 'apuracao-original':
                 with self.server.cadastro_lock:
