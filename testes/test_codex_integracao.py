@@ -12,10 +12,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from comum import PARTES, escrever_json, fluxo_esperado, manifesto_prompts, sha256
 from criar_caso import criar_caso
 from cadastrar_documentos import cadastrar
-from codex_apuracao import Conversas
+from codex_apuracao import ACTIVE, Conversas
 from inferencia_api import seguro
 from interface_pesquisa import Servidor
-from agente_fluxo_fixture import completar, esperar
+from agente_fluxo_fixture import aguardar_fim, completar, encerrar_gerenciador, esperar
 
 
 class FakeServer:
@@ -89,16 +89,16 @@ class CodexIntegrationTest(unittest.TestCase):
             path.write_text(f'{word} sintético. Valor 123.\n<script>não executar</script>\n', encoding='utf-8')
             criar_caso(self.root, case, 'Caso sintético ' + case, [path], 'sinteticos')
         self.manager = Conversas(self.root, FakeServer)
-        self.addCleanup(self.manager.close)
+        # Runs before temp.cleanup (LIFO): no execution thread may still write in the folder.
+        self.addCleanup(encerrar_gerenciador, self.manager)
 
     def start(self, **extra):
         result = self.manager.perguntar({'caso': 'alpha', 'pergunta': 'Pergunta técnica sintética.', **extra})
-        self.assertTrue(self.manager.rpc.ready.wait(30))
         identifier = result['conversa']
-        limit = time.monotonic() + 30
-        while not self.manager.contexts[identifier]['meta'].get('turn_id') and time.monotonic() < limit:
-            time.sleep(.01)
-        self.assertEqual(self.manager.contexts[identifier]['meta']['estado'], 'executando')
+        meta = lambda: self.manager.contexts[identifier]['meta']
+        # The first turn of this question was sent, or the execution already ended (shown below).
+        esperar(lambda: meta().get('turn_id') or meta()['estado'] not in ACTIVE)
+        self.assertEqual(meta()['estado'], 'executando', meta().get('situacao'))
         return identifier
 
     def tool(self, identifier, action, **args):
@@ -155,7 +155,7 @@ class CodexIntegrationTest(unittest.TestCase):
         self.assertTrue(any(m == 'thread/resume' for m, _ in rpc.calls))
         self.assertEqual(original_hash, sha256(self.manager.fonte(identifier, hit['referencia'])))
         self.manager.cancelar(identifier)
-        esperar(lambda: self.manager.eventos(identifier)['conversa']['estado'] == 'interrompido')
+        self.assertEqual(aguardar_fim(self.manager, identifier)['estado'], 'interrompido')
         self.assertEqual(self.manager.contexts[identifier]['meta']['estado'], 'interrompido')
 
     def test_isolamento_concorrencia_hash_e_permissoes(self):
@@ -189,7 +189,7 @@ class CodexIntegrationTest(unittest.TestCase):
         self.manager._notification({'method': 'local/disconnected'})
         self.assertEqual(self.manager.contexts[identifier]['meta']['estado'], 'erro')
         restored = Conversas(self.root, FakeServer)
-        self.addCleanup(restored.close)
+        self.addCleanup(encerrar_gerenciador, restored)
         events = restored.eventos(identifier)
         self.assertTrue(any(e['tipo'] == 'delta' for e in events['eventos']))
         self.assertEqual(restored.listar('beta')['conversas'], [])
@@ -258,7 +258,7 @@ class CodexIntegrationTest(unittest.TestCase):
         turn = self.manager.contexts[identifier]['meta']['turn_id']
         self.manager.rpc.emit('turn/completed', {'turn': {'id': turn, 'status': 'failed',
             'error': {'message': 'Limite de uso da API atingido. sk-ant-segredo', 'codexErrorInfo': 'limite'}}})
-        esperar(lambda: self.manager.eventos(identifier)['conversa']['estado'] == 'erro')
+        self.assertEqual(aguardar_fim(self.manager, identifier)['estado'], 'erro')
         result = self.manager.eventos(identifier)
         self.assertTrue(any(e['tipo'] == 'erro' and 'Limite' in e['dados']['mensagem'] for e in result['eventos']))
         self.assertNotIn('sk-ant-segredo', (self.manager._path(identifier) / 'eventos.jsonl').read_text(encoding='utf-8'))
@@ -304,7 +304,7 @@ class CodexIntegrationTest(unittest.TestCase):
 
         rpc.call = falha
         identifier = self.manager.perguntar({'caso': 'alpha', 'pergunta': 'Pergunta técnica sintética.'})['conversa']
-        esperar(lambda: self.manager.eventos(identifier)['conversa']['estado'] not in ('pronto', 'preparando'))
+        aguardar_fim(self.manager, identifier)
         self.assertEqual(self.manager.contexts[identifier]['meta']['estado'], 'erro')
         self.assertFalse(any(method == 'turn/start' for method, _ in rpc.calls))
         self.assertTrue(any(e['tipo'] == 'erro' and 'configuracao.json' in e['dados']['mensagem']

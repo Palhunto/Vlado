@@ -1,35 +1,28 @@
 """Failure states and retry of the same frozen round; fake provider, no model calls or keys."""
 import json
 from pathlib import Path
-import time
 import unittest
 
 import test_codex_integracao as fixture
 import test_inferencia_api as api
-from agente_fluxo_fixture import entrega, esperar
+from agente_fluxo_fixture import aguardar_fim, aguardar_threads, encerrar_gerenciador, entrega, esperar
 from codex_apuracao import Conversas, classificar_erro, retomavel
 from comum import escrever_json, ler_json
 from inferencia_api import ErroIA, Resposta, ServidorAPI
 
 ETAPAS = ('inventario', 'plano', 'busca', 'geracao_inicial', 'revisao', 'sintese')
-ENCERRADOS = ('pronto', 'concluido', 'erro', 'interrompido', 'incompleto')
 
 
 class Base(unittest.TestCase):
     def setUp(self):
         self.fx = fixture.CodexIntegrationTest()
+        self.addCleanup(self.fx.doCleanups)  # before setUp: a setUp failure still cleans up
         self.fx.setUp()
-        self.addCleanup(self.fx.doCleanups)
         self.manager, self.root = self.fx.manager, self.fx.root
         self.refs = {}
 
     def estado(self, manager, identifier):
         return manager.eventos(identifier)['conversa']
-
-    def aguardar_fim(self, manager, identifier):
-        # _finish sets estado before the situation and codex_execucao.json, all under the manager
-        # lock; reading through eventos() (which takes it) returns only after _finish completes.
-        esperar(lambda: self.estado(manager, identifier)['estado'] in ENCERRADOS[1:])
 
     def etapa(self, manager, identifier, stage, entregar=True, encerrar=True):
         """Drive one stage like the model would: wait for its turn, deliver, end the turn."""
@@ -49,16 +42,16 @@ class Base(unittest.TestCase):
     def completar_de(self, manager, identifier, primeira):
         for stage in ETAPAS[ETAPAS.index(primeira):]:
             self.etapa(manager, identifier, stage)
-        self.aguardar_fim(manager, identifier)
+        aguardar_fim(manager, identifier)
 
     def travar_como_queda(self, manager, identifier):
         """Simulates a crash: the worker stops and nothing is recorded, as if the process died."""
         manager.contexts[identifier]['busy'] = False
-        time.sleep(0.5)
+        aguardar_threads(manager)  # the stopped worker returns without writing anything
 
     def novo_backend(self):
         novo = Conversas(self.root, fixture.FakeServer)
-        self.addCleanup(novo.close)
+        self.addCleanup(encerrar_gerenciador, novo)
         return novo
 
     def revisoes(self, identifier):
@@ -116,7 +109,7 @@ class QuedaEReinicioTest(Base):
         novo = self.novo_backend()
         self.assertEqual(self.estado(novo, identifier)['progresso']['proxima'], None)
         self.assertEqual(novo.retomar(identifier)['retomada_da_etapa'], 'publicacao')
-        self.aguardar_fim(novo, identifier)
+        aguardar_fim(novo, identifier)
         self.assertEqual(novo.contexts[identifier]['meta']['estado'], 'concluido')
         self.assertFalse(any(m == 'turn/start' for m, _ in novo.rpc.calls))
         self.assertEqual(self.revisoes(identifier), ['r1_busca', 'r2_revisao', 'r3_sintese'])
@@ -136,7 +129,7 @@ class QuedaEReinicioTest(Base):
         with self.assertRaisesRegex(ValueError, 'em andamento'):
             novo.retomar(identifier, dono='convite-1')
         novo.cancelar(outra)
-        esperar(lambda: novo.contexts[outra]['meta']['estado'] not in ('preparando', 'executando', 'cancelando'))
+        aguardar_fim(novo, outra)
         with self.assertRaisesRegex(ValueError, 'indisponível'):  # invitation no longer covers the case
             novo.retomar(identifier, dono='convite-1', casos=['beta'])
         self.assertEqual(novo.retomar(identifier, dono='convite-1', casos=['alpha'])['conversa'], identifier)
@@ -166,12 +159,12 @@ class SituacoesTest(Base):
         if codigo:
             erro['codexErrorInfo'] = codigo
         self.manager.rpc.emit('turn/completed', {'turn': {'id': turn, 'status': 'failed', 'error': erro}})
-        self.aguardar_fim(self.manager, identifier)
+        aguardar_fim(self.manager, identifier)
 
     def test_cancelamento_pelo_usuario(self):
         identifier = self.fx.start()
         self.manager.cancelar(identifier)
-        self.aguardar_fim(self.manager, identifier)
+        aguardar_fim(self.manager, identifier)
         conversa = self.estado(self.manager, identifier)
         self.assertEqual((conversa['estado'], conversa['situacao']['codigo'], conversa['situacao']['causa']),
                          ('interrompido', 'cancelado', 'usuario'))
@@ -185,7 +178,7 @@ class SituacoesTest(Base):
         identifier = self.fx.start()
         self.manager.contexts[identifier]['causa'] = ('erro', 'conexao', 'Falha sintética de conexão.')
         self.manager.cancelar(identifier)
-        self.aguardar_fim(self.manager, identifier)
+        aguardar_fim(self.manager, identifier)
         situacao = self.estado(self.manager, identifier)['situacao']
         self.assertEqual((situacao['codigo'], situacao['causa']), ('cancelado', 'usuario'))
 
@@ -226,7 +219,7 @@ class SituacoesTest(Base):
             'limites': {'tokens_por_consulta': 100, 'tokens_por_dia': None}})
         identifier = self.fx.start()
         self.manager.rpc.emit('item/usage', {'turnId': 'turn-1', 'modelo': 'm', 'uso': {'entrada': 150, 'saida': 10}})
-        self.aguardar_fim(self.manager, identifier)
+        aguardar_fim(self.manager, identifier)
         conversa = self.estado(self.manager, identifier)
         self.assertEqual((conversa['estado'], conversa['situacao']['codigo'], conversa['situacao']['causa']),
                          ('interrompido', 'sem_cota', 'limite_consulta'))
