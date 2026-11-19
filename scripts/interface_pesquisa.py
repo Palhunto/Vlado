@@ -577,6 +577,8 @@ class Handler(BaseHTTPRequestHandler):
                   '/caderno.js': ('caderno.js', 'text/javascript; charset=utf-8'),
                   '/apuracao.js': ('apuracao.js', 'text/javascript; charset=utf-8'),
                   '/editor_notas.js': ('editor_notas.js', 'text/javascript; charset=utf-8'),
+                  '/redacao.js': ('redacao.js', 'text/javascript; charset=utf-8'),
+                  '/redacao.css': ('redacao.css', 'text/css; charset=utf-8'),
                   '/vendor/vditor/dist/index.min.js': ('vendor/vditor/dist/index.min.js', 'text/javascript; charset=utf-8'),
                   '/vendor/vditor/dist/index.css': ('vendor/vditor/dist/index.css', 'text/css; charset=utf-8'),
                   '/vendor/vditor/dist/js/lute/lute.min.js': ('vendor/vditor/dist/js/lute/lute.min.js', 'text/javascript; charset=utf-8'),
