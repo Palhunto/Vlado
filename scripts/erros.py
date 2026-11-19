@@ -124,6 +124,22 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('fontes_web_limite', r'^Limite de (?P<limite>\d+) capturas web por caso'),
     ('fontes_web_captura_inexistente', r'^Captura web inexistente'),
     ('fontes_web_campos_invalidos', r'^Campos não permitidos na operação de fontes web'),
+    # Drafts (rascunhos): one per account, case and screen, with a growing version.
+    ('rascunho_conflito', r'^O rascunho mudou em outra aba'),
+    ('rascunho_sem_caso', r'^Selecione uma apuração para o rascunho'),
+    ('rascunho_tela_invalida', r'^Tela de rascunho inválida'),
+    ('rascunho_conta_invalida', r'^Conta do rascunho inválida'),
+    ('rascunho_com_chave', r'^Rascunhos não guardam chaves de API'),
+    ('rascunho_grande_demais', r'^Rascunho grande demais \(limite de (?P<limite>\d+) KB\)'),
+    ('rascunhos_caso_cheio', r'^Rascunhos desta apuração ocupam o limite do caso \(limite de (?P<limite>\d+) KB\)'),
+    ('rascunhos_caso_limite', r'^Rascunhos desta apuração chegaram ao limite \((?P<limite>\d+) abertos\)'),
+    ('rascunhos_conta_limite', r'^Rascunhos desta conta chegaram ao limite \((?P<limite>\d+) abertos\)'),
+    ('rascunho_ilegivel', r'^Rascunho ilegível no servidor'),
+    ('rascunho_invalido', r'^Rascunho inválido'),
+    ('rascunho_so_pergunta', r'^Convidados guardam somente o rascunho da pergunta'),
+    # Resume summary of the active case (continuidade.resumo_caso).
+    ('resumo_campos_invalidos', r'^Campos inválidos no resumo de retomada'),
+    ('resumo_sem_caso', r'^Selecione uma apuração para o resumo de retomada'),
 )
 _COMPILADOS = tuple((codigo, re.compile(padrao)) for codigo, padrao in PADROES)
 

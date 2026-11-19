@@ -1,14 +1,34 @@
-"""Explicit corpus expansion and attributed comparisons within one conversation."""
+"""Explicit corpus expansion and attributed comparisons within one conversation.
+
+Also the resume summary of the active case (``resumo_caso``): what is finished and what is
+still open, read from this case's own metadata only. No model or network call.
+"""
 from copy import deepcopy
 import json
+from pathlib import Path
+import re
 
 from comum import dentro, ler_json, sha256
 from cadastrar_documentos import inventario
 from indice_sqlite import _entradas
 from indice_achados import resumo
 from registros_achados import carregar
+import diligencias
+import hipoteses
+import lixeira
+import rascunhos
+import tabelas_apuracao
 
 TIPOS = ('mantida', 'alterada', 'pendencia_respondida', 'nova', 'nao_retomada')
+# Resume summary: the only fields a request may carry.
+CAMPOS_RESUMO = {'caso'}
+DILIGENCIAS_ENCERRADAS = ('concluida', 'cancelada')
+# Mesa area that opens each pending item (interface/app.js `areaNames`).
+AREAS = {'documento': 'documentos', 'rodada': 'codex', 'conversa': 'codex', 'rascunho': 'codex',
+         'hipoteses': 'apuracao', 'diligencias': 'diligencias', 'tabelas': 'apuracao'}
+# Screen of a draft -> area where it is reopened (pergunta*, quadro-diligencias*, others in the notebook).
+AREA_RASCUNHO = (('pergunta', 'codex'), ('quadro-diligencias', 'diligencias'),
+                 ('quadro-diligencias-resposta', 'diligencias'), ('quadro-revisao', 'achados'))
 
 
 def resumir(data):
@@ -93,6 +113,128 @@ def contrato(bundle, data):
         'Este comparativo é avaliação da mesma IA, sem aprovação humana. '
         'Use somente os dados autorizados abaixo; resultados anteriores são contexto, não fontes novas.\n'
         + json.dumps({'anterior': bundle['achados_anteriores'], 'atual': resumir(data)}, ensure_ascii=False))
+
+
+def _documento_pendente(doc):
+    """Why a registered document still needs attention, or None. Same signals as `Leitura.lacunas`."""
+    info = doc.get('extracao_pdf')
+    if Path(doc.get('arquivo', '')).suffix.lower() == '.pdf' and not info:
+        return 'sem_extracao'
+    if info:
+        if info.get('protegido'):
+            return 'protegido'
+        if info.get('estado') == 'erro':
+            return 'falha_extracao'
+        if info.get('paginas_com_erro'):
+            return 'paginas_com_erro'
+        if info.get('paginas_sem_texto'):
+            return 'paginas_sem_texto'
+    if (doc.get('extracao_office') or {}).get('estado') == 'erro':
+        return 'falha_extracao'
+    return None
+
+
+def _rodada_atual(root, caso):
+    """Latest round of the case outside the trash, with the stages accepted so far (no content read)."""
+    from fluxo_codex import ETAPAS  # fluxo_codex imports this module: resolve at call time
+    folder = dentro(root, f'execucoes/{caso}')
+    removed = lixeira.ativos(root)
+    names = [p.name for p in folder.iterdir() if p.is_dir() and re.fullmatch(lixeira.ID_RODADA, p.name)
+             and not lixeira.excluido(root, caso, rodada=p.name, itens=removed)] if folder.is_dir() else []
+    if not names:
+        return None
+    current = max(names, key=lambda name: int(name[1:]))
+    run = dentro(root, f'execucoes/{caso}/{current}')
+    accepted, legible = [], True
+    try:
+        state = ler_json(run / 'saidas/codex_fluxo_estado.json') if (run / 'saidas/codex_fluxo_estado.json').is_file() else {}
+        stages = state.get('etapas') if isinstance(state, dict) else None
+        accepted = [e for e in ETAPAS if isinstance(stages, dict) and e in stages]
+    except (OSError, ValueError):
+        legible = False
+    pending = [e for e in ETAPAS if e not in accepted]
+    return {'id': current, 'total_rodadas': len(names), 'etapas': list(ETAPAS), 'aceitas': accepted,
+            'etapa_concluida': accepted[-1] if accepted else None, 'proxima_etapa': pending[0] if pending else None,
+            'concluida': not pending, 'estado_legivel': legible}
+
+
+def _quadro(nome, contar):
+    """One board's pending count; a broken board is reported without hiding the others."""
+    try:
+        pendentes, total = contar()
+        return {'quadro': nome, 'pendentes': pendentes, 'total': total, 'area': AREAS[nome], 'erro': None}
+    except (ValueError, OSError, KeyError, TypeError):
+        # Fixed code: the exception text may carry server paths. The board's own screen shows its error.
+        return {'quadro': nome, 'pendentes': None, 'total': None, 'area': AREAS[nome], 'erro': 'ilegivel'}
+
+
+def _hipoteses(root, caso):
+    items = [i for i in hipoteses.listar(root, caso) if not i.get('divergente')]
+    return sum(1 for i in items if i['estado']['situacao'] == 'em_aberto'), len(items)
+
+
+def _diligencias(root, caso):
+    items = diligencias.listar(root, caso)['resultados']
+    return sum(1 for i in items if i['diligencia']['estado'] not in DILIGENCIAS_ENCERRADAS), len(items)
+
+
+def _tabelas(root, caso):
+    items = tabelas_apuracao.quadro(root, caso)['tabelas']
+    return sum(1 for t in items if t['celulas_por_estado'].get('pendente')), len(items)
+
+
+def _area_rascunho(tela):
+    return next((area for prefix, area in AREA_RASCUNHO if tela == prefix or tela.startswith(prefix + '/')), 'apuracao')
+
+
+def resumo_caso(root, caso, conta=None, conversas=None):
+    """What is done and what is still open in the active case, with the Mesa area of each pending item.
+
+    ``conversas`` is the case's conversation list (``Conversas.listar``) when the caller has one; the
+    drafts are those of ``conta`` only and never include their text.
+    """
+    root = Path(root)
+    docs = inventario(root, caso)  # validates the ID and refuses a case in the trash
+    pending_docs = []
+    for doc in docs['documentos']:
+        reason = _documento_pendente(doc)
+        if reason:
+            pending_docs.append({'id': doc['id'], 'nome': doc['nome_recebido'], 'motivo': reason})
+    rodada = _rodada_atual(root, caso)
+    boards = [_quadro('hipoteses', lambda: _hipoteses(root, caso)),
+              _quadro('diligencias', lambda: _diligencias(root, caso)),
+              _quadro('tabelas', lambda: _tabelas(root, caso))]
+    drafts = [{'tela': d['tela'], 'versao': d['versao'], 'atualizado_em_utc': d['atualizado_em_utc'],
+               'area': _area_rascunho(d['tela'])} for d in rascunhos.listar(root, caso, conta)['rascunhos']]
+    interrupted = [{'id': c['id'], 'titulo': c.get('titulo'), 'rodada': c.get('rodada'), 'area': AREAS['conversa']}
+                   for c in (conversas or []) if c.get('retomavel')]
+    pendencias = [{'tipo': 'documento', 'id': d['id'], 'motivo': d['motivo'], 'area': AREAS['documento']}
+                  for d in pending_docs]
+    if rodada and not rodada['concluida']:
+        pendencias.append({'tipo': 'rodada', 'id': rodada['id'], 'motivo': rodada['proxima_etapa'], 'area': AREAS['rodada']})
+    pendencias += [{'tipo': 'conversa', 'id': c['id'], 'motivo': 'retomavel', 'area': c['area']} for c in interrupted]
+    pendencias += [{'tipo': 'quadro', 'id': b['quadro'], 'motivo': 'erro' if b['erro'] else 'pendentes', 'area': b['area']}
+                   for b in boards if b['erro'] or b['pendentes']]
+    pendencias += [{'tipo': 'rascunho', 'id': d['tela'], 'motivo': 'aberto', 'area': d['area']} for d in drafts]
+    return {'esquema': 1, 'caso': caso, 'titulo': docs['titulo'],
+            'documentos': {'cadastrados': docs['total_documentos'], 'pendentes': pending_docs},
+            'rodada': rodada, 'conversas_interrompidas': interrupted, 'quadros': boards, 'rascunhos': drafts,
+            'pendencias': pendencias,
+            'aviso': 'Resumo dos registros da apuração; não confere conteúdo nem substitui a leitura dos originais.'}
+
+
+def executar_resumo(root, data, conta=None, listar_conversas=None):
+    """``POST /api/continuidade-resumo``: only the case ID is accepted.
+
+    ``listar_conversas(caso)`` returns the case's conversations; it runs only after the request is valid.
+    """
+    if not isinstance(data, dict) or set(data) - CAMPOS_RESUMO:
+        raise ValueError('Campos inválidos no resumo de retomada.')
+    caso = data.get('caso')
+    if not isinstance(caso, str) or not re.fullmatch(lixeira.ID_CASO, caso):
+        raise ValueError('Selecione uma apuração para o resumo de retomada.')
+    lixeira.conferir_disponivel(Path(root), caso)
+    return resumo_caso(root, caso, conta, listar_conversas(caso) if listar_conversas else None)
 
 
 def comparar(bundle, data, references, evidence_refs, payload):
