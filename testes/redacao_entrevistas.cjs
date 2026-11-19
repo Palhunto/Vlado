@@ -191,6 +191,41 @@ test('entrevistas: lacunas, pergunta com diligência ligada, formulário fechado
   assert.equal(f.chamadas('entrevistas-responder').length, 0);
 });
 
+test('M3: cada exportação libera a URL do arquivo anterior antes de criar a nova', async () => {
+  const f = await abrir({modo: 'piloto'});
+  const criadas = [], liberadas = [];
+  f.mesa.janela.URL.createObjectURL = () => { const url = `blob:teste-${criadas.length + 1}`; criadas.push(url); return url; };
+  f.mesa.janela.URL.revokeObjectURL = url => liberadas.push(url);
+  const painel = await f.montar('entrevistas');
+  const marcar = painel.querySelector('.redacao-pergunta input[type="checkbox"]');
+  marcar.checked = true; marcar.dispatchEvent(new (f.mesa.janela.Event)('change'));
+  const [pauta, pedido] = painel.querySelectorAll('.redacao-exportar button');
+  pauta.click(); await f.mesa.esperar(4);
+  assert.deepEqual(liberadas, [], 'a primeira exportação não tem o que liberar');
+  pedido.click(); await f.mesa.esperar(4);
+  pauta.click(); await f.mesa.esperar(4);
+  assert.deepEqual(criadas, ['blob:teste-1', 'blob:teste-2', 'blob:teste-3']);
+  assert.deepEqual(liberadas, ['blob:teste-1', 'blob:teste-2'], 'só a URL da exportação vigente continua viva');
+  assert.equal(painel.querySelector('.redacao-exportar a').href, 'blob:teste-3');
+});
+
+test('M4: com conta o pedido de pergunta não leva nome de autor; no modo local leva o nome informado', async () => {
+  for (const [modo, esperado] of [['piloto', ''], ['local', 'Repórter Local']]) {
+    const f = await abrir({modo});
+    const painel = await f.montar('entrevistas');
+    const form = painel.querySelector('.redacao-lacunas form');
+    const [tipo] = form.querySelectorAll('select'), campos = form.querySelectorAll('input');
+    tipo.value = 'entrevista';
+    campos[0].value = 'Secretaria de Obras'; campos[1].value = 'Responsável Fulano';
+    assert.equal(form.querySelectorAll('input').length, modo === 'local' ? 4 : 3, 'campo "Seu nome" só no modo local');
+    if (modo === 'local') campos[3].value = 'Repórter Local';
+    form.requestSubmit(); await f.mesa.esperar(6);
+    const [chamada] = f.chamadas('entrevistas-preparar');
+    assert.equal(chamada.dados.autor, esperado, modo);
+    assert.equal(chamada.dados.responsavel, 'Responsável Fulano');
+  }
+});
+
 test('em inglês as duas telas aparecem traduzidas', async () => {
   const f = await abrir({idioma: 'en', modo: 'piloto'});
   assert.deepEqual(f.mesa.janela.abas.map(a => a.rotulo), ['Claim review', 'Interviews and requests']);

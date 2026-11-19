@@ -211,7 +211,8 @@
       form.addEventListener('submit', async evento => {
         evento.preventDefault(); enviar.disabled = true; aviso(retorno, t('Preparando…'));
         try {
-          await api('entrevistas-preparar', {caso: casoId, requisicao_id: rid(), autor: autor.value || responsavel.value, origem: lacuna.origem,
+          // With an account the server takes the author from it: the browser sends no name of its own.
+          await api('entrevistas-preparar', {caso: casoId, requisicao_id: rid(), autor: comConta() ? '' : autor.value, origem: lacuna.origem,
             tipo: tipo.value, destinatario: destinatario.value, responsavel: responsavel.value, prazo: prazo.value || null});
           recarregar();
         } catch (erro) { aviso(retorno, erro.message, true); enviar.disabled = false; }
@@ -319,12 +320,16 @@
       const retorno = element('p', '', 'small'), saida = element('pre', '', 'redacao-markdown'); saida.hidden = true;
       saida.setAttribute('translate', 'no');
       const link = element('a', t('Baixar o arquivo Markdown')); link.hidden = true;
+      let endereco = null;  // one blob URL at a time: the previous export is released before a new one
+      const liberar = () => { if (endereco) URL.revokeObjectURL(endereco); endereco = null; };
       const exportar = async formato => {
         if (!selecionadas.size) { aviso(retorno, t('Marque ao menos uma pergunta para exportar.'), true); return; }
         try {
           const dados = await api('entrevistas-exportar', {caso: casoId, ids: [...selecionadas], formato});
           saida.textContent = dados.markdown; saida.hidden = false;
-          link.href = URL.createObjectURL(new Blob([dados.markdown], {type: 'text/markdown'})); link.download = dados.nome_arquivo; link.hidden = false;
+          liberar();
+          endereco = URL.createObjectURL(new Blob([dados.markdown], {type: 'text/markdown'}));
+          link.href = endereco; link.download = dados.nome_arquivo; link.hidden = false;
           aviso(retorno, formato === 'pauta' ? t('Pauta interna gerada: não envie à fonte.') : t('Pedido gerado só com as perguntas.'));
         } catch (erro) { aviso(retorno, erro.message, true); }
       };
