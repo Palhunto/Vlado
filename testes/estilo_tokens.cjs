@@ -11,7 +11,7 @@ const {raiz, ler, semComentarios, tokens, blocos, propriedades, claro, escuro, c
 
 const css = ler('style.css');
 // Sheets whose rules paint the Mesa: none may hold a colour value of its own.
-const FOLHAS = ['style.css', 'caderno.css', 'entrar.css'];
+const FOLHAS = ['style.css', 'caderno.css', 'entrar.css', 'redacao.css'];
 
 test('tokens.css é carregado antes das folhas da Mesa e da página de entrada', () => {
   for (const pagina of ['index.html', 'entrar.html']) {
