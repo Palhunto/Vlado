@@ -110,11 +110,21 @@ test('bordas de controles, foco e marcas do mapa alcançam 3:1 nos dois temas', 
 test('marcas do mapa e o foco delas alcançam 3:1 sobre o fundo do próprio mapa', () => {
   // The SVG sits on --quadro-coluna-fundo (reading), not on the page surface.
   for (const [nome, tema] of [['claro', claro], ['escuro', escuro]]) {
-    for (const marca of ['--mapa-ligacao', '--mapa-ligacao-destaque', '--mapa-pessoa', '--mapa-organizacao']) {
+    for (const marca of ['--mapa-ligacao', '--mapa-ligacao-destaque', '--mapa-ligacao-aberta', '--mapa-pessoa', '--mapa-organizacao']) {
       const razao = contraste(cor(tema, marca), cor(tema, '--quadro-coluna-fundo'));
       assert.ok(razao >= 3, `${nome}: ${marca} sobre o fundo do mapa = ${razao.toFixed(2)} < 3`);
     }
   }
+});
+
+test('no mapa, a ligação aberta se distingue do foco por cor e espessura, não só pelo halo (N7)', () => {
+  const regra = seletor => (css.match(new RegExp(`${seletor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\{([^}]*)\\}`)) || [])[1] || '';
+  const aberta = regra('.mapa-ligacao.is-ativa .mapa-linha'), foco = regra('.mapa-ligacao:focus-visible .mapa-linha,.mapa-ligacao:hover .mapa-linha');
+  assert.match(aberta, /stroke:var\(--mapa-ligacao-aberta\)/);
+  assert.match(aberta, /stroke-width:6/);
+  assert.match(foco, /stroke:var\(--mapa-ligacao-destaque\)/);
+  assert.match(foco, /stroke-width:4/);
+  for (const tema of [claro, escuro]) assert.notEqual(cor(tema, '--mapa-ligacao-aberta'), cor(tema, '--mapa-ligacao-destaque'));
 });
 
 test('campos e botões secundários usam a borda de controle, sem cor fixa', () => {

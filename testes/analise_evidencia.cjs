@@ -154,7 +154,11 @@ test('mapa: SVG sem biblioteca, forma por tipo, traço por situação e evidênc
   const detalhe = painel.querySelector('.mapa-detalhe');
   documentada.dispatchEvent(new Evento('focus'));
   assert.match(detalhe.textContent, /Escolha uma ligação/, 'o foco só destaca; o painel ao vivo não muda');
+  assert.equal(documentada.getAttribute('aria-pressed'), 'false');
   documentada.dispatchEvent(new Evento('keydown', {key: 'Enter', cancelable: true}));
+  assert.equal(documentada.getAttribute('aria-pressed'), 'true', 'a ligação aberta fica marcada também para o leitor de tela');
+  assert.ok(documentada.classList.contains('is-ativa'));
+  assert.equal(inferida.getAttribute('aria-pressed'), 'false');
   assert.match(detalhe.textContent, /Lúcia Prates — fiscal de contrato com — Construtora Exemplo Ltda\./);
   assert.match(detalhe.textContent, /Lúcia Prates, fiscal do contrato\./);
   detalhe.querySelector('button').click(); await m.esperar();

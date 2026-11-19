@@ -244,11 +244,14 @@
     const desenho = svg('svg', {viewBox: `0 0 ${L} ${A}`, class: 'mapa-svg', role: 'group', 'aria-label': t('Diagrama do mapa. A lista ao lado traz as mesmas ligações.')});
     for (const r of mapa.relacoes) {
       const [x1, y1] = pos[r.origem] || [cx, cy], [x2, y2] = pos[r.destino] || [cx, cy];
-      const g = svg('g', {class: `mapa-ligacao traco-${traco(r.situacao)}`, tabindex: '0', role: 'button',
+      const g = svg('g', {class: `mapa-ligacao traco-${traco(r.situacao)}`, tabindex: '0', role: 'button', 'aria-pressed': 'false',
         'aria-label': `${nomes[r.origem]} — ${r.tipo} — ${nomes[r.destino]}: ${t(SIT_RELACAO[r.situacao] || r.situacao)}`});
       g.dataset.relacao = r.id;
       g.append(svg('line', {x1, y1, x2, y2, class: 'mapa-linha'}), svg('line', {x1, y1, x2, y2, class: 'mapa-alvo'}));
-      const abrir = () => { for (const outro of desenho.querySelectorAll('.mapa-ligacao')) outro.classList.remove('is-ativa'); g.classList.add('is-ativa'); detalheRelacao(casoId, saida, r, nomes); };
+      const abrir = () => {
+        for (const outro of desenho.querySelectorAll('.mapa-ligacao')) { outro.classList.remove('is-ativa'); outro.setAttribute('aria-pressed', 'false'); }
+        g.classList.add('is-ativa'); g.setAttribute('aria-pressed', 'true'); detalheRelacao(casoId, saida, r, nomes);
+      };
       // Focus only highlights the line (CSS); the live detail panel changes on Enter, Space or click.
       g.addEventListener('click', abrir);
       g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(); } });
