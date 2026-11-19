@@ -96,6 +96,8 @@ class ConferenciaRedacaoTest(Fontes, unittest.TestCase):
 
     def test_afirmacao_sem_evidencia_fica_sem_suporte_e_vinculo_conferido_define_o_estado(self):
         record = self.criar('A fonte declara valor 12. O valor foi pago. Segundo a fonte, o valor é 14.')
+        self.assertRegex(record['id'], redacao.ID_TEXTO)  # prefixo C: W é o ID de documento das capturas web
+        self.assertTrue(record['id'].startswith('C'))
         view = self.ver(record)
         self.assertEqual([c['estado'] for c in view['afirmacoes']], ['sem_suporte'] * 3)
         self.assertEqual(view['resumo']['por_estado']['sem_suporte'], 3)

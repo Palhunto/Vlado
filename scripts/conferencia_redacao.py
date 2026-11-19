@@ -36,7 +36,7 @@ DECISOES = tuple(e for e in ESTADOS_REVISAO_HUMANA if e != 'pendente')
 TIPOS_SINAL = ('numero_divergente', 'quantificador_mais_forte', 'causalidade_sem_suporte', 'certeza_sem_atribuicao')
 PADROES = {'titulo': None, 'texto': None, 'versao': 1, 'afirmacoes': [], 'revisao': None}
 ID_AFIRMACAO = r'F[a-f0-9]{32}'
-ID_TEXTO = r'W[a-f0-9]{32}'
+ID_TEXTO = r'C[a-f0-9]{32}'  # prefixo C; W é o ID de documento das capturas web (contrato §5.8)
 LIMITE_TEXTO = 50000
 LIMITE_AFIRMACOES = 500
 SEMELHANCA_REABERTURA = 0.6
@@ -298,7 +298,7 @@ def _regras(state):
             raise ValueError('A revisão humana exige uma conta autenticada da Mesa.')
 
 
-COLECAO = ev.Colecao('redacao', 'W', PADROES, _normalizar, _regras, 'conferência da redação')
+COLECAO = ev.Colecao('redacao', 'C',PADROES, _normalizar, _regras, 'conferência da redação')
 CAMPOS_BASE = {'caso', 'requisicao_id', 'autor', 'observacao'}
 _DIVERGENTE = ('Histórico do registro divergente (revisão humana sem ação de conta correspondente); '
                'nenhuma atualização foi aplicada.')
