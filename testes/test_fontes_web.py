@@ -284,6 +284,38 @@ class TextoOcultoTest(unittest.TestCase):
         self.assertIn('Rótulo visível.', text)
         self.assertTrue(info['contem_texto_oculto'])
 
+    def _extrair(self, html):
+        return fontes_web.texto_da_captura(html.encode('utf-8'), '.html', 'utf-8')
+
+    def test_elemento_oculto_com_barra_de_fechamento_continua_aberto(self):
+        """B1 (QA, 2ª revisão): HTML ignores the "/" of a non-void element, so what follows is hidden."""
+        for html, oculto in (('<div hidden/>OCULTO1<p>visivel</p>', 'OCULTO1'),
+                             ('<span style="display:none"/>OCULTO2', 'OCULTO2')):
+            with self.subTest(html=html):
+                text, info = self._extrair(html)
+                self.assertNotIn(oculto, text)
+                self.assertTrue(info['contem_texto_oculto'])
+
+    def test_br_e_img_com_barra_continuam_funcionando(self):
+        text, info = self._extrair('<p>antes<br/>depois<img src="x.png" alt="figura"/> fim</p><p>outro</p>')
+        self.assertEqual([line for line in text.splitlines() if line], ['antes', 'depois fim', 'outro'])
+        self.assertFalse(info['contem_texto_oculto'])
+
+    def test_bloco_fecha_paragrafo_oculto_mesmo_com_inline_aberto(self):
+        """M1 (QA, 2ª revisão): a block start ends the open <p>, as in a browser."""
+        for html in ('<p hidden>X<div>visivel</div>', '<p hidden><b>X<p>visivel</p>'):
+            with self.subTest(html=html):
+                text, info = self._extrair(html)
+                self.assertIn('visivel', text)
+                self.assertNotIn('X', text)
+                self.assertTrue(info['contem_texto_oculto'])
+
+    def test_bloco_dentro_de_celula_nao_fecha_paragrafo_de_fora(self):
+        text, info = self._extrair('<p hidden>X<table><tr><td>Y<div>Z</div></td></tr></table>')
+        # <table> closes the hidden <p>; inside the cell there is no <p> to close.
+        self.assertEqual([line.strip(' |') for line in text.splitlines() if line.strip(' |')], ['Y', 'Z'])
+        self.assertTrue(info['contem_texto_oculto'])
+
     def test_script_e_estilo_nao_contam_como_texto_oculto(self):
         text, info = fontes_web.texto_da_captura(PAGINA, '.html', 'utf-8')
         self.assertNotIn('nao indexar', text)

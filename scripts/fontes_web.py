@@ -335,6 +335,12 @@ class _Texto(HTMLParser):
               'source', 'track', 'wbr'}
     # Elements a browser closes implicitly when the same element opens again.
     AUTOFECHO = {'p', 'li', 'tr', 'td', 'th', 'option', 'dt', 'dd'}
+    # Block elements whose start closes an open <p> (M1 of the QA review), and the elements
+    # that bound that search, as in the HTML parsing rules.
+    FECHAM_P = {'address', 'article', 'aside', 'blockquote', 'details', 'div', 'dl', 'fieldset', 'figcaption',
+                'figure', 'footer', 'form', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hgroup', 'hr',
+                'main', 'menu', 'nav', 'ol', 'p', 'pre', 'section', 'summary', 'table', 'ul'}
+    ESCOPO_P = {'applet', 'button', 'caption', 'html', 'marquee', 'object', 'table', 'td', 'template', 'th'}
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -361,6 +367,8 @@ class _Texto(HTMLParser):
         if tag == 'title':
             self._no_titulo = True
             return
+        if tag in self.FECHAM_P:
+            self._fechar_p()
         if tag not in self.VAZIOS:
             if tag in self.AUTOFECHO and self.pilha and self.pilha[-1][0] == tag:
                 self.pilha.pop()
@@ -368,10 +376,21 @@ class _Texto(HTMLParser):
             self.pilha.append((tag, motivo))
         self._quebra(tag)
 
+    def _fechar_p(self):
+        """Implicit end of an open <p> when a block element starts, even with inline elements
+        still open inside it (HTML "p in button scope"). Stops at scope boundaries."""
+        for index in range(len(self.pilha) - 1, -1, -1):
+            aberto = self.pilha[index][0]
+            if aberto == 'p':
+                del self.pilha[index:]
+                return
+            if aberto in self.ESCOPO_P:
+                return
+
     def handle_startendtag(self, tag, attrs):
-        # A self-closed element has no content to drop; keep the block break if visible.
-        if tag != 'title' and not self._escondido(attrs):
-            self._quebra(tag)
+        # HTML ignores the "/" of a non-void element: <div hidden/> opens an element that stays
+        # open (B1 of the QA review), so its following text is hidden. Void elements just break.
+        self.handle_starttag(tag, attrs)
 
     def handle_endtag(self, tag):
         if tag == 'title':
