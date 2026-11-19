@@ -97,9 +97,13 @@ test('tabela conferível: fonte da célula no foco, célula corrigida marcada e 
   assert.match(fonte.textContent, /Corrigida por Ana/);
   assert.match(fonte.textContent, /Valor anterior: 1154\.50/);
   assert.match(fonte.textContent, /Dígitos trocados/);
+  assert.deepEqual(fonte.querySelectorAll('[translate=no]').map(n => n.textContent).filter(x => ['Ana', '1154.50'].includes(x)), ['Ana', '1154.50'],
+    'autor e valor anterior são dados, fora da tradução');
   assert.match(celulas[4].textContent, /pendente/);
+  let anuncios = 0; celulas[2].addEventListener('focus', () => anuncios++);
   celulas[0].dispatchEvent(new Evento('keydown', {key: 'ArrowDown', cancelable: true}));
   assert.equal(m.doc.activeElement, celulas[2]);
+  assert.equal(anuncios, 0, 'a seta só move o foco; o navegador dispara o focus uma vez');
   assert.equal(celulas[2].getAttribute('tabindex'), '0');
   celulas[2].dispatchEvent(new Evento('keydown', {key: 'ArrowRight', cancelable: true}));
   assert.equal(m.doc.activeElement, celulas[3]);
@@ -126,8 +130,10 @@ test('mapa: SVG sem biblioteca, forma por tipo, traço por situação e evidênc
   assert.ok(documentada.classList.contains('traco-solido'));
   assert.ok(inferida.classList.contains('traco-tracejado'));
   assert.equal(documentada.getAttribute('tabindex'), '0');
-  documentada.dispatchEvent(new Evento('keydown', {key: 'Enter', cancelable: true}));
   const detalhe = painel.querySelector('.mapa-detalhe');
+  documentada.dispatchEvent(new Evento('focus'));
+  assert.match(detalhe.textContent, /Escolha uma ligação/, 'o foco só destaca; o painel ao vivo não muda');
+  documentada.dispatchEvent(new Evento('keydown', {key: 'Enter', cancelable: true}));
   assert.match(detalhe.textContent, /Lúcia Prates — fiscal de contrato com — Construtora Exemplo Ltda\./);
   assert.match(detalhe.textContent, /Lúcia Prates, fiscal do contrato\./);
   detalhe.querySelector('button').click(); await m.esperar();
@@ -150,6 +156,7 @@ test('mapa em lista acessível e lista lateral de homônimos, sem fundir entidad
   assert.match(hom.textContent, /Motivo: Nome igual/);
   assert.match(hom.textContent, /Conferência pendente/);
   assert.match(hom.textContent, /Nada é fundido/);
+  assert.ok(hom.querySelectorAll('[translate=no]').some(n => n.textContent === 'matricula'), 'identificadores divergentes fora da tradução');
 });
 
 test('tabelas ficam atrás da verificação de disponibilidade da rota', async () => {

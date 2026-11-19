@@ -26,6 +26,7 @@ const TIPOS = {fato: 'Data do fato (ocorrência)', assinatura: 'Data de assinatu
 const entrada = (id, tipo, valor, precisao) => ({evento_id: id, sha256: 'e'.repeat(64), descricao: `Evento ${id}`,
   data: {tipo, valor, precisao, aproximada: false, fonte: 0, observacao: '', rotulo: TIPOS[tipo]},
   fonte_da_data: evidencia(REF_IA, `Trecho de ${id}`), fonte_conferida: true, evidencias: [], divergente: false, divergencia: null, retirado: false, motivo_retirada: ''});
+const RETIRADO = {...entrada('T3', 'publicacao', '2021-05', 'mes'), retirado: true, motivo_retirada: 'Fonte duplicada.'};
 const LINHA = {caso: 'alpha', total: 2, divergencias: [], fontes_indisponiveis: [], divergentes: [], tipos_data: TIPOS,
   aviso: 'Ordem por data registrada; datas parciais vão para o início do período.',
   entradas: [entrada('T1', 'assinatura', '2021', 'ano'), entrada('T2', 'fato', '2021-03-12', 'dia')]};
@@ -103,6 +104,14 @@ test('linha do tempo: filtro por tipo de data e distinção entre data exata e p
   assert.equal(m.$('quadros-tempo').querySelector('#tempo-tipo-assinatura').checked, false, 'a escolha continua marcada');
   eventos()[0].querySelector('button').click(); await m.esperar();
   assert.equal(m.chamadas.at(-1).operacao, 'achados-original', 'cada evento abre a evidência da sua data');
+});
+
+test('evento retirado mostra o motivo como dado, fora da tradução', async () => {
+  const m = await mesa({api: operacao => operacao === 'linha-tempo-listar' ? {...LINHA, entradas: [RETIRADO]} : QUADRO}); await abrir(m);
+  m.$('quadros-aba-tempo').click(); await m.esperar(8);
+  const aviso = m.$('quadros-tempo').querySelector('.tempo-evento .notice');
+  assert.match(aviso.textContent, /^Evento retirado: Fonte duplicada\.$/);
+  assert.equal(aviso.querySelector('[translate=no]').textContent, 'Fonte duplicada.');
 });
 
 test('abas por teclado: setas, Home e End; só a aba ativa fica na ordem de Tab', async () => {

@@ -228,7 +228,7 @@ window.Quadros = (() => {
     li.append(quando, element('p', t(e.data.rotulo || e.data.tipo), 'small tempo-tipo'), Q.dado('h3', e.descricao));
     if (e.data.observacao) li.append(Q.dado('p', e.data.observacao, 'small'));
     if (e.divergente) li.append(element('p', t('Há datas divergentes do mesmo tipo neste evento. O quadro não escolhe uma: confira as fontes.'), 'notice'));
-    if (e.retirado) li.append(element('p', t('Evento retirado: {motivo}', {motivo: e.motivo_retirada}), 'notice'));
+    if (e.retirado) { const aviso = element('p', `${t('Evento retirado:')} `, 'notice'); aviso.append(Q.dado('span', e.motivo_retirada)); li.append(aviso); }
     const fonte = element('div', undefined, 'tempo-fonte');
     fonte.append(element('p', t('Evidência da data'), 'eyebrow'));
     if (e.fonte_da_data) fonte.append(Q.evidencia(casoId, e.fonte_da_data, 'div'));

@@ -100,8 +100,13 @@
     else saida.append(dado('p', t('Fonte: {fonte}', {fonte: celula.fonte_legivel || ''}), 'small'),
       element('p', celula.fonte_conferida ? t('Fonte conferida no original.') : t('Fonte indisponível: confira o original antes de usar.'), celula.fonte_conferida ? 'small' : 'notice'));
     const c = celula.ultima_correcao;
-    if (c) saida.append(element('p', t('Corrigida por {autor} em {quando}. Valor anterior: {anterior}.', {autor: c.autor, quando: new Date(c.em_utc).toLocaleString('pt-BR'), anterior: c.valor_anterior ?? t('(vazio)')}), 'small'),
-      dado('p', t('Justificativa: {j}', {j: c.justificativa}), 'small'));
+    if (c) {
+      // Author and previous value are data: they keep their own language (translate="no").
+      const linha = element('p', `${t('Corrigida por')} `, 'small');
+      linha.append(dado('span', c.autor), ` ${t('em {quando}. Valor anterior:', {quando: new Date(c.em_utc).toLocaleString('pt-BR')})} `,
+        c.valor_anterior === null || c.valor_anterior === undefined ? element('span', t('(vazio)')) : dado('span', c.valor_anterior), '.');
+      saida.append(linha, dado('p', t('Justificativa: {j}', {j: c.justificativa}), 'small'));
+    }
   }
   function grade(tabela, saida) {
     const wrap = element('div', undefined, 'tabela-rolagem');
@@ -126,7 +131,7 @@
           if (!passo) return;
           const alvo = celulas[i + passo[0]]?.[j + passo[1]];
           if (!alvo) return;
-          evento.preventDefault(); td.tabIndex = -1; alvo.tabIndex = 0; alvo.focus(); alvo.dispatchEvent(new Event('focus'));
+          evento.preventDefault(); td.tabIndex = -1; alvo.tabIndex = 0; alvo.focus();
         });
         (celulas[i] ||= [])[j] = td; tr.append(td);
       });
@@ -219,7 +224,8 @@
       g.dataset.relacao = r.id;
       g.append(svg('line', {x1, y1, x2, y2, class: 'mapa-linha'}), svg('line', {x1, y1, x2, y2, class: 'mapa-alvo'}));
       const abrir = () => { for (const outro of desenho.querySelectorAll('.mapa-ligacao')) outro.classList.remove('is-ativa'); g.classList.add('is-ativa'); detalheRelacao(casoId, saida, r, nomes); };
-      g.addEventListener('click', abrir); g.addEventListener('focus', abrir);
+      // Focus only highlights the line (CSS); the live detail panel changes on Enter, Space or click.
+      g.addEventListener('click', abrir);
       g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(); } });
       desenho.append(g);
     }
@@ -263,7 +269,10 @@
       li.append(dado('p', h.nomes.join(' · '), 'mapa-homonimo-nomes'), element('p', t('Motivo: {m}', {m: t(MOTIVO_HOM[h.motivo] || h.motivo)}), 'small'),
         element('p', t(SIT_HOM[h.situacao] || h.situacao), `small homonimo-${h.situacao}`));
       if (h.identificadores_comuns?.length) li.append(dado('p', t('Identificadores iguais: {i}', {i: h.identificadores_comuns.map(i => `${i.tipo.toUpperCase()} ${i.valor_exibicao}`).join(', ')}), 'small'));
-      if (h.identificadores_divergentes?.length) li.append(element('p', t('Identificadores diferentes: {i}', {i: h.identificadores_divergentes.join(', ')}), 'small'));
+      if (h.identificadores_divergentes?.length) {
+        const linha = element('p', `${t('Identificadores diferentes:')} `, 'small');
+        linha.append(dado('span', h.identificadores_divergentes.join(', '))); li.append(linha);
+      }
       lista.append(li);
     }
     if (!mapa.homonimos?.length) lista.append(element('li', t('Nenhum possível homônimo encontrado.'), 'small quadro-vazio'));
