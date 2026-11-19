@@ -9,7 +9,7 @@ Implementado em 04/11/2026, versão operacional e prompts **1.2.0**, a pedido do
 3. Clique em **Enviar e cadastrar agora**. O envio produz imediatamente um recibo por arquivo: nome, ID, hash e condição de novo documento ou duplicata. O inventário mostra o total acumulado do caso, mesmo sem rodada ou pergunta.
 4. Confira o número de arquivos do recibo e acrescente outros lotes, se necessário. Só depois envie sua pergunta na conversa da Mesa (ou ao agente de chat), indicando o caso. A seleção no navegador não muda o caso ativo do Codex.
 
-O envio admite até 50 MB e 100 arquivos por lote. O limite de documentos únicos por caso vem da configuração (inicialmente 20). Formatos aceitos: PDF, PNG, JPG/JPEG, TXT, MD, CSV/TSV, XLSX e DOCX. PDFs passam por extração textual automática com `pypdf` e, nas páginas sem texto nativo utilizável, por OCR local. O recibo e o inventário informam o resultado: páginas com texto nativo, reconhecidas por OCR, sem texto e com falha. Imagens avulsas e outros formatos continuam sem conversão automática.
+O envio admite até 50 MB e 100 arquivos por lote. O limite de documentos únicos por caso vem da configuração (inicialmente 20). Formatos aceitos: PDF, PNG, JPG/JPEG, TXT, MD, CSV/TSV, XLSX e DOCX. PDFs passam por extração textual automática com `pypdf` e, nas páginas sem texto nativo utilizável, por OCR local. O recibo e o inventário informam o resultado: páginas com texto nativo, reconhecidas por OCR, sem texto e com falha. DOCX e XLSX também ganham cópia de trabalho com localizador (ver [Extração de DOCX e XLSX](#extração-de-docx-e-xlsx)); `.docm`/`.xlsm` são aceitos como originais, mas o conteúdo com macro não é extraído. Imagens avulsas só passam por OCR com a opção explícita `--ocr-imagens`; os demais formatos continuam sem conversão automática.
 
 O iniciador verifica Python 3.12+, SQLite/FTS5 e `pypdf` (o OCR é opcional e informado à parte) no próprio interpretador que abrirá o serviço. A prioridade é `.venv`, runtime do Codex e depois os comandos `python`/`py -3`, sempre com essa verificação. Um Python que apenas responde a `--version` não é suficiente. `Iniciar pesquisa.cmd --verificar-runtime` mostra o ambiente selecionado sem abrir o serviço. Nenhuma dependência é instalada automaticamente.
 
@@ -68,7 +68,26 @@ Variáveis de ambiente (lidas pelo processo que executa o cadastro):
 
 Os subprocessos rodam sem abrir janelas de console no Windows, com saída capturada e tempo limite. No Docker, `Dockerfile` instala `tesseract-ocr`, `-por`, `-eng`, `-osd`, `ghostscript`, `pngquant` e `unpaper`, e `requirements.txt` fixa `ocrmypdf==16.10.4`. No Windows o Ghostscript não é obrigatório: sem ele, a alternativa PyMuPDF + Tesseract é usada automaticamente. Se nenhum motor estiver disponível, o cadastro segue como antes e o recibo informa `ocr_indisponivel`.
 
-Limites: OCR não é perfeito. Pode errar letras, números, nomes, tabelas, manuscritos, carimbos e colunas, e trocar a ordem de leitura. O recibo e a cobertura do índice não atestam fidelidade: confira sempre a página no original antes de usar uma passagem como evidência. O OCR roda durante o cadastro e pode levar segundos por página; PDFs grandes alongam a requisição. Imagens avulsas (PNG/JPG) não passam por OCR.
+Limites: OCR não é perfeito. Pode errar letras, números, nomes, tabelas, manuscritos, carimbos e colunas, e trocar a ordem de leitura. O recibo e a cobertura do índice não atestam fidelidade: confira sempre a página no original antes de usar uma passagem como evidência. O OCR roda durante o cadastro e pode levar segundos por página; PDFs grandes alongam a requisição. Imagens avulsas (PNG/JPG) não passam por OCR, a menos que o cadastro seja chamado com `--ocr-imagens` (ver abaixo).
+
+## Extração de DOCX e XLSX
+
+`scripts/extrair_office.py` lê os pacotes só com `zipfile` e `xml.etree` da biblioteca padrão, sem rede, sem modelo, sem resolver DTD/entidades e com limite de tamanho descompactado. O cadastro grava `derivados/D###_texto_docx.md` ou `D###_texto_xlsx.md` e registra no manifesto `tipo` (`texto_extraido_docx`/`texto_extraido_xlsx`), `origem` (`extracao_docx`/`extracao_xlsx`), `versao_extrator`, `metodo`, `origem_sha256` e o hash do derivado. O resultado completo fica em `extracao_office` do documento (estado `extraido`, `parcial`, `sem_texto` ou `erro`, `recusa`, `mensagem`, `contagens`, `abas`, `falhas`, `avisos`).
+
+- **DOCX:** parágrafos e células de tabela em ordem, com localizador `P0001` ou `T01 L02 C03` (tabela, linha, coluna da grade); cabeçalhos (`CAB1 P0001`), rodapés (`ROD1 P0001`), notas (`NOTA 1 P0001`, `NOTAFIM 1 P0001`) e comentários (`COMENT 1 P0001`) quando existirem.
+- **XLSX:** cada célula preenchida de cada aba com `Aba!A1` (aba entre aspas quando o Excel exigiria), valor gravado, valor exibido para formato numérico simples e fórmula como texto, sem avaliar.
+- **Recusas legíveis:** arquivo com macro (`.docm`, `.xlsm` ou `vbaProject`), protegido por senha, corrompido ou acima dos limites continua cadastrado como original, sem derivado, com `estado: erro`, `recusa` e mensagem. O lote não é abortado. Reenviar o mesmo arquivo tenta de novo; uma extração legível não é repetida.
+- **Recibo:** `extracao_office_resumo` conta documentos, processados agora, DOCX/XLSX, estados, parágrafos, tabelas, células de tabela, abas, células, fórmulas, falhas e recusas por motivo.
+
+Extrair não é ler nem validar: valores, datas e fórmulas da cópia de trabalho precisam ser conferidos no original antes de virar evidência.
+
+## OCR de imagens avulsas (opcional)
+
+```powershell
+python scripts/cadastrar_documentos.py --caso minha_apuracao --documentos entrada/foto.png --ocr-imagens
+```
+
+Desligado por padrão. Com `--ocr-imagens`, cada PNG/JPEG do lote passa pela CLI local do Tesseract (`scripts/ocr.py`, mesma configuração `VLADO_*` da tabela acima), sem enviar a imagem a serviço externo e sem modelo. O derivado `D###_texto_ocr.md` entra no manifesto com `tipo: texto_ocr_imagem`, `origem: ocr`, motor, versões, idiomas e o aviso de que o texto precisa ser conferido no original; o documento recebe `ocr_imagem` com o estado. A rotação detectada pelo OSD é só avisada, não corrigida. Sem Tesseract (ou com `VLADO_OCR=0`), a imagem fica `pendente`, sem derivado, com mensagem clara; reenviar a imagem com a opção depois de instalar o motor tenta de novo. O recibo traz `ocr_imagens_resumo` (solicitado, imagens, processadas agora, extraído, sem texto, pendente, erro, sem OCR).
 
 ## Preservação e conferência
 

@@ -8,9 +8,9 @@ import unittest
 from unittest.mock import patch
 
 import test_codex_integracao as fixture
-from agente_fluxo_fixture import completar, entrega, esperar
+from agente_fluxo_fixture import aguardar_fim, completar, encerrar_gerenciador, entrega, esperar
 from cadastrar_documentos import cadastrar
-from codex_apuracao import ACTIVE, Conversas
+from codex_apuracao import Conversas
 from comum import ler_json, sha256
 from interface_pesquisa import Servidor
 import continuidade
@@ -35,15 +35,17 @@ def completar_expansao(manager, identifier, *, tipo='alterada', parar_antes=None
         tool({'acao':'guardar','etapa':'sintese' if stage=='comparacao' else stage,'texto':raw})
         turn=manager.contexts[identifier]['meta']['turn_id']
         manager.rpc.emit('turn/completed',{'turn':{'id':turn,'status':'completed'}})
-    esperar(lambda:manager.eventos(identifier)['conversa']['estado'] not in
-        ('preparando','executando','publicando','aguardando_aprovacao','cancelando'))
+    aguardar_fim(manager,identifier)
 
 
 class ContinuarDocumentosTest(unittest.TestCase):
+    # The integration fixture runs on this test, so its cleanups (threads, manager, temporary
+    # folder) are registered here: they run even if setUp fails midway and report their errors.
+    start=fixture.CodexIntegrationTest.start
+
     def setUp(self):
-        self.fx=fixture.CodexIntegrationTest();self.fx.setUp();self.addCleanup(self.fx.doCleanups)
-        self.manager,self.root=self.fx.manager,self.fx.root
-        self.chat=self.fx.start();completar(self.manager,self.chat)
+        fixture.CodexIntegrationTest.setUp(self)
+        self.chat=self.start();completar(self.manager,self.chat)
         self.first=self.manager.contexts[self.chat]['run']
 
     def cadastrar_novo(self,name='assessoria.txt',text='Contrato adicional. Valor total 246.'):
@@ -62,7 +64,7 @@ class ContinuarDocumentosTest(unittest.TestCase):
         receipt=self.cadastrar_novo();preview=self.previa()
         self.assertEqual(receipt['corpus_id'],'alpha_v2');self.assertEqual(preview['documentos_novos'][0]['id'],'D002')
         self.assertEqual(self.manager.contexts[self.chat]['meta']['rodadas'],['R001'])
-        self.fx.start(conversa=self.chat,atualizar_corpus=preview['solicitacao'])
+        self.start(conversa=self.chat,atualizar_corpus=preview['solicitacao'])
         completar_expansao(self.manager,self.chat)
         ctx=self.manager.contexts[self.chat]
         self.assertEqual(ctx['meta']['estado'],'concluido')
@@ -82,8 +84,8 @@ class ContinuarDocumentosTest(unittest.TestCase):
         self.assertTrue(all(sha256(p)==digest for p,digest in before.items()))
         self.assertEqual(config,(self.root/'configuracao.json').read_bytes())
         # Resume from disk: ordinary follow-ups retain the expanded frozen corpus.
-        self.manager.close()
-        other=Conversas(self.root,fixture.FakeServer);self.addCleanup(other.close)
+        encerrar_gerenciador(self.manager)
+        other=Conversas(self.root,fixture.FakeServer);self.addCleanup(encerrar_gerenciador,other)
         response=other.perguntar({'caso':'alpha','conversa':self.chat,'pergunta':'Complemento técnico.'})
         esperar(lambda:other.contexts[response['conversa']]['meta'].get('turn_id'))
         completar(other,self.chat)
@@ -112,14 +114,14 @@ class ContinuarDocumentosTest(unittest.TestCase):
         with patch.object(self.manager,'_freeze',side_effect=racing):
             self.manager.perguntar({'caso':'alpha','conversa':self.chat,'pergunta':'Continuar.',
                 'atualizar_corpus':preview['solicitacao']})
-            esperar(lambda:not self.manager.contexts[self.chat]['busy'])
+            aguardar_fim(self.manager,self.chat)
         self.assertEqual(self.manager.contexts[self.chat]['meta']['estado'],'erro')
         self.assertEqual(sha256(state),before)
         self.assertFalse((self.root/'execucoes/alpha/R002').exists())
 
     def test_comparativo_recusa_vinculos_incompletos_ou_pendencia_falsamente_respondida(self):
         self.cadastrar_novo();preview=self.previa()
-        self.fx.start(conversa=self.chat,atualizar_corpus=preview['solicitacao'])
+        self.start(conversa=self.chat,atualizar_corpus=preview['solicitacao'])
         completar_expansao(self.manager,self.chat)
         pipeline=self.manager.contexts[self.chat]['pipeline']
         entry={'anteriores':['A001'],'atuais':['A001'],'tipo':'alterada','justificativa':'Reexame sintético.'}
@@ -164,15 +166,13 @@ class ContinuarDocumentosTest(unittest.TestCase):
 
     def test_comparacao_ausente_impede_conclusao_e_preserva_publicacoes_parciais(self):
         self.cadastrar_novo();preview=self.previa()
-        self.fx.start(conversa=self.chat,atualizar_corpus=preview['solicitacao'])
+        self.start(conversa=self.chat,atualizar_corpus=preview['solicitacao'])
         completar_expansao(self.manager,self.chat,parar_antes='comparacao')
         ctx=self.manager.contexts[self.chat]
         for attempt in (1,2):
             esperar(lambda:ctx['meta'].get('etapa')=='comparacao' and ctx['meta'].get('tentativa_etapa')==attempt and ctx['meta'].get('turn_id'))
             self.manager.rpc.emit('turn/completed',{'turn':{'id':ctx['meta']['turn_id'],'status':'completed'}})
-        # _finish clears busy before writing codex_execucao.json, all under the manager lock;
-        # eventos() takes that lock, so the final state is only seen once the report exists.
-        esperar(lambda:self.manager.eventos(self.chat)['conversa']['estado'] not in ACTIVE)
+        aguardar_fim(self.manager,self.chat)
         self.assertEqual(ctx['meta']['estado'],'incompleto')
         report=ler_json(ctx['run']/'saidas/codex_execucao.json')
         self.assertEqual(report['etapas_sem_registro'],['comparacao'])
@@ -181,7 +181,7 @@ class ContinuarDocumentosTest(unittest.TestCase):
         self.assertTrue((ctx['run']/'saidas/achados/revisoes/r3_sintese/registros.json').is_file())
 
     def test_pendencia_respondida_vincula_ultima_rodada_concluida_a_suporte_novo(self):
-        self.fx.start(conversa=self.chat,pergunta='Pendência técnica sintética.')
+        self.start(conversa=self.chat,pergunta='Pendência técnica sintética.')
         refs={}
         for stage in ('inventario','plano','busca','geracao_inicial','revisao','sintese'):
             ctx=self.manager.contexts[self.chat]
@@ -197,10 +197,10 @@ class ContinuarDocumentosTest(unittest.TestCase):
             else:raw=entrega(stage,tool,refs)
             tool({'acao':'guardar','etapa':stage,'texto':raw})
             self.manager.rpc.emit('turn/completed',{'turn':{'id':ctx['meta']['turn_id'],'status':'completed'}})
-        esperar(lambda:not ctx['busy'])
+        aguardar_fim(self.manager,self.chat)
         self.cadastrar_novo();preview=self.previa()
         self.assertEqual(preview['rodada_anterior'],'R002')
-        self.fx.start(conversa=self.chat,atualizar_corpus=preview['solicitacao'])
+        self.start(conversa=self.chat,atualizar_corpus=preview['solicitacao'])
         completar_expansao(self.manager,self.chat,tipo='pendencia_respondida')
         ctx=self.manager.contexts[self.chat]
         self.assertEqual(ctx['meta']['estado'],'concluido')

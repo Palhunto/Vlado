@@ -10,17 +10,37 @@ import re
 import sqlite3
 import uuid
 
+import unicodedata
+
 from comum import dentro, escrever_json, ler_json, sha256, pasta_preparacao
 from fontes_web import documentos_e_capturas
 
+# Copies of the working-copy markers, so banco.py + indice_sqlite.py + comum.py stay a
+# portable set; testes/test_extrair_office.py checks they match extrair_office and ocr.
+MARCADORES_OFFICE = frozenset({'[SEM TEXTO EXTRAIVEL NESTE DOCUMENTO]', '[ABA SEM CELULAS PREENCHIDAS]',
+                               '[aba oculta no original]', '[aba de grafico; sem celulas]'})
+SEM_TEXTO_IMAGEM = '[SEM TEXTO RECONHECIDO NA IMAGEM]'
+AVISO_OCR_IMAGEM = ('Texto de reconhecimento automatico (OCR), sujeito a erros; '
+                    'conferir no original antes de usar como evidencia.')
+
 ESQUEMA = 1
 IMPLEMENTACAO = '1.0.0'
+# REGRAS and IMPLEMENTACAO enter every index identity: changing them would make every
+# existing round's index unverifiable. DOCX/XLSX/image-OCR adapters below only apply to
+# derivatives that did not exist before, so PDF and plain-text indexing is unchanged.
 REGRAS = {'adaptadores': 'texto_utf8_e_markdown_paginado_v1',
           'linhas_por_trecho': 40, 'sobreposicao_linhas': 4,
           'tokenizador': 'unicode61 remove_diacritics 2'}
+ADAPTADORES_OFFICE = {'docx': 'markdown_docx_v1', 'xlsx': 'markdown_xlsx_v1'}
+ADAPTADOR_OCR_IMAGEM = 'markdown_ocr_imagem_v1'
+SECAO = re.compile(r'^## ([A-Za-z0-9_-]+) - (.+)$')
+LOCALIZADOR_DOCX = re.compile(r'^\[((?:(?:CAB|ROD)[0-9]+ |(?:NOTA|NOTAFIM|COMENT) [^\s\[\]]+ )?P[0-9]{4,}'
+                              r'|T[0-9]{2,} L[0-9]{2,} C[0-9]{2,})\](?: (.*))?$')
+LOCALIZADOR_XLSX = re.compile(r"^\[((?:[A-Za-z_][A-Za-z0-9_.]*|'(?:[^']|'')+')![A-Z]{1,3}[1-9][0-9]*)\](?: (.*))?$")
 ID_CASO = r'[a-z0-9][a-z0-9_-]{0,63}'
 ID_RODADA = r'R[0-9]{3,6}'
 ID_GERACAO = r'[a-z0-9][a-z0-9_-]{0,31}'
+ID_DOCUMENTO = r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}'
 PAGINA = re.compile(r'^## ([A-Za-z0-9_-]+) - pagina PDF ([1-9][0-9]*)$')
 LINHA = re.compile(r'^\[L([0-9]{4,})\] ?(.*)$')
 SEM_TEXTO = '[SEM TEXTO EXTRAIVEL NESTA PAGINA]'
@@ -125,7 +145,7 @@ def _entradas(run: Path, caso: str, rodada: str):
     sources, identifiers, paths = [], set(), set()
     for document in documents:
         identifier = document['id']
-        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', identifier) or identifier in identifiers:
+        if not re.fullmatch(ID_DOCUMENTO, identifier) or identifier in identifiers:
             raise ValueError('ID documental invalido ou repetido.')
         identifiers.add(identifier)
         for number, item in enumerate([document, *document.get('derivados', [])]):
@@ -170,6 +190,10 @@ def _adaptar(path: Path, document_id: str, original_hash: str, tipo: str):
         method = 'Leitura direta de texto UTF-8' if tipo == 'original' else 'Leitura UTF-8; metodo de origem nao informado'
         return 'texto_linhas_v1', method, [
             _unidade(1, None, list(enumerate(lines, 1)))]
+    header = lines[:next((i for i, line in enumerate(lines) if line.startswith('## ')), len(lines))]
+    declared_format = next((line.removeprefix('Formato: ') for line in header if line.startswith('Formato: ')), None)
+    if declared_format in ADAPTADORES_OFFICE or declared_format == 'imagem':
+        return _adaptar_secoes(lines, header, document_id, original_hash, declared_format)
     units, buffer, page, empty, failed = [], [], None, False, False
     method = next((line.removeprefix('Metodo: ') for line in lines if line.startswith('Metodo: ')), 'nao_informado')
     declared_hash = next((line.removeprefix('SHA-256 do PDF: ') for line in lines if line.startswith('SHA-256 do PDF: ')), None)
@@ -208,6 +232,77 @@ def _adaptar(path: Path, document_id: str, original_hash: str, tipo: str):
     except ValueError as exc:
         return 'markdown_paginado_v1', method, [_unidade(1, None, [], 'erro_leitura', str(exc))]
     return 'markdown_paginado_v1', method, units
+
+
+def _aba_do_localizador(locator):
+    sheet = locator.rsplit('!', 1)[0]
+    return sheet[1:-1].replace("''", "'") if sheet.startswith("'") else sheet
+
+
+def _adaptar_secoes(lines, header, document_id, original_hash, kind):
+    """DOCX/XLSX/image-OCR working copies: one unit per `## ID - <section>` block.
+
+    Each content line keeps its source locator (`[P0001]`, `[T01 L02 C03]`, `[Aba!B3]`,
+    `[L0001]`) in the indexed text and is numbered 1..n inside its unit. Informational
+    markers are not content. Any incoherence makes the whole source unreadable rather
+    than indexing doubtful locators.
+    """
+    adapter = ADAPTADORES_OFFICE.get(kind, ADAPTADOR_OCR_IMAGEM)
+    method = next((line.removeprefix('Metodo: ') for line in header if line.startswith('Metodo: ')), 'nao_informado')
+    declared_hash = next((line.removeprefix('SHA-256 do original: ') for line in header
+                          if line.startswith('SHA-256 do original: ')), None)
+    pattern = {'docx': LOCALIZADOR_DOCX, 'xlsx': LOCALIZADOR_XLSX}.get(kind, LINHA)
+    markers = MARCADORES_OFFICE if kind in ADAPTADORES_OFFICE else {SEM_TEXTO_IMAGEM}
+    sections = []
+    try:
+        if declared_hash != original_hash:
+            raise ValueError('Hash de origem ausente ou divergente no derivado.')
+        for line in lines[len(header):]:
+            match = SECAO.fullmatch(line)
+            if match:
+                if match[1] != document_id:
+                    raise ValueError('Cabecalho de secao de outro documento.')
+                title = match[2]
+                if kind == 'xlsx' and not title.startswith('aba '):
+                    raise ValueError('Secao de planilha sem aba identificada.')
+                if kind == 'imagem' and (title != 'imagem' or sections):
+                    raise ValueError('Derivado de OCR de imagem com secao inesperada.')
+                sections.append((title, []))
+            elif not line or line in markers:
+                continue
+            elif not sections:
+                raise ValueError('Conteudo antes da primeira secao.')
+            else:
+                found = pattern.fullmatch(line)
+                if not found:
+                    raise ValueError('Linha sem localizador valido no derivado.')
+                buffer = sections[-1][1]
+                if kind == 'xlsx' and _aba_do_localizador(found[1]) != sections[-1][0].removeprefix('aba '):
+                    raise ValueError('Celula citada em aba diferente da secao.')
+                if kind == 'imagem':
+                    if int(found[1]) != len(buffer) + 1:
+                        raise ValueError('Linhas do OCR fora de sequencia.')
+                    buffer.append((len(buffer) + 1, found[2]))
+                else:
+                    buffer.append((len(buffer) + 1, line))
+        if not sections:
+            raise ValueError('Derivado sem secoes reconhecidas.')
+    except ValueError as exc:
+        return adapter, method, [_unidade(1, None, [], 'erro_leitura', str(exc))]
+    return adapter, method, [_unidade(number, None, buffer) for number, (_, buffer) in enumerate(sections, 1)]
+
+
+def _localizadores(adapter, linhas, start, end):
+    """(locator, text) of each Office line in a block; None for other adapters."""
+    pattern = {'markdown_docx_v1': LOCALIZADOR_DOCX, 'markdown_xlsx_v1': LOCALIZADOR_XLSX}.get(adapter)
+    if not pattern:
+        return None
+    found = [pattern.fullmatch(text) for number, text in linhas if start <= number <= end]
+    return [(m[1], m[2] or '') for m in found if m]
+
+
+def _normalizar(text):
+    return ''.join(c for c in unicodedata.normalize('NFKD', text.casefold()) if not unicodedata.combining(c))
 
 
 def _partes(lines):
@@ -406,19 +501,41 @@ def _consulta_comum(query):
 
 SELECT_TRECHO = '''SELECT t.referencia,d.documento_id,d.arquivo,d.sha256,
  f.arquivo,f.sha256,f.tipo,f.metodo,u.pagina_pdf,t.linha_inicio,t.linha_fim,t.texto,
- u.linhas_json,u.unidade_id,d.nome FROM trechos t
+ u.linhas_json,u.unidade_id,d.nome,f.adaptador FROM trechos t
  JOIN unidades u USING(unidade_id) JOIN fontes f USING(fonte_id)
  JOIN documentos d USING(documento_id)'''
 
 
-def _resultado(row, caso):
-    return {'referencia': row[0], 'caso_id': caso, 'documento_id': row[1],
-            'nome_documento': row[14],
-            'original': f'entradas/{row[2]}', 'original_sha256': row[3],
-            'fonte_textual': f'entradas/{row[4]}', 'fonte_sha256': row[5],
-            'tipo_fonte': row[6], 'metodo': row[7], 'pagina_pdf': row[8],
-            'linha_inicio': row[9], 'linha_fim': row[10], 'trecho': row[11],
-            'linhas_referem_se_a': 'copia textual de trabalho' if row[6] == 'derivado' else 'arquivo textual original'}
+def _resultado(row, caso, consulta=None, modo=None):
+    result = {'referencia': row[0], 'caso_id': caso, 'documento_id': row[1],
+              'nome_documento': row[14],
+              'original': f'entradas/{row[2]}', 'original_sha256': row[3],
+              'fonte_textual': f'entradas/{row[4]}', 'fonte_sha256': row[5],
+              'tipo_fonte': row[6], 'metodo': row[7], 'pagina_pdf': row[8],
+              'linha_inicio': row[9], 'linha_fim': row[10], 'trecho': row[11],
+              'linhas_referem_se_a': 'copia textual de trabalho' if row[6] == 'derivado' else 'arquivo textual original'}
+    if row[15] == ADAPTADOR_OCR_IMAGEM:
+        result.update(origem_texto='ocr', aviso_ocr=AVISO_OCR_IMAGEM)
+    located = _localizadores(row[15], json.loads(row[12]), row[9], row[10])
+    if located is None:
+        return result
+    # Lines of a DOCX/XLSX unit are positions in the working copy; the citable place in
+    # the original is the locator (paragraph, table cell or Aba!A1) written on each line.
+    result.update(formato=next(k for k, v in ADAPTADORES_OFFICE.items() if v == row[15]),
+                  localizadores=[loc for loc, _ in located],
+                  localizador_inicio=located[0][0] if located else None,
+                  localizador_fim=located[-1][0] if located else None)
+    if modo == 'literal':
+        needle = consulta.strip()
+        result['localizadores_com_termo'] = [loc for loc, text in located if needle in text]
+    elif modo == 'comum':
+        terms = [_normalizar(phrase or term) for phrase, term in re.findall(r'"([^"\n]+)"|([^\s"]+)', consulta)]
+        result['localizadores_com_termo'] = [loc for loc, text in located
+                                             if any(term in _normalizar(text) for term in terms)]
+    if 'localizadores_com_termo' in result:
+        result['observacao_localizadores'] = ('Linhas do trecho cujo conteudo (sem o localizador) contem algum termo '
+                                              'da consulta, por comparacao simples; conferir no original.')
+    return result
 
 
 def pesquisar(root, caso, rodada, consulta, *, modo='comum', documentos=None,
@@ -459,7 +576,7 @@ def pesquisar(root, caso, rodada, consulta, *, modo='comum', documentos=None,
             order = 't.referencia' if modo == 'literal' else 'bm25(trechos_fts), t.referencia'
             rows = con.execute(base + ' ORDER BY ' + order + ' LIMIT ? OFFSET ?',
                                [*params, limite, deslocamento]).fetchall()
-            result['resultados'] = [_resultado(row, caso) for row in rows]
+            result['resultados'] = [_resultado(row, caso, consulta, modo) for row in rows]
             result.update(total_correspondencias=total, retornados=len(rows),
                           truncado=deslocamento > 0 or deslocamento + len(rows) < total,
                           proximo_deslocamento=deslocamento + len(rows) if deslocamento + len(rows) < total else None)
@@ -479,6 +596,11 @@ def ler_passagem(root, caso, rodada, referencia, *, geracao='v1'):
             raise ValueError('Referencia nao encontrada nesta geracao/caso/rodada.')
         result = _base(manifest, 'ler')
         result['passagem'] = _resultado(row, caso)
-        result['unidade_completa'] = [{'linha': number, 'texto': text} for number, text in json.loads(row[12])]
+        linhas = json.loads(row[12])
+        result['unidade_completa'] = [{'linha': number, 'texto': text} for number, text in linhas]
+        located = _localizadores(row[15], linhas, 1, len(linhas))
+        if located is not None and len(located) == len(linhas):
+            for item, (locator, _) in zip(result['unidade_completa'], located):
+                item['localizador'] = locator
         result['aviso'] = 'Contexto textual; conferir original quando houver imagens, tabelas ou erro de extracao.'
     return _salvar_log(run, result)
