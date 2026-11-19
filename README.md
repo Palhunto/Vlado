@@ -45,6 +45,24 @@ O projeto é genérico. Cada apuração possui documentos, manifesto, versão e 
 
 Para começar com outra pauta, basta enviar os arquivos no novo chat e dizer, por exemplo, que pertencem a uma nova apuração. Não é necessário editar os prompts. Para trocar de caso, selecione o desejado e use um chat novo em testes comparáveis. Só cruzar casos quando você pedir explicitamente e autorizar a seleção documental conjunta.
 
+## Fontes web por apuração (planejado, ainda não disponível)
+
+> **Status:** esta seção descreve o comportamento previsto. Ele ainda não está implementado e exige, antes disso, alterar a regra de [AGENTS.md](AGENTS.md) que proíbe navegação na apuração fechada. Até essa mudança, toda apuração funciona somente com os documentos cadastrados.
+
+Ao criar uma **nova apuração**, o jornalista escolhe o modo:
+
+- **Somente documental** (padrão): a apuração usa apenas os documentos cadastrados, sem acesso à internet.
+- **Documentos + web**: além dos documentos, a apuração pode consultar **um site específico** informado pelo jornalista, e somente ele.
+
+No modo com web:
+
+- o site é registrado no manifesto do caso como lista de domínios permitidos; páginas de outros domínios são recusadas;
+- cada fonte web guarda o conteúdo capturado, o endereço completo e a data e hora do acesso, com hash, para que a citação possa ser conferida depois;
+- as fontes web aparecem separadas dos documentos originais nas respostas e nos registros, com a mesma exigência de localizador e suporte;
+- o modo pode ser trocado só criando outra apuração; não se muda o modo de um caso em andamento.
+
+Nenhuma página é aberta, pesquisada ou capturada sem a opção estar marcada no caso.
+
 ## O que foi migrado
 
 | Original | Operação nesta versão |
