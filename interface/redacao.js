@@ -11,7 +11,7 @@
     const Q = window.Quadros;
     if (!Q || typeof Q.registrarAba !== 'function') return;  // older page without the boards
     const {t} = Q;
-    const ESTADOS = {sem_suporte: 'Sem suporte', suporte_parcial: 'Suporte parcial', suportada: 'Suportada',
+    const ESTADOS = {sem_suporte: 'Sem suporte', suporte_parcial: 'Com suporte parcial', suportada: 'Suportada',
       revisada_por_humano: 'Revisada por pessoa'};
     const DECISOES = {conferida_no_original: 'Conferida no original', precisa_de_ajuste: 'Precisa de ajuste',
       sem_suporte_suficiente: 'Sem suporte suficiente'};
@@ -19,7 +19,7 @@
       causalidade_sem_suporte: 'Causalidade sem suporte', certeza_sem_atribuicao: 'Certeza onde a fonte só atribui'};
     const TIPOS = {entrevista: 'Entrevista', pedido_informacao: 'Pedido de informação', pedido_lai: 'Pedido via LAI'};
     const SITUACOES = {aberta: 'Aberta', respondida: 'Respondida', parcial: 'Respondida em parte', sem_resposta: 'Sem resposta'};
-    const ORIGENS = {registrada: 'Lacuna registrada por pessoa', automatica: 'Lacuna apontada pelo quadro',
+    const ORIGENS = {registrada: 'Lacuna registrada na hipótese', automatica: 'Lacuna apontada pelo quadro de hipóteses',
       afirmacao_sem_suporte: 'Afirmação sem suporte no texto'};
     const comConta = () => document.body.dataset.modo !== 'local';
     const celular = () => !!window.matchMedia?.('(max-width: 1050px)').matches;
@@ -180,7 +180,7 @@
           const li = element('li'), abrir = Q.botao(item.titulo);
           abrir.setAttribute('translate', 'no');
           abrir.addEventListener('click', async () => {
-            Q.estado(painel, 'carregando', t('Carregando…'));
+            Q.estado(painel, 'carregando', t('Carregando a conferência…'));
             try { conferencia(painel, casoId, await api('redacao-conferir', {caso: casoId, id: item.id})); }
             catch (erro) { Q.estado(painel, 'erro', erro.message); }
           });
@@ -189,7 +189,7 @@
         }
         corpo.push(ul);
       } else corpo.push(Q.estado(element('div'), 'vazio', t('Nenhum texto em conferência nesta apuração.')));
-      if (dados.divergentes?.length) corpo.push(element('p', t('{n} registros com histórico divergente ficaram de fora.', {n: dados.divergentes.length}), 'notice'));
+      if (dados.divergentes?.length) corpo.push(element('p', t('{n} textos com histórico divergente ficaram de fora.', {n: dados.divergentes.length}), 'notice'));
       painel.replaceChildren(...corpo, formNovo(painel, casoId));
     }
     Q.registrarAba({id: 'redacao', rotulo: t('Conferência do texto'), carregar: Q.quadro('conferencia_redacao', lista)});
