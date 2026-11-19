@@ -21,6 +21,8 @@
     const SITUACOES = {aberta: 'Aberta', respondida: 'Respondida', parcial: 'Respondida em parte', sem_resposta: 'Sem resposta'};
     const ORIGENS = {registrada: 'Lacuna registrada na hipótese', automatica: 'Lacuna apontada pelo quadro de hipóteses',
       afirmacao_sem_suporte: 'Afirmação sem suporte no texto'};
+    // Number agreement: "1 parcial", "2 parciais" (and "1 partial claim" in English through the dictionary).
+    const contagem = (n, um, varios) => t(n === 1 ? um : varios, {n});
     const comConta = () => document.body.dataset.modo !== 'local';
     const celular = () => !!window.matchMedia?.('(max-width: 1050px)').matches;
     const rid = () => window.crypto.randomUUID().replace(/-/g, '').slice(0, 32);
@@ -43,7 +45,7 @@
         if (a.inicio > pos) corpo.append(visao.texto.slice(pos, a.inicio));
         const trecho = element('button', visao.texto.slice(a.inicio, a.fim), `redacao-afirmacao estado-${a.estado}`);
         trecho.type = 'button'; trecho.dataset.afirmacao = a.id; trecho.dataset.estado = a.estado;
-        trecho.setAttribute('aria-label', `${t(ESTADOS[a.estado] || a.estado)}${a.sinais.length ? ` · ${t('{n} sinais', {n: a.sinais.length})}` : ''}: ${a.texto}`);
+        trecho.setAttribute('aria-label', `${t(ESTADOS[a.estado] || a.estado)}${a.sinais.length ? ` · ${contagem(a.sinais.length, '{n} sinal', '{n} sinais')}` : ''}: ${a.texto}`);
         trecho.addEventListener('click', () => escolher(a, trecho));
         corpo.append(trecho);
         pos = Math.max(pos, a.fim);
@@ -141,10 +143,10 @@
       const cabeca = element('header', undefined, 'redacao-cabeca');
       const voltar = Q.botao(t('Todos os textos')); voltar.addEventListener('click', () => lista(painel, casoId));
       const r = visao.resumo.por_estado;
-      cabeca.append(voltar, Q.dado('h3', visao.titulo),
-        element('p', t('Versão {versao} · {total} afirmações · {sem} sem suporte · {parcial} parciais · {suportadas} suportadas · {revisadas} revisadas por pessoa',
-          {versao: visao.versao, total: visao.resumo.total, sem: r.sem_suporte, parcial: r.suporte_parcial, suportadas: r.suportada,
-            revisadas: r.revisada_por_humano}), 'small'));
+      cabeca.append(voltar, Q.dado('h3', visao.titulo), element('p', [t('Versão {versao}', {versao: visao.versao}),
+        contagem(visao.resumo.total, '{n} afirmação', '{n} afirmações'), t('{n} sem suporte', {n: r.sem_suporte}),
+        contagem(r.suporte_parcial, '{n} parcial', '{n} parciais'), contagem(r.suportada, '{n} suportada', '{n} suportadas'),
+        contagem(r.revisada_por_humano, '{n} revisada por pessoa', '{n} revisadas por pessoa')].join(' · '), 'small redacao-resumo'));
       const grade = element('div', undefined, 'redacao-grade');
       grade.append(textoMarcado(visao, escolher), lado);
       painel.replaceChildren(cabeca, element('p', t(visao.aviso), 'small quadro-aviso'), legenda(), grade);
@@ -184,7 +186,8 @@
             try { conferencia(painel, casoId, await api('redacao-conferir', {caso: casoId, id: item.id})); }
             catch (erro) { Q.estado(painel, 'erro', erro.message); }
           });
-          li.append(abrir, element('p', t('Versão {versao} · {total} afirmações', {versao: item.versao, total: item.resumo.total}), 'small'));
+          li.append(abrir, element('p', [t('Versão {versao}', {versao: item.versao}),
+            contagem(item.resumo.total, '{n} afirmação', '{n} afirmações')].join(' · '), 'small'));
           ul.append(li);
         }
         corpo.push(ul);
@@ -223,7 +226,7 @@
       const li = element('li', undefined, 'quadro-lacuna');
       li.append(Q.dado('p', lacuna.motivo.lacuna), element('p', t(ORIGENS[lacuna.motivo.origem_lacuna] || lacuna.motivo.origem_lacuna), 'small'),
         Q.dado('p', lacuna.motivo.contexto, 'small'),
-        element('p', t('{n} evidências motivam esta lacuna', {n: lacuna.evidencias.length}), 'small'));
+        element('p', contagem(lacuna.evidencias.length, '{n} evidência motiva esta lacuna', '{n} evidências motivam esta lacuna'), 'small'));
       if (lacuna.pergunta_id) li.append(element('p', t('Pergunta preparada · {situacao}', {situacao: t(SITUACOES[lacuna.situacao] || lacuna.situacao)}), 'quadro-selo'));
       else {
         const form = formPreparar(casoId, lacuna, recarregar), abrir = Q.botao(t('Preparar pergunta'));
