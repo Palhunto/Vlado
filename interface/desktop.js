@@ -263,6 +263,8 @@
     info.append(element('p',counts.join(' · '),'small'));
     next.append(element('p','SUA PRÓXIMA AÇÃO','eyebrow'),element('p',caseData.rodadas.length?'Retome a conversa e confira as fontes antes de avançar.':'Confira o recebimento dos documentos e faça sua primeira pergunta.'));
     const button=element('button','Retomar trabalho →');button.type='button';button.addEventListener('click',()=>$('inicio-retomar').click());next.append(button);target.append(info,next);
+    // Resume summary (continuidade.js): done and pending items, each linked to its area. Admin only.
+    if(window.Continuidade&&document.body.dataset.papel!=='convidado'){const slot=element('div',undefined,'mesa-resume-progress');target.append(slot);window.Continuidade.montar(slot,caseData.id);}
   }
   function formatBytes(n){if(!Number.isFinite(n))return '';return new Intl.NumberFormat('pt-BR',{maximumFractionDigits:1}).format(n>=1048576?n/1048576:n/1024)+(n>=1048576?' MB':' KB');}
   function documentTable(){
