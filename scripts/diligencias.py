@@ -11,6 +11,23 @@ from registros_achados import carregar
 
 ID = r'G[a-f0-9]{32}'
 ESTADOS = ('a_solicitar', 'em_andamento', 'aguardando_resposta', 'resposta_recebida', 'concluida', 'cancelada')
+# Campos opcionais de diligências de contato (entrevistas.py). Diligências antigas não os têm e continuam válidas.
+TIPOS = ('entrevista', 'pedido_informacao', 'pedido_lai')
+ID_PERGUNTA = r'J[a-f0-9]{32}'
+CAMPOS_CONTATO = ('tipo', 'destinatario', 'pergunta_id')
+
+
+def _contato(data):
+    """Tipo, destinatário e pergunta de origem, quando a diligência é um contato; ``{}`` se não for."""
+    if not any(k in data for k in CAMPOS_CONTATO):
+        return {}
+    if data.get('tipo') not in TIPOS:
+        raise ValueError('Escolha o tipo de contato: entrevista, pedido de informação ou pedido via LAI.')
+    question = data.get('pergunta_id')
+    if question is not None and (not isinstance(question, str) or not re.fullmatch(ID_PERGUNTA, question)):
+        raise ValueError('Pergunta de origem da diligência inválida.')
+    return {'tipo': data['tipo'], 'destinatario': caderno._texto(data.get('destinatario'), 'Destinatário', 200),
+            'pergunta_id': question}
 
 
 def _pasta(root, case):
@@ -78,6 +95,10 @@ def detalhe(root, case, identifier):
         caderno._texto(current.get('acao'), 'Ação', 1000)
         caderno._texto(current.get('responsavel'), 'Responsável', 120)
         _prazo(current.get('prazo'))
+        contact = {k: current[k] for k in CAMPOS_CONTATO if k in current}
+        if (contact and _contato(contact) != contact
+                or state and contact != {k: state[k] for k in CAMPOS_CONTATO if k in state}):
+            raise ValueError('Estado ou origem da diligência inválidos.')
         events.append(event); previous = sha256(path); state = current
     identity = state['origem']['identidade']
     origin = _origem(root, case, None if identity == {'tipo': 'livre'} else identity)
@@ -105,7 +126,8 @@ def listar(root, case, *, estado='', responsavel='', texto=''):
             continue
         item = detalhe(root, case, path.name); state = item['diligencia']
         if ((not estado or state['estado'] == estado) and (not who or who in state['responsavel'].casefold())
-                and (not query or query in (state['acao'] + ' ' + state['origem']['redacao']).casefold())):
+                and (not query or query in (state['acao'] + ' ' + state['origem']['redacao'] + ' '
+                                            + state.get('destinatario', '')).casefold())):
             result.append(item)
     result.sort(key=lambda item: (item['diligencia']['atualizada_em_utc'], item['id']), reverse=True)
     return {'caso': case, 'resultados': result, 'total': len(result)}
@@ -113,7 +135,8 @@ def listar(root, case, *, estado='', responsavel='', texto=''):
 
 def salvar(root, data, operation='criar', conta=None):
     fields = {'caso', 'requisicao_id', 'autor', 'observacao'}
-    fields |= {'origem', 'acao', 'responsavel', 'prazo'} if operation == 'criar' else {'diligencia_id', 'anterior_sha256'}
+    fields |= ({'origem', 'acao', 'responsavel', 'prazo', *CAMPOS_CONTATO} if operation == 'criar'
+               else {'diligencia_id', 'anterior_sha256'})
     fields |= {'acao', 'responsavel', 'prazo', 'estado'} if operation == 'atualizar' else set()
     fields |= {'origem_id', 'documentos'} if operation == 'responder' else set()
     if operation not in ('criar', 'atualizar', 'responder') or not isinstance(data, dict) or set(data) - fields:
@@ -145,7 +168,7 @@ def salvar(root, data, operation='criar', conta=None):
                 'origem_autoria': who['origem_autoria'], 'respostas': [],
                 'acao': caderno._texto(data.get('acao'), 'Ação', 1000),
                 'responsavel': caderno._texto(data.get('responsavel'), 'Responsável', 120),
-                'prazo': _prazo(data.get('prazo'))}
+                'prazo': _prazo(data.get('prazo')), **_contato(data)}
         else:
             if not current or data.get('anterior_sha256') != current['sha256']:
                 raise ValueError('A diligência mudou. Atualize antes de salvar; seu formulário foi preservado.')

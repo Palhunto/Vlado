@@ -34,6 +34,7 @@ import apuracao
 import exportar_apuracao
 import diligencias
 import rotas_evidencia
+import rotas_redacao
 import rotas_tabelas
 import rascunhos
 import continuidade
@@ -224,6 +225,9 @@ def executar(root, operation, data, conta=None, originais_abertos=None, casos=No
     if operation in rotas_tabelas.OPERACOES:
         # Investigation tables: cells point to evidence; same case checks as the boards; no model or network.
         return rotas_tabelas.executar(root, operation, data, conta, casos)
+    if operation in rotas_redacao.OPERACOES:
+        # Claim-by-claim review of the story text: human review only with the server's account; no model or network.
+        return rotas_redacao.executar(root, operation, data, conta, casos)
     if operation in rascunhos.OPERACOES:
         # Unconfirmed drafts per account, case and screen; guests (casos is a list) keep only the question.
         return rascunhos.executar(root, operation, data, conta, casos, convidado=casos is not None)
@@ -552,7 +556,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {'codex': True, 'protocolo_interface': 1, 'gerenciamento': True,
                              'apresentacao_editorial': True, 'preparacao_pdfs': True,
                              'revisao_humana': True, 'continuar_observacoes': True, 'continuar_documentos': True, 'caderno_humano': True, 'diligencias': True, 'quadros_evidencia': True,
-                             'tabelas_apuracao': True, 'continuidade_resumo': True, 'extracao_pdf': self.server.ambiente['extracao_pdf']})
+                             'tabelas_apuracao': True, 'continuidade_resumo': True, 'conferencia_redacao': True, 'entrevistas': True,
+                             'extracao_pdf': self.server.ambiente['extracao_pdf']})
             return
         if path == '/api/catalogo':
             try:
@@ -584,6 +589,8 @@ class Handler(BaseHTTPRequestHandler):
                   '/caderno.js': ('caderno.js', 'text/javascript; charset=utf-8'),
                   '/apuracao.js': ('apuracao.js', 'text/javascript; charset=utf-8'),
                   '/editor_notas.js': ('editor_notas.js', 'text/javascript; charset=utf-8'),
+                  '/redacao.js': ('redacao.js', 'text/javascript; charset=utf-8'),
+                  '/redacao.css': ('redacao.css', 'text/css; charset=utf-8'),
                   '/vendor/vditor/dist/index.min.js': ('vendor/vditor/dist/index.min.js', 'text/javascript; charset=utf-8'),
                   '/vendor/vditor/dist/index.css': ('vendor/vditor/dist/index.css', 'text/css; charset=utf-8'),
                   '/vendor/vditor/dist/js/lute/lute.min.js': ('vendor/vditor/dist/js/lute/lute.min.js', 'text/javascript; charset=utf-8'),
@@ -661,7 +668,7 @@ class Handler(BaseHTTPRequestHandler):
                        else 2 * 1024 * 1024 if operation in (*apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS,
                                                              *rotas_tabelas.SALVAR, *rascunhos.SALVAR)
                        else 128 * 1024 if operation in ('caderno-salvar', 'diligencias-criar', 'diligencias-atualizar', 'diligencias-responder',
-                                                     *rotas_evidencia.SALVAR) else 32768)
+                                                     *rotas_evidencia.SALVAR, *rotas_redacao.SALVAR) else 32768)
             if not 0 < length <= maximum:
                 raise ValueError('Requisição vazia ou muito grande.')
             body = self.rfile.read(length)
@@ -686,7 +693,7 @@ class Handler(BaseHTTPRequestHandler):
         codex_operations = ('codex-status', 'codex-listar',
                             'codex-perguntar', 'codex-retomar', 'codex-eventos', 'codex-cancelar', 'codex-original',
                             'codex-desligar', 'codex-observacoes', 'codex-corpus-previa', 'codex-documentos-cadastrar', 'codex-caderno-previa', 'codex-diligencias-previa')
-        if operation not in (*codex_operations, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES, *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, *rascunhos.OPERACOES, 'continuidade-resumo', 'analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario',
+        if operation not in (*codex_operations, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES, *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, *rotas_redacao.OPERACOES, *rascunhos.OPERACOES, 'continuidade-resumo', 'analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario',
                              *fontes_web.OPERACOES,
                              'ambiente', 'preparar-pdfs',
                              'gerenciar-listar', 'excluir', 'restaurar', 'lixeira-alcance', 'lixeira-apagar', *IA_OPERACOES, *CONTAS_OPERACOES, 'sessao-sair',
