@@ -343,13 +343,29 @@ class _Texto(HTMLParser):
     # that opens again closes the open one of the same family, even with inline elements still
     # open inside it, but never across the boundary of its own list, table, row or select.
     _ESCOPO = {'applet', 'caption', 'html', 'marquee', 'object', 'table', 'template'}
+    # "Special" category of the HTML parsing spec (HTML, MathML and SVG elements; names as
+    # html.parser reports them, in lower case). A new <li>, <dt> or <dd> closes the previous one
+    # only through non-special elements and through address, div and p (B1 of the QA, phase 09):
+    # stopping anywhere else would show text the browser keeps hidden.
+    ESPECIAIS = {
+        'address', 'applet', 'area', 'article', 'aside', 'base', 'basefont', 'bgsound', 'blockquote', 'body',
+        'br', 'button', 'caption', 'center', 'col', 'colgroup', 'dd', 'details', 'dir', 'div', 'dl', 'dt',
+        'embed', 'fieldset', 'figcaption', 'figure', 'footer', 'form', 'frame', 'frameset', 'h1', 'h2', 'h3',
+        'h4', 'h5', 'h6', 'head', 'header', 'hgroup', 'hr', 'html', 'iframe', 'img', 'input', 'keygen', 'li',
+        'link', 'listing', 'main', 'marquee', 'menu', 'meta', 'nav', 'noembed', 'noframes', 'noscript',
+        'object', 'ol', 'p', 'param', 'plaintext', 'pre', 'script', 'search', 'section', 'select', 'source',
+        'style', 'summary', 'table', 'tbody', 'td', 'template', 'textarea', 'tfoot', 'th', 'thead', 'title',
+        'tr', 'track', 'ul', 'wbr', 'xmp',
+        # MathML and SVG
+        'mi', 'mo', 'mn', 'ms', 'mtext', 'annotation-xml', 'foreignobject', 'desc'}
+    _LIMITE_ITEM = ESPECIAIS - {'address', 'div', 'p'}
     IRMAOS = {
-        'li': ({'li'}, {'ul', 'ol', 'menu', 'td', 'th'} | _ESCOPO),
+        'li': ({'li'}, _LIMITE_ITEM - {'li'}),
+        'dt': ({'dt', 'dd'}, _LIMITE_ITEM - {'dt', 'dd'}),
+        'dd': ({'dt', 'dd'}, _LIMITE_ITEM - {'dt', 'dd'}),
         'td': ({'td', 'th'}, {'tr', 'thead', 'tbody', 'tfoot'} | _ESCOPO),
         'th': ({'td', 'th'}, {'tr', 'thead', 'tbody', 'tfoot'} | _ESCOPO),
         'tr': ({'tr'}, {'thead', 'tbody', 'tfoot'} | _ESCOPO),
-        'dt': ({'dt', 'dd'}, {'dl', 'td', 'th'} | _ESCOPO),
-        'dd': ({'dt', 'dd'}, {'dl', 'td', 'th'} | _ESCOPO),
         'option': ({'option'}, {'select', 'datalist', 'optgroup'} | _ESCOPO),
     }
 
