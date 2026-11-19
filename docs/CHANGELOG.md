@@ -18,7 +18,7 @@ Novas áreas, integradas em `codex/lapidacao`: contrato de evidência e quadros 
 - **N4:** o resumo da entrada do caso só aparece quando o servidor anuncia `continuidade_resumo`.
 - **N6:** na conta da tabela, só os valores recebem o ponto de milhar; IDs como `E1234` ficam como estão.
 - **N7:** no mapa, a ligação aberta tem traço próprio (6 px e cor própria) e o foco tem 4 px com halo, com contraste de 3:1 nos dois temas.
-- **M4:** na exportação da redação, a URL do arquivo anterior é liberada antes de criar a nova.
+- **M3:** na exportação da redação, a URL do arquivo anterior é liberada antes de criar a nova.
 - **M5:** o resumo da conferência concorda em número ("1 parcial", "2 parciais"), em português e em inglês.
 - **M6:** as seções da redação e das entrevistas ganharam margem superior no celular.
 
