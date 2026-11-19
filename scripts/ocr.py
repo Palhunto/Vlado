@@ -1,4 +1,5 @@
-"""OCR local para paginas de PDF sem texto nativo. Nenhum PDF sai desta maquina.
+"""OCR local para paginas de PDF sem texto nativo e, so quando pedido, imagens avulsas.
+Nenhum arquivo sai desta maquina.
 
 Motores, em ordem de preferencia (VLADO_OCR_MOTOR=auto):
 1. OCRmyPDF (+ Tesseract + Ghostscript), restrito as paginas pedidas, com rotacao automatica;
@@ -21,6 +22,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+
+from comum import sha256
 
 IDIOMAS_PADRAO = 'por+eng'
 TESSERACT_WINDOWS = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
@@ -380,3 +383,77 @@ def reconhecer(pdf: Path, paginas) -> dict:
             continue
         return {**resultado, 'avisos': avisos + resultado.get('avisos', [])}
     raise OcrIndisponivel('Nenhum motor de OCR disponivel.')
+
+
+EXTENSOES_IMAGEM = ('.png', '.jpg', '.jpeg')
+
+
+def reconhecer_imagem(imagem: Path) -> dict:
+    """OCR one standalone PNG/JPEG with the local Tesseract CLI; only on explicit request.
+
+    The image is read in place and never rewritten. Raises OcrIndisponivel when OCR is
+    disabled or Tesseract/its languages are missing (the image stays pending), and
+    OcrFalha when the engine fails on this file.
+    """
+    imagem = Path(imagem)
+    if imagem.suffix.lower() not in EXTENSOES_IMAGEM:
+        raise ValueError('OCR de imagem avulsa aceita somente PNG ou JPEG.')
+    config = configuracao()
+    if not config['habilitado']:
+        raise OcrIndisponivel('OCR desabilitado (VLADO_OCR=0).')
+    if not _tesseract_ok(config):
+        raise OcrIndisponivel('Tesseract nao encontrado nesta maquina: instale o Tesseract OCR '
+                              'ou indique o executavel em VLADO_TESSERACT.')
+    ausentes = _idiomas_ausentes(config)
+    if ausentes:
+        raise OcrIndisponivel('Idiomas do Tesseract ausentes: ' + ', '.join(ausentes)
+                              + ' (instalar os dados de idioma ou ajustar VLADO_OCR_IDIOMAS).')
+    giro = _giro_osd(imagem, config)
+    texto = _reconhecer_imagem(imagem, config)
+    avisos = ([f'A imagem parece girada {giro} graus; o OCR nao corrigiu a rotacao. Conferir no original.']
+              if giro else [])
+    return {'motor': 'tesseract', 'versoes': {'tesseract': _versao_tesseract(config['tesseract'])},
+            'idiomas': config['idiomas'], 'texto': texto, 'avisos': avisos}
+
+
+SEM_TEXTO_IMAGEM = '[SEM TEXTO RECONHECIDO NA IMAGEM]'
+AVISO_OCR_IMAGEM = ('Texto de reconhecimento automatico (OCR), sujeito a erros; '
+                    'conferir no original antes de usar como evidencia.')
+
+
+def ocr_imagem(source: Path, identifier: str, target: Path) -> dict:
+    """Write the located OCR working copy of a standalone image and return an explicit outcome.
+
+    `estado`: extraido | sem_texto | pendente (OCR unavailable; nothing written) | erro
+    (engine failure; nothing written). The original image is never modified.
+    """
+    source, target = Path(source), Path(target)
+    if target.exists():
+        raise FileExistsError('Nao sobrescrever OCR existente; usar nova versao.')
+    result = {'estado': 'erro', 'origem': 'ocr', 'motor': None, 'versoes': {}, 'idiomas': None,
+              'linhas': 0, 'metodo': None, 'mensagem': None, 'avisos': [],
+              'aviso_conferencia': AVISO_OCR_IMAGEM, 'conferencia_humana': 'nao_realizada'}
+    try:
+        lido = reconhecer_imagem(source)
+    except (OcrIndisponivel, ValueError) as exc:
+        return {**result, 'estado': 'pendente',
+                'mensagem': f'OCR da imagem nao executado: {exc} A imagem fica pendente; o original esta preservado.'}
+    except OcrFalha as exc:
+        return {**result, 'mensagem': f'Falha do OCR nesta imagem: {exc} O original esta preservado.'}
+    versao = lido['versoes'].get('tesseract') or 'versao nao informada'
+    metodo = (f'OCR local de imagem avulsa, pedido explicitamente: Tesseract {versao}; idiomas {lido["idiomas"]}; '
+              'sem envio externo, sem modelo e sem correcao editorial.')
+    linhas = [line for line in lido['texto'].splitlines() if line.strip()]
+    result.update(estado='extraido' if linhas else 'sem_texto', motor=lido['motor'], versoes=lido['versoes'],
+                  idiomas=lido['idiomas'], linhas=len(linhas), metodo=metodo, avisos=lido['avisos'])
+    header = [f'# {identifier} - copia textual de trabalho', '',
+              f'Original: {source.name}', f'SHA-256 do original: {sha256(source)}',
+              'Formato: imagem', 'Origem: ocr', f'Metodo: {metodo}', f'Aviso: {AVISO_OCR_IMAGEM}',
+              *[f'Aviso: {aviso}' for aviso in lido['avisos']],
+              'Copia de trabalho, nao o original; conferir o original antes de usar como evidencia.', '',
+              f'## {identifier} - imagem', '']
+    body = [f'[L{numero:04d}] {line}' for numero, line in enumerate(linhas, 1)] or [SEM_TEXTO_IMAGEM]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open('x', encoding='utf-8', newline='\n') as stream:
+        stream.write('\n'.join(header + body) + '\n')
+    return result

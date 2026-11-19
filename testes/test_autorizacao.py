@@ -37,7 +37,10 @@ SO_ADMIN = (
     'hipoteses-listar', 'hipoteses-detalhe', 'hipoteses-quadro', 'hipoteses-criar', 'hipoteses-atualizar',
     'linha-tempo-listar', 'linha-tempo-detalhe', 'linha-tempo-criar', 'linha-tempo-atualizar',
     'comparar-evidencias', 'comparar-documentos', 'mapa-ver', 'mapa-homonimos', 'mapa-entidade-criar',
-    'mapa-entidade-atualizar', 'mapa-relacao-criar', 'mapa-relacao-atualizar')
+    'mapa-entidade-atualizar', 'mapa-relacao-criar', 'mapa-relacao-atualizar',
+    # Investigation tables (scripts/rotas_tabelas.py): admin only.
+    'tabelas-listar', 'tabelas-detalhe', 'tabelas-historico-celula', 'tabelas-calcular', 'tabelas-criar',
+    'tabelas-atualizar', 'tabelas-corrigir', 'tabelas-exportar')
 
 
 class Http(unittest.TestCase):
@@ -201,6 +204,14 @@ class EntrarTest(Http):
         with patch('acesso.agora', return_value=acesso.agora() + timedelta(hours=2, minutes=1)):
             status, body = self.post(self.ana, 'codex-status', {})
         self.assertEqual((status, body['estado'], body['codigo']), (401, 'sem_sessao', 'sessao_expirada'))
+
+    def test_post_anonimo_pequeno_sempre_recebe_401_inteiro(self):
+        # Without draining the small body, Windows may reset the socket and lose the 401 (seen once under load).
+        corpo = json.dumps({'caso': 'alpha', 'texto': 'x' * 30000})
+        for _ in range(40):
+            status, _, body = self.request('POST', '/api/codex-status', corpo,
+                                           {'Content-Type': 'application/json', 'Origin': ORIGEM})
+            self.assertEqual((status, json.loads(body)['codigo']), (401, 'sessao_expirada'))
 
     def test_post_autenticado_exige_origem_csrf_e_json(self):
         self.assertEqual(self.post(self.ana, 'codex-status', {}, origin='http://127.0.0.1')[0], 403)

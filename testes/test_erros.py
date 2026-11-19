@@ -44,6 +44,22 @@ class CodigosTest(unittest.TestCase):
             'Documento sem original congelado nesta rodada.': ('documento_sem_original', {}),
             'D002 não tem texto utilizável nesta rodada; compare no original.':
                 ('documento_sem_texto', {'documento': 'D002'}),
+            'Célula já registrada (L0001/valor): reenvie-a como está salva, ou omita as linhas; valor e fonte só '
+            'mudam por correção com justificativa.': ('tabela_celula_registrada', {'celula': 'L0001/valor'}),
+            'Valor inválido em L0002/valor: informe o número como texto, com ponto decimal e sem separador de '
+            'milhar (ex.: 8750000.00).': ('tabela_valor_invalido', {'celula': 'L0002/valor'}),
+            'Para corrigir uma célula, informe a justificativa (L0001/valor).':
+                ('correcao_sem_justificativa', {'celula': 'L0001/valor'}),
+            'Cálculo recusado: unidades ou moedas diferentes (moeda BRL; moeda USD); não há conversão automática, '
+            'calcule cada grandeza em separado.': ('calculo_unidades_incompativeis', {}),
+            'Cálculo recusado: célula sem valor (L0002/valor); preencha a célula ou escolha as células do cálculo.':
+                ('calculo_celula_sem_valor', {}),
+            'Cálculo recusado: nenhuma célula para a soma.': ('calculo_recusado', {}),
+            'Fonte indicada indisponível (evidência 2): Fonte da evidência ausente nesta apuração.':
+                ('tabela_fonte_indisponivel', {'evidencia': 2}),
+            'Fonte da célula: indique uma evidência vinculada a este item.': ('tabela_fonte_invalida', {}),
+            'O quadro de tabelas de apuração está sendo salvo em outra janela ou um salvamento foi interrompido.':
+                ('quadro_em_uso', {}),
             'O arquivo X está em execução em outro processo.': ('erro', {}),  # anchored patterns only
         }
         for mensagem, esperado in casos.items():
