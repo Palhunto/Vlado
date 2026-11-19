@@ -96,6 +96,12 @@ class ResumoCasoTest(unittest.TestCase):
         self.assertEqual(continuidade.resumo_caso(self.root, 'alpha')['rascunhos'], [], 'modo local: dono próprio')
         self.assertEqual(sum(p['tipo'] == 'rascunho' for p in resumo['pendencias']), 2)
 
+    def test_area_de_cada_tela_de_rascunho(self):
+        casos = {'pergunta': 'codex', 'pergunta/' + 'a' * 32: 'codex', 'quadro-diligencias/0123abcd': 'diligencias',
+                 'quadro-diligencias-resposta/0123abcd': 'diligencias', 'quadro-revisao/0123abcd': 'achados',
+                 'quadro-caderno': 'apuracao', 'caderno/N0001': 'apuracao'}
+        self.assertEqual({tela: continuidade._area_rascunho(tela) for tela in casos}, casos)
+
     def test_conversas_interrompidas_viram_pendencia(self):
         conversas = [{'id': 'a' * 32, 'titulo': 'Primeira', 'rodada': 'R001', 'retomavel': True},
                      {'id': 'b' * 32, 'titulo': 'Concluída', 'rodada': 'R001', 'retomavel': False}]

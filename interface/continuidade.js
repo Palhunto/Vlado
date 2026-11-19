@@ -92,11 +92,14 @@ window.Rascunhos = (() => {
     const data = new Date(iso);
     return Number.isNaN(data.getTime()) ? '' : `${String(data.getHours()).padStart(2, '0')}:${String(data.getMinutes()).padStart(2, '0')}`;
   }
+  // UTF-8 size (keepalive caps bytes, not characters).
+  const bytes = texto => encodeURIComponent(texto).replace(/%[0-9A-F]{2}/g, '.').length;
   // Same as api(), plus keepalive so a save started on pagehide survives the page.
   async function pedir(operacao, dados, manter = false) {
-    if (!manter) return api(operacao, dados);
-    const corpo = JSON.stringify(dados);
-    if (corpo.length > KEEPALIVE) throw Object.assign(new Error('Sem conexão com o servidor.'), {rede: true});
+    const corpo = manter ? JSON.stringify(dados) : '';
+    // Too big for keepalive: a normal request (may not finish if the page closes; the copy in
+    // this browser stays pending and is offered on the next opening).
+    if (!manter || bytes(corpo) > KEEPALIVE) return api(operacao, dados);
     let resposta;
     try {
       resposta = await fetch(`/api/${operacao}`, {method: 'POST', keepalive: true,
@@ -117,6 +120,12 @@ window.Rascunhos = (() => {
     const oferta = element('div', undefined, 'rascunho-oferta notice'); oferta.hidden = true;
     ancora.after(estado, oferta);
     let controle = null, atual = null, versao = 0, timer = null, emVoo = null, denovo = false, decidir = false, sequencia = 0, semRede = false, abrindo = null;
+    // `ultimo`: the fields last read for the current target. Leaving a target sends this, not
+    // ler(), because the caller may already have put another target's text in the field.
+    // `alheio`: the server holds a draft of another item of this screen; closing does not discard it.
+    let ultimo = null, alheio = false;
+    const concluidos = new Map();  // targets finished while a save was in flight -> content sent
+    const nomeAlvo = a => `${a.caso}\n${a.tela}`;
     const mesmo = a => !!a && !!atual && a.caso === atual.caso && a.tela === atual.tela;
     function mostrar(texto, vars) {
       estado.textContent = texto ? preencher(texto, vars) : ''; estado.hidden = !texto;
@@ -147,23 +156,30 @@ window.Rascunhos = (() => {
       if (!mesmo(alvoAgora)) { abrir().then(() => { if (mesmo(alvoAgora) && !decidir) mudou(); }); return; }
       if (decidir) { mostrar('Escolha acima qual rascunho manter para continuar salvando.'); return; }
       const conteudo = ler();
-      if (temChave(conteudo)) { parar(); removerLocal(atual); mostrar(SEM_CHAVE); return; }
+      if (temChave(conteudo)) { parar(); removerLocal(atual); ultimo = null; mostrar(SEM_CHAVE); return; }
+      ultimo = conteudo; alheio = false;
       gravarLocal(atual, {conteudo, versao, em: new Date().toISOString(), pendente: true});
       agendar();
     }
-    async function enviar(manter = false) {
+    async function enviar(manter = false, fixo = null) {
       // The version comes from the server read in abrir(): never save before it answers.
       if (abrindo && !manter) await abrindo;
       if (encerrado || decidir || !atual) return;
       if (emVoo) { denovo = true; return emVoo; }
-      const alvoEnvio = atual, conteudo = ler();
+      const alvoEnvio = atual, conteudo = fixo || ler();
       if (temChave(conteudo)) return;
-      if (vazio(conteudo)) { removerLocal(alvoEnvio); if (versao) await descartarServidor(alvoEnvio); mostrar(''); return; }
+      if (vazio(conteudo)) { removerLocal(alvoEnvio); if (versao) await descartarServidor(alvoEnvio, ultimo); mostrar(''); return; }
       mostrar('Salvando…');
       emVoo = (async () => {
         try {
           const resultado = await pedir('rascunhos-salvar', {caso: alvoEnvio.caso, tela: alvoEnvio.tela, versao, conteudo}, manter);
-          if (!mesmo(alvoEnvio)) return;
+          if (!mesmo(alvoEnvio)) {
+            if (concluidos.has(nomeAlvo(alvoEnvio))) {
+              concluidos.delete(nomeAlvo(alvoEnvio));
+              api('rascunhos-descartar', {caso: alvoEnvio.caso, tela: alvoEnvio.tela, versao: resultado.versao}).catch(() => {});
+            }
+            return;
+          }
           versao = resultado.versao; semRede = false;
           const local = lerLocal(alvoEnvio);
           if (local) gravarLocal(alvoEnvio, {...local, versao, pendente: !igual(local.conteudo, conteudo)});
@@ -199,13 +215,17 @@ window.Rascunhos = (() => {
           mostrar(servidor.conteudo ? 'Salvo às {hora}' : '', {hora: hora(servidor.atualizado_em_utc)});
         }, 'secondary']]);
     }
-    async function descartarServidor(alvoDescarte) {
+    // On a conflict, another tab wrote after this one: its draft stays unless it is what this tab knew.
+    async function descartarServidor(alvoDescarte, conhecido) {
+      let versaoDescarte = versao;
       for (let tentativa = 0; tentativa < 2; tentativa++) {
-        try { const r = await api('rascunhos-descartar', {caso: alvoDescarte.caso, tela: alvoDescarte.tela, versao}); if (mesmo(alvoDescarte)) versao = r.versao; return; }
+        try { const r = await api('rascunhos-descartar', {caso: alvoDescarte.caso, tela: alvoDescarte.tela, versao: versaoDescarte}); if (mesmo(alvoDescarte)) versao = r.versao; return; }
         catch (erro) {
           const resposta = erro.result || {};
-          if (resposta.codigo !== 'rascunho_conflito' || !resposta.atual || !mesmo(alvoDescarte)) return;
-          versao = resposta.atual.versao;
+          if (resposta.codigo !== 'rascunho_conflito' || !resposta.atual) return;
+          if (mesmo(alvoDescarte)) versao = resposta.atual.versao;
+          if (resposta.atual.descartado || !conhecido || !igual(resposta.atual.conteudo, conhecido)) return;
+          versaoDescarte = resposta.atual.versao;
         }
       }
     }
@@ -213,14 +233,15 @@ window.Rascunhos = (() => {
     function despedir() {
       if (!atual || decidir) return;
       const local = lerLocal(atual);
-      if (timer || local?.pendente) { parar(); enviar(true).catch(() => {}); }
+      const conteudo = ultimo || (local?.pendente ? local.conteudo : null);
+      if ((timer || local?.pendente) && conteudo) { parar(); enviar(true, conteudo).catch(() => {}); }
     }
     // Called when the screen opens or its target changes: offers a newer draft back.
     function abrir() {
       const novo = alvo();
       if (novo && mesmo(novo)) return abrindo || Promise.resolve();
       despedir(); fecharOferta(); mostrar('');
-      atual = novo ? {caso: novo.caso, tela: novo.tela} : null; versao = 0; semRede = false;
+      atual = novo ? {caso: novo.caso, tela: novo.tela} : null; versao = 0; semRede = false; ultimo = null; alheio = false;
       const pedido = ++sequencia;
       if (!atual || encerrado) { abrindo = null; return Promise.resolve(); }
       const promessa = carregar(novo, pedido).finally(() => { if (pedido === sequencia) abrindo = null; });
@@ -235,6 +256,7 @@ window.Rascunhos = (() => {
       try { servidor = await api('rascunhos-ler', {caso: atual.caso, tela: atual.tela}); } catch (erro) { if (erro.rede) semRede = true; }
       if (pedido !== sequencia || !mesmo(novo)) return;
       versao = servidor ? servidor.versao : (local?.versao || 0);
+      alheio = !!(servidor?.conteudo && !servidor.descartado && valido(servidor.conteudo) && !compativel(servidor.conteudo));
       const candidatos = [];
       if (servidor?.conteudo && !servidor.descartado && valido(servidor.conteudo)) candidatos.push({conteudo: servidor.conteudo, em: servidor.atualizado_em_utc || ''});
       // The local copy counts while unsent, or when the server could not answer.
@@ -247,22 +269,26 @@ window.Rascunhos = (() => {
       perguntar('Há um rascunho de {hora} que não foi enviado. Restaurar?', {hora: hora(melhor.em)}, [
         ['Restaurar rascunho', () => {
           aplicar(melhor.conteudo);
-          gravarLocal(atual, {conteudo: ler(), versao, em: new Date().toISOString(), pendente: true});
+          ultimo = ler();
+          gravarLocal(atual, {conteudo: ultimo, versao, em: new Date().toISOString(), pendente: true});
           enviar();
         }, ''],
-        ['Descartar rascunho', () => { removerLocal(atual); if (versao) descartarServidor(atual); mostrar(''); }, 'secondary']]);
+        ['Descartar rascunho', () => { removerLocal(atual); if (versao) descartarServidor(atual, melhor.conteudo); mostrar(''); }, 'secondary']]);
     }
     // The text was sent or saved for real: the draft is no longer needed.
     function concluir() {
       parar(); fecharOferta(); mostrar('');
       if (!atual) return;
       const feito = atual;
-      removerLocal(feito);
-      if (versao) descartarServidor(feito);
-      atual = null; versao = 0; abrindo = null; ++sequencia;
+      if (!alheio) {
+        removerLocal(feito);
+        if (emVoo) concluidos.set(nomeAlvo(feito), true);
+        else if (versao) descartarServidor(feito, ultimo);
+      }
+      atual = null; versao = 0; abrindo = null; ultimo = null; alheio = false; ++sequencia;
     }
     // Forget the target without discarding (the next abrir() reads it again).
-    function soltar() { despedir(); parar(); fecharOferta(); mostrar(''); atual = null; versao = 0; ++sequencia; }
+    function soltar() { despedir(); parar(); fecharOferta(); mostrar(''); atual = null; versao = 0; ultimo = null; alheio = false; ++sequencia; }
     origem.addEventListener('input', mudou);
     origem.addEventListener('change', mudou);
     controle = {abrir, concluir, soltar, enviar, despedir, parar, estado: () => ({alvo: atual, versao, pendente: !!timer, semRede, decidir})};
@@ -305,7 +331,14 @@ window.Rascunhos = (() => {
       for (const nome of nomes) armazenamento.removeItem(nome);
     } catch { /* Storage blocked: nothing was kept. */ } finally { situacoes.clear(); ultimaHora = null; notificar(); }
   }
-  return {registrar, lerFormulario, aplicarFormulario, limparTudo, indicador, PREFIXO, PAUSA};
+  // Stable short id of an item's identity text, so each item of a screen has its own draft
+  // (tela `quadro-revisao/<id>`). Two 32-bit FNV-1a variants: 16 hex digits.
+  function idItem(texto) {
+    let a = 0x811c9dc5, b = 0x9e3779b9;
+    for (const letra of String(texto)) { const n = letra.codePointAt(0); a = Math.imul(a ^ n, 16777619); b = Math.imul(b ^ n, 2246822507); }
+    return (a >>> 0).toString(16).padStart(8, '0') + (b >>> 0).toString(16).padStart(8, '0');
+  }
+  return {registrar, lerFormulario, aplicarFormulario, limparTudo, indicador, idItem, PREFIXO, PAUSA};
 })();
 (() => {
   const dialog=$('continuidade-dialogo');

@@ -303,10 +303,11 @@
     // Automatic draft of the form (continuidade.js). Closing saves or discards for real, so the
     // draft goes too; closing the page keeps it, and the next opening of the same item offers it.
     const forms=formIds.map(id=>$(id)), heading=dialog.querySelector('.section-heading');
-    // The item on screen (the finding under review) is data, so it does not change with the language.
-    const contexto=()=>String(dialog.querySelector('[id*="-afirmacao"]')?.textContent||'').replace(/\s+/g,' ').trim().slice(0,500);
+    // The item on screen (finding under review, notebook scope, diligence origin) names the draft.
+    const contexto=()=>String(dialog.querySelector('[id*="-afirmacao"],[id*="-escopo"],[id*="-origem"]')?.textContent||'').replace(/\s+/g,' ').trim().slice(0,500);
+    const tela=()=>{const nome='quadro-'+dialogId.replace(/-dialogo$/,''),item=contexto();return item?`${nome}/${window.Rascunhos.idItem(item)}`:nome;};
     const rascunho=window.Rascunhos?.registrar({origem:dialog,ancora:heading||forms[0],
-      alvo:()=>dialog.open&&window.contextoCaso?.()?{caso:window.contextoCaso(),tela:'quadro-'+dialogId.replace(/-dialogo$/,'')}:null,
+      alvo:()=>dialog.open&&window.contextoCaso?.()?{caso:window.contextoCaso(),tela:tela()}:null,
       ler:()=>({...window.Rascunhos.lerFormulario(forms),contexto:contexto()}),
       aplicar:conteudo=>window.Rascunhos.aplicarFormulario(forms,conteudo),
       compativel:conteudo=>conteudo.contexto===contexto()});

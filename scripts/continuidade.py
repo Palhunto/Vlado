@@ -27,7 +27,8 @@ DILIGENCIAS_ENCERRADAS = ('concluida', 'cancelada')
 AREAS = {'documento': 'documentos', 'rodada': 'codex', 'conversa': 'codex', 'rascunho': 'codex',
          'hipoteses': 'apuracao', 'diligencias': 'diligencias', 'tabelas': 'apuracao'}
 # Screen of a draft -> area where it is reopened (pergunta*, quadro-diligencias*, others in the notebook).
-AREA_RASCUNHO = (('pergunta', 'codex'), ('quadro-diligencias', 'diligencias'), ('quadro-revisao', 'achados'))
+AREA_RASCUNHO = (('pergunta', 'codex'), ('quadro-diligencias', 'diligencias'),
+                 ('quadro-diligencias-resposta', 'diligencias'), ('quadro-revisao', 'achados'))
 
 
 def resumir(data):

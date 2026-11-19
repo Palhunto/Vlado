@@ -247,6 +247,52 @@ test('formulário de quadro guarda o rascunho e o fechamento o descarta', async 
   assert.equal(t.local.getItem(PREFIXO + 'quadro-diligencias'), null);
 });
 
+test('trocar de conversa na pausa envia o texto da conversa que ficou, sem apagá-lo', async () => {
+  const t = await abrir({semRede: () => true});
+  await t.escrever('Pergunta da conversa nova');
+  const outra = 'd'.repeat(32), opcao = t.mesa.doc.createElement('option');
+  opcao.value = outra; opcao.textContent = 'Outra conversa'; t.mesa.$('codex-conversa').append(opcao);
+  t.mesa.$('codex-conversa').value = outra;
+  t.mesa.$('codex-conversa').dispatchEvent(new Evento('change', {bubbles: true}));
+  await t.mesa.esperar(10);
+  const daNova = t.salvamentos().filter(e => e.dados.tela === 'pergunta');
+  assert.deepEqual(daNova.map(e => e.dados.conteudo), [{pergunta: 'Pergunta da conversa nova'}], 'o texto enviado é o da tela que ficou');
+  assert.ok(!t.salvamentos().some(e => e.dados.tela === 'pergunta' && e.dados.conteudo.pergunta !== 'Pergunta da conversa nova'));
+  assert.ok(!t.envios.some(e => e.op === 'rascunhos-descartar'), 'nada é descartado na troca');
+  assert.equal(JSON.parse(t.local.getItem(PREFIXO + 'pergunta')).conteudo.pergunta, 'Pergunta da conversa nova');
+});
+
+test('cada item de um quadro tem o próprio rascunho; fechar outro item não o apaga', async () => {
+  const rascunhos = servidorRascunhos(), local = memoria();
+  const abrirItem = async (t, achado) => {
+    t.mesa.$('revisao-afirmacao').textContent = achado;
+    t.mesa.$('revisao-dialogo').showModal();
+    t.mesa.$('revisao-observacao').dispatchEvent(new Evento('focusin', {bubbles: true}));
+    await t.mesa.esperar(8);
+  };
+  const ofertaQuadro = t => t.mesa.$('revisao-dialogo').querySelector('.rascunho-oferta');
+  const primeira = await abrir({rascunhos, local});
+  await abrirItem(primeira, 'Achado F1: o contrato custou R$ 10 mil.');
+  primeira.mesa.$('revisao-observacao').value = 'Conferir a página 3 do contrato';
+  primeira.mesa.$('revisao-observacao').dispatchEvent(new Evento('input', {bubbles: true}));
+  await primeira.mesa.esperar(6);
+  await primeira.avancar();
+  const telaF1 = primeira.salvamentos()[0].dados.tela;
+  assert.match(telaF1, /^quadro-revisao\/[0-9a-f]{16}$/);
+  // The page closes; another finding is opened and closed without typing.
+  const segunda = await abrir({rascunhos, local});
+  await abrirItem(segunda, 'Achado F2: a obra atrasou.');
+  assert.equal(ofertaQuadro(segunda).hidden, true, 'o rascunho de F1 não é oferecido em F2');
+  segunda.mesa.$('revisao-dialogo').close();
+  await segunda.mesa.esperar(10);
+  assert.ok(!segunda.envios.some(e => e.op === 'rascunhos-descartar' && e.dados.tela === telaF1));
+  assert.equal(rascunhos.telas.get(telaF1).conteudo.revisao_observacao, 'Conferir a página 3 do contrato');
+  // F1 again: its own draft is offered.
+  const terceira = await abrir({rascunhos, local});
+  await abrirItem(terceira, 'Achado F1: o contrato custou R$ 10 mil.');
+  assert.equal(ofertaQuadro(terceira).hidden, false);
+});
+
 test('Sair apaga deste navegador os rascunhos das telas', async () => {
   const local = memoria({[PREFIXO + 'pergunta']: '{}', 'vlado:rascunho-tela:k1:beta:pergunta': '{}', 'vlado-idioma': 'pt'});
   const t = await abrir({local});
