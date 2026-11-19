@@ -100,7 +100,17 @@
   const unidadeColuna = c => [c.moeda, c.unidade].filter(Boolean).join(' ');
   // Values stay as recorded; only numeric columns are shown in pt-BR notation (the stored text does not change).
   const valorCelula = (coluna, valor) => ['numero', 'monetario'].includes(coluna?.tipo) ? formatarNumero(valor) : String(valor);
-  const numerosNaConta = texto => String(texto).replace(/-?\d+(?:\.\d+)?/g, formatarNumero);
+  // The calculation is rebuilt from its cell values (the same terms as tabelas_apuracao._termo), so only
+  // values get pt-BR notation; any other number in the text (an ID such as E1234, a count, the divisor)
+  // stays as recorded. Counting and unexpected shapes show the Core's expression unchanged.
+  const termo = valor => String(valor).startsWith('-') ? `(${formatarNumero(valor)})` : formatarNumero(valor);
+  function contaFormatada(calc) {
+    const valores = (calc.celulas || []).map(c => c.valor);
+    const montar = {soma: t => t.join(' + '), diferenca: t => t.length === 2 ? `${t[0]} - ${t[1]}` : null, media: t => `(${t.join(' + ')}) / ${t.length}`}[calc.operacao];
+    const expressao = montar && valores.length && valores.every(v => v !== null && v !== undefined) ? montar(valores.map(termo)) : null;
+    if (!expressao) return {expressao: String(calc.expressao), resultado: String(calc.resultado)};
+    return {expressao, resultado: formatarNumero(calc.resultado)};
+  }
   function detalheCelula(saida, linha, coluna, celula) {
     saida.replaceChildren(element('p', t('Célula {linha} · {coluna}', {linha, coluna: coluna.nome}), 'eyebrow'));
     saida.append(dado('p', celula.valor === null ? t('(vazia)') : `${valorCelula(coluna, celula.valor)}${unidadeColuna(coluna) ? ' ' + unidadeColuna(coluna) : ''}`, 'tabela-valor'),
@@ -159,7 +169,8 @@
       art.append(dado('h5', calc.nome || calc.id), element('p', t('Operação: {op}', {op: t(OPER[calc.operacao] || calc.operacao)}), 'small'));
       if (calc.estado === 'recusado') { art.append(element('p', t('Cálculo recusado: {erro}', {erro: calc.erro}), 'notice')); secao.append(art); continue; }
       const g = calc.grandeza || {};
-      art.append(dado('p', `${numerosNaConta(calc.expressao)} = ${numerosNaConta(calc.resultado)}${[g.moeda, g.unidade].filter(Boolean).length ? ' ' + [g.moeda, g.unidade].filter(Boolean).join(' ') : ''}`, 'tabela-expressao'));
+      const conta = contaFormatada(calc);
+      art.append(dado('p', `${conta.expressao} = ${conta.resultado}${[g.moeda, g.unidade].filter(Boolean).length ? ' ' + [g.moeda, g.unidade].filter(Boolean).join(' ') : ''}`, 'tabela-expressao'));
       if (calc.arredondamento) art.append(element('p', t('Arredondado para {casas} casas.', {casas: calc.arredondamento.casas}), 'small'));
       art.append(element('p', calc.estado === 'com_fonte' ? t('Todas as células têm fonte.') : t('Há células pendentes ou fontes indisponíveis: resultado provisório.'), calc.estado === 'com_fonte' ? 'small' : 'notice'));
       const lista = element('ul', undefined, 'tabela-usadas');
