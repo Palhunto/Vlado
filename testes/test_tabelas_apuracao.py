@@ -205,6 +205,12 @@ class TabelasApuracaoTest(Fontes, unittest.TestCase):
         self.assertEqual(versions[1]['fonte']['localizador'], 'D001 · linha 1')
         last = tabelas.tabela(self.root, 'alpha', record['id'])['linhas'][0]['celulas']['valor']['ultima_correcao']
         self.assertEqual((last['sequencia'], last['autor'], last['valor_anterior']), (2, 'Editora C', '12'))
+        # Depois de uma correção, devolver a fonte é preenchimento, mas a célula não volta a parecer extraída.
+        fourth = self.corrigir(third, [{'linha': 'L0003', 'coluna': 'peso', 'fonte': 0}])
+        self.assertEqual(fourth['estado']['correcoes'][0]['tipo'], 'preenchimento')
+        self.assertEqual(self.celula(fourth, 'L0003', 'peso'), {'valor': '0.00', 'fonte': 0, 'estado': 'corrigido_manual'})
+        self.assertEqual(tabelas.tabela(self.root, 'alpha', record['id'])['linhas'][2]['celulas']['peso']['estado'],
+                         'corrigido_manual')
 
     def test_celula_registrada_so_muda_por_correcao_e_linhas_so_sao_acrescentadas(self):
         record = self.criar()

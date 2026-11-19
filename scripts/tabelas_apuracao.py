@@ -488,7 +488,9 @@ def _conferir_correcoes(records, state):
                 or before[1] is not None and _fonte(before[1], links) != before[1]
                 or not isinstance(reason, str) or ev.texto(reason, 'Justificativa', 2000, vazio=True) != reason
                 or changed and not reason
-                or cell['estado'] != _estado(cell['valor'], cell['fonte'], changed)):
+                # Preencher célula já corrigida antes mantém a marca de correção manual (o histórico mostra a origem).
+                or cell['estado'] not in {_estado(cell['valor'], cell['fonte'], changed),
+                                          _estado(cell['valor'], cell['fonte'], record['tipo'] == 'preenchimento')}):
             raise ValueError('Correções preservadas inválidas.')
 
 
@@ -509,7 +511,16 @@ def _regras(state):
 
 # Normalização dos pedidos (criar, atualizar e corrigir)
 
-def _corrigir(root, case, data, atual):
+def _corrigidas_antes(root, case, identifier):
+    """Células que já receberam correção manual em algum evento anterior da tabela."""
+    if not identifier:
+        return set()
+    record = COLECAO.detalhe(root, case, identifier)
+    return {(r['linha'], r['coluna']) for event in record['historico']
+            for r in event['estado'].get('correcoes', []) if r['tipo'] == 'correcao'}
+
+
+def _corrigir(root, case, data, atual, identifier=None):
     if atual is None:
         raise ValueError('Correção inválida: só se corrige célula de tabela já registrada.')
     if set(data) != {'correcoes'}:
@@ -521,6 +532,7 @@ def _corrigir(root, case, data, atual):
     columns = {c['id']: c for c in state['colunas']}
     rows = {r['id']: r for r in state['linhas']}
     links, records, sources = state['evidencias'], [], set()
+    manual = _corrigidas_antes(root, case, identifier)
     for item in items:
         if (not isinstance(item, dict) or set(item) - {'linha', 'coluna', 'valor', 'fonte', 'justificativa'}
                 or not {'linha', 'coluna'} <= set(item) or not {'valor', 'fonte'} & set(item)):
@@ -546,7 +558,7 @@ def _corrigir(root, case, data, atual):
         if source is not None and source != cell['fonte']:
             sources.add(source)
         rows[row_id]['celulas'][column_id] = {'valor': value, 'fonte': source,
-                                              'estado': _estado(value, source, changed)}
+                                              'estado': _estado(value, source, changed or (row_id, column_id) in manual)}
         records.append({'linha': row_id, 'coluna': column_id, 'tipo': 'correcao' if changed else 'preenchimento',
                         'valor_anterior': cell['valor'], 'fonte_anterior': cell['fonte'], 'valor': value,
                         'fonte': source, 'justificativa': reason})
@@ -557,9 +569,9 @@ def _corrigir(root, case, data, atual):
     return state
 
 
-def _normalizar(root, case, data, atual, _identificador):
+def _normalizar(root, case, data, atual, identificador):
     if 'correcoes' in data:
-        return _corrigir(root, case, data, atual)
+        return _corrigir(root, case, data, atual, identificador)
     state = ev.mesclar(data, atual, PADROES)
     removing, reason = ev.retirada(state)
     cache = {}

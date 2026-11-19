@@ -16,7 +16,7 @@ import json
 import re
 import zipfile
 import xml.etree.ElementTree as ET
-from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
+from decimal import Context, Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path, PurePosixPath
 
 from comum import sha256
@@ -136,12 +136,26 @@ class _Pacote:
         return _parse_xml(self.ler(name), name)
 
 
-_DTD = re.compile(rb'<!DOCTYPE|<!ENTITY', re.IGNORECASE)
+_DTD = re.compile(r'<!DOCTYPE|<!ENTITY', re.IGNORECASE)
+
+
+def _texto_xml(data: bytes) -> str:
+    """Decode an XML part as the parser would (UTF-8, or UTF-16/32 by BOM) for content checks."""
+    for bom, encoding in ((b'\x00\x00\xfe\xff', 'utf-32-be'), (b'\xff\xfe\x00\x00', 'utf-32-le'),
+                          (b'\xfe\xff', 'utf-16-be'), (b'\xff\xfe', 'utf-16-le')):
+        if data.startswith(bom):
+            return data[len(bom):].decode(encoding, errors='replace')
+    if data[:4] in (b'\x00\x00\x00<', b'<\x00\x00\x00'):  # UTF-32 without BOM
+        return data.decode('utf-32-be' if data[0] == 0 else 'utf-32-le', errors='replace')
+    if data[:2] in (b'\x00<', b'<\x00'):  # UTF-16 without BOM
+        return data.decode('utf-16-be' if data[0] == 0 else 'utf-16-le', errors='replace')
+    return data.decode('utf-8', errors='replace')
 
 
 def _parse_xml(data: bytes, name: str):
     # OOXML never needs a DTD; refusing it blocks external entities and entity expansion.
-    if _DTD.search(data):
+    # The check runs on decoded text so a UTF-16 part cannot hide the declaration.
+    if _DTD.search(_texto_xml(data)):
         raise Recusa('corrompido', f'Parte {name} declara DTD/entidades XML; recusada por segurança.')
     try:
         return ET.fromstring(data)
@@ -153,8 +167,8 @@ def _verificar_macro(pacote: _Pacote):
     if any(PurePosixPath(n).name.lower() == 'vbaproject.bin' for n in pacote.nomes):
         raise Recusa('macro', 'Pacote contém macros (vbaProject.bin); conteúdo não extraído.')
     if pacote.existe('[Content_Types].xml'):
-        tipos = pacote.ler('[Content_Types].xml').lower()
-        if b'macroenabled' in tipos or b'vbaproject' in tipos:
+        tipos = _texto_xml(pacote.ler('[Content_Types].xml')).lower()
+        if 'macroenabled' in tipos or 'vbaproject' in tipos:
             raise Recusa('macro', 'Pacote declarado como habilitado para macros; conteúdo não extraído.')
 
 
@@ -204,7 +218,8 @@ def _texto_paragrafo(paragraph) -> str:
                 pieces.append(f'[nota {_attr(child, "id")}]')
             elif name == 'endnoteReference':
                 pieces.append(f'[nota final {_attr(child, "id")}]')
-            elif name in ('delText', 'instrText', 'del', 'moveFrom', 'rPr', 'pPr'):
+            elif name in ('delText', 'instrText', 'del', 'moveFrom', 'rPr', 'pPr', 'Fallback'):
+                # mc:Fallback repeats the mc:Choice content (text boxes) for older readers.
                 continue  # deleted text, field codes and formatting are not displayed text
             else:
                 walk(child)
@@ -213,8 +228,48 @@ def _texto_paragrafo(paragraph) -> str:
 
 
 def _paragrafos_de(node):
-    """All paragraphs below node, in order, including those inside nested tables/controls."""
-    return [p for p in node.iter() if _local(p.tag) == 'p']
+    """Paragraphs below node, in order, including nested tables/controls.
+
+    A text box inside a paragraph is already part of that paragraph's text, so the
+    search does not descend into paragraphs, nor into mc:Fallback copies.
+    """
+    result = []
+    for child in node:
+        name = _local(child.tag)
+        if name == 'p':
+            result.append(child)
+        elif name != 'Fallback':
+            result.extend(_paragrafos_de(child))
+    return result
+
+
+_INVOLUCROS = ('sdt', 'customXml', 'ins', 'moveTo')
+
+
+def _filhos_tabela(element, name):
+    """Table rows/cells in order, unwrapping content controls and tracked insertions."""
+    for child in element:
+        local = _local(child.tag)
+        if local == name:
+            yield child
+        elif local in _INVOLUCROS:
+            content = _filho(child, 'sdtContent') if local == 'sdt' else child
+            if content is not None:
+                yield from _filhos_tabela(content, name)
+
+
+def _inteiro_val(element, name, default):
+    item = _filho(element, name) if element is not None else None
+    if item is None:
+        return default
+    try:
+        return max(0, int(_attr(item, 'val', str(default))))
+    except ValueError:
+        return default
+
+
+def _ordem_natural(nome: str):
+    return [int(p) if p.isdigit() else p for p in re.split(r'(\d+)', nome)]
 
 
 def _blocos(container):
@@ -223,7 +278,7 @@ def _blocos(container):
         name = _local(child.tag)
         if name in ('p', 'tbl'):
             yield child
-        elif name in ('sdt', 'customXml', 'ins', 'moveTo'):
+        elif name in _INVOLUCROS:
             content = _filho(child, 'sdtContent') if name == 'sdt' else child
             if content is not None:
                 yield from _blocos(content)
@@ -267,18 +322,11 @@ def ler_docx(source: Path, *, limite_total=None, limite_membro=None) -> dict:
                 continue
             contagens['tabelas'] += 1
             tabela = contagens['tabelas']
-            for linha, row in enumerate(_filhos(bloco, 'tr'), 1):
-                coluna = 1
-                for cell in _filhos(row, 'tc'):
-                    props = _filho(cell, 'tcPr')
-                    span = 1
-                    if props is not None:
-                        grid = _filho(props, 'gridSpan')
-                        if grid is not None:
-                            try:
-                                span = max(1, int(_attr(grid, 'val', '1')))
-                            except ValueError:
-                                span = 1
+            for linha, row in enumerate(_filhos_tabela(bloco, 'tr'), 1):
+                # gridBefore: the row starts after empty grid columns, as Word draws it.
+                coluna = 1 + _inteiro_val(_filho(row, 'trPr'), 'gridBefore', 0)
+                for cell in _filhos_tabela(row, 'tc'):
+                    span = max(1, _inteiro_val(_filho(cell, 'tcPr'), 'gridSpan', 1))
                     textos = [t for t in (_texto_paragrafo(p) for p in _paragrafos_de(cell)) if t]
                     if textos:
                         contagens['celulas_tabela'] += 1
@@ -292,7 +340,7 @@ def ler_docx(source: Path, *, limite_total=None, limite_membro=None) -> dict:
         for kind, label, prefix, key in ((REL_HEADER, 'cabecalho', 'CAB', 'cabecalhos'),
                                          (REL_FOOTER, 'rodape', 'ROD', 'rodapes')):
             numero = 0
-            for _, (tipo, parte) in sorted(rels.items(), key=lambda item: item[1][1]):
+            for _, (tipo, parte) in sorted(rels.items(), key=lambda item: _ordem_natural(item[1][1])):
                 if tipo != kind or parte in vistos or not pacote.existe(parte):
                     continue
                 vistos.add(parte)
@@ -360,6 +408,21 @@ _FORMATO_NUMERICO = re.compile(r'^(#,##)?0(\.0+)?(%)?$')
 _FORMATO_DATA = re.compile(r'^[dmyhs:/\-. ,]+(?:AM/PM)?$', re.IGNORECASE)
 
 
+def _letras_coluna(numero: int) -> str:
+    letras = ''
+    while numero > 0:
+        numero, resto = divmod(numero - 1, 26)
+        letras = chr(65 + resto) + letras
+    return letras
+
+
+def _numero_coluna(ref: str) -> int:
+    numero = 0
+    for letra in re.match(r'[A-Z]+', ref).group():
+        numero = numero * 26 + ord(letra) - 64
+    return numero
+
+
 def referencia_celula(aba: str, celula: str) -> str:
     """`Aba!B3`, quoting the sheet name as Excel does when it is not a plain identifier."""
     nome = aba if _NOME_SIMPLES.fullmatch(aba) and not _CELULA.fullmatch(aba.upper()) else "'" + aba.replace("'", "''") + "'"
@@ -419,13 +482,24 @@ def _exibir(valor: str, formato, data1904: bool):
             base = _dt.datetime(1899, 12, 31)  # Excel's 1900 leap-year bug only shifts serials >= 61
             if number == 60:
                 return None
-        moment = base + _dt.timedelta(seconds=round(float(number) * 86400))
+        try:
+            moment = base + _dt.timedelta(seconds=round(float(number) * 86400))
+        except (OverflowError, ValueError):
+            return None  # outside the supported date range: the raw value stays, only the display is omitted
         return moment.date().isoformat() if formato == 'data' else moment.strftime('%Y-%m-%d %H:%M:%S')
     percent = formato.endswith('%')
-    if percent:
-        number *= 100
     decimals = len(formato.split('.', 1)[1].rstrip('%')) if '.' in formato else 0
-    quantized = number.quantize(Decimal(1).scaleb(-decimals), rounding=ROUND_HALF_EVEN)
+    # Excel rounds the displayed value half away from zero; a context wide enough for the
+    # integer part keeps quantize exact instead of raising InvalidOperation on huge values.
+    contexto = Context(prec=max(28, number.adjusted() + decimals + 6), rounding=ROUND_HALF_UP)
+    try:
+        if percent:
+            number = contexto.multiply(number, Decimal(100))
+        quantized = number.quantize(Decimal(1).scaleb(-decimals), context=contexto)
+    except InvalidOperation:
+        return None
+    if quantized.is_zero():
+        quantized = abs(quantized)  # Excel does not show -0
     text = f'{quantized:,.{decimals}f}' if formato.startswith('#,##') else f'{quantized:.{decimals}f}'
     return text + ('%' if percent else '')
 
@@ -498,10 +572,20 @@ def ler_xlsx(source: Path, *, limite_total=None, limite_membro=None) -> dict:
             if _filho(raiz, 'sheetProtection') is not None:
                 avisos.append(f'Aba {nome} com proteção de edição; a leitura das células não foi afetada.')
             data = _filho(raiz, 'sheetData')
+            numero_linha = 0
             for row in (_filhos(data, 'row') if data is not None else []):
+                try:
+                    numero_linha = int(_attr(row, 'r')) if _attr(row, 'r') else numero_linha + 1
+                except ValueError:
+                    numero_linha += 1
+                numero_coluna = 0
                 for cell in _filhos(row, 'c'):
                     ref = (_attr(cell, 'r') or '').upper()
-                    if not _CELULA.fullmatch(ref):
+                    if not ref and numero_linha > 0:
+                        ref = f'{_letras_coluna(numero_coluna + 1)}{numero_linha}'  # r is optional in OOXML
+                    if _CELULA.fullmatch(ref):
+                        numero_coluna = _numero_coluna(ref)
+                    else:
                         falhas.append({'aba': nome, 'erro': f'Célula sem referência válida ({ref or "vazia"}); ignorada.'})
                         continue
                     kind = _attr(cell, 't', 'n')
@@ -514,7 +598,10 @@ def ler_xlsx(source: Path, *, limite_total=None, limite_membro=None) -> dict:
                         kind = 'texto'
                     elif kind == 's' and raw is not None:
                         try:
-                            raw = strings[int(raw)]
+                            indice = int(raw)
+                            if indice < 0:
+                                raise IndexError(indice)
+                            raw = strings[indice]
                         except (ValueError, IndexError):
                             falhas.append({'aba': nome, 'celula': ref, 'erro': 'Índice de texto compartilhado inválido.'})
                             continue

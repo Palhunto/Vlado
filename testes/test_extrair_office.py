@@ -231,6 +231,91 @@ class ExtrairOfficeTest(unittest.TestCase):
         units = ler_docx(source)['secoes'][0]['unidades']
         self.assertEqual(units, [{'localizador': 'P0001', 'texto': 'Um'}, {'localizador': 'P0002', 'texto': 'Dois'}])
 
+    # Regressões da revisão independente da Fase 04 (Working/tabelas-revisao.md).
+
+    def test_exibido_arredonda_como_o_excel_e_nao_derruba_a_planilha(self):
+        exibir = extrair_office._exibir
+        self.assertEqual(exibir('2.5', '0', False), '3')
+        self.assertEqual(exibir('0.125', '0.00', False), '0.13')
+        self.assertEqual(exibir('-0.125', '0.00', False), '-0.13')
+        self.assertEqual(exibir('0.125', '0%', False), '13%')
+        self.assertEqual(exibir('-0.001', '0.00', False), '0.00')
+        self.assertEqual(exibir('1E+30', '#,##0.00', False), '1,000,000,000,000,000,000,000,000,000,000.00')
+        self.assertIsNone(exibir('2958000', 'data', True))  # fora do intervalo de datas com base 1904
+        styles = ('<numFmts count="1"><numFmt numFmtId="164" formatCode="0.00"/></numFmts>'
+                  '<cellXfs count="3"><xf numFmtId="0"/><xf numFmtId="164"/><xf numFmtId="14"/></cellXfs>')
+        data = ('<row r="1"><c r="A1" s="1"><v>1.5E+26</v></c><c r="B1" s="2"><v>2958000</v></c>'
+                '<c r="C1" s="1"><v>2.345</v></c></row>')
+        source = xlsx(self.dir / 'grande.xlsx', [('P', data, None)], styles=styles,
+                      extra={'xl/workbook.xml': f'<?xml version="1.0"?><workbook xmlns="{S}" xmlns:r="{R}">'
+                                                '<workbookPr date1904="1"/><sheets><sheet name="P" sheetId="1" r:id="rId1"/>'
+                                                '</sheets></workbook>'})
+        result = extrair(source, 'X20', self.dir / 'x20.md')
+        self.assertEqual(result['estado'], 'extraido')
+        cells = {c['celula']: c for c in ler_xlsx(source)['abas'][0]['celulas']}
+        self.assertEqual((cells['A1']['valor'], cells['A1']['exibido']), ('1.5E+26', '150000000000000000000000000.00'))
+        self.assertEqual((cells['B1']['valor'], cells['B1']['exibido']), ('2958000', None))
+        self.assertEqual(cells['C1']['exibido'], '2.35')
+
+    def test_celulas_e_linhas_sem_referencia_sao_inferidas_pela_posicao(self):
+        data = ('<row><c t="inlineStr"><is><t>a</t></is></c><c><v>2</v></c></row>'
+                '<row r="5"><c r="C5"><v>3</v></c><c><v>4</v></c></row><row><c><v>5</v></c></row>')
+        result = ler_xlsx(xlsx(self.dir / 'semr.xlsx', [('P', data, None)]))
+        self.assertEqual(result['falhas'], [])
+        self.assertEqual([c['localizador'] for c in result['abas'][0]['celulas']],
+                         ['P!A1', 'P!B1', 'P!C5', 'P!D5', 'P!A6'])
+        self.assertEqual(extrair_office._letras_coluna(28), 'AB')
+        self.assertEqual(extrair_office._numero_coluna('AB7'), 28)
+
+    def test_indice_negativo_de_texto_compartilhado_e_falha(self):
+        data = '<row r="1"><c r="A1" t="s"><v>-1</v></c><c r="B1" t="s"><v>0</v></c></row>'
+        result = ler_xlsx(xlsx(self.dir / 'neg.xlsx', [('P', data, None)], shared=('um', 'dois')))
+        self.assertEqual([c['valor'] for c in result['abas'][0]['celulas']], ['um'])
+        self.assertEqual(result['falhas'][0]['celula'], 'A1')
+
+    def test_tabela_docx_com_controle_de_conteudo_e_grid_before(self):
+        table = ('<w:tbl><w:tr><w:tc>' + _p('A') + '</w:tc><w:tc>' + _p('B') + '</w:tc><w:tc>' + _p('C') + '</w:tc></w:tr>'
+                 '<w:sdt><w:sdtContent><w:tr><w:tc>' + _p('Linha no controle') + '</w:tc>'
+                 '<w:sdt><w:sdtContent><w:tc>' + _p('Celula no controle') + '</w:tc></w:sdtContent></w:sdt>'
+                 '</w:tr></w:sdtContent></w:sdt>'
+                 '<w:tr><w:trPr><w:gridBefore w:val="1"/></w:trPr><w:tc>' + _p('Deslocada') + '</w:tc></w:tr></w:tbl>')
+        units = ler_docx(docx(self.dir / 'sdt.docx', table))['secoes'][0]['unidades']
+        self.assertEqual([(u['localizador'], u['texto']) for u in units], [
+            ('T01 L01 C01', 'A'), ('T01 L01 C02', 'B'), ('T01 L01 C03', 'C'),
+            ('T01 L02 C01', 'Linha no controle'), ('T01 L02 C02', 'Celula no controle'),
+            ('T01 L03 C02', 'Deslocada')])
+
+    def test_caixa_de_texto_nao_duplica_texto_nem_paragrafos(self):
+        mc = 'http://schemas.openxmlformats.org/markup-compatibility/2006'
+        caixa = (f'<w:p><w:r><w:t>Ancora </w:t></w:r><w:r><mc:AlternateContent xmlns:mc="{mc}">'
+                 '<mc:Choice Requires="wps"><w:drawing><w:txbxContent>' + _p('Na caixa') + '</w:txbxContent></w:drawing></mc:Choice>'
+                 '<mc:Fallback><w:pict><w:txbxContent>' + _p('Na caixa') + '</w:txbxContent></w:pict></mc:Fallback>'
+                 '</mc:AlternateContent></w:r></w:p>')
+        table = '<w:tbl><w:tr><w:tc>' + caixa + '</w:tc></w:tr></w:tbl>'
+        units = ler_docx(docx(self.dir / 'caixa.docx', caixa + table))['secoes'][0]['unidades']
+        self.assertEqual([(u['localizador'], u['texto']) for u in units],
+                         [('P0001', 'Ancora Na caixa'), ('T01 L01 C01', 'Ancora Na caixa')])
+
+    def test_cabecalhos_seguem_ordem_numerica_das_partes(self):
+        extra = {f'word/header{n}.xml': f'<w:hdr xmlns:w="{W}">{_p(f"Cabecalho {n}")}</w:hdr>' for n in (2, 10)}
+        rels = ''.join(f'<Relationship Id="rId{n}" Type="{REL}/header" Target="header{n}.xml"/>' for n in (10, 2))
+        secoes = ler_docx(docx(self.dir / 'cab.docx', _p('x'), extra, rels))['secoes']
+        self.assertEqual([s['unidades'][0]['texto'] for s in secoes if s['titulo'].startswith('cabecalho')],
+                         ['Cabecalho 2', 'Cabecalho 10'])
+
+    def test_dtd_e_macro_em_utf16_tambem_sao_detectados(self):
+        evil = (f'<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE d [<!ENTITY x "y">]>'
+                f'<w:document xmlns:w="{W}"><w:body>{_p("&x;")}</w:body></w:document>')
+        source = _zip(self.dir / 'utf16.docx', {'word/document.xml': evil.encode('utf-16')})
+        result = extrair(source, 'D21', self.dir / 'd21.md')
+        self.assertEqual(result['recusa'], 'corrompido')
+        self.assertIn('DTD', result['mensagem'])
+        tipos = ('<?xml version="1.0" encoding="UTF-16"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/'
+                 'content-types"><Override PartName="/word/outra.bin" ContentType="application/vnd.ms-office.vbaProject"/>'
+                 '</Types>').encode('utf-16')
+        source = docx(self.dir / 'macro16.docx', _p('x'), {'[Content_Types].xml': tipos})
+        self.assertEqual(extrair(source, 'D22', self.dir / 'd22.md')['recusa'], 'macro')
+
     def test_quebras_de_linha_nao_separam_texto_do_localizador(self):
         data = '<row r="1"><c r="A1" t="inlineStr"><is><t>um\u2028dois\x85fim</t></is></c></row>'
         source = xlsx(self.dir / 'quebras.xlsx', [('Plan1', data, None)])
