@@ -1,9 +1,13 @@
 """DOCX/XLSX extraction with locators; packages are built inside the tests with zipfile."""
 from pathlib import Path
 import sys
+import json
+import struct
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
+import zlib
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import extrair_office
@@ -226,6 +230,225 @@ class ExtrairOfficeTest(unittest.TestCase):
         source = docx(self.dir / 'u.docx', _p('Um') + _p('Dois'))
         units = ler_docx(source)['secoes'][0]['unidades']
         self.assertEqual(units, [{'localizador': 'P0001', 'texto': 'Um'}, {'localizador': 'P0002', 'texto': 'Dois'}])
+
+    def test_quebras_de_linha_nao_separam_texto_do_localizador(self):
+        data = '<row r="1"><c r="A1" t="inlineStr"><is><t>um\u2028dois\x85fim</t></is></c></row>'
+        source = xlsx(self.dir / 'quebras.xlsx', [('Plan1', data, None)])
+        target = self.dir / 'k.md'
+        extrair(source, 'D12', target)
+        self.assertIn('[Plan1!A1] um ⏎ dois ⏎ fim', target.read_text(encoding='utf-8').splitlines())
+
+
+def png_branco(path: Path, size=8):
+    """Minimal valid grayscale PNG built with zlib (no image library needed)."""
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+    raw = b''.join(b'\x00' + b'\xff' * size for _ in range(size))
+    path.write_bytes(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 0, 0, 0, 0))
+                     + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b''))
+    return path
+
+
+class CadastroOfficeTest(unittest.TestCase):
+    """Registration, receipt, SQLite index and opt-in image OCR on synthetic files."""
+
+    def setUp(self):
+        from comum import PARTES, escrever_json, fluxo_esperado, manifesto_prompts
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        (self.root / 'prompts').mkdir()
+        for name in PARTES:
+            (self.root / 'prompts' / name).write_text('# Fixture sintetica\n', encoding='utf-8')
+        (self.root / 'prompts' / 'FLUXO_COMPLETO.md').write_bytes(fluxo_esperado(self.root))
+        escrever_json(self.root / 'prompts' / 'manifesto_prompts.json', manifesto_prompts(self.root))
+        (self.root / 'AGENTS.md').write_text('Fixture tecnica.', encoding='utf-8')
+        escrever_json(self.root / 'configuracao.json', {'versao': '1.1.0', 'caso_ativo': None,
+            'manifesto_ativo': None, 'maximo_documentos_inicial': 20, 'indice_sqlite': True})
+        self.src = self.root / 'recebidos'
+        self.src.mkdir()
+
+    def arquivos(self):
+        planilha = ('<row r="1"><c r="A1" t="inlineStr"><is><t>Item</t></is></c>'
+                    '<c r="B1" t="inlineStr"><is><t>Fornecedor</t></is></c></row>'
+                    '<row r="3"><c r="A3" t="inlineStr"><is><t>Obra sintetica</t></is></c>'
+                    '<c r="B3" t="inlineStr"><is><t>Empresa Zeta</t></is></c>'
+                    '<c r="C3"><f>SUM(C1:C2)</f><v>10</v></c></row>')
+        xl = xlsx(self.src / 'gastos.xlsx', [('Plan1', planilha, None), ("Gastos d'obra", '<row r="1"><c r="A1"><v>7</v></c></row>', None)])
+        table = '<w:tbl><w:tr><w:tc>' + _p('Contrato') + '</w:tc><w:tc>' + _p('Empresa Zeta assinou') + '</w:tc></w:tr></w:tbl>'
+        doc = docx(self.src / 'nota.docx', _p('Paragrafo sintetico unico.') + table)
+        return doc, xl
+
+    def cadastrar(self, sources, **kwargs):
+        import cadastrar_documentos
+        kwargs.setdefault('novo', True)
+        if kwargs['novo']:
+            kwargs.setdefault('titulo', 'Caso sintetico Office')
+        return cadastrar_documentos.cadastrar(self.root, 'alpha', sources, natureza='sinteticos', **kwargs)
+
+    def manifest(self):
+        return json.loads((self.root / 'casos/alpha/manifesto.json').read_text(encoding='utf-8'))
+
+    def rodada(self):
+        from nova_rodada import criar_rodada
+        from selecionar_caso import selecionar
+        selecionar(self.root, 'alpha')
+        return criar_rodada(self.root, 'R001', 'Pergunta sintetica de armazenamento, sem apuracao.')
+
+    def test_cadastro_registra_derivado_hash_origem_versao_e_recibo(self):
+        from comum import sha256
+        doc, xl = self.arquivos()
+        result = self.cadastrar([doc, xl])
+        docs = {d['nome_recebido']: d for d in self.manifest()['documentos']}
+        for name, kind in (('nota.docx', 'docx'), ('gastos.xlsx', 'xlsx')):
+            entry = docs[name]
+            self.assertEqual(entry['extracao_office']['estado'], 'extraido')
+            [derived] = entry['derivados']
+            self.assertEqual(derived['tipo'], f'texto_extraido_{kind}')
+            self.assertEqual(derived['origem'], f'extracao_{kind}')
+            self.assertEqual(derived['versao_extrator'], extrair_office.VERSAO_EXTRATOR)
+            self.assertEqual(derived['origem_sha256'], entry['sha256'])
+            self.assertTrue(derived['arquivo'].endswith(f'/derivados/{entry["id"]}_texto_{kind}.md'))
+            self.assertEqual(sha256(self.root / derived['arquivo']), derived['sha256'])
+            self.assertEqual(sha256(self.root / entry['arquivo']), entry['sha256'])
+        summary = result['extracao_office_resumo']
+        self.assertEqual({k: summary[k] for k in ('documentos', 'processados_agora', 'docx', 'xlsx', 'extraido',
+                                                    'paragrafos', 'celulas_tabela', 'abas', 'celulas', 'formulas', 'falhas')},
+                         {'documentos': 2, 'processados_agora': 2, 'docx': 1, 'xlsx': 1, 'extraido': 2,
+                          'paragrafos': 1, 'celulas_tabela': 2, 'abas': 2, 'celulas': 6, 'formulas': 1, 'falhas': 0})
+        receipt = json.loads((self.root / result['arquivo_recibo']).read_text(encoding='utf-8'))
+        self.assertEqual(receipt['extracao_office_resumo'], summary)
+        self.assertTrue(all(item['derivados'] and item['extracao_office'] for item in receipt['arquivos']))
+        self.assertEqual(result['inventario']['documentos'][0]['derivados'], 1)
+
+    def test_reenvio_nao_reprocessa_extracao_legivel(self):
+        doc, _ = self.arquivos()
+        first = self.cadastrar([doc])
+        again = self.cadastrar([doc], novo=False)
+        self.assertEqual(again['duplicados'], 1)
+        self.assertEqual(again['extracao_office_resumo']['processados_agora'], 0)
+        self.assertEqual(again['corpus_id'], first['corpus_id'])
+
+    def test_macro_e_corrompido_ficam_pendentes_sem_abortar_o_lote(self):
+        from comum import sha256
+        doc, _ = self.arquivos()
+        macro = docx(self.src / 'macro.xlsm', _p('x'))
+        broken = self.src / 'quebrado.docx'
+        broken.write_bytes(b'nao sou um zip')
+        result = self.cadastrar([doc, macro, broken])
+        self.assertEqual(result['novos'], 3)
+        docs = {d['nome_recebido']: d for d in self.manifest()['documentos']}
+        for name, reason in (('macro.xlsm', 'macro'), ('quebrado.docx', 'corrompido')):
+            entry = docs[name]
+            self.assertEqual((entry['extracao_office']['estado'], entry['extracao_office']['recusa']), ('erro', reason))
+            self.assertIn('original fica preservado', entry['extracao_office']['mensagem'])
+            self.assertEqual(entry['derivados'], [])
+            self.assertEqual(sha256(self.root / entry['arquivo']), entry['sha256'])
+        self.assertEqual(result['extracao_office_resumo']['recusados'], {'macro': 1, 'corrompido': 1})
+        self.assertEqual(result['extracao_office_resumo']['erro'], 2)
+
+    def test_busca_no_indice_devolve_aba_celula_e_paragrafo(self):
+        from indice_sqlite import cobertura, ler_passagem, pesquisar, verificar_indice
+        doc, xl = self.arquivos()
+        self.cadastrar([doc, xl])
+        self.rodada()
+        ids = {d['nome_recebido']: d['id'] for d in self.manifest()['documentos']}
+        response = pesquisar(self.root, 'alpha', 'R001', 'Zeta', documentos=[ids['gastos.xlsx']])
+        [hit] = response['resultados']
+        self.assertEqual(hit['formato'], 'xlsx')
+        self.assertEqual(hit['localizadores_com_termo'], ['Plan1!B3'])
+        self.assertEqual(hit['localizadores'], ['Plan1!A1', 'Plan1!B1', 'Plan1!A3', 'Plan1!B3', 'Plan1!C3'])
+        self.assertIsNone(hit['pagina_pdf'])
+        self.assertIn('[Plan1!B3] Empresa Zeta', hit['trecho'])
+        literal = pesquisar(self.root, 'alpha', 'R001', 'Empresa Zeta', modo='literal', documentos=[ids['gastos.xlsx']])
+        self.assertEqual(literal['resultados'][0]['localizadores_com_termo'], ['Plan1!B3'])
+        quoted = pesquisar(self.root, 'alpha', 'R001', '7', modo='literal', documentos=[ids['gastos.xlsx']])
+        self.assertEqual(quoted['resultados'][0]['localizadores_com_termo'], ["'Gastos d''obra'!A1"])
+        docx_hit = pesquisar(self.root, 'alpha', 'R001', 'Zeta', documentos=[ids['nota.docx']])['resultados'][0]
+        self.assertEqual(docx_hit['localizadores_com_termo'], ['T01 L01 C02'])
+        self.assertEqual(docx_hit['localizador_inicio'], 'P0001')
+        passage = ler_passagem(self.root, 'alpha', 'R001', hit['referencia'])
+        self.assertEqual(passage['unidade_completa'][3]['localizador'], 'Plan1!B3')
+        report = cobertura(self.root, 'alpha', 'R001')['cobertura']
+        adapters = {f['adaptador'] for d in report['documentos'] for f in d['fontes'] if f['tipo'] == 'derivado'}
+        self.assertEqual(adapters, {'markdown_docx_v1', 'markdown_xlsx_v1'})
+        self.assertEqual(report['documentos_pesquisaveis'], 2)
+        self.assertEqual(pesquisar(self.root, 'alpha', 'R001', 'SHA-256')['total_correspondencias'], 0)
+        self.assertEqual(verificar_indice(self.root, 'alpha', 'R001')['estado'], 'ok')
+
+    def test_derivado_incoerente_nao_ganha_localizador(self):
+        from indice_sqlite import _adaptar
+        doc, xl = self.arquivos()
+        self.cadastrar([xl])
+        entry = self.manifest()['documentos'][0]
+        derived = self.root / entry['derivados'][0]['arquivo']
+        good = derived.read_text(encoding='utf-8')
+        self.assertEqual(_adaptar(derived, entry['id'], entry['sha256'], 'derivado')[2][0]['estado'], 'com_texto')
+        for bad in (good.replace('[Plan1!B3]', '[Outra!B3]'), good.replace('[Plan1!B3] ', ''),
+                    good.replace(entry['sha256'], '0' * 64)):
+            copy = self.root / 'incoerente.md'
+            copy.write_text(bad, encoding='utf-8')
+            adapter, _, units = _adaptar(copy, entry['id'], entry['sha256'], 'derivado')
+            self.assertEqual(adapter, 'markdown_xlsx_v1')
+            self.assertEqual([u['estado'] for u in units], ['erro_leitura'])
+
+    def test_marcadores_do_indice_correspondem_aos_dos_extratores(self):
+        import indice_sqlite
+        import ocr
+        self.assertEqual(indice_sqlite.MARCADORES_OFFICE, extrair_office.MARCADORES)
+        self.assertEqual(indice_sqlite.SEM_TEXTO_IMAGEM, ocr.SEM_TEXTO_IMAGEM)
+        self.assertEqual(indice_sqlite.AVISO_OCR_IMAGEM, ocr.AVISO_OCR_IMAGEM)
+
+    def test_imagem_sem_ocr_por_padrao(self):
+        image = png_branco(self.src / 'foto.png')
+        with patch('ocr.reconhecer_imagem') as engine:
+            result = self.cadastrar([image])
+        engine.assert_not_called()
+        entry = self.manifest()['documentos'][0]
+        self.assertNotIn('ocr_imagem', entry)
+        self.assertEqual(entry['derivados'], [])
+        self.assertEqual(result['ocr_imagens_resumo'],
+                         {'solicitado': False, 'imagens': 1, 'processadas_agora': 0, 'extraido': 0,
+                          'sem_texto': 0, 'pendente': 0, 'erro': 0, 'sem_ocr': 1})
+
+    def test_ocr_imagens_sem_tesseract_fica_pendente_com_mensagem(self):
+        import ocr
+        image = png_branco(self.src / 'foto.png')
+        config = {**ocr.configuracao(), 'habilitado': True, 'tesseract': None}
+        with patch('ocr.configuracao', return_value=config):
+            result = self.cadastrar([image], ocr_imagens=True)
+        entry = self.manifest()['documentos'][0]
+        self.assertEqual(entry['ocr_imagem']['estado'], 'pendente')
+        self.assertIn('Tesseract nao encontrado', entry['ocr_imagem']['mensagem'])
+        self.assertEqual(entry['derivados'], [])
+        self.assertEqual(result['ocr_imagens_resumo']['pendente'], 1)
+
+    def test_ocr_imagens_marca_origem_ocr_e_indexa_com_aviso(self):
+        from indice_sqlite import pesquisar
+        image = png_branco(self.src / 'foto.png')
+        fake = {'motor': 'tesseract', 'versoes': {'tesseract': '5.x (simulado)'}, 'idiomas': 'por+eng',
+                'texto': 'Placa sintetica\nNumero 42', 'avisos': []}
+        with patch('ocr.reconhecer_imagem', return_value=fake):
+            result = self.cadastrar([image], ocr_imagens=True)
+        entry = self.manifest()['documentos'][0]
+        self.assertEqual((entry['ocr_imagem']['estado'], entry['ocr_imagem']['origem']), ('extraido', 'ocr'))
+        [derived] = entry['derivados']
+        self.assertEqual((derived['tipo'], derived['origem']), ('texto_ocr_imagem', 'ocr'))
+        self.assertIn('conferir no original', derived['aviso'])
+        self.assertIn('conferir no original', result['ocr_imagens_resumo']['aviso'])
+        self.rodada()
+        [hit] = pesquisar(self.root, 'alpha', 'R001', 'Numero 42')['resultados']
+        self.assertEqual((hit['origem_texto'], hit['linha_inicio'], hit['linha_fim']), ('ocr', 1, 2))
+        self.assertIn('conferir no original', hit['aviso_ocr'])
+
+    @unittest.skipUnless(__import__('ocr').diagnostico()['tesseract']['disponivel'], 'Tesseract local ausente')
+    def test_ocr_imagens_com_tesseract_real(self):
+        image = png_branco(self.src / 'branca.png', size=64)
+        result = self.cadastrar([image], ocr_imagens=True)
+        info = self.manifest()['documentos'][0]['ocr_imagem']
+        self.assertIn(info['estado'], ('sem_texto', 'extraido'))
+        self.assertEqual(info['motor'], 'tesseract')
+        self.assertEqual(result['ocr_imagens_resumo']['processadas_agora'], 1)
 
 
 if __name__ == '__main__':

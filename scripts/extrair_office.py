@@ -23,6 +23,11 @@ from comum import sha256
 
 VERSAO_EXTRATOR = '1'
 SEM_TEXTO = '[SEM TEXTO EXTRAIVEL NESTE DOCUMENTO]'
+ABA_SEM_CELULAS = '[ABA SEM CELULAS PREENCHIDAS]'
+ABA_OCULTA = '[aba oculta no original]'
+ABA_GRAFICO = '[aba de grafico; sem celulas]'
+# Informational lines of the working copy; the SQLite index never treats them as content.
+MARCADORES = frozenset({SEM_TEXTO, ABA_SEM_CELULAS, ABA_OCULTA, ABA_GRAFICO})
 SEPARADOR_PARAGRAFOS_CELULA = ' ¶ '
 
 # Decompression limits (bytes actually read, not the sizes declared in the zip headers).
@@ -554,7 +559,8 @@ def ler_xlsx(source: Path, *, limite_total=None, limite_membro=None) -> dict:
 
 def _linha_celula(cell) -> str:
     def clean(text):
-        return (text or '').replace('\r', ' ').replace('\n', ' ⏎ ')
+        # splitlines covers every separator the index splits on (\r, \n, \v, \f, \x1c-\x1e, \x85,  ,  ).
+        return ' ⏎ '.join((text or '').splitlines())
     parts = [clean(cell['valor']) if cell['valor'] is not None else '(sem valor gravado)']
     if cell['exibido'] is not None and cell['exibido'] != cell['valor']:
         parts.append(f'exibido: {cell["exibido"]}')
@@ -568,6 +574,12 @@ def _metodo(formato: str) -> str:
     if formato == 'docx':
         return f'{base}; paragrafos e celulas de tabela em ordem; sem OCR, sem avaliacao ou correcao editorial.'
     return f'{base}; celulas preenchidas com valor gravado e formula como texto, sem avaliar; sem correcao editorial.'
+
+
+def formato_office(suffix: str) -> str:
+    """`docx` or `xlsx` family of an extension (macro-enabled variants included)."""
+    suffix = suffix.lower()
+    return EXTENSOES.get(suffix) or ('xlsx' if suffix.startswith('.xl') else 'docx')
 
 
 def _resultado_base(formato: str) -> dict:
@@ -589,7 +601,7 @@ def extrair_office(source: Path, identifier: str, target: Path, *,
     if target.exists():
         raise FileExistsError('Nao sobrescrever extracao existente; usar nova versao.')
     suffix = source.suffix.lower()
-    formato = EXTENSOES.get(suffix) or ('xlsx' if suffix.startswith('.xl') else 'docx')
+    formato = formato_office(suffix)
     result = _resultado_base(formato)
     if suffix in EXTENSOES_MACRO:
         result.update(recusa='macro', mensagem=f'Formato {suffix} habilitado para macros; conteúdo não extraído por segurança. O original fica preservado.')
@@ -620,7 +632,9 @@ def extrair_office(source: Path, identifier: str, target: Path, *,
                 continue
             body.extend([f'## {identifier} - {secao["titulo"]}', ''])
             for unit in secao['unidades']:
-                body.append(f'[{unit["localizador"]}] {unit["texto"]}')
+                # One located line per unit: a stray line break would orphan text from its locator.
+                texto = ' '.join(unit['texto'].splitlines())
+                body.append(f'[{unit["localizador"]}] {texto}')
                 unidades += 1
             if not secao['unidades']:
                 body.append(SEM_TEXTO)
@@ -633,12 +647,12 @@ def extrair_office(source: Path, identifier: str, target: Path, *,
         for aba in lido['abas']:
             body.extend([f'## {identifier} - aba {aba["nome"]}', ''])
             if aba['oculta']:
-                body.append('[aba oculta no original]')
+                body.append(ABA_OCULTA)
             if aba['tipo'] == 'grafico':
-                body.append('[aba de grafico; sem celulas]')
+                body.append(ABA_GRAFICO)
             body.extend(_linha_celula(cell) for cell in aba['celulas'])
             if not aba['celulas'] and aba['tipo'] != 'grafico':
-                body.append('[ABA SEM CELULAS PREENCHIDAS]')
+                body.append(ABA_SEM_CELULAS)
             body.append('')
         tem_texto = lido['contagens']['celulas'] > 0
     if result['falhas']:
