@@ -1,4 +1,262 @@
 'use strict';
+// Automatic drafts for the question and the panel forms. Each keystroke goes to localStorage at
+// once (the copy in this browser) and, after a short pause, to the server (the durable copy,
+// POST /api/rascunhos-*). Leaving the tab (visibilitychange) or the page (pagehide) sends at once.
+// The notebook (Caderno) keeps its own drafts: sessionStorage plus the server's note save,
+// because contract section 3 keeps note text out of localStorage.
+// Drafts never hold keys: password fields and key-like names or values are not kept anywhere.
+window.Rascunhos = (() => {
+  const PREFIXO = 'vlado:rascunho-tela:';
+  const PAUSA = 1200;
+  // keepalive bodies are capped by browsers (64 KB); larger drafts stay in this browser on pagehide.
+  const KEEPALIVE = 60000;
+  const VALOR_DE_CHAVE = /\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}|ANTHROPIC_API_KEY|OPENAI_API_KEY|ANTHROPIC_AUTH_TOKEN/;
+  const CAMPO_PROIBIDO = /chave|key|senha|password|passwd|token|secret|segredo|credencia|api/i;
+  const CAMPO = /^[a-z][a-z0-9_]{0,39}$/;
+  const SEM_CHAVE = 'Rascunho não guardado: retire a chave de API, senha ou token do texto.';
+  const SEM_REDE = 'Sem conexão — salvo neste navegador';
+  // Templates with {name}, translated by i18n.js (keys in i18n_en.js), like the notebook's.
+  const preencher = (texto, vars) => window.I18N ? window.I18N.t(texto, vars)
+    : Object.entries(vars || {}).reduce((fim, [nome, valor]) => fim.split(`{${nome}}`).join(String(valor)), texto);
+  const controles = new Set();
+  let encerrado = false;
+  const conta = () => document.body.dataset.conta || (document.body.dataset.modo === 'local' ? 'local' : 'sessao');
+  const area = () => { try { return window.localStorage || null; } catch { return null; } };
+  const chave = alvo => `${PREFIXO}${conta()}:${alvo.caso}:${alvo.tela}`;
+  const plano = valor => valor === null || ['string', 'number', 'boolean'].includes(typeof valor);
+  function valido(conteudo) {
+    return !!conteudo && typeof conteudo === 'object' && !Array.isArray(conteudo)
+      && Object.entries(conteudo).every(([nome, valor]) => CAMPO.test(nome) && plano(valor));
+  }
+  function temChave(conteudo) {
+    return Object.entries(conteudo).some(([nome, valor]) => CAMPO_PROIBIDO.test(nome) || (typeof valor === 'string' && VALOR_DE_CHAVE.test(valor)));
+  }
+  const vazio = conteudo => !conteudo || Object.entries(conteudo).every(([nome, valor]) => nome === 'contexto' || valor === null || valor === false || valor === '');
+  const ordenado = conteudo => JSON.stringify(Object.keys(conteudo || {}).sort().map(nome => [nome, conteudo[nome]]));
+  const igual = (a, b) => ordenado(a) === ordenado(b);
+  function lerLocal(alvo) {
+    try {
+      const dados = JSON.parse(area()?.getItem(chave(alvo)) || 'null');
+      return dados && valido(dados.conteudo) && Number.isInteger(dados.versao) && typeof dados.em === 'string' ? dados : null;
+    } catch { return null; }
+  }
+  function gravarLocal(alvo, dados) {
+    if (encerrado) return;
+    try { area()?.setItem(chave(alvo), JSON.stringify(dados)); } catch { /* Full or blocked: the server copy goes on. */ }
+  }
+  function removerLocal(alvo) { try { area()?.removeItem(chave(alvo)); } catch { /* Nothing kept. */ } }
+  function hora(iso) {
+    const data = new Date(iso);
+    return Number.isNaN(data.getTime()) ? '' : `${String(data.getHours()).padStart(2, '0')}:${String(data.getMinutes()).padStart(2, '0')}`;
+  }
+  // Same as api(), plus keepalive so a save started on pagehide survives the page.
+  async function pedir(operacao, dados, manter = false) {
+    if (!manter) return api(operacao, dados);
+    const corpo = JSON.stringify(dados);
+    if (corpo.length > KEEPALIVE) throw Object.assign(new Error('Sem conexão com o servidor.'), {rede: true});
+    let resposta;
+    try {
+      resposta = await fetch(`/api/${operacao}`, {method: 'POST', keepalive: true,
+        headers: {'Content-Type': 'application/json', 'X-Session-Token': token}, body: corpo});
+    } catch (causa) { throw Object.assign(new Error('Sem conexão com o servidor.'), {rede: true, cause: causa}); }
+    let resultado;
+    try { resultado = await resposta.json(); } catch (causa) { throw Object.assign(new Error('Sem conexão com o servidor.'), {rede: true, cause: causa}); }
+    if (!resposta.ok) throw Object.assign(new Error(resultado.erro || ''), {result: resultado});
+    return resultado;
+  }
+
+  // `alvo()` -> {caso, tela} or null; `ler()` -> flat fields; `aplicar(conteudo)` puts them back.
+  // `ancora` is where the status line and the restore offer appear (right after it).
+  // `compativel(conteudo)` may refuse a draft written for another item of the same screen.
+  function registrar({origem, ancora, alvo, ler, aplicar, compativel = () => true}) {
+    const estado = element('p', '', 'small rascunho-estado');
+    estado.setAttribute('role', 'status'); estado.setAttribute('aria-live', 'polite'); estado.hidden = true;
+    const oferta = element('div', undefined, 'rascunho-oferta notice'); oferta.hidden = true;
+    ancora.after(estado, oferta);
+    let atual = null, versao = 0, timer = null, emVoo = null, denovo = false, decidir = false, sequencia = 0, semRede = false, abrindo = null;
+    const mesmo = a => !!a && !!atual && a.caso === atual.caso && a.tela === atual.tela;
+    function mostrar(texto, vars) { estado.textContent = texto ? preencher(texto, vars) : ''; estado.hidden = !texto; }
+    function fecharOferta() { decidir = false; oferta.hidden = true; oferta.replaceChildren(); }
+    function perguntar(texto, vars, opcoes) {
+      decidir = true; oferta.replaceChildren(element('p', preencher(texto, vars)));
+      const acoes = element('div', undefined, 'actions');
+      for (const [rotulo, acao, classe] of opcoes) {
+        const botao = element('button', rotulo, classe); botao.type = 'button';
+        botao.addEventListener('click', () => { fecharOferta(); acao(); });
+        acoes.append(botao);
+      }
+      oferta.append(acoes); oferta.hidden = false;
+    }
+    function parar() { clearTimeout(timer); timer = null; }
+    function agendar() { parar(); timer = setTimeout(() => { timer = null; enviar(); }, PAUSA); }
+    // Copy in this browser at once, then the server after the pause. While a restore or conflict
+    // choice is on screen nothing is written, so the older draft cannot be overwritten silently.
+    function mudou() {
+      if (encerrado) return;
+      const alvoAgora = alvo();
+      if (!alvoAgora) return;
+      // First keystroke on a target not opened yet: open it (may offer a draft), then save.
+      if (!mesmo(alvoAgora)) { abrir().then(() => { if (mesmo(alvoAgora) && !decidir) mudou(); }); return; }
+      if (decidir) { mostrar('Escolha acima qual rascunho manter para continuar salvando.'); return; }
+      const conteudo = ler();
+      if (temChave(conteudo)) { parar(); removerLocal(atual); mostrar(SEM_CHAVE); return; }
+      gravarLocal(atual, {conteudo, versao, em: new Date().toISOString(), pendente: true});
+      agendar();
+    }
+    async function enviar(manter = false) {
+      // The version comes from the server read in abrir(): never save before it answers.
+      if (abrindo && !manter) await abrindo;
+      if (encerrado || decidir || !atual) return;
+      if (emVoo) { denovo = true; return emVoo; }
+      const alvoEnvio = atual, conteudo = ler();
+      if (temChave(conteudo)) return;
+      if (vazio(conteudo)) { removerLocal(alvoEnvio); if (versao) await descartarServidor(alvoEnvio); mostrar(''); return; }
+      mostrar('Salvando…');
+      emVoo = (async () => {
+        try {
+          const resultado = await pedir('rascunhos-salvar', {caso: alvoEnvio.caso, tela: alvoEnvio.tela, versao, conteudo}, manter);
+          if (!mesmo(alvoEnvio)) return;
+          versao = resultado.versao; semRede = false;
+          const local = lerLocal(alvoEnvio);
+          if (local) gravarLocal(alvoEnvio, {...local, versao, pendente: !igual(local.conteudo, conteudo)});
+          mostrar('Salvo às {hora}', {hora: hora(resultado.atualizado_em_utc || new Date().toISOString())});
+        } catch (erro) {
+          if (!mesmo(alvoEnvio)) return;
+          if (erro.rede) { semRede = true; mostrar(SEM_REDE); return; }
+          const resposta = erro.result || {};
+          if (resposta.codigo === 'rascunho_conflito' && resposta.atual) { conflito(resposta.atual, conteudo); return; }
+          if (resposta.codigo === 'rascunho_com_chave') { removerLocal(alvoEnvio); mostrar(SEM_CHAVE); return; }
+          mostrar('Não foi possível guardar no servidor — salvo neste navegador. {erro}', {erro: erro.message});
+        }
+      })();
+      try { await emVoo; } finally {
+        emVoo = null;
+        if (denovo) { denovo = false; if (!manter && !decidir) agendar(); }
+      }
+    }
+    // Another tab or window wrote first: nothing was overwritten; the writer chooses.
+    function conflito(servidor, meu) {
+      versao = servidor.versao;
+      if (servidor.conteudo && igual(servidor.conteudo, meu)) {
+        const local = lerLocal(atual);
+        if (local) gravarLocal(atual, {...local, versao, pendente: !igual(local.conteudo, meu)});
+        mostrar('Salvo às {hora}', {hora: hora(servidor.atualizado_em_utc)}); return;
+      }
+      mostrar('');
+      perguntar('Este rascunho mudou em outra aba ou janela. Qual versão manter?', {}, [
+        ['Manter o desta aba', () => enviar(), ''],
+        ['Usar o da outra aba', () => {
+          aplicar(servidor.conteudo || {});
+          gravarLocal(atual, {conteudo: ler(), versao, em: servidor.atualizado_em_utc || new Date().toISOString(), pendente: false});
+          mostrar(servidor.conteudo ? 'Salvo às {hora}' : '', {hora: hora(servidor.atualizado_em_utc)});
+        }, 'secondary']]);
+    }
+    async function descartarServidor(alvoDescarte) {
+      for (let tentativa = 0; tentativa < 2; tentativa++) {
+        try { const r = await api('rascunhos-descartar', {caso: alvoDescarte.caso, tela: alvoDescarte.tela, versao}); if (mesmo(alvoDescarte)) versao = r.versao; return; }
+        catch (erro) {
+          const resposta = erro.result || {};
+          if (resposta.codigo !== 'rascunho_conflito' || !resposta.atual || !mesmo(alvoDescarte)) return;
+          versao = resposta.atual.versao;
+        }
+      }
+    }
+    // Leaving the tab or page: send at once what is still only in this browser.
+    function despedir() {
+      if (!atual || decidir) return;
+      const local = lerLocal(atual);
+      if (timer || local?.pendente) { parar(); enviar(true).catch(() => {}); }
+    }
+    // Called when the screen opens or its target changes: offers a newer draft back.
+    function abrir() {
+      const novo = alvo();
+      if (novo && mesmo(novo)) return abrindo || Promise.resolve();
+      despedir(); fecharOferta(); mostrar('');
+      atual = novo ? {caso: novo.caso, tela: novo.tela} : null; versao = 0; semRede = false;
+      const pedido = ++sequencia;
+      if (!atual || encerrado) { abrindo = null; return Promise.resolve(); }
+      const promessa = carregar(novo, pedido).finally(() => { if (pedido === sequencia) abrindo = null; });
+      abrindo = promessa;
+      return promessa;
+    }
+    async function carregar(novo, pedido) {
+      const local = lerLocal(atual);
+      let servidor = null;
+      try { servidor = await api('rascunhos-ler', {caso: atual.caso, tela: atual.tela}); } catch (erro) { if (erro.rede) semRede = true; }
+      if (pedido !== sequencia || !mesmo(novo)) return;
+      versao = servidor ? servidor.versao : (local?.versao || 0);
+      const candidatos = [];
+      if (servidor?.conteudo && !servidor.descartado && valido(servidor.conteudo)) candidatos.push({conteudo: servidor.conteudo, em: servidor.atualizado_em_utc || ''});
+      // The local copy counts while unsent, or when the server could not answer.
+      if (local && (local.pendente || !servidor) && !(servidor?.descartado && local.versao < servidor.versao)) candidatos.push({conteudo: local.conteudo, em: local.em});
+      candidatos.sort((a, b) => (Date.parse(b.em) || 0) - (Date.parse(a.em) || 0));
+      const melhor = candidatos.find(c => !vazio(c.conteudo) && compativel(c.conteudo));
+      if (servidor?.descartado && !local?.pendente) removerLocal(atual);
+      if (semRede) mostrar(SEM_REDE);
+      if (!melhor || igual(melhor.conteudo, ler())) return;
+      perguntar('Há um rascunho de {hora} que não foi enviado. Restaurar?', {hora: hora(melhor.em)}, [
+        ['Restaurar rascunho', () => {
+          aplicar(melhor.conteudo);
+          gravarLocal(atual, {conteudo: ler(), versao, em: new Date().toISOString(), pendente: true});
+          enviar();
+        }, ''],
+        ['Descartar rascunho', () => { removerLocal(atual); if (versao) descartarServidor(atual); mostrar(''); }, 'secondary']]);
+    }
+    // The text was sent or saved for real: the draft is no longer needed.
+    function concluir() {
+      parar(); fecharOferta(); mostrar('');
+      if (!atual) return;
+      const feito = atual;
+      removerLocal(feito);
+      if (versao) descartarServidor(feito);
+      atual = null; versao = 0; abrindo = null; ++sequencia;
+    }
+    // Forget the target without discarding (the next abrir() reads it again).
+    function soltar() { despedir(); parar(); fecharOferta(); mostrar(''); atual = null; versao = 0; ++sequencia; }
+    origem.addEventListener('input', mudou);
+    origem.addEventListener('change', mudou);
+    const controle = {abrir, concluir, soltar, enviar, despedir, parar, estado: () => ({alvo: atual, versao, pendente: !!timer, semRede, decidir})};
+    controles.add(controle);
+    return controle;
+  }
+  // Flat fields of a form, by id (dashes become underscores). Password, file and key-like
+  // fields are never read.
+  function campos(forms) {
+    return forms.flatMap(form => [...form.querySelectorAll('input[id], textarea[id], select[id]')]).filter(el => {
+      const nome = el.id.replace(/-/g, '_');
+      return !['password', 'file', 'hidden', 'submit', 'button'].includes(el.type) && CAMPO.test(nome) && !CAMPO_PROIBIDO.test(nome);
+    }).slice(0, 49);
+  }
+  const marcavel = el => el.type === 'checkbox' || el.type === 'radio';
+  function lerFormulario(forms) {
+    const dados = {};
+    for (const el of campos(forms)) dados[el.id.replace(/-/g, '_')] = marcavel(el) ? !!el.checked : String(el.value ?? '');
+    return dados;
+  }
+  function aplicarFormulario(forms, conteudo) {
+    for (const el of campos(forms)) {
+      const nome = el.id.replace(/-/g, '_');
+      if (!(nome in conteudo)) continue;
+      if (marcavel(el)) el.checked = !!conteudo[nome]; else el.value = conteudo[nome] ?? '';
+      el.dispatchEvent(new Event('input', {bubbles: true}));  // counters and "unsaved" checks follow
+    }
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') for (const c of controles) c.despedir(); });
+  window.addEventListener('pagehide', () => { for (const c of controles) c.despedir(); });
+  window.addEventListener('online', () => { for (const c of controles) if (c.estado().semRede) c.enviar(); });
+  // Sign-out: stop saving and leave nothing of these drafts in this browser.
+  function limparTudo() {
+    encerrado = true;
+    for (const c of controles) c.parar();
+    try {
+      const armazenamento = area(), nomes = [];
+      if (!armazenamento) return;
+      for (let i = 0; i < armazenamento.length; i++) { const nome = armazenamento.key(i); if (nome?.startsWith(PREFIXO)) nomes.push(nome); }
+      for (const nome of nomes) armazenamento.removeItem(nome);
+    } catch { /* Storage blocked: nothing was kept. */ }
+  }
+  return {registrar, lerFormulario, aplicarFormulario, limparTudo, PREFIXO, PAUSA};
+})();
 (() => {
   const dialog=$('continuidade-dialogo');
   let scope=null, preview=null, busy=false, sequence=0;
