@@ -48,7 +48,9 @@ SO_ADMIN = (
     'entrevistas-lacunas', 'entrevistas-listar', 'entrevistas-detalhe', 'entrevistas-exportar',
     'entrevistas-preparar', 'entrevistas-editar', 'entrevistas-responder',
     # Web sources per case (scripts/fontes_web.py): admin only; the capture is the only network route.
-    'fontes-web-listar', 'fontes-web-abrir', 'fontes-web-capturar')
+    'fontes-web-listar', 'fontes-web-abrir', 'fontes-web-capturar',
+    # Case resume summary (scripts/continuidade.py): admin only; guests keep only the question draft.
+    'continuidade-resumo')
 
 
 class Http(unittest.TestCase):
@@ -277,6 +279,32 @@ class PapeisTest(Http):
                 status, body = self.post(self.ana, operation, {'caso': 'alpha', 'id': self.ana_id})
                 self.assertEqual((status, body.get('estado')), (403, 'proibido'), body)
         self.assertEqual(self.post(self.ana, 'acesso-listar', {})[0], 404)  # v1 invitation operations are gone
+
+    def test_convidado_so_alcanca_os_rascunhos_da_pergunta(self):
+        import interface_pesquisa
+        import rascunhos
+        # Beyond the conversation itself, the only guest operations are the drafts.
+        extras = set(interface_pesquisa.OPERACOES_CONVIDADO) - {
+            'codex-status', 'codex-listar', 'codex-perguntar', 'codex-eventos', 'codex-cancelar', 'codex-retomar',
+            'codex-original', 'sessao-sair'}
+        self.assertEqual(extras, set(rascunhos.OPERACOES))
+        status, body = self.post(self.ana, 'rascunhos-salvar', {'caso': 'alpha', 'tela': 'pergunta', 'versao': 0,
+                                                                'conteudo': {'texto': 'Pergunta em preparo.'}})
+        self.assertEqual(status, 200, body)
+        for tela in ('caderno/N0001', 'quadro-diligencias', 'quadro-revisao/A001'):
+            with self.subTest(tela=tela):
+                status, body = self.post(self.ana, 'rascunhos-salvar', {'caso': 'alpha', 'tela': tela, 'versao': 0,
+                                                                        'conteudo': {'texto': 'Fora da pergunta.'}})
+                self.assertEqual(status, 400, body)
+                status, body = self.post(self.ana, 'rascunhos-ler', {'caso': 'alpha', 'tela': tela})
+                self.assertEqual(status, 400, body)
+        # A draft of another screen written by the admin does not show in the guest listing.
+        self.assertEqual(self.post(self.admin, 'rascunhos-salvar', {'caso': 'alpha', 'tela': 'caderno/N0001', 'versao': 0,
+                                                                   'conteudo': {'texto': 'Nota da editora.'}})[0], 200)
+        status, body = self.post(self.ana, 'rascunhos-listar', {'caso': 'alpha'})
+        self.assertEqual(status, 200, body)
+        self.assertEqual([r['tela'] for r in body['rascunhos']], ['pergunta'])
+        self.assertEqual(self.post(self.ana, 'continuidade-resumo', {'caso': 'alpha'})[0], 403)
 
     def test_admin_alcanca_operacoes_de_administracao(self):
         for operation in ('contas-listar', 'apuracao-notas', 'caderno-listar', 'gerenciar-listar', 'ia-config'):
