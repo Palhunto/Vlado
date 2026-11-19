@@ -475,7 +475,7 @@ class Handler(BaseHTTPRequestHandler):
                  'account activation link, or <a href="/entrar">sign in with your login and password</a>.</p>')
         self._send(410, (f'<!doctype html><html lang="pt-BR"><meta charset="utf-8">'
                          f'<meta name="viewport" content="width=device-width, initial-scale=1">'
-                         f'<title>Vlado</title><link rel="stylesheet" href="/style.css"><main class="panel">{texto}</main></html>'
+                         f'<title>Vlado</title><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/style.css"><main class="panel">{texto}</main></html>'
                          ).encode('utf-8'), 'text/html; charset=utf-8')
 
     def _ambiente_publico(self):
@@ -588,6 +588,7 @@ class Handler(BaseHTTPRequestHandler):
                   '/icones/vlado-192.png': ('icones/vlado-192.png', 'image/png'),
                   '/icones/vlado-512.png': ('icones/vlado-512.png', 'image/png'),
                   '/icones/vlado-maskable-512.png': ('icones/vlado-maskable-512.png', 'image/png'),
+                  '/tokens.css': ('tokens.css', 'text/css; charset=utf-8'),
                   '/style.css': ('style.css', 'text/css; charset=utf-8'),
                   '/caderno.css': ('caderno.css', 'text/css; charset=utf-8')}
         if path not in assets:

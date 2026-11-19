@@ -1,0 +1,97 @@
+/* Design system do Vlado: the only place where colour values live (docs/design/design-system.md).
+   Three layers, loaded before style.css and caderno.css:
+   1. primitives (--vlado-*): raw values of the current Vlado palette, never used by rules directly;
+   2. semantic (--theme-*, short names, scales): the meaning of each colour, one set per theme;
+   3. components (--quadro-*, --mapa-*, --tempo-*, --tabela-*, --pdf-*): what a component paints.
+   Light is the base; dark redefines the same semantic names. Control borders reach 3:1 and
+   text pairs reach 4.5:1 (WCAG AA), checked by testes/estilo_tokens.cjs. */
+
+/* === 1. PRIMITIVES === */
+:root{
+ /* Paper (light surfaces) */
+ --vlado-papel-50:#fffefa;--vlado-papel-100:#f6f5f0;--vlado-papel-150:#f1f2e9;--vlado-papel-200:#efefe8;
+ --vlado-papel-250:#eae9df;--vlado-papel-300:#dddfd6;--vlado-branco:#ffffff;
+ /* Ink (neutral greens for text and control lines) */
+ --vlado-tinta-300:#a8b3a9;--vlado-tinta-500:#74837a;--vlado-tinta-550:#64786a;--vlado-tinta-600:#5f6a63;--vlado-tinta-900:#202c29;
+ /* Night (dark surfaces) */
+ --vlado-noite-700:#3c4940;--vlado-noite-750:#28322c;--vlado-noite-800:#202823;--vlado-noite-900:#171d1a;--vlado-noite-950:#121714;
+ /* Vlado green */
+ --vlado-verde-50:#e8eee6;--vlado-verde-100:#e4e9dc;--vlado-verde-150:#cfe0cf;--vlado-verde-200:#bad8af;--vlado-verde-300:#a8c79d;
+ --vlado-verde-350:#88a57f;--vlado-verde-400:#7f9685;--vlado-verde-450:#7e9972;--vlado-verde-500:#53886c;--vlado-verde-550:#526b49;
+ --vlado-verde-600:#2e604c;--vlado-verde-700:#1e4d3e;--vlado-verde-800:#2c3c2e;--vlado-verde-950:#172315;
+ /* Earth (warnings), ochre (notices), brick (danger) */
+ --vlado-terra-50:#f7ecdf;--vlado-terra-400:#c58b55;--vlado-terra-500:#aa8754;--vlado-terra-700:#8e4b28;--vlado-terra-900:#372e21;
+ --vlado-ocre-300:#e6bc7a;--vlado-ocre-500:#b18442;
+ --vlado-tijolo-50:#f8e9e5;--vlado-tijolo-300:#e7a097;--vlado-tijolo-400:#b06a5c;--vlado-tijolo-450:#a76e66;--vlado-tijolo-700:#87342c;--vlado-tijolo-900:#382725;
+ /* Categorical pair for the relationship map (validated with the dataviz checks, light and dark) */
+ --vlado-esmeralda-400:#3fa877;--vlado-esmeralda-600:#1d8058;--vlado-anil-400:#8487e6;--vlado-anil-600:#5b5fb8;
+ /* Translucent shadows and veils */
+ --vlado-sombra-verde:#18372f26;--vlado-sombra-verde-suave:#173f2910;--vlado-veu-verde:#132d27aa;
+ --vlado-sombra-noite:#00000066;--vlado-sombra-noite-suave:#00000033;--vlado-veu-noite:#080d0bd9;
+ /* PDF page (a printed page stays white in both themes) and its highlight colours */
+ --vlado-pdf-selecao:#005ac84d;--vlado-pdf-trecho:#ffc4006b;--vlado-pdf-trecho-borda:#c478008c;
+ /* Spacing (4px base) and radii */
+ --vlado-espaco-1:4px;--vlado-espaco-2:8px;--vlado-espaco-3:12px;--vlado-espaco-4:16px;--vlado-espaco-5:20px;--vlado-espaco-6:24px;--vlado-espaco-8:32px;
+ --vlado-raio-1:4px;--vlado-raio-2:6px;--vlado-raio-3:8px;--vlado-raio-4:10px;--vlado-raio-5:12px;--vlado-raio-pilula:999px;
+}
+
+/* === 2. SEMANTIC === */
+:root{
+ color-scheme:light;
+ --theme-background:var(--vlado-papel-100);--theme-surface:var(--vlado-papel-50);--theme-sidebar:var(--vlado-papel-200);
+ --theme-text:var(--vlado-tinta-900);--theme-muted:var(--vlado-tinta-600);--theme-accent:var(--vlado-verde-700);
+ --theme-primary-hover:var(--vlado-verde-600);--theme-on-primary:var(--vlado-branco);
+ --theme-line:var(--vlado-papel-300);--theme-input-line:var(--vlado-tinta-500);--theme-accent-line:var(--vlado-verde-400);--theme-focus:var(--vlado-verde-500);
+ --theme-soft:var(--vlado-verde-50);--theme-reading:var(--vlado-papel-150);--theme-active:var(--vlado-verde-100);
+ --theme-warning:var(--vlado-terra-700);--theme-warning-bg:var(--vlado-terra-50);--theme-warning-line:var(--vlado-terra-400);--theme-notice-line:var(--vlado-ocre-500);
+ --theme-danger:var(--vlado-tijolo-700);--theme-danger-bg:var(--vlado-tijolo-50);--theme-danger-line:var(--vlado-tijolo-400);
+ --theme-quote-line:var(--vlado-verde-450);--theme-selection:var(--vlado-verde-150);
+ --theme-shadow:var(--vlado-sombra-verde);--theme-shadow-soft:var(--vlado-sombra-verde-suave);--theme-backdrop:var(--vlado-veu-verde);
+ --theme-entidade-pessoa:var(--vlado-esmeralda-600);--theme-entidade-organizacao:var(--vlado-anil-600);
+}
+:root[data-theme=dark]{
+ color-scheme:dark;
+ --theme-background:var(--vlado-noite-900);--theme-surface:var(--vlado-noite-800);--theme-sidebar:var(--vlado-noite-950);
+ --theme-text:var(--vlado-papel-250);--theme-muted:var(--vlado-tinta-300);--theme-accent:var(--vlado-verde-300);
+ --theme-primary-hover:var(--vlado-verde-200);--theme-on-primary:var(--vlado-verde-950);
+ --theme-line:var(--vlado-noite-700);--theme-input-line:var(--vlado-tinta-550);--theme-accent-line:var(--vlado-verde-350);--theme-focus:var(--vlado-ocre-300);
+ --theme-soft:var(--vlado-verde-800);--theme-reading:var(--vlado-noite-750);--theme-active:var(--vlado-verde-800);
+ --theme-warning:var(--vlado-ocre-300);--theme-warning-bg:var(--vlado-terra-900);--theme-warning-line:var(--vlado-terra-500);--theme-notice-line:var(--vlado-ocre-300);
+ --theme-danger:var(--vlado-tijolo-300);--theme-danger-bg:var(--vlado-tijolo-900);--theme-danger-line:var(--vlado-tijolo-450);
+ --theme-quote-line:var(--vlado-verde-300);--theme-selection:var(--vlado-verde-550);
+ --theme-shadow:var(--vlado-sombra-noite);--theme-shadow-soft:var(--vlado-sombra-noite-suave);--theme-backdrop:var(--vlado-veu-noite);
+ --theme-entidade-pessoa:var(--vlado-esmeralda-400);--theme-entidade-organizacao:var(--vlado-anil-400);
+}
+:root{
+ /* Short names used by the rules. */
+ --paper:var(--theme-background);--white:var(--theme-surface);--ink:var(--theme-text);--muted:var(--theme-muted);
+ --line:var(--theme-line);--green:var(--theme-accent);--soft:var(--theme-soft);
+ --warning:var(--theme-warning);--warning-bg:var(--theme-warning-bg);
+ /* Type scale: seven interface steps, 12px minimum. Quote and wordmark sit outside it. */
+ --text-xs:12px;--text-sm:13px;--text-md:14px;--text-base:16px;--text-lg:18px;--text-xl:22px;--text-2xl:28px;
+ --text-quote:20px;--text-brand:36px;
+ /* Spacing, radius and shadow scales for new components (existing rules keep their measured values). */
+ --espaco-1:var(--vlado-espaco-1);--espaco-2:var(--vlado-espaco-2);--espaco-3:var(--vlado-espaco-3);--espaco-4:var(--vlado-espaco-4);
+ --espaco-5:var(--vlado-espaco-5);--espaco-6:var(--vlado-espaco-6);--espaco-8:var(--vlado-espaco-8);
+ --raio-controle:var(--vlado-raio-2);--raio-cartao:var(--vlado-raio-3);--raio-painel:var(--vlado-raio-4);--raio-pilula:var(--vlado-raio-pilula);
+ --sombra-cartao:0 1px 2px var(--theme-shadow-soft);--sombra-flutuante:0 4px 18px var(--theme-shadow-soft);
+}
+
+/* === 3. COMPONENTS === */
+:root{
+ --mesa-sidebar:224px;
+ /* PDF reader: the page is paper in both themes */
+ --pdf-pagina:var(--vlado-branco);--pdf-selecao:var(--vlado-pdf-selecao);
+ --pdf-trecho:var(--vlado-pdf-trecho);--pdf-trecho-borda:var(--vlado-pdf-trecho-borda);
+ /* Evidence boards (quadros.js, analise.js) */
+ --quadro-fundo:var(--theme-surface);--quadro-borda:var(--theme-line);--quadro-raio:var(--raio-painel);
+ --quadro-coluna-fundo:var(--theme-reading);
+ --quadro-sustenta:var(--theme-accent);--quadro-contraria:var(--theme-danger);--quadro-falta:var(--theme-warning);
+ --quadro-indisponivel:var(--theme-muted);
+ --tempo-trilho:var(--theme-accent-line);--tempo-marco-exato:var(--theme-accent);--tempo-marco-parcial:var(--theme-surface);
+ --comparar-removido-fundo:var(--theme-danger-bg);--comparar-removido-texto:var(--theme-danger);
+ --comparar-incluido-fundo:var(--theme-soft);--comparar-incluido-texto:var(--theme-accent);
+ --tabela-corrigida:var(--theme-warning-line);--tabela-pendente:var(--theme-input-line);--tabela-foco:var(--theme-active);
+ --mapa-pessoa:var(--theme-entidade-pessoa);--mapa-organizacao:var(--theme-entidade-organizacao);
+ --mapa-ligacao:var(--theme-input-line);--mapa-ligacao-destaque:var(--theme-focus);--mapa-rotulo-fundo:var(--theme-surface);
+}

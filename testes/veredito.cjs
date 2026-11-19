@@ -49,14 +49,9 @@ const luminancia = hex => { const n = parseInt(hex.slice(1, 7), 16); return 0.21
 const contraste = (a, b) => { const [x, y] = [luminancia(a), luminancia(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
 function temas() {
-  // One token block per theme at the top of the style sheet; short names alias theme tokens.
-  const bloco = seletor => Object.fromEntries([...css.match(seletor)[1].matchAll(/--([\w-]+):([^;]+)/g)].map(m => [m[1], m[2].trim()]));
-  const claro = bloco(/:root\{([^}]*)\}/), escuro = {...claro, ...bloco(/:root\[data-theme=dark\]\{([^}]*)\}/)};
-  const resolver = (tabela, nome) => {
-    const apelido = /^var\(--([\w-]+)\)$/.exec(tabela[nome] || '');
-    return apelido ? tabela[apelido[1]] : tabela[nome];
-  };
-  return {claro: nome => resolver(claro, nome), escuro: nome => resolver(escuro, nome)};
+  // Theme tokens live in tokens.css (primitives, then one semantic set per theme); aliases resolve to the primitive.
+  const {claro, escuro, resolver} = require('./tokens_tema.cjs');
+  return {claro: nome => resolver(claro, `--${nome}`), escuro: nome => resolver(escuro, `--${nome}`)};
 }
 
 test('selos mantêm contraste nos dois temas', () => {
