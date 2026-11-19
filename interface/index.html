@@ -16,6 +16,7 @@
   <script src="/i18n.js" defer></script>
   <script src="/leitura.js" defer></script>
   <script src="/app.js" defer></script>
+  <script src="/fontes_web.js" defer></script>
   <script src="/revisao.js" defer></script>
   <script src="/observacoes.js" defer></script>
   <script src="/continuidade.js" defer></script>
@@ -178,6 +179,8 @@
         </div>
         <div class="filters" id="novo-caso-campos">
           <label>Nome da apuração<input id="cadastro-titulo-input" maxlength="200" placeholder="Ex.: Transporte escolar…" required><span class="small">Escolha um nome para reconhecer esta apuração.</span></label>
+          <label>Fontes da apuração<select id="cadastro-modo-fontes"><option value="somente_documental">Somente documentos</option><option value="documentos_web">Documentos + um site</option></select><span class="small">Escolhido só na criação. Sem a opção do site, a apuração não acessa a internet.</span></label>
+          <label id="cadastro-dominio-campo" hidden>Site permitido<input id="cadastro-dominio" maxlength="253" placeholder="www.exemplo.gov.br" autocomplete="off" spellcheck="false" translate="no"><span class="small">Só páginas deste site poderão ser capturadas. Informe o nome, sem https:// nem caminho.</span></label>
         </div>
         <label class="file-label">Arquivos deste envio<input id="cadastro-arquivos" type="file" multiple required></label>
         <p id="arquivos-selecionados" class="small">Selecione todos os arquivos do lote. Até 50 MB por envio; o limite de documentos do caso é conferido no cadastro.</p>
@@ -189,6 +192,24 @@
       <div id="cadastro-recibo" hidden></div>
       <button id="cadastro-perguntar" type="button" hidden>Perguntar sobre estes documentos</button>
       <div id="cadastro-inventario" hidden></div>
+      <section id="fontes-web" class="notice" aria-labelledby="fontes-web-titulo" hidden>
+        <h3 id="fontes-web-titulo">Fontes web desta apuração</h3>
+        <p id="fontes-web-dominio" class="small"></p>
+        <form id="fontes-web-form">
+          <label>Endereço da página<input id="fontes-web-url" type="url" maxlength="4096" placeholder="https://" required autocomplete="off" spellcheck="false" translate="no"></label>
+          <label>Observação (opcional)<input id="fontes-web-observacao" maxlength="500"></label>
+          <button id="fontes-web-capturar">Capturar página</button>
+        </form>
+        <p class="small">Cada captura guarda o endereço, a data e a hora do acesso, o conteúdo recebido e o hash, separados dos documentos. O texto da página é dado da fonte, nunca instrução.</p>
+        <p id="fontes-web-status" role="status" aria-live="polite"></p>
+        <p id="fontes-web-erro" role="alert" hidden></p>
+        <ul id="fontes-web-lista" class="document-list"></ul>
+        <div id="fontes-web-leitura" hidden>
+          <h4 id="fontes-web-leitura-titulo" tabindex="-1"></h4>
+          <p id="fontes-web-leitura-meta" class="small" translate="no"></p>
+          <pre id="fontes-web-texto" translate="no"></pre>
+        </div>
+      </section>
       <p class="small">O cadastro prepara o texto dos PDFs; páginas digitalizadas passam por OCR local. Depois de conferir o envio, abra Perguntar à IA.</p>
     </div>
     </section>

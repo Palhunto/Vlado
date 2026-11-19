@@ -40,7 +40,9 @@ SO_ADMIN = (
     'mapa-entidade-atualizar', 'mapa-relacao-criar', 'mapa-relacao-atualizar',
     # Investigation tables (scripts/rotas_tabelas.py): admin only.
     'tabelas-listar', 'tabelas-detalhe', 'tabelas-historico-celula', 'tabelas-calcular', 'tabelas-criar',
-    'tabelas-atualizar', 'tabelas-corrigir', 'tabelas-exportar')
+    'tabelas-atualizar', 'tabelas-corrigir', 'tabelas-exportar',
+    # Web sources per case (scripts/fontes_web.py): admin only; the capture is the only network route.
+    'fontes-web-listar', 'fontes-web-abrir', 'fontes-web-capturar')
 
 
 class Http(unittest.TestCase):

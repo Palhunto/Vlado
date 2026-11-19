@@ -3,7 +3,7 @@
   "modulos": [
     {
       "arquivo": "prompts/00_REGRAS.md",
-      "sha256": "4611530093e5de024c7e2cab2d542e040d3595a3b9e5c147309099bfc6399519"
+      "sha256": "0d91db3585f9a219af7574d75e90296c654f73ca24b78244dcd94e6ce0d5b420"
     },
     {
       "arquivo": "prompts/01_DESCREVER_CORPUS.md",
@@ -32,6 +32,6 @@
   ],
   "fluxo_completo": {
     "arquivo": "prompts/FLUXO_COMPLETO.md",
-    "sha256": "76ba7c9ace4059ea0c2c61abf889ffb74067a234d2019be138ca9460e076af12"
+    "sha256": "249a86d9cf52c326ef257caf238122cedd1286b41196cd7e969d4389711dea85"
   }
 }
