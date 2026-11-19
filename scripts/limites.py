@@ -1,8 +1,9 @@
-"""Server-side spend limits: tokens per question and per day for the whole installation.
+"""Server-side limits: tokens per question and per day for the whole installation, and draft sizes.
 
-Values come from configuracao.json "limites" (null disables one limit). The daily
+Token values come from configuracao.json "limites" (null disables one limit). The daily
 counter lives in ajustes/uso_diario.json (gitignored, Docker volume) and only
-keeps the current UTC day.
+keeps the current UTC day. Draft sizes (scripts/rascunhos.py) are fixed here: a note of the
+Caderno accepts 200 000 characters, so one draft holds it with room to spare.
 """
 from __future__ import annotations
 
@@ -15,6 +16,9 @@ from cadastrar_documentos import _atomico
 from comum import ler_json, trava_arquivo
 
 PADROES = {'tokens_por_consulta': 3_000_000, 'tokens_por_dia': 30_000_000}
+# Bytes of the canonical JSON of a draft's fields, per draft and summed over every open draft of a case.
+RASCUNHOS = {'bytes_por_rascunho': 1024 * 1024, 'bytes_rascunhos_por_caso': 16 * 1024 * 1024,
+             'rascunhos_por_caso': 200}
 _TRAVA = threading.Lock()
 
 
@@ -68,3 +72,9 @@ def conferir_dia(root: Path) -> None:
     limite = ler(root)['tokens_por_dia']
     if limite is not None and _total(root) >= limite:
         raise ValueError(f'Limite diário de tokens da instalação atingido ({limite}). Novas perguntas voltam amanhã (UTC).')
+
+
+def conferir_tamanho(tamanho: int, limite: int, rotulo: str) -> None:
+    """Refuse a stored item over its byte limit; the message carries the limit in KB."""
+    if tamanho > limite:
+        raise ValueError(f'{rotulo} (limite de {limite // 1024} KB). Reduza o texto ou divida-o em partes.')

@@ -21,6 +21,7 @@ Todos os caminhos internos são resolvidos a partir desta pasta de projeto, sem 
 - `continuidade.py`: seleção da versão ampliada do corpus, vínculo à última rodada concluída e validação do comparativo entre achados anteriores e atuais.
 - `revisao_humana.py`: marcações humanas em eventos separados, com histórico e vínculo à versão do achado.
 - `lixeira.py`: exclusão lógica e restauração de itens, com preservação dos arquivos.
+- `rascunhos.py`: rascunho do texto ainda não confirmado por conta, apuração e tela (`POST /api/rascunhos-salvar|ler|listar|descartar`), em `casos/<caso>/rascunhos/`. Versão crescente: a aba com versão antiga recebe 409 com a versão atual, sem sobrescrever. Limites em `limites.RASCUNHOS`; recusa campos e valores com forma de chave; vai para a lixeira e para o apagamento definitivo junto com o caso; convidados guardam só a pergunta.
 - `ambiente.py`: diagnóstico das dependências do interpretador utilizado pelo iniciador, inclusive a disponibilidade dos SDKs `anthropic` e `openai` e a presença de cada chave (apenas verdadeiro ou falso).
 - `apuracao.py`: notas editáveis por caso, com revisões atômicas separadas das fontes, seleções documentais/IA e controle de conflitos entre janelas.
 - `exportar_apuracao.py`: Markdown, PDF real (`reportlab`) e DOCX editável (`python-docx`) com referências legíveis. Ver [aba Apuração](../docs/APURACAO.md).

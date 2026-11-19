@@ -34,6 +34,7 @@ import exportar_apuracao
 import diligencias
 import rotas_evidencia
 import rotas_tabelas
+import rascunhos
 import erros
 from codex_apuracao import Conversas
 from inferencia_api import resumo_inferencia, salvar_inferencia
@@ -58,7 +59,7 @@ IA_OPERACOES = ('ia-config', 'ia-config-salvar')
 CONTAS_OPERACOES = ('contas-listar', 'contas-criar', 'contas-atualizar', 'contas-desativar', 'contas-reativar',
                     'contas-recuperar')
 OPERACOES_CONVIDADO = ('codex-status', 'codex-listar', 'codex-perguntar', 'codex-eventos', 'codex-cancelar',
-                       'codex-retomar', 'codex-original', 'sessao-sair')
+                       'codex-retomar', 'codex-original', 'sessao-sair', *rascunhos.OPERACOES)
 # Guest operations on an existing conversation: the conversation's case is checked on every call.
 OPERACOES_CONVERSA = ('codex-eventos', 'codex-cancelar', 'codex-original', 'codex-retomar')
 # Before a session exists (hosted mode only): Origin + JSON, no CSRF, small bodies.
@@ -220,6 +221,9 @@ def executar(root, operation, data, conta=None, originais_abertos=None, casos=No
     if operation in rotas_tabelas.OPERACOES:
         # Investigation tables: cells point to evidence; same case checks as the boards; no model or network.
         return rotas_tabelas.executar(root, operation, data, conta, casos)
+    if operation in rascunhos.OPERACOES:
+        # Unconfirmed drafts per account, case and screen; guests (casos is a list) keep only the question.
+        return rascunhos.executar(root, operation, data, conta, casos, convidado=casos is not None)
     if operation == 'cadastrar':
         return receber_documentos(root, data)
     if operation == 'inventario':
@@ -644,7 +648,7 @@ class Handler(BaseHTTPRequestHandler):
             maximum = (32768 if principal is not None and principal['papel'] != 'admin'
                        else 72 * 1024 * 1024 if operation in ('cadastrar', 'codex-documentos-cadastrar')
                        else 2 * 1024 * 1024 if operation in (*apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS,
-                                                             *rotas_tabelas.SALVAR)
+                                                             *rotas_tabelas.SALVAR, *rascunhos.SALVAR)
                        else 128 * 1024 if operation in ('caderno-salvar', 'diligencias-criar', 'diligencias-atualizar', 'diligencias-responder',
                                                      *rotas_evidencia.SALVAR) else 32768)
             if not 0 < length <= maximum:
@@ -671,7 +675,7 @@ class Handler(BaseHTTPRequestHandler):
         codex_operations = ('codex-status', 'codex-listar',
                             'codex-perguntar', 'codex-retomar', 'codex-eventos', 'codex-cancelar', 'codex-original',
                             'codex-desligar', 'codex-observacoes', 'codex-corpus-previa', 'codex-documentos-cadastrar', 'codex-caderno-previa', 'codex-diligencias-previa')
-        if operation not in (*codex_operations, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES, *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, 'analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario',
+        if operation not in (*codex_operations, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES, *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, *rascunhos.OPERACOES, 'analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario',
                              'ambiente', 'preparar-pdfs',
                              'gerenciar-listar', 'excluir', 'restaurar', 'lixeira-alcance', 'lixeira-apagar', *IA_OPERACOES, *CONTAS_OPERACOES, 'sessao-sair',
                              'achados-revisao-salvar',
@@ -840,6 +844,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {'estado': 'erro', 'codigo': 'conferencia_sem_original', 'erro': str(exc), 'faltam': exc.faltam})
         except apuracao.ConflitoNota as exc:
             self._json(409, {'estado': 'erro', 'codigo': 'conflito', 'erro': str(exc), 'atual': exc.atual})
+        except rascunhos.ConflitoRascunho as exc:
+            self._json(409, {'estado': 'erro', 'codigo': 'rascunho_conflito', 'erro': str(exc), 'atual': exc.atual})
         except (ValueError, OSError, KeyError, TypeError, sqlite3.Error) as exc:
             convidado = principal['papel'] != 'admin'
             # Guests get user-facing ValueError messages only; internal errors stay generic.

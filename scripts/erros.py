@@ -104,6 +104,18 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('calculo_invalido', r'^Cálculo inválido'),
     ('calculo_inexistente', r'^Cálculo não encontrado nesta tabela'),
     ('exportacao_formato_invalido', r'^Formato de exportação inválido'),
+    # Drafts (rascunhos): one per account, case and screen, with a growing version.
+    ('rascunho_conflito', r'^O rascunho mudou em outra aba'),
+    ('rascunho_sem_caso', r'^Selecione uma apuração para o rascunho'),
+    ('rascunho_tela_invalida', r'^Tela de rascunho inválida'),
+    ('rascunho_conta_invalida', r'^Conta do rascunho inválida'),
+    ('rascunho_com_chave', r'^Rascunhos não guardam chaves de API'),
+    ('rascunho_grande_demais', r'^Rascunho grande demais \(limite de (?P<limite>\d+) KB\)'),
+    ('rascunhos_caso_cheio', r'^Rascunhos desta apuração ocupam o limite do caso \(limite de (?P<limite>\d+) KB\)'),
+    ('rascunhos_caso_limite', r'^Rascunhos desta apuração chegaram ao limite \((?P<limite>\d+) abertos\)'),
+    ('rascunho_ilegivel', r'^Rascunho ilegível no servidor'),
+    ('rascunho_invalido', r'^Rascunho inválido'),
+    ('rascunho_so_pergunta', r'^Convidados guardam somente o rascunho da pergunta'),
 )
 _COMPILADOS = tuple((codigo, re.compile(padrao)) for codigo, padrao in PADROES)
 
