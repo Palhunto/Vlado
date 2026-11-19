@@ -557,6 +557,7 @@ class Handler(BaseHTTPRequestHandler):
                              'apresentacao_editorial': True, 'preparacao_pdfs': True,
                              'revisao_humana': True, 'continuar_observacoes': True, 'continuar_documentos': True, 'caderno_humano': True, 'diligencias': True, 'quadros_evidencia': True,
                              'tabelas_apuracao': True, 'continuidade_resumo': True, 'conferencia_redacao': True, 'entrevistas': True,
+                             'fontes_web': True,
                              'extracao_pdf': self.server.ambiente['extracao_pdf']})
             return
         if path == '/api/catalogo':
@@ -667,6 +668,7 @@ class Handler(BaseHTTPRequestHandler):
                        else 72 * 1024 * 1024 if operation in ('cadastrar', 'codex-documentos-cadastrar')
                        else 2 * 1024 * 1024 if operation in (*apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS,
                                                              *rotas_tabelas.SALVAR, *rascunhos.SALVAR)
+                       else rotas_redacao.LIMITE_CORPO_TEXTO if operation in rotas_redacao.TEXTO
                        else 128 * 1024 if operation in ('caderno-salvar', 'diligencias-criar', 'diligencias-atualizar', 'diligencias-responder',
                                                      *rotas_evidencia.SALVAR, *rotas_redacao.SALVAR) else 32768)
             if not 0 < length <= maximum:

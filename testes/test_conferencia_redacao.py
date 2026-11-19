@@ -278,6 +278,22 @@ class RotasRedacaoTest(Fontes, unittest.TestCase):
         self.assertNotIn(created['id'], json.dumps(self.ok('redacao-listar', {'caso': 'beta'})))
         self.erro('redacao-listar', {'caso': '../alpha'}, 'quadro_sem_caso')
 
+    def test_texto_de_50_mil_caracteres_acentuados_passa_pelo_limite_do_corpo(self):
+        # S4 da revisão de segurança: 50 000 caracteres em UTF-8 passam de 128 KB; o texto no limite precisa caber.
+        frase = 'Ação pública é ' + '€€€€€€€€ ' * 40 + 'fim.\n'
+        texto = (frase * (50000 // len(frase) + 1))[:50000]
+        self.assertEqual(len(texto), redacao.LIMITE_TEXTO)
+        corpo = self.base(titulo='Texto no limite', texto=texto)
+        self.assertGreater(len(json.dumps(corpo).encode('utf-8')), 128 * 1024)
+        self.assertGreater(len(json.dumps(corpo, ensure_ascii=False).encode('utf-8')), 128 * 1024)
+        criado = self.ok('redacao-criar', corpo)
+        self.assertEqual(criado['texto'], texto)
+        self.assertGreater(criado['resumo']['total'], 100)
+        dividido = self.ok('redacao-dividir', {'caso': 'alpha', 'texto': texto})
+        self.assertEqual(len(dividido['afirmacoes']), criado['resumo']['total'])
+        # Acima do limite de caracteres a recusa continua sendo a do módulo, com código próprio.
+        self.erro('redacao-criar', self.base(titulo='Texto longo demais', texto=texto + 'x'), 'redacao_texto_invalido')
+
     def test_recusa_sem_token(self):
         for op in rotas_redacao.OPERACOES:
             status, _ = self.post(op, {'caso': 'alpha'}, token=False)

@@ -22,10 +22,15 @@
 .redacao-opcao{flex-direction:row;align-items:center;gap:10px;font-weight:400}
 .redacao-opcao input{width:24px;height:24px;min-height:0;flex:none;margin:0}
 .redacao-lacunas p.quadro-selo,.redacao-pergunta p.quadro-selo{display:inline-block}
+.redacao-perguntas,.redacao-exportar{margin-top:var(--espaco-8)}
+.redacao-exportar h4{margin-bottom:var(--espaco-3)}
+.redacao-exportar button{margin:0 var(--espaco-2) var(--espaco-2) 0}
 .redacao-cabeca{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline}
 @media (max-width:1050px){
   .redacao-grade{grid-template-columns:minmax(0,1fr)}
   .redacao-form{max-width:none}
   .redacao-texto{padding:12px}
   .redacao-afirmacao{padding:4px 2px}
+  .redacao-perguntas,.redacao-exportar{margin-top:var(--espaco-6)}
+  .redacao-painel{margin-top:var(--espaco-4)}
 }

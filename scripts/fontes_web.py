@@ -333,14 +333,41 @@ class _Texto(HTMLParser):
     OCULTOS = {'script', 'style', 'noscript', 'template', 'svg'}
     VAZIOS = {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param',
               'source', 'track', 'wbr'}
-    # Elements a browser closes implicitly when the same element opens again.
-    AUTOFECHO = {'p', 'li', 'tr', 'td', 'th', 'option', 'dt', 'dd'}
     # Block elements whose start closes an open <p> (M1 of the QA review), and the elements
     # that bound that search, as in the HTML parsing rules.
     FECHAM_P = {'address', 'article', 'aside', 'blockquote', 'details', 'div', 'dl', 'fieldset', 'figcaption',
                 'figure', 'footer', 'form', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hgroup', 'hr',
                 'main', 'menu', 'nav', 'ol', 'p', 'pre', 'section', 'summary', 'table', 'ul'}
     ESCOPO_P = {'applet', 'button', 'caption', 'html', 'marquee', 'object', 'table', 'td', 'template', 'th'}
+    # Implicit end of a sibling (S3 of the phase 09 security review / M4 of the QA): the element
+    # that opens again closes the open one of the same family, even with inline elements still
+    # open inside it, but never across the boundary of its own list, table, row or select.
+    _ESCOPO = {'applet', 'caption', 'html', 'marquee', 'object', 'table', 'template'}
+    # "Special" category of the HTML parsing spec (HTML, MathML and SVG elements; names as
+    # html.parser reports them, in lower case). A new <li>, <dt> or <dd> closes the previous one
+    # only through non-special elements and through address, div and p (B1 of the QA, phase 09):
+    # stopping anywhere else would show text the browser keeps hidden.
+    ESPECIAIS = {
+        'address', 'applet', 'area', 'article', 'aside', 'base', 'basefont', 'bgsound', 'blockquote', 'body',
+        'br', 'button', 'caption', 'center', 'col', 'colgroup', 'dd', 'details', 'dir', 'div', 'dl', 'dt',
+        'embed', 'fieldset', 'figcaption', 'figure', 'footer', 'form', 'frame', 'frameset', 'h1', 'h2', 'h3',
+        'h4', 'h5', 'h6', 'head', 'header', 'hgroup', 'hr', 'html', 'iframe', 'img', 'input', 'keygen', 'li',
+        'link', 'listing', 'main', 'marquee', 'menu', 'meta', 'nav', 'noembed', 'noframes', 'noscript',
+        'object', 'ol', 'p', 'param', 'plaintext', 'pre', 'script', 'search', 'section', 'select', 'source',
+        'style', 'summary', 'table', 'tbody', 'td', 'template', 'textarea', 'tfoot', 'th', 'thead', 'title',
+        'tr', 'track', 'ul', 'wbr', 'xmp',
+        # MathML and SVG
+        'mi', 'mo', 'mn', 'ms', 'mtext', 'annotation-xml', 'foreignobject', 'desc'}
+    _LIMITE_ITEM = ESPECIAIS - {'address', 'div', 'p'}
+    IRMAOS = {
+        'li': ({'li'}, _LIMITE_ITEM - {'li'}),
+        'dt': ({'dt', 'dd'}, _LIMITE_ITEM - {'dt', 'dd'}),
+        'dd': ({'dt', 'dd'}, _LIMITE_ITEM - {'dt', 'dd'}),
+        'td': ({'td', 'th'}, {'tr', 'thead', 'tbody', 'tfoot'} | _ESCOPO),
+        'th': ({'td', 'th'}, {'tr', 'thead', 'tbody', 'tfoot'} | _ESCOPO),
+        'tr': ({'tr'}, {'thead', 'tbody', 'tfoot'} | _ESCOPO),
+        'option': ({'option'}, {'select', 'datalist', 'optgroup'} | _ESCOPO),
+    }
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -370,22 +397,27 @@ class _Texto(HTMLParser):
         if tag in self.FECHAM_P:
             self._fechar_p()
         if tag not in self.VAZIOS:
-            if tag in self.AUTOFECHO and self.pilha and self.pilha[-1][0] == tag:
-                self.pilha.pop()
+            if tag in self.IRMAOS:
+                self._fechar(*self.IRMAOS[tag])
             motivo = 'tag' if tag in self.OCULTOS else ('atributo' if self._escondido(attrs) else None)
             self.pilha.append((tag, motivo))
         self._quebra(tag)
 
+    def _fechar(self, alvos, limites):
+        """Close the nearest open element in `alvos` (and everything opened inside it), searching
+        down the stack past inline elements, but stopping at the first element in `limites`."""
+        for index in range(len(self.pilha) - 1, -1, -1):
+            aberto = self.pilha[index][0]
+            if aberto in alvos:
+                del self.pilha[index:]
+                return
+            if aberto in limites:
+                return
+
     def _fechar_p(self):
         """Implicit end of an open <p> when a block element starts, even with inline elements
         still open inside it (HTML "p in button scope"). Stops at scope boundaries."""
-        for index in range(len(self.pilha) - 1, -1, -1):
-            aberto = self.pilha[index][0]
-            if aberto == 'p':
-                del self.pilha[index:]
-                return
-            if aberto in self.ESCOPO_P:
-                return
+        self._fechar({'p'}, self.ESCOPO_P)
 
     def handle_startendtag(self, tag, attrs):
         # HTML ignores the "/" of a non-void element: <div hidden/> opens an element that stays

@@ -61,6 +61,37 @@ const SYNC_TYPING=300;
 const NAVIGATION=new Set(['Shift','Control','Alt','Meta','CapsLock','Escape','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End','PageUp','PageDown']);
 const isTaskBox=node=>Boolean(node?.matches?.('.vditor-task>input[type="checkbox"]'));
 window.normalizarTarefas=text=>String(text).replace(/^(\s*(?:[-*+]|\d+[.)])[ \t]+)\[X\]/gm,'$1[x]');
+// Lute's sanitize removes scripts, on* attributes and javascript: links but keeps <iframe>, <object>
+// and <embed>. Every HTML the editor renders (preview, visual and split modes) passes through Lute,
+// so each Lute instance Vditor creates drops those tags too, even when they point at this origin.
+// Escaped text (&lt;iframe) is left as text; the Markdown field keeps what the writer typed.
+const EMBUTIDOS=/<\/?(?:iframe|object|embed)\b[^>]*>/gi;
+// Repeated until nothing changes, so a tag rebuilt by the removal itself (<ifr<iframe>ame>) also goes.
+// Past the limit, any "<" left is escaped: the result is shown as text rather than risk markup.
+const VOLTAS_EMBUTIDOS=10;
+window.semEmbutidos=html=>{
+  let atual=String(html);
+  for(let volta=0;volta<VOLTAS_EMBUTIDOS;volta++){
+    const limpo=atual.replace(EMBUTIDOS,'');
+    if(limpo===atual)return limpo;
+    atual=limpo;
+  }
+  return atual.replace(/</g,'&lt;');
+};
+window.protegerLute=lute=>{
+  for(const name in lute){
+    if(typeof lute[name]!=='function'||!/(?:DOM|HTML)$/.test(name))continue;
+    const original=lute[name];
+    lute[name]=(...args)=>window.semEmbutidos(original.apply(lute,args));
+  }
+  return lute;
+};
+function protegerLuteGlobal(){
+  if(!window.Lute||window.Lute.semEmbutidos)return;
+  const nova=window.Lute.New;
+  window.Lute.New=(...args)=>window.protegerLute(nova.apply(window.Lute,args));
+  window.Lute.semEmbutidos=true;
+}
 
 // Vditor edits Markdown; the existing field remains the persistence boundary.
 // Every change (typing, paste, style, task box, inserted reference) reaches the one onInput,
@@ -131,6 +162,7 @@ window.EditorNotas=class {
     try{
       if(!window.CarregadorVditor.ready())throw new Error('Arquivos do editor indisponíveis.');
       this.host.hidden=false;this.fallbackLabel.hidden=true;this.status('');
+      protegerLuteGlobal();
       this.instance=new Vditor(this.host,{
         cdn:'/vendor/vditor',lang:'pt_BR',i18n:{...window.VditorI18n,wysiwyg:'Edição visual',splitView:'Markdown e prévia'},
         mode:'wysiwyg',value:this.field.value,cache:{enable:false},
@@ -154,7 +186,7 @@ window.EditorNotas=class {
               const pre=document.createElement('pre'),code=document.createElement('code');
               code.textContent=block.textContent;pre.append(code);block.replaceWith(pre);
             }
-            return template.innerHTML;
+            return window.semEmbutidos(template.innerHTML);
           }
         },
         input:value=>{

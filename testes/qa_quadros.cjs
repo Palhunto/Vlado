@@ -6,7 +6,9 @@ const {chromium} = require('playwright');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs/promises');
-const [origem, saida, caso, casoComparacao, chrome] = process.argv.slice(2);
+const [origem, saida, caso, casoComparacao, chrome, tema = 'escuro'] = process.argv.slice(2);
+// The Mesa opens dark; the light theme is the browser's saved choice (desktop.js, key apuracao:tema).
+const sufixo = tema === 'claro' ? '-claro' : '';
 
 (async () => {
   const browser = await chromium.launch({headless: true, ...(chrome ? {executablePath: chrome} : {})});
@@ -14,6 +16,7 @@ const [origem, saida, caso, casoComparacao, chrome] = process.argv.slice(2);
   try {
     for (const [nome, viewport] of [['desktop', {width: 1440, height: 1000}], ['celular', {width: 390, height: 844}]]) {
       const page = await browser.newPage({viewport});
+      if (tema === 'claro') await page.addInitScript(() => { try { localStorage.setItem('apuracao:tema', 'light'); } catch (_) { /* no storage */ } });
       page.on('pageerror', e => resultado.erros.push(`${nome}: ${e.message}`));
       page.on('request', r => { if (!r.url().startsWith(origem) && !r.url().startsWith('blob:') && !r.url().startsWith('data:')) resultado.externos.push(r.url()); });
       const ir = async () => {
@@ -22,7 +25,7 @@ const [origem, saida, caso, casoComparacao, chrome] = process.argv.slice(2);
         await page.locator('#area-quadros').waitFor({state: 'visible'});
       };
       // Full-page captures start at the top: otherwise the sticky header is drawn mid-page.
-      const foto = async rotulo => { await page.evaluate(() => scrollTo(0, 0)); const arquivo = path.join(saida, `${rotulo}-${nome}.png`); await page.screenshot({path: arquivo, fullPage: true}); resultado.capturas.push(arquivo); };
+      const foto = async rotulo => { await page.evaluate(() => scrollTo(0, 0)); const arquivo = path.join(saida, `${rotulo}-${nome}${sufixo}.png`); await page.screenshot({path: arquivo, fullPage: true}); resultado.capturas.push(arquivo); };
       const aba = async id => { await page.locator(`#quadros-aba-${id}`).click(); await page.locator(`#quadros-${id}`).waitFor({state: 'visible'}); await page.waitForLoadState('networkidle'); };
       await page.goto(origem); await page.locator('#area-inicio').waitFor({state: 'visible'});
       await page.selectOption('#contexto-caso', caso);
@@ -50,8 +53,21 @@ const [origem, saida, caso, casoComparacao, chrome] = process.argv.slice(2);
         assert.equal(foco.outline, 'none', 'sem o retângulo do contorno padrão');
         assert.equal(foco.linha[1], '4px', 'linha destacada no foco');
         assert.match(foco.painel, /Escolha uma ligação/, 'o foco não troca o painel ao vivo');
-        const arquivo = path.join(saida, 'mapa-foco-teclado-desktop.png');
+        assert.equal(await page.locator('html').getAttribute('data-theme'), tema === 'claro' ? 'light' : 'dark');
+        const arquivo = path.join(saida, `mapa-foco-teclado-desktop${sufixo}.png`);
         await page.locator('.mapa-visual').screenshot({path: arquivo}); resultado.capturas.push(arquivo);
+        // Enter opens the link: thicker accent line and aria-pressed, distinct from the focus (N7).
+        await page.keyboard.press('Enter');
+        const aberta = await page.evaluate(() => {
+          const g = document.activeElement, l = getComputedStyle(g.querySelector('.mapa-linha'));
+          return {pressionada: g.getAttribute('aria-pressed'), linha: [l.stroke, l.strokeWidth], painel: document.querySelector('.mapa-detalhe h4')?.textContent || ''};
+        });
+        resultado.ligacao_aberta = aberta;
+        assert.equal(aberta.pressionada, 'true');
+        assert.equal(aberta.linha[1], '6px');
+        assert.notEqual(aberta.linha[0], foco.linha[0], 'cor da ligação aberta diferente da cor do foco');
+        const aberto = path.join(saida, `mapa-ligacao-aberta-desktop${sufixo}.png`);
+        await page.locator('.mapa-visual').screenshot({path: aberto}); resultado.capturas.push(aberto);
       }
       else assert.equal(await page.locator('svg.mapa-svg').isVisible(), false, 'no celular o mapa é a lista');
       await foto('mapa');
@@ -64,7 +80,7 @@ const [origem, saida, caso, casoComparacao, chrome] = process.argv.slice(2);
     assert.deepEqual(resultado.erros, []);
     assert.deepEqual(resultado.externos, [], 'nenhuma requisição fora da Mesa');
   } finally {
-    await fs.writeFile(path.join(saida, 'qa_quadros.json'), JSON.stringify(resultado, null, 2));
+    await fs.writeFile(path.join(saida, `qa_quadros${sufixo}.json`), JSON.stringify({tema, ...resultado}, null, 2));
     await browser.close();
   }
   console.log(`${resultado.capturas.length} capturas em ${saida}`);

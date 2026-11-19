@@ -45,6 +45,16 @@ O projeto é genérico. Cada apuração possui documentos, manifesto, versão e 
 
 Para começar com outra pauta, basta enviar os arquivos no novo chat e dizer, por exemplo, que pertencem a uma nova apuração. Não é necessário editar os prompts. Para trocar de caso, selecione o desejado e use um chat novo em testes comparáveis. Só cruzar casos quando você pedir explicitamente e autorizar a seleção documental conjunta.
 
+## Quadros, redação e retomada
+
+Estas áreas organizam o trabalho a partir das evidências já registradas no caso. Elas não julgam veracidade, não chamam modelo e não marcam nada como aprovado por conta própria. O contrato comum (documento, localizador, suporte e tipo de afirmação) está em `.maestro/equipe/CONTRATO_EVIDENCIA.md`, e o percurso completo, do caso à revisão humana, está no [guia do fluxo de ponta a ponta](docs/FLUXO_PONTA_A_PONTA.md).
+
+- **Quadros de evidência** (`scripts/hipoteses.py`, `linha_tempo.py`, `comparador.py`, `mapa_relacoes.py`): **Hipóteses** em três colunas (o que sustenta, o que contraria e o que falta), **Linha do tempo** com tipos de data separados e datas parciais, **Comparador** de dois trechos ou documentos com as diferenças de valor e de data destacadas no contexto, e **Mapa de relações** de pessoas e organizações, com evidência em cada ligação, lista equivalente ao desenho e sugestões de homônimos que nunca fundem entidades. Cada item abre o original pela evidência.
+- **Tabelas de apuração** (`scripts/tabelas_apuracao.py`): fonte por célula, correção manual com justificativa e histórico, e cálculos declarados (soma, diferença, contagem e média) sem conversão entre moedas ou unidades. Exportam CSV com a fonte e o estado de cada célula.
+- **Rascunhos e retomada** (`scripts/rascunhos.py`, `scripts/continuidade.py`, `interface/continuidade.js`): a pergunta em preparo e os formulários dos quadros são guardados enquanto se digita, primeiro neste navegador e depois no servidor, por conta. O indicador mostra "Salvando", "Salvo às HH:MM" ou "Sem conexão — salvo neste navegador". Ao reabrir, a Mesa oferece restaurar ou descartar o rascunho, e a entrada do caso resume o que está concluído e o que falta. O texto das notas do Caderno não vai para o armazenamento local do navegador. Chaves e senhas nunca entram em rascunho.
+- **Conferência da redação** (`scripts/conferencia_redacao.py`): o texto é dividido em afirmações, cada uma ligada às evidências do caso. Regras fixas apontam número diferente da fonte, quantificador mais forte, causalidade sem suporte e certeza onde a fonte só atribui. A afirmação fica sem suporte, com suporte parcial ou com suporte; **revisada por humano** só com ação de uma conta autenticada. Uma versão nova do texto preserva o histórico e reabre o que mudou.
+- **Entrevistas e pedidos** (`scripts/entrevistas.py`): lacunas das hipóteses e afirmações sem suporte viram perguntas por modelo fixo de texto, ligadas a uma diligência (entrevista, pedido de informação ou LAI). A resposta entra como fonte do Caderno, e a pauta interna e o texto do pedido saem em Markdown.
+
 ## Fontes web por apuração
 
 Ao criar uma **nova apuração**, o jornalista escolhe o modo de fontes na tela de cadastro, ou com `--modo-fontes` e `--dominio-permitido` em `scripts/cadastrar_documentos.py --novo`:
@@ -59,10 +69,16 @@ No modo com web, a captura é feita pelo painel "Fontes web desta apuração", n
 - **Rede:** só `https`, na porta padrão, e só o site do caso. Os redirecionamentos são seguidos um a um e conferidos a cada salto. O nome do site é resolvido e conferido antes de conectar, e endereços internos, privados ou reservados são recusados.
 - **Limites:** 20 MB por página e 60 segundos por captura. Só HTML, texto ou PDF, sem conteúdo comprimido.
 - **O que fica registrado:** cada captura recebe um ID `W001`, `W002`… e fica em `casos/<id>/fontes_web/`, separada dos documentos. Ela guarda o conteúdo exatamente como recebido, a cópia de texto, o endereço pedido e o final, a data e a hora do acesso (UTC), a situação HTTP, os cabeçalhos relevantes e o SHA-256. Também ganha uma linha no registro `fontes_web/registro.jsonl`, que só recebe acréscimos.
-- **Texto da página:** a cópia de texto deixa de fora scripts, estilos e o que estiver escondido pelo próprio HTML: o atributo `hidden`, `aria-hidden="true"` ou `display:none`/`visibility:hidden` no `style` do elemento. A captura é marcada com `contem_texto_oculto` quando algo foi descartado. Texto escondido de outras formas, como por CSS externo ou de um bloco `<style>`, não é detectado e pode aparecer na cópia. O conteúdo bruto fica preservado como recebido, e o texto é dado da fonte, nunca instrução.
+- **Texto da página:** a cópia de texto deixa de fora scripts, estilos e o que estiver escondido pelo próprio HTML: o atributo `hidden`, `aria-hidden="true"` ou `display:none`/`visibility:hidden` no `style` do elemento. A captura é marcada com `contem_texto_oculto` quando algo foi descartado. Texto escondido de outras formas não é detectado e pode aparecer na cópia sem essa marca. Isso inclui CSS externo ou de um bloco `<style>`, `opacity:0`, `font-size:0`, texto posicionado fora da tela e o conteúdo de um `<details>` fechado. O conteúdo bruto fica preservado como recebido, e o texto é dado da fonte, nunca instrução.
 - **Uso na apuração:** as capturas são congeladas na rodada junto com os documentos, entram no índice e são citadas com o endereço e o horário do acesso. Uma captura registra o que o site entregou naquele momento. Ela não prova que a página continue igual e não substitui a conferência no original.
 
 Nenhuma página é aberta, pesquisada ou capturada sem o modo marcado no caso.
+
+## Pendências e decisões em aberto
+
+- **Texto escondido por CSS nas capturas (S2):** só o que o próprio HTML esconde é retirado e marcado com `contem_texto_oculto`. Ocultação por CSS externo ou de bloco `<style>`, `opacity:0`, `font-size:0`, posicionamento fora da tela e `<details>` fechado continua só com o aviso da seção anterior. Detectar esses casos exigiria renderizar a página num navegador; a decisão está com o usuário.
+- **`innerHTML` do editor de notas (S6):** é o único ponto da interface que monta HTML a partir do texto do usuário e fica como exceção aceita. A limpeza do Vditor (`sanitize`) retira scripts, atributos `on*` e `javascript:`; o editor retira também `<iframe>`, `<object>` e `<embed>`, mesmo com endereço da própria Mesa; e a política de segurança da página (CSP) barra script embutido, iframe e imagem de outra origem. `testes/editor_notas_seguranca.cjs` confere as três camadas.
+- **Formulários ainda fora da tela:** vincular evidência a uma afirmação da redação e enviar uma nova versão do texto já existem nas rotas (`redacao-vincular`, `redacao-nova-versao`), mas ainda não têm formulário na Mesa.
 
 ## O que foi migrado
 

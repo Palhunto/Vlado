@@ -474,6 +474,10 @@ window.Continuidade = (() => {
   const rotuloTela = r => t((TELAS.find(([p]) => r.tela === p || r.tela.startsWith(p + '/')) || [null, 'Rascunho guardado às {hora}'])[1], {hora: hora(r.atualizado_em_utc)});
   const sequencias = new WeakMap();  // container -> number of its latest montar() call
   const resumo = caso => api('continuidade-resumo', {caso});
+  // The server announces the route in /api/integracao; an older server, or one that fails, hides the summary.
+  let anuncio = null;
+  const disponivel = () => (anuncio ||= fetch('/api/integracao').then(r => r.ok ? r.json() : {}).catch(() => ({})))
+    .then(dados => dados?.continuidade_resumo === true);
   function ligacao(texto, area) {
     const item = element('li'), link = element('a', texto);
     link.href = window.enderecoAreaMesa ? window.enderecoAreaMesa(area) : `?area=${encodeURIComponent(area)}`;
@@ -537,5 +541,5 @@ window.Continuidade = (() => {
       return null;
     }
   }
-  return {resumo, renderResumo, montar};
+  return {resumo, renderResumo, montar, disponivel};
 })();

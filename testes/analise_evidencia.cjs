@@ -29,7 +29,14 @@ const TABELA = {caso: 'alpha', id: 'Q' + '1'.repeat(32), titulo: 'Pagamentos 202
   calculos: [{id: 'total', nome: 'Total pago', operacao: 'soma', estado: 'com_fonte', expressao: '1200.00 + 1145.50', resultado: '2345.50',
     grandeza: {tipo: 'monetario', moeda: 'BRL', unidade: null}, arredondamento: null,
     celulas: [{linha: 'L0001', coluna: 'valor', nome_coluna: 'Valor', valor: '1200.00', fonte_legivel: 'D003 · Pagamentos!B2'},
-      {linha: 'L0002', coluna: 'valor', nome_coluna: 'Valor', valor: '1145.50', fonte_legivel: 'D003 · Pagamentos!B3'}]}]};
+      {linha: 'L0002', coluna: 'valor', nome_coluna: 'Valor', valor: '1145.50', fonte_legivel: 'D003 · Pagamentos!B3'}]},
+    {id: 'dif', nome: 'Diferença negativa', operacao: 'diferenca', estado: 'com_fonte', expressao: '(-1200.50) - 10000', resultado: '-11200.50',
+      grandeza: {tipo: 'monetario', moeda: 'BRL', unidade: null}, arredondamento: null,
+      celulas: [{linha: 'L0001', coluna: 'valor', valor: '-1200.50', fonte_legivel: 'D003'}, {linha: 'L0002', coluna: 'valor', valor: '10000', fonte_legivel: 'D003'}]},
+    {id: 'cont', nome: 'Contagem', operacao: 'contagem', estado: 'com_fonte', expressao: '1234 de 2000 célula(s) com valor', resultado: '1234',
+      grandeza: {tipo: 'contagem', moeda: null, unidade: 'células com valor'}, arredondamento: null, celulas: []},
+    {id: 'id', nome: 'Expressão com ID', operacao: 'soma', estado: 'pendente', expressao: 'E1234 + 1200.00', resultado: '1200.00',
+      grandeza: {tipo: 'monetario', moeda: 'BRL', unidade: null}, arredondamento: null, celulas: []}]};
 const MAPA = {caso: 'alpha', divergentes: [], aviso: 'Ligações registradas por pessoas a partir de evidências; não indicam culpa nem causalidade.',
   entidades: [
     {id: 'P1', tipo: 'pessoa', nome: 'Lúcia Prates', identificadores: [{tipo: 'matricula', fonte: 0, valor_exibicao: '7781'}], situacao: 'com_evidencia', evidencias: []},
@@ -125,6 +132,15 @@ test('painel de cálculo mostra operação, células usadas e resultado, e desta
   assert.deepEqual(usadas, ['L0001|valor', 'L0002|valor']);
 });
 
+test('notação brasileira só nos valores da conta: IDs, contagens e divisores ficam como registrados (N6)', async () => {
+  const m = mesa(); const painel = await aba(m, 'tabelas');
+  const contas = painel.querySelectorAll('.tabela-expressao').map(p => p.textContent);
+  assert.equal(contas[1], '(-1.200,50) - 10.000 = -11.200,50 BRL', 'termo negativo entre parênteses, como no Core');
+  assert.equal(contas[2], '1234 de 2000 célula(s) com valor = 1234 células com valor', 'contagem não vira valor monetário');
+  assert.match(contas[3], /^E1234 \+ 1200\.00 = /, 'sem os valores das células, a expressão do Core aparece como está');
+  assert.doesNotMatch(contas.join(' '), /E1\.234/);
+});
+
 test('mapa: SVG sem biblioteca, forma por tipo, traço por situação e evidência em cada ligação', async () => {
   const m = mesa(); const painel = await aba(m, 'mapa');
   const desenho = painel.querySelector('svg.mapa-svg');
@@ -138,7 +154,11 @@ test('mapa: SVG sem biblioteca, forma por tipo, traço por situação e evidênc
   const detalhe = painel.querySelector('.mapa-detalhe');
   documentada.dispatchEvent(new Evento('focus'));
   assert.match(detalhe.textContent, /Escolha uma ligação/, 'o foco só destaca; o painel ao vivo não muda');
+  assert.equal(documentada.getAttribute('aria-pressed'), 'false');
   documentada.dispatchEvent(new Evento('keydown', {key: 'Enter', cancelable: true}));
+  assert.equal(documentada.getAttribute('aria-pressed'), 'true', 'a ligação aberta fica marcada também para o leitor de tela');
+  assert.ok(documentada.classList.contains('is-ativa'));
+  assert.equal(inferida.getAttribute('aria-pressed'), 'false');
   assert.match(detalhe.textContent, /Lúcia Prates — fiscal de contrato com — Construtora Exemplo Ltda\./);
   assert.match(detalhe.textContent, /Lúcia Prates, fiscal do contrato\./);
   detalhe.querySelector('button').click(); await m.esperar();
