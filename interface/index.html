@@ -9,6 +9,7 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icones/vlado.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icones/vlado-192.png">
+  <link rel="stylesheet" href="/tokens.css">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/caderno.css">
   <link rel="preload" href="/fonts/SourceSans3-Upright.otf" as="font" type="font/otf" crossorigin media="(min-width: 1051px)">
@@ -24,6 +25,9 @@
   <script src="/editor_notas.js" defer></script>
   <script src="/apuracao.js" defer></script>
   <script src="/diligencias.js" defer></script>
+  <script src="/quadros.js" defer></script>
+  <script src="/analise.js" defer></script>
+  <script src="/indicador_salvamento.js" defer></script>
   <script src="/codex.js" defer></script>
   <script src="/configuracao_ia.js" defer></script>
   <script src="/piloto.js" defer></script>
@@ -48,6 +52,7 @@
       <button id="ver-achados" type="button" aria-pressed="false" aria-controls="area-achados">Achados da IA</button>
       <button id="ver-apuracao" type="button" aria-pressed="false" aria-controls="area-apuracao">Caderno</button>
       <button id="ver-diligencias" type="button" aria-pressed="false" aria-controls="area-diligencias">Diligências</button>
+      <button id="ver-quadros" type="button" aria-pressed="false" aria-controls="area-quadros">Quadros de evidência</button>
       <button id="ver-caderno" type="button" aria-pressed="false" aria-controls="area-caderno" hidden>Trechos com fonte</button>
       <p class="eyebrow">ESPAÇO DE TRABALHO</p>
       <button id="ver-gerenciar" type="button" aria-pressed="false" aria-controls="area-gerenciar">Apurações e lixeira</button>
@@ -119,6 +124,14 @@
         <div class="actions"><button id="diligencias-nova" type="button">Nova diligência</button></div><p class="small">Crie uma ação livre ou parta de um achado para preservar o vínculo com a fonte. Responsáveis e autores são declarados.</p>
         <label>Conversa para retomar a questão<select id="diligencias-conversa"><option value="">Nova conversa com os documentos cadastrados</option></select></label><label class="feedback-choice"><input id="diligencias-incorporar" type="checkbox"><span>Incorporar os documentos novos na conversa selecionada. A prévia aparecerá antes do envio da pergunta.</span></label>
       </div><p id="diligencias-status" role="status" aria-live="polite">Selecione uma apuração.</p><p id="diligencias-erro" role="alert" hidden></p><div id="diligencias-resultados"></div>
+    </section>
+    <section id="area-quadros" aria-labelledby="quadros-titulo" hidden>
+      <div class="panel quadros">
+        <div class="section-heading"><h2 id="quadros-titulo">Quadros de evidência</h2></div>
+        <p class="small">Hipóteses e acontecimentos registrados por pessoas a partir das evidências desta apuração. Cada evidência abre o original conferido; os quadros organizam e apontam lacunas, sem avaliar veracidade.</p>
+        <div id="quadros-abas" class="quadros-abas" role="tablist" aria-label="Quadros de evidência"></div>
+        <div id="quadros-paineis"></div>
+      </div>
     </section>
     <section id="area-apuracao" aria-labelledby="apuracao-titulo" hidden>
       <h2 id="apuracao-titulo" class="sr-only">Caderno editável</h2>
