@@ -8,7 +8,9 @@ atual e a interface decide (restaurar, mesclar ou descartar). Reenviar o mesmo c
 depois de perder a resposta não é conflito: devolve o rascunho já gravado.
 
 Descartar apaga o conteúdo e deixa só a marca da versão (``descartado``), para que a
-numeração continue crescente e uma aba antiga não ressuscite um rascunho descartado.
+numeração continue crescente e uma aba antiga não ressuscite um rascunho descartado. As marcas
+de cada conta têm teto de arquivos (``limites.RASCUNHOS``, menor para convidados): ao criar um
+rascunho novo além dele, as marcas mais antigas dessa conta são apagadas; os abertos, nunca.
 
 Os arquivos ficam em ``casos/<caso>/rascunhos/<conta>/<hash da tela>.json``: vão para a
 lixeira junto com a apuração (``lixeira.conferir_disponivel`` recusa o uso enquanto ela
@@ -191,6 +193,28 @@ def _conferir_limites(pasta: Path, alvo: Path, tamanho: int, convidado: bool = F
                              valores['bytes_rascunhos_por_caso'], 'Rascunhos desta apuração ocupam o limite do caso')
 
 
+def _podar_marcas(alvo: Path, convidado: bool) -> None:
+    """Before a new draft file of this account: keep its folder under the file cap by deleting the oldest
+    discard marks. Open drafts are never deleted. A deleted mark only drops the version of a screen that
+    was already discarded: a stale tab sending its old version still gets a conflict (versions differ)."""
+    teto = limites.RASCUNHOS['arquivos_por_convidado' if convidado else 'arquivos_por_conta']
+    dono = alvo.parent
+    arquivos = [p for p in dono.glob('*.json') if p.is_file() and not p.is_symlink()] if dono.is_dir() else []
+    excesso = len(arquivos) + 1 - teto
+    if excesso <= 0:
+        return
+    marcas = []
+    for path in arquivos:
+        try:
+            dados = _ler(path)
+        except ValueError:
+            continue  # an unreadable file is not a mark; it is refused when read
+        if dados and dados.get('descartado'):
+            marcas.append((dados.get('atualizado_em_utc') or '', path.name, path))
+    for _, _, path in sorted(marcas)[:excesso]:
+        path.unlink(missing_ok=True)
+
+
 def ler(root, caso, conta, tela) -> dict:
     root = Path(root)
     tela = _tela(tela)
@@ -243,6 +267,8 @@ def _gravar(root: Path, caso, conta, tela, versao, conteudo, *, descartar: bool,
         tamanho = 0 if descartar else _tamanho(conteudo)
         if not descartar:
             _conferir_limites(pasta, alvo, tamanho, convidado)
+            if atual is None:  # a new file: discard marks of this account stay bounded
+                _podar_marcas(alvo, convidado)
         novo = {'formato': FORMATO, 'caso': caso, 'conta': dono, 'tela': tela, 'versao': gravada + 1,
                 'atualizado_em_utc': _agora(), 'descartado': descartar,
                 'conteudo': None if descartar else conteudo, 'bytes': tamanho}

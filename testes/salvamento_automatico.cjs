@@ -52,7 +52,7 @@ const RESUMO = {esquema: 1, caso: 'alfa', titulo: 'Pauta Alfa',
   pendencias: [], aviso: 'Resumo dos registros da apuração; não confere conteúdo nem substitui a leitura dos originais.'};
 
 async function abrir({rascunhos = servidorRascunhos(), local = memoria(), semRede = () => false,
-  area = 'codex', resumo = RESUMO, papel = 'admin', modo = 'local', sessao = {}} = {}) {
+  area = 'codex', resumo = RESUMO, papel = 'admin', modo = 'local', sessao = {}, integracao = {continuidade_resumo: true}} = {}) {
   const relogio = [], envios = [];
   const mesa = criarMesa({catalogo: [ALFA], url: `http://127.0.0.1:8765/?area=${area}&caso=alfa`, papel, modo,
     api: (op, dados) => {
@@ -77,6 +77,7 @@ async function abrir({rascunhos = servidorRascunhos(), local = memoria(), semRed
       janela.clearTimeout = item => { const i = relogio.indexOf(item); if (i >= 0) relogio.splice(i, 1); else clearTimeout(item); };
       const original = janela.fetch;
       janela.fetch = async (rota, opcoes = {}) => {
+        if (String(rota) === '/api/integracao') return {ok: true, json: async () => integracao};
         if (String(rota).startsWith('/api/rascunhos-')) {
           envios.push({op: String(rota).slice(5), dados: JSON.parse(opcoes.body), keepalive: !!opcoes.keepalive});
           if (semRede()) throw new TypeError('Failed to fetch');
@@ -434,6 +435,15 @@ test('dois contêineres montados ao mesmo tempo chegam os dois ao resumo final',
   assert.ok(await nova);
   segunda();
   assert.equal(await antiga, null, 'a resposta mais antiga do mesmo contêiner é descartada');
+});
+
+test('sem o anúncio continuidade_resumo em /api/integracao, a entrada do caso não pede nem mostra o resumo', async () => {
+  for (const integracao of [{}, {continuidade_resumo: false}]) {
+    const t = await abrir({area: 'inicio', integracao});
+    await t.mesa.esperar(10);
+    assert.ok(!t.mesa.chamadas.some(c => c.operacao === 'continuidade-resumo'), JSON.stringify(integracao));
+    assert.equal(t.mesa.doc.querySelector('.mesa-resume-progress'), null, 'o espaço do resumo é retirado');
+  }
 });
 
 test('convidado não pede o resumo de retomada', async () => {
