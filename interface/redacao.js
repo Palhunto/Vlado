@@ -241,7 +241,7 @@
       const documento = element('select'), localizador = element('input'), trecho = element('textarea'), pagina = element('input');
       const manual = element('input'); manual.type = 'checkbox';
       pagina.type = 'number'; pagina.min = '1'; trecho.rows = 4; localizador.maxLength = 300;
-      const marca = element('label', undefined, 'tempo-opcao'); marca.append(manual, element('span', t('Transcrição manual conferida no original')));
+      const marca = element('label', undefined, 'redacao-opcao'); marca.append(manual, element('span', t('Transcrição manual conferida no original')));
       fonte.append(element('legend', t('Trecho do documento da resposta')), rotulado('Documento já cadastrado', documento),
         rotulado('Página do PDF (se for PDF)', pagina), rotulado('Localização no documento', localizador), rotulado('Trecho', trecho), marca);
       fonte.hidden = true;
@@ -285,7 +285,7 @@
       li.dataset.pergunta = p.id;
       const marcar = element('input'); marcar.type = 'checkbox'; marcar.value = p.id;
       marcar.addEventListener('change', () => { if (marcar.checked) selecionadas.add(p.id); else selecionadas.delete(p.id); });
-      const escolha = element('label', undefined, 'tempo-opcao'); escolha.append(marcar, element('span', t('Incluir na exportação')));
+      const escolha = element('label', undefined, 'redacao-opcao'); escolha.append(marcar, element('span', t('Incluir na exportação')));
       const d = p.diligencia;
       li.append(Q.dado('h4', p.pergunta),
         element('p', t('Situação: {situacao}', {situacao: t(SITUACOES[p.situacao] || p.situacao)}), `quadro-selo situacao-${p.situacao}`));
