@@ -153,6 +153,27 @@ def arquivos_do_corpus(root: Path, manifest: dict):
             yield relative, path
 
 
+def capturas_como_documentos(manifest: dict) -> list[dict]:
+    """Web captures shaped like documents (id, arquivo, sha256, derivados), for indexing and reading.
+
+    Kept here, with no network code, so the portable copy of `banco.py` (banco, indice_sqlite,
+    comum) keeps working. Mode and domain are checked in `fontes_web`; a manifest with captures
+    but without the "documentos_web" mode is refused.
+    """
+    captures = manifest.get('capturas_web') or []
+    if captures and (manifest.get('fontes_web') or {}).get('modo') != 'documentos_web':
+        raise ValueError('Caso somente documental não pode ter domínio ou capturas web.')
+    return [{'id': c['id'], 'arquivo': c['arquivo'], 'sha256': c['sha256'],
+             'nome_recebido': c['url_final'], 'tipo_fonte': 'captura_web',
+             'origem_informada': {'url_solicitada': c['url_solicitada'], 'url_final': c['url_final'],
+                                  'acessado_em_utc': c['acessado_em_utc']},
+             'derivados': c.get('derivados', [])} for c in captures]
+
+
+def documentos_e_capturas(manifest: dict) -> list[dict]:
+    return [*manifest.get('documentos', []), *capturas_como_documentos(manifest)]
+
+
 def fluxo_esperado(root: Path = ROOT) -> bytes:
     header = (
         f'# Apuracao v1 online - fluxo completo v{VERSAO_PROMPTS}\n\n'

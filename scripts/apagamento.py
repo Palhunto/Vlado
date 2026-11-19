@@ -49,7 +49,7 @@ def _categoria(partes: tuple[str, ...]) -> str:
         if resto[:1] == ('cadastros',) and len(resto) > 3 and resto[2] in ('originais', 'derivados'):
             return resto[2]
         return {'caderno': 'caderno', 'diligencias': 'diligencias', 'apuracao': 'notas',
-                'quadros': 'quadros_evidencia', 'rascunhos': 'rascunhos'}.get(
+                'quadros': 'quadros_evidencia', 'fontes_web': 'fontes_web', 'rascunhos': 'rascunhos'}.get(
             resto[0] if resto else '', 'corpus')
     resto = partes[3:]
     if resto[:1] == ('indice',):
