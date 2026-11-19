@@ -590,7 +590,10 @@ class Handler(BaseHTTPRequestHandler):
                   '/icones/vlado-maskable-512.png': ('icones/vlado-maskable-512.png', 'image/png'),
                   '/tokens.css': ('tokens.css', 'text/css; charset=utf-8'),
                   '/style.css': ('style.css', 'text/css; charset=utf-8'),
-                  '/caderno.css': ('caderno.css', 'text/css; charset=utf-8')}
+                  '/caderno.css': ('caderno.css', 'text/css; charset=utf-8'),
+                  '/quadros.js': ('quadros.js', 'text/javascript; charset=utf-8'),
+                  '/analise.js': ('analise.js', 'text/javascript; charset=utf-8'),
+                  '/indicador_salvamento.js': ('indicador_salvamento.js', 'text/javascript; charset=utf-8')}
         if path not in assets:
             self._json(404, {'erro': 'Página não encontrada.'})
             return
