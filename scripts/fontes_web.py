@@ -325,35 +325,73 @@ def _baixar(url, dominio):
 
 
 class _Texto(HTMLParser):
+    """Visible text only. Skips scripts and styles, and elements hidden by `hidden`,
+    `aria-hidden="true"` or inline `display:none`/`visibility:hidden`, with their children
+    (N1 of the QA review: a hidden instruction must not reach the working copy)."""
     BLOCOS = {'p', 'div', 'br', 'li', 'tr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'section',
               'article', 'header', 'footer', 'table', 'ul', 'ol', 'dt', 'dd', 'blockquote', 'pre'}
     OCULTOS = {'script', 'style', 'noscript', 'template', 'svg'}
+    VAZIOS = {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param',
+              'source', 'track', 'wbr'}
+    # Elements a browser closes implicitly when the same element opens again.
+    AUTOFECHO = {'p', 'li', 'tr', 'td', 'th', 'option', 'dt', 'dd'}
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
-        self.partes, self.oculto, self.titulo, self._no_titulo = [], 0, None, False
+        self.partes, self.titulo, self._no_titulo = [], None, False
+        self.pilha = []             # open elements: [(tag, motivo)], motivo None, 'tag' or 'atributo'
+        self.texto_oculto = False   # some text was dropped because an attribute or style hid it
 
-    def handle_starttag(self, tag, attrs):
-        if tag in self.OCULTOS:
-            self.oculto += 1
-        elif tag == 'title':
-            self._no_titulo = True
-        elif tag in self.BLOCOS or tag in ('td', 'th'):
+    @staticmethod
+    def _escondido(attrs):
+        values = {k.lower(): (v or '') for k, v in attrs}
+        style = re.sub(r'\s+', '', values.get('style', '').lower())
+        return ('hidden' in values or values.get('aria-hidden', '').strip().lower() == 'true'
+                or 'display:none' in style or 'visibility:hidden' in style)
+
+    def _motivo(self):
+        motivos = {m for _, m in self.pilha if m}
+        return 'tag' if 'tag' in motivos else ('atributo' if motivos else None)
+
+    def _quebra(self, tag):
+        if self._motivo() is None and (tag in self.BLOCOS or tag in ('td', 'th')):
             self.partes.append('\n' if tag in self.BLOCOS else ' | ')
 
+    def handle_starttag(self, tag, attrs):
+        if tag == 'title':
+            self._no_titulo = True
+            return
+        if tag not in self.VAZIOS:
+            if tag in self.AUTOFECHO and self.pilha and self.pilha[-1][0] == tag:
+                self.pilha.pop()
+            motivo = 'tag' if tag in self.OCULTOS else ('atributo' if self._escondido(attrs) else None)
+            self.pilha.append((tag, motivo))
+        self._quebra(tag)
+
+    def handle_startendtag(self, tag, attrs):
+        # A self-closed element has no content to drop; keep the block break if visible.
+        if tag != 'title' and not self._escondido(attrs):
+            self._quebra(tag)
+
     def handle_endtag(self, tag):
-        if tag in self.OCULTOS:
-            self.oculto = max(0, self.oculto - 1)
-        elif tag == 'title':
+        if tag == 'title':
             self._no_titulo = False
-        elif tag in self.BLOCOS:
+            return
+        if any(aberto == tag for aberto, _ in self.pilha):
+            while self.pilha and self.pilha.pop()[0] != tag:
+                pass
+        if self._motivo() is None and tag in self.BLOCOS:
             self.partes.append('\n')
 
     def handle_data(self, data):
         if self._no_titulo:
             self.titulo = ((self.titulo or '') + data.strip())[:500]
-        elif not self.oculto:
+            return
+        motivo = self._motivo()
+        if motivo is None:
             self.partes.append(data)
+        elif motivo == 'atributo' and data.strip():
+            self.texto_oculto = True
 
 
 def _charset_html(content: bytes):
@@ -376,12 +414,12 @@ def texto_da_captura(content: bytes, extensao: str, charset=None):
     if extensao == '.html':
         charset = charset or _charset_html(content)
     text, used, replaced = _decodificar(content, charset)
-    title = None
+    title, hidden = None, False
     if extensao == '.html':
         parser = _Texto()
         parser.feed(text)
         parser.close()
-        title = parser.titulo
+        title, hidden = parser.titulo, parser.texto_oculto
         text = ''.join(parser.partes)
     lines = [re.sub(r'[ \t\r\f\v]+', ' ', line).strip() for line in text.splitlines()]
     compact = []
@@ -391,7 +429,7 @@ def texto_da_captura(content: bytes, extensao: str, charset=None):
     while compact and not compact[-1]:
         compact.pop()
     return '\n'.join(compact) + '\n', {'charset_usado': used, 'caracteres_substituidos': replaced,
-                                      'titulo_pagina': title}
+                                      'titulo_pagina': title, 'contem_texto_oculto': hidden}
 
 
 def _novo_id(manifest):
@@ -508,6 +546,8 @@ def capturar(root, caso, url, *, observacao=None, trava=None, _baixar_fn=None):
                                       **{k: v for k, v in d.items() if k != 'nome'}} for d in derived]}
             if pdf_info is not None:
                 capture['extracao_pdf'] = pdf_info
+            # Text hidden in the page (hidden, aria-hidden, display:none, visibility:hidden) was dropped.
+            capture['contem_texto_oculto'] = any(d.get('contem_texto_oculto') for d in derived)
             same = next((c['id'] for c in manifest.get('capturas_web', []) if c['sha256'] == digest), None)
             if same:
                 capture['mesmo_conteudo_que'] = same
@@ -605,7 +645,7 @@ def localizador(capture: dict, linha_inicio: int, linha_fim: int, trecho: str) -
 
 
 CAMPOS_LISTA = ('id', 'url_solicitada', 'url_final', 'acessado_em_utc', 'status_http', 'tipo_conteudo',
-                'sha256', 'bytes', 'observacao', 'mesmo_conteudo_que')
+                'sha256', 'bytes', 'observacao', 'mesmo_conteudo_que', 'contem_texto_oculto')
 
 
 def _caso_valido(caso):
