@@ -33,6 +33,7 @@ import apuracao
 import exportar_apuracao
 import diligencias
 import rotas_evidencia
+import rotas_redacao
 import rotas_tabelas
 import erros
 from codex_apuracao import Conversas
@@ -220,6 +221,9 @@ def executar(root, operation, data, conta=None, originais_abertos=None, casos=No
     if operation in rotas_tabelas.OPERACOES:
         # Investigation tables: cells point to evidence; same case checks as the boards; no model or network.
         return rotas_tabelas.executar(root, operation, data, conta, casos)
+    if operation in rotas_redacao.OPERACOES:
+        # Claim-by-claim review of the story text: human review only with the server's account; no model or network.
+        return rotas_redacao.executar(root, operation, data, conta, casos)
     if operation == 'cadastrar':
         return receber_documentos(root, data)
     if operation == 'inventario':
@@ -542,7 +546,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {'codex': True, 'protocolo_interface': 1, 'gerenciamento': True,
                              'apresentacao_editorial': True, 'preparacao_pdfs': True,
                              'revisao_humana': True, 'continuar_observacoes': True, 'continuar_documentos': True, 'caderno_humano': True, 'diligencias': True, 'quadros_evidencia': True,
-                             'tabelas_apuracao': True, 'extracao_pdf': self.server.ambiente['extracao_pdf']})
+                             'tabelas_apuracao': True, 'conferencia_redacao': True, 'extracao_pdf': self.server.ambiente['extracao_pdf']})
             return
         if path == '/api/catalogo':
             try:
@@ -646,7 +650,7 @@ class Handler(BaseHTTPRequestHandler):
                        else 2 * 1024 * 1024 if operation in (*apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS,
                                                              *rotas_tabelas.SALVAR)
                        else 128 * 1024 if operation in ('caderno-salvar', 'diligencias-criar', 'diligencias-atualizar', 'diligencias-responder',
-                                                     *rotas_evidencia.SALVAR) else 32768)
+                                                     *rotas_evidencia.SALVAR, *rotas_redacao.SALVAR) else 32768)
             if not 0 < length <= maximum:
                 raise ValueError('Requisição vazia ou muito grande.')
             body = self.rfile.read(length)
@@ -671,7 +675,7 @@ class Handler(BaseHTTPRequestHandler):
         codex_operations = ('codex-status', 'codex-listar',
                             'codex-perguntar', 'codex-retomar', 'codex-eventos', 'codex-cancelar', 'codex-original',
                             'codex-desligar', 'codex-observacoes', 'codex-corpus-previa', 'codex-documentos-cadastrar', 'codex-caderno-previa', 'codex-diligencias-previa')
-        if operation not in (*codex_operations, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES, *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, 'analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario',
+        if operation not in (*codex_operations, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES, *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, *rotas_redacao.OPERACOES, 'analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario',
                              'ambiente', 'preparar-pdfs',
                              'gerenciar-listar', 'excluir', 'restaurar', 'lixeira-alcance', 'lixeira-apagar', *IA_OPERACOES, *CONTAS_OPERACOES, 'sessao-sair',
                              'achados-revisao-salvar',

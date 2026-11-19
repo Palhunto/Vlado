@@ -40,7 +40,10 @@ SO_ADMIN = (
     'mapa-entidade-atualizar', 'mapa-relacao-criar', 'mapa-relacao-atualizar',
     # Investigation tables (scripts/rotas_tabelas.py): admin only.
     'tabelas-listar', 'tabelas-detalhe', 'tabelas-historico-celula', 'tabelas-calcular', 'tabelas-criar',
-    'tabelas-atualizar', 'tabelas-corrigir', 'tabelas-exportar')
+    'tabelas-atualizar', 'tabelas-corrigir', 'tabelas-exportar',
+    # Claim-by-claim review of the story text (scripts/rotas_redacao.py): admin only.
+    'redacao-listar', 'redacao-conferir', 'redacao-dividir', 'redacao-criar', 'redacao-nova-versao',
+    'redacao-vincular', 'redacao-revisar')
 
 
 class Http(unittest.TestCase):

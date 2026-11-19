@@ -104,6 +104,15 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('calculo_invalido', r'^Cálculo inválido'),
     ('calculo_inexistente', r'^Cálculo não encontrado nesta tabela'),
     ('exportacao_formato_invalido', r'^Formato de exportação inválido'),
+    # Claim-by-claim review of the story text (conferencia_redacao via rotas_redacao).
+    ('revisao_humana_sem_conta', r'^A revisão humana exige uma conta autenticada'),
+    ('afirmacao_inexistente', r'^Afirmação não encontrada nesta versão do texto'),
+    ('afirmacao_sem_suporte_vinculado', r'^Esta afirmação não tem evidência de suporte vinculada'),
+    ('redacao_sem_alteracao', r'^Nada mudou (no texto|nos vínculos desta afirmação|na revisão desta afirmação)'),
+    ('redacao_texto_invalido', r'^Texto da reportagem: informe texto válido'),
+    ('redacao_afirmacoes_demais', r'^O texto tem mais de (?P<limite>\d+) afirmações'),
+    ('revisao_humana_invalida', r'^(Revisão humana inválida|Escolha uma decisão de revisão válida)'),
+    ('vinculos_afirmacao_invalidos', r'^Vínculos da afirmação inválidos'),
 )
 _COMPILADOS = tuple((codigo, re.compile(padrao)) for codigo, padrao in PADROES)
 
