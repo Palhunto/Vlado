@@ -17,6 +17,11 @@ LEITURA = ('redacao-listar', 'redacao-conferir', 'redacao-dividir',
 SALVAR = ('redacao-criar', 'redacao-nova-versao', 'redacao-vincular', 'redacao-revisar',
           'entrevistas-preparar', 'entrevistas-editar', 'entrevistas-responder')
 OPERACOES = LEITURA + SALVAR
+# Pedidos que levam o texto inteiro da reportagem (até redacao.LIMITE_TEXTO caracteres). Em UTF-8 um caractere
+# ocupa até 4 bytes e o JSON pode dobrar aspas e barras, então o corpo aceita até 512 KB (limite de transporte;
+# o limite de conteúdo continua em caracteres, no módulo).
+TEXTO = ('redacao-criar', 'redacao-nova-versao', 'redacao-dividir')
+LIMITE_CORPO_TEXTO = 512 * 1024
 _REDACAO = {'redacao-criar': redacao.criar, 'redacao-nova-versao': redacao.nova_versao,
             'redacao-vincular': redacao.vincular, 'redacao-revisar': redacao.revisar}
 _ENTREVISTAS = {'entrevistas-preparar': entrevistas.preparar, 'entrevistas-editar': entrevistas.editar,
