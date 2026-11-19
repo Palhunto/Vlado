@@ -545,7 +545,11 @@ ins.comparar-incluido,p.comparar-incluido{background:var(--comparar-incluido-fun
 /* No box outline around the SVG group (it drew a rectangle across the map); focus is a halo on the line itself. */
 .mapa-ligacao:focus,.mapa-ligacao:focus-visible{outline:none}
 .mapa-ligacao:focus-visible .mapa-alvo{stroke:var(--mapa-ligacao-destaque);stroke-opacity:.35;stroke-width:14}
-.mapa-ligacao:focus-visible .mapa-linha,.mapa-ligacao.is-ativa .mapa-linha,.mapa-ligacao:hover .mapa-linha{stroke:var(--mapa-ligacao-destaque);stroke-width:4}
+/* Focus (keyboard) and hover: 4 px in the focus colour, plus the halo on focus. The open link (its evidence is in
+   the panel) is drawn differently: 6 px in the accent colour, and marked aria-pressed="true". Dashes keep meaning the situation. */
+.mapa-ligacao:focus-visible .mapa-linha,.mapa-ligacao:hover .mapa-linha{stroke:var(--mapa-ligacao-destaque);stroke-width:4}
+.mapa-ligacao.is-ativa .mapa-linha{stroke:var(--mapa-ligacao-aberta);stroke-width:6}
+.mapa-ligacao.is-ativa:focus-visible .mapa-linha{stroke:var(--mapa-ligacao-aberta);stroke-width:6}
 .mapa-legenda{display:flex;flex-wrap:wrap;gap:var(--espaco-1) var(--espaco-4);list-style:none;margin:0 0 var(--espaco-2);padding:0;font-size:var(--text-sm)}
 .mapa-legenda li::before{content:'';display:inline-block;width:14px;height:14px;margin-right:var(--espaco-1);vertical-align:-2px}
 .mapa-legenda .legenda-pessoa::before{border-radius:50%;background:var(--mapa-pessoa)}

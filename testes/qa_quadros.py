@@ -62,6 +62,8 @@ def main():
     parser.add_argument('--modulos-node', required=True)
     parser.add_argument('--saida', required=True)
     parser.add_argument('--chrome', default='')
+    parser.add_argument('--tema', choices=('escuro', 'claro'), default='escuro',
+                        help='tema da Mesa nas capturas; o claro acrescenta "-claro" aos nomes dos arquivos')
     args = parser.parse_args()
     saida = Path(args.saida).resolve(); saida.mkdir(parents=True, exist_ok=True)
     env = Ambiente(); server = None
@@ -76,7 +78,7 @@ def main():
         server = Servidor(('127.0.0.1', 0), env.root)
         threading.Thread(target=server.serve_forever, daemon=True).start()
         return subprocess.run(['node', str(Path(__file__).with_suffix('.cjs')), server.origin, str(saida), demo.CASO,
-                               demo.CASO_COMPARACAO, args.chrome], env=node_env).returncode
+                               demo.CASO_COMPARACAO, args.chrome, args.tema], env=node_env).returncode
     finally:
         if server:
             server.shutdown(); server.server_close()

@@ -100,7 +100,17 @@
   const unidadeColuna = c => [c.moeda, c.unidade].filter(Boolean).join(' ');
   // Values stay as recorded; only numeric columns are shown in pt-BR notation (the stored text does not change).
   const valorCelula = (coluna, valor) => ['numero', 'monetario'].includes(coluna?.tipo) ? formatarNumero(valor) : String(valor);
-  const numerosNaConta = texto => String(texto).replace(/-?\d+(?:\.\d+)?/g, formatarNumero);
+  // The calculation is rebuilt from its cell values (the same terms as tabelas_apuracao._termo), so only
+  // values get pt-BR notation; any other number in the text (an ID such as E1234, a count, the divisor)
+  // stays as recorded. Counting and unexpected shapes show the Core's expression unchanged.
+  const termo = valor => String(valor).startsWith('-') ? `(${formatarNumero(valor)})` : formatarNumero(valor);
+  function contaFormatada(calc) {
+    const valores = (calc.celulas || []).map(c => c.valor);
+    const montar = {soma: t => t.join(' + '), diferenca: t => t.length === 2 ? `${t[0]} - ${t[1]}` : null, media: t => `(${t.join(' + ')}) / ${t.length}`}[calc.operacao];
+    const expressao = montar && valores.length && valores.every(v => v !== null && v !== undefined) ? montar(valores.map(termo)) : null;
+    if (!expressao) return {expressao: String(calc.expressao), resultado: String(calc.resultado)};
+    return {expressao, resultado: formatarNumero(calc.resultado)};
+  }
   function detalheCelula(saida, linha, coluna, celula) {
     saida.replaceChildren(element('p', t('Célula {linha} · {coluna}', {linha, coluna: coluna.nome}), 'eyebrow'));
     saida.append(dado('p', celula.valor === null ? t('(vazia)') : `${valorCelula(coluna, celula.valor)}${unidadeColuna(coluna) ? ' ' + unidadeColuna(coluna) : ''}`, 'tabela-valor'),
@@ -159,7 +169,8 @@
       art.append(dado('h5', calc.nome || calc.id), element('p', t('Operação: {op}', {op: t(OPER[calc.operacao] || calc.operacao)}), 'small'));
       if (calc.estado === 'recusado') { art.append(element('p', t('Cálculo recusado: {erro}', {erro: calc.erro}), 'notice')); secao.append(art); continue; }
       const g = calc.grandeza || {};
-      art.append(dado('p', `${numerosNaConta(calc.expressao)} = ${numerosNaConta(calc.resultado)}${[g.moeda, g.unidade].filter(Boolean).length ? ' ' + [g.moeda, g.unidade].filter(Boolean).join(' ') : ''}`, 'tabela-expressao'));
+      const conta = contaFormatada(calc);
+      art.append(dado('p', `${conta.expressao} = ${conta.resultado}${[g.moeda, g.unidade].filter(Boolean).length ? ' ' + [g.moeda, g.unidade].filter(Boolean).join(' ') : ''}`, 'tabela-expressao'));
       if (calc.arredondamento) art.append(element('p', t('Arredondado para {casas} casas.', {casas: calc.arredondamento.casas}), 'small'));
       art.append(element('p', calc.estado === 'com_fonte' ? t('Todas as células têm fonte.') : t('Há células pendentes ou fontes indisponíveis: resultado provisório.'), calc.estado === 'com_fonte' ? 'small' : 'notice'));
       const lista = element('ul', undefined, 'tabela-usadas');
@@ -233,11 +244,14 @@
     const desenho = svg('svg', {viewBox: `0 0 ${L} ${A}`, class: 'mapa-svg', role: 'group', 'aria-label': t('Diagrama do mapa. A lista ao lado traz as mesmas ligações.')});
     for (const r of mapa.relacoes) {
       const [x1, y1] = pos[r.origem] || [cx, cy], [x2, y2] = pos[r.destino] || [cx, cy];
-      const g = svg('g', {class: `mapa-ligacao traco-${traco(r.situacao)}`, tabindex: '0', role: 'button',
+      const g = svg('g', {class: `mapa-ligacao traco-${traco(r.situacao)}`, tabindex: '0', role: 'button', 'aria-pressed': 'false',
         'aria-label': `${nomes[r.origem]} — ${r.tipo} — ${nomes[r.destino]}: ${t(SIT_RELACAO[r.situacao] || r.situacao)}`});
       g.dataset.relacao = r.id;
       g.append(svg('line', {x1, y1, x2, y2, class: 'mapa-linha'}), svg('line', {x1, y1, x2, y2, class: 'mapa-alvo'}));
-      const abrir = () => { for (const outro of desenho.querySelectorAll('.mapa-ligacao')) outro.classList.remove('is-ativa'); g.classList.add('is-ativa'); detalheRelacao(casoId, saida, r, nomes); };
+      const abrir = () => {
+        for (const outro of desenho.querySelectorAll('.mapa-ligacao')) { outro.classList.remove('is-ativa'); outro.setAttribute('aria-pressed', 'false'); }
+        g.classList.add('is-ativa'); g.setAttribute('aria-pressed', 'true'); detalheRelacao(casoId, saida, r, nomes);
+      };
       // Focus only highlights the line (CSS); the live detail panel changes on Enter, Space or click.
       g.addEventListener('click', abrir);
       g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(); } });

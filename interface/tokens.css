@@ -93,5 +93,5 @@
  --comparar-incluido-fundo:var(--theme-soft);--comparar-incluido-texto:var(--theme-accent);
  --tabela-corrigida:var(--theme-warning-line);--tabela-pendente:var(--theme-input-line);--tabela-foco:var(--theme-active);
  --mapa-pessoa:var(--theme-entidade-pessoa);--mapa-organizacao:var(--theme-entidade-organizacao);
- --mapa-ligacao:var(--theme-muted);--mapa-ligacao-destaque:var(--theme-focus);--mapa-rotulo-fundo:var(--theme-surface);
+ --mapa-ligacao:var(--theme-muted);--mapa-ligacao-destaque:var(--theme-focus);--mapa-ligacao-aberta:var(--theme-accent);--mapa-rotulo-fundo:var(--theme-surface);
 }
