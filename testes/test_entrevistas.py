@@ -119,7 +119,8 @@ class EntrevistasTest(Base, unittest.TestCase):
         self.assertNotIn('tipo', old['diligencia'])
         updated = diligencias.salvar(self.root, self.base(diligencia_id=old['id'], anterior_sha256=old['sha256'],
                                                           estado='em_andamento', acao='Pedir cópia do contrato.',
-                                                          responsavel='Repórter B', prazo=None), 'atualizar')
+                                                          responsavel='Repórter B', prazo=None,
+                                                          observacao='Contato iniciado.'), 'atualizar')
         self.assertEqual(updated['diligencia']['estado'], 'em_andamento')
         self.assertEqual(diligencias.listar(self.root, 'alpha', texto='Secretaria de Obras')['total'], 1)
         with self.assertRaisesRegex(ValueError, 'tipo de contato'):

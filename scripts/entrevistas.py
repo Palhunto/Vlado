@@ -315,8 +315,12 @@ def _visao(root, case, record, cache):
     for answer in state['respostas']:
         source = None
         if answer['referencia']:
-            source = ev.conferir_vinculos(root, case, [{'referencia': answer['referencia']}], cache)[0]
-            source = {'estado': source['estado'], 'evidencia': source['evidencia'], 'erro': source.get('erro')}
+            # A fonte da resposta é uma referência (não um vínculo): resolve contra o original sem derrubar a visão.
+            try:
+                source = {'estado': 'conferida', 'evidencia': ev.resolver(root, case, answer['referencia'], cache),
+                          'erro': None}
+            except ValueError as exc:
+                source = {'estado': 'indisponivel', 'evidencia': None, 'erro': str(exc)}
         answers.append({**answer, 'fonte': source})
     return {'id': record['id'], 'sha256': record['sha256'], 'origem': state['origem'], 'motivo': state['motivo'],
             'pergunta': state['pergunta'], 'situacao': state['situacao'],
