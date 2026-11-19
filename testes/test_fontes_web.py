@@ -316,6 +316,32 @@ class TextoOcultoTest(unittest.TestCase):
         self.assertEqual([line.strip(' |') for line in text.splitlines() if line.strip(' |')], ['Y', 'Z'])
         self.assertTrue(info['contem_texto_oculto'])
 
+    def test_irmao_fecha_o_oculto_mesmo_com_inline_aberto(self):
+        """S3 (segurança, fase 09) / M4 (QA): the next sibling ends the hidden one, as in a browser."""
+        for html in ('<ul><li hidden><b>X<li>Y</ul>', '<table><tr><td hidden><b>X<td>Y</tr></table>',
+                     '<table><tr><th hidden><i>X<td>Y</tr></table>', '<table><tr hidden><td><b>X<tr><td>Y</table>',
+                     '<dl><dt hidden><b>X<dd>Y</dl>', '<select><option hidden><b>X<option>Y</select>'):
+            with self.subTest(html=html):
+                text, info = self._extrair(html)
+                self.assertIn('Y', text)
+                self.assertNotIn('X', text)
+                self.assertTrue(info['contem_texto_oculto'])
+
+    def test_lista_dentro_de_lista_nao_fecha_o_item_de_fora(self):
+        text, info = self._extrair('<ul><li hidden>A<ul><li>B</li></ul>C</li><li>D</li></ul>')
+        # The inner <li> stops at its own <ul>: B and C stay inside the hidden outer item.
+        self.assertEqual([line for line in text.splitlines() if line], ['D'])
+        self.assertTrue(info['contem_texto_oculto'])
+        text, info = self._extrair('<ul><li>A<ul><li>B</ul>C<li>D</ul>')
+        self.assertEqual([line for line in text.splitlines() if line], ['A', 'B', 'C', 'D'])
+        self.assertFalse(info['contem_texto_oculto'])
+
+    def test_celula_nao_fecha_item_de_lista_de_fora(self):
+        text, _ = self._extrair('<ul><li hidden>X<table><tr><td><li>Y</td></tr></table></li><li>Z</ul>')
+        # The <li> inside the cell does not reach the hidden outer <li>: Y stays hidden.
+        self.assertNotIn('Y', text)
+        self.assertIn('Z', text)
+
     def test_script_e_estilo_nao_contam_como_texto_oculto(self):
         text, info = fontes_web.texto_da_captura(PAGINA, '.html', 'utf-8')
         self.assertNotIn('nao indexar', text)
