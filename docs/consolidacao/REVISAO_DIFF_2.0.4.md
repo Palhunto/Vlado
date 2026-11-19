@@ -279,3 +279,34 @@ Ressalva sobre o executável: não gerei um build novo. O `Vlado.exe` em `build/
 - **Cliente HTTPS dos dois provedores:** `--verificar-https` confirma apenas a construção dos clientes (TLS e certificados empacotados). Uma conexão real exige chave e pode gerar custo. Falta um teste de handshake TLS contra um servidor local com certificado de teste, ou uma verificação manual autorizada.
 - **Build reproduzível:** falta gerar o instalador de novo a partir dos commits desta branch, registrar o SHA-256 e comparar com `dist/Vlado-Setup.exe.sha256`. Isso depende do Inno Setup.
 - **OCR empacotado:** `configurar_ocr` e o desvio `-m ocrmypdf` do lançador (os workers do OCRmyPDF entram de novo no executável) não têm teste no executável.
+
+## Estado final da fase 1
+
+Verificação feita em 2026-11-19, sem chaves de API no ambiente (`env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY`), com o Python do `.venv` (3.12). O `python` do PATH (3.14 do sistema) não tem as dependências: com ele, a suíte importa só 193 testes e dá 67 erros de importação (`pypdf`, `argon2`). Isso é do ambiente, não do código.
+
+### Comandos de manutenção
+
+| Comando | Resultado observado |
+| --- | --- |
+| `python scripts/montar_fluxo.py --check` | `OK: fluxo completo e hashes correspondem aos sete modulos.` (saída 0) |
+| `python scripts/verificar_projeto.py` | `OK de preparacao; nao e validacao da qualidade da apuracao.` (saída 0) |
+| `python -m unittest discover -s testes -v`, 1ª execução | 415 testes: 404 aprovados, 10 pulados, **1 falha** (`test_mobile_interface…test_voltar_conexao_e_faixa_de_ambiente`) |
+| `python -m unittest discover -s testes -v`, 2ª execução | 415 testes: 403 aprovados, 10 pulados, **2 falhas** (a mesma e `test_indice_sqlite…test_cli_em_copia_portavel_e_consulta_por_arquivo`) |
+| `test_mobile_interface.py` e `test_indice_sqlite.py` rodados isoladamente (`discover -p`) | os dois deram OK |
+
+Nas três falhas, um processo filho (`node --test` ou o CLI do índice) terminou ao iniciar com o código `3221225794` (`0xC0000142`, `STATUS_DLL_INIT_FAILED`), sem nada no stdout ou no stderr. O código de teste e o de produção não mudaram desde a execução verde da tarefa de verificação (415/405/10/0): `git diff 5616f31 HEAD -- scripts testes interface` está vazio. Os módulos passam isolados, e a falha mudou de um teste para outro entre as execuções. Por isso atribuo as falhas ao ambiente: o Windows não conseguiu inicializar processos filhos com a máquina carregada. Na 1ª execução havia uma segunda suíte rodando em paralelo, e o sistema tinha cerca de 450 processos. Isso é uma inferência, não está comprovado. **A suíte completa não ficou verde nesta fase.** A próxima fase deve repetir a suíte numa máquina com menos carga antes de tomar esta branch como base.
+
+Os 10 pulados são os mesmos da verificação anterior: 7 de `test_ocr` (Tesseract, PyMuPDF e pypdf não disponíveis juntos), `test_ambiente…test_iniciador_verifica_o_runtime…` (depende de `VLADO_TESTAR_INICIADOR=1`), `test_apagamento…test_nao_segue_link_para_fora_da_raiz` (links simbólicos indisponíveis) e `test_revisao_entrega…test_arquivo_de_backup_so_do_dono` (permissões POSIX).
+
+### Git
+
+- Branch atual: `codex/consolidacao-vlado`. Árvore limpa, exceto `.maestro/` (não versionado).
+- Commits em `main..HEAD`, do mais antigo ao mais recente (esta seção entra num commit a mais, `docs: estado final da consolidação local`):
+  1. `8e75059` fix: caminhos temporários, esquema de achados e HTTPS no executável Windows 2.0.4
+  2. `c609631` feat: termo de uso aprovado no instalador
+  3. `f252186` chore: preparação Docker para homologação
+  4. `5616f31` fix: testes esperam o fim da execução pela trava do gerenciador
+  5. `dcd5113` docs: revisão do diff da consolidação 2.0.4
+  6. `ce82596` MAESTRO: docs: cobertura do aplicativo empacotado na revisão 2.0.4
+- `main` continua em `9b8f38e`, igual a `origin/main`. Não houve commit nem alteração em `main`.
+- Não houve push: a branch não tem upstream e nenhum ramo remoto contém o `HEAD`. Não mexi em `origin/entrega-intercept`.
