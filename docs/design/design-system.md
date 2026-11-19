@@ -86,7 +86,7 @@ As escalas de espaço, raio e sombra vêm dos valores que mais aparecem em `styl
 | Linha do tempo | `--tempo-trilho`, `--tempo-marco-exato`, `--tempo-marco-parcial` | accent-line, accent, surface (marco vazado) |
 | Comparador | `--comparar-removido-fundo/-texto`, `--comparar-incluido-fundo/-texto` | danger-bg/danger, soft/accent |
 | Tabela conferível | `--tabela-corrigida`, `--tabela-pendente`, `--tabela-foco` | warning-line, input-line, active |
-| Mapa de relações | `--mapa-pessoa`, `--mapa-organizacao`, `--mapa-ligacao`, `--mapa-ligacao-destaque`, `--mapa-rotulo-fundo` | entidade-pessoa, entidade-organizacao, input-line, focus, surface |
+| Mapa de relações | `--mapa-pessoa`, `--mapa-organizacao`, `--mapa-ligacao`, `--mapa-ligacao-destaque`, `--mapa-rotulo-fundo` | entidade-pessoa, entidade-organizacao, muted, focus, surface |
 | Leitor de PDF | `--pdf-pagina`, `--pdf-selecao`, `--pdf-trecho`, `--pdf-trecho-borda` | primitivos `branco` e `pdf-*` (a página impressa é branca nos dois temas) |
 
 ## Ajustes e a razão de cada um
@@ -97,6 +97,8 @@ As escalas de espaço, raio e sombra vêm dos valores que mais aparecem em `styl
 | Leitor de PDF | `background:white`, `rgb(0 90 200 / .3)`, `rgb(255 196 0 / .42)`, `rgb(196 120 0 / .55)` | `--pdf-pagina`, `--pdf-selecao`, `--pdf-trecho`, `--pdf-trecho-borda` | Eram as únicas cores literais fora dos tokens. Os valores são os mesmos, em hexadecimal com alfa. |
 | Reserva em `var()` | `var(--line, rgba(127,127,127,.25))` e `var(--white, var(--theme-surface))` | `var(--line)` e `var(--white)` | Os dois tokens sempre existem. Uma reserva esconderia um token que faltasse. |
 | Cores do mapa | — | esmeralda e anil (claro `#1d8058`/`#5b5fb8`, escuro `#3fa877`/`#8487e6`) | O mapa precisa de duas cores categóricas, para pessoa e organização. O verde do Vlado (`#1e4d3e`) fica abaixo do piso de croma e lê como cinza no gráfico, e as cores de aviso e erro são reservadas para estado. O par passou nas checagens da skill `dataviz` no claro e no escuro: faixa de luminosidade, croma, separação para daltonismo (ΔE 17), visão normal (ΔE 21) e contraste de pelo menos 3:1 sobre a superfície. A cor nunca é o único sinal: pessoa é círculo, organização é quadrado, e cada nó tem rótulo. |
+
+| `--mapa-ligacao` | `--theme-input-line` | `--theme-muted` | A captura com foco de teclado (`qa_quadros`) levou a medir as linhas contra o fundo do próprio mapa (`--quadro-coluna-fundo`). No escuro, `#64786a` sobre `#28322c` dava 2,80:1, abaixo dos 3:1 do WCAG 1.4.11 para elementos gráficos. Com `--theme-muted`, fica 6,1:1 no escuro e 5,0:1 no claro. A linha em foco (`--theme-focus`) dá 7,5:1 e 3,7:1, e se distingue também pela largura (4 px mais um halo de 14 px). |
 
 Os pares que já passavam ficaram como estavam:
 

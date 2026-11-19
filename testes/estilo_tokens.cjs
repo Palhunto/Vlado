@@ -107,6 +107,16 @@ test('bordas de controles, foco e marcas do mapa alcançam 3:1 nos dois temas', 
   }
 });
 
+test('marcas do mapa e o foco delas alcançam 3:1 sobre o fundo do próprio mapa', () => {
+  // The SVG sits on --quadro-coluna-fundo (reading), not on the page surface.
+  for (const [nome, tema] of [['claro', claro], ['escuro', escuro]]) {
+    for (const marca of ['--mapa-ligacao', '--mapa-ligacao-destaque', '--mapa-pessoa', '--mapa-organizacao']) {
+      const razao = contraste(cor(tema, marca), cor(tema, '--quadro-coluna-fundo'));
+      assert.ok(razao >= 3, `${nome}: ${marca} sobre o fundo do mapa = ${razao.toFixed(2)} < 3`);
+    }
+  }
+});
+
 test('campos e botões secundários usam a borda de controle, sem cor fixa', () => {
   assert.match(css, /input,select,textarea\{[^}]*border-color:var\(--theme-input-line\)/);
   assert.match(css, /\.secondary\{[^}]*border-color:var\(--theme-input-line\)/);
