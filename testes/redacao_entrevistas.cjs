@@ -226,6 +226,35 @@ test('M4: com conta o pedido de pergunta não leva nome de autor; no modo local 
   }
 });
 
+test('M5: o resumo concorda em número, em português e em inglês', async () => {
+  const resumo = async (idioma, porEstado, total, evidencias) => {
+    const visao = structuredClone(VISAO);
+    Object.assign(visao.resumo, {total, por_estado: porEstado});
+    const lacunas = structuredClone(LACUNAS);
+    lacunas.lacunas[0].evidencias = Array.from({length: evidencias}, () => ({}));
+    const f = await abrir({idioma, respostas: {'redacao-conferir': visao, 'entrevistas-lacunas': lacunas,
+      'redacao-listar': {caso: 'alfa', textos: [{id: VISAO.id, titulo: VISAO.titulo, versao: 1, resumo: visao.resumo}], divergentes: []}}});
+    const lista = await f.montar('redacao');
+    const linhaLista = lista.querySelector('.redacao-textos p').textContent;
+    lista.querySelector('.redacao-textos button').click(); await f.mesa.esperar(6);
+    const entrevistas = await f.montar('entrevistas');
+    return [linhaLista, lista.querySelector('.redacao-resumo').textContent, entrevistas.querySelector('.redacao-lacunas li').textContent];
+  };
+  const um = {sem_suporte: 0, suporte_parcial: 1, suportada: 1, revisada_por_humano: 1};
+  const [lista, cabeca, lacuna] = await resumo('pt', um, 1, 1);
+  assert.equal(lista, 'Versão 1 · 1 afirmação');
+  assert.equal(cabeca, 'Versão 1 · 1 afirmação · 0 sem suporte · 1 parcial · 1 suportada · 1 revisada por pessoa');
+  assert.match(lacuna, /1 evidência motiva esta lacuna/);
+  const dois = {sem_suporte: 2, suporte_parcial: 2, suportada: 2, revisada_por_humano: 0};
+  const [, cabeca2, lacuna2] = await resumo('pt', dois, 6, 2);
+  assert.equal(cabeca2, 'Versão 1 · 6 afirmações · 2 sem suporte · 2 parciais · 2 suportadas · 0 revisadas por pessoa');
+  assert.match(lacuna2, /2 evidências motivam esta lacuna/);
+  const [listaEn, cabecaEn, lacunaEn] = await resumo('en', um, 1, 1);
+  assert.equal(listaEn, 'Version 1 · 1 claim');
+  assert.equal(cabecaEn, 'Version 1 · 1 claim · 0 unsupported · 1 partial · 1 supported · 1 reviewed by a person');
+  assert.match(lacunaEn, /1 piece of evidence prompts this gap/);
+});
+
 test('em inglês as duas telas aparecem traduzidas', async () => {
   const f = await abrir({idioma: 'en', modo: 'piloto'});
   assert.deepEqual(f.mesa.janela.abas.map(a => a.rotulo), ['Claim review', 'Interviews and requests']);
@@ -244,6 +273,7 @@ test('todo texto de interface de redacao.js tem tradução, e o dicionário não
   for (const bloco of fonte.matchAll(/const (?:ESTADOS|DECISOES|SINAIS|TIPOS|SITUACOES|ORIGENS) = \{([^}]*)\}/g))
     for (const m of bloco[1].matchAll(/: '([^']*)'/g)) literais.add(m[1]);
   for (const m of fonte.matchAll(/(?:rotulado|opcoes\([A-Z{][^,]*,)\s*\(?'([^']*)'/g)) literais.add(m[1]);
+  for (const m of fonte.matchAll(/contagem\([^,]+,\s*'([^']*)',\s*'([^']*)'\)/g)) { literais.add(m[1]); literais.add(m[2]); }
   const mesa = criarMesa({scripts: ['i18n_en.js']});
   const textos = mesa.janela.VLADO_I18N_EN.textos;
   const ausentes = [...literais].filter(l => !(l in textos));
