@@ -107,7 +107,7 @@ class ResumoCasoTest(unittest.TestCase):
         with patch.object(hipoteses, 'listar', side_effect=ValueError('Histórico divergente.')):
             resumo = continuidade.resumo_caso(self.root, 'alpha')
         quadros = {q['quadro']: q for q in resumo['quadros']}
-        self.assertEqual(quadros['hipoteses']['erro'], 'Histórico divergente.')
+        self.assertEqual(quadros['hipoteses']['erro'], 'ilegivel', 'código fixo, sem o texto da exceção')
         self.assertEqual((quadros['diligencias']['erro'], quadros['tabelas']['erro']), (None, None))
         self.assertIn(('quadro', 'hipoteses', 'erro'), [(p['tipo'], p['id'], p['motivo']) for p in resumo['pendencias']])
 

@@ -162,8 +162,9 @@ def _quadro(nome, contar):
     try:
         pendentes, total = contar()
         return {'quadro': nome, 'pendentes': pendentes, 'total': total, 'area': AREAS[nome], 'erro': None}
-    except (ValueError, OSError, KeyError, TypeError) as exc:
-        return {'quadro': nome, 'pendentes': None, 'total': None, 'area': AREAS[nome], 'erro': str(exc)}
+    except (ValueError, OSError, KeyError, TypeError):
+        # Fixed code: the exception text may carry server paths. The board's own screen shows its error.
+        return {'quadro': nome, 'pendentes': None, 'total': None, 'area': AREAS[nome], 'erro': 'ilegivel'}
 
 
 def _hipoteses(root, caso):

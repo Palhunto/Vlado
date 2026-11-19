@@ -47,15 +47,16 @@ const RESUMO = {esquema: 1, caso: 'alfa', titulo: 'Pauta Alfa',
   conversas_interrompidas: [{id: 'c'.repeat(32), titulo: 'Contratos da merenda', rodada: 'R002', area: 'codex'}],
   quadros: [{quadro: 'hipoteses', pendentes: 2, total: 3, area: 'apuracao', erro: null},
     {quadro: 'diligencias', pendentes: 0, total: 1, area: 'diligencias', erro: null},
-    {quadro: 'tabelas', pendentes: null, total: null, area: 'apuracao', erro: 'Histórico divergente.'}],
+    {quadro: 'tabelas', pendentes: null, total: null, area: 'apuracao', erro: 'ilegivel'}],
   rascunhos: [{tela: 'pergunta', versao: 3, atualizado_em_utc: '2026-11-19T13:00:00Z', area: 'codex'}],
   pendencias: [], aviso: 'Resumo dos registros da apuração; não confere conteúdo nem substitui a leitura dos originais.'};
 
 async function abrir({rascunhos = servidorRascunhos(), local = memoria(), semRede = () => false,
-  area = 'codex', resumo = RESUMO, papel = 'admin'} = {}) {
+  area = 'codex', resumo = RESUMO, papel = 'admin', modo = 'local', sessao = {}} = {}) {
   const relogio = [], envios = [];
-  const mesa = criarMesa({catalogo: [ALFA], url: `http://127.0.0.1:8765/?area=${area}&caso=alfa`, papel,
+  const mesa = criarMesa({catalogo: [ALFA], url: `http://127.0.0.1:8765/?area=${area}&caso=alfa`, papel, modo,
     api: (op, dados) => {
+      if (op === 'sessao') return sessao;
       if (op === 'continuidade-resumo') { if (resumo instanceof Error) throw resumo; return resumo; }
       const resposta = op.startsWith('rascunhos-') ? rascunhos.responder(op, dados) : null;
       if (resposta) return resposta;
@@ -254,6 +255,37 @@ test('Sair apaga deste navegador os rascunhos das telas', async () => {
   assert.equal(local.getItem('vlado-idioma'), 'pt', 'preferências que não são rascunho ficam');
   await t.escrever('Depois de sair');
   assert.equal(local.getItem(PREFIXO + 'pergunta'), null, 'depois de sair nada é gravado');
+});
+
+test('com contas, a cópia deste navegador é de cada conta: B não recebe o rascunho de A', async () => {
+  const local = memoria();
+  // Account A writes offline and the window closes without Sair (session expired).
+  const a = await abrir({local, modo: 'piloto', sessao: {conta: {id: 'aaaa1111'}}, semRede: () => true});
+  await a.escrever('Pauta não publicada de A');
+  assert.equal(JSON.parse(local.getItem('vlado:rascunho-tela:aaaa1111:alfa:pergunta')).conteudo.pergunta, 'Pauta não publicada de A');
+  assert.deepEqual([...local.dados.keys()].filter(k => k.includes(':sessao:')), [], 'nenhuma chave comum a todas as contas');
+  // Account B signs in on the same browser: no offer, and A's copy is not touched.
+  const b = await abrir({local, modo: 'piloto', sessao: {conta: {id: 'bbbb2222'}}, semRede: () => true});
+  assert.equal(b.oferta().hidden, true);
+  await b.escrever('Texto de B');
+  assert.equal(JSON.parse(local.getItem('vlado:rascunho-tela:aaaa1111:alfa:pergunta')).conteudo.pergunta, 'Pauta não publicada de A');
+  assert.equal(JSON.parse(local.getItem('vlado:rascunho-tela:bbbb2222:alfa:pergunta')).conteudo.pergunta, 'Texto de B');
+  // A comes back: the offer is A's own text.
+  const deNovo = await abrir({local, modo: 'piloto', sessao: {conta: {id: 'aaaa1111'}}, semRede: () => true});
+  assert.equal(deNovo.oferta().hidden, false);
+  deNovo.botao('Restaurar rascunho').click();
+  await deNovo.mesa.esperar(10);
+  assert.equal(deNovo.mesa.$('codex-pergunta').value, 'Pauta não publicada de A');
+});
+
+test('com contas e sessão desconhecida, nada vai para o navegador', async () => {
+  const local = memoria({'vlado:rascunho-tela:sessao:alfa:pergunta': JSON.stringify({conteudo: {pergunta: 'antigo'}, versao: 0, em: '2026-11-19T10:00:00Z', pendente: true})});
+  const t = await abrir({local, modo: 'piloto', sessao: {}});
+  assert.equal(t.oferta().hidden, true, 'chave sem conta conhecida não é oferecida');
+  await t.escrever('Sem conta conhecida');
+  assert.deepEqual([...local.dados.keys()].filter(k => k.startsWith('vlado:rascunho-tela:')), ['vlado:rascunho-tela:sessao:alfa:pergunta']);
+  await t.avancar();
+  assert.equal(t.salvamentos().length, 1, 'a cópia do servidor continua');
 });
 
 // Header indicator (Rascunhos.indicador): the Interface consumes it without editing continuidade.js.

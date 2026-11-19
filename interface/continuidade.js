@@ -46,9 +46,24 @@ window.Rascunhos = (() => {
     estado: agregado,
     assinar(fn) { if (typeof fn !== 'function') return () => {}; ouvintes.add(fn); fn(agregado()); return () => ouvintes.delete(fn); },
   };
-  const conta = () => document.body.dataset.conta || (document.body.dataset.modo === 'local' ? 'local' : 'sessao');
+  // The account that owns the copies in this browser. In the modes with accounts (piloto,
+  // local-contas) it comes from /api/sessao, like the notebook's; until it is known nothing is read
+  // from or written to localStorage, so one account never sees another account's unsent text.
+  const CONTA = /^[a-z0-9]{1,64}$/;
+  let contaSessao = null, pedidoConta = null;
+  const conta = () => document.body.dataset.conta || (document.body.dataset.modo === 'local' ? 'local' : contaSessao);
+  function contaPronta() {
+    if (conta()) return Promise.resolve(conta());
+    if (!pedidoConta) {
+      pedidoConta = fetch('/api/sessao').then(resposta => resposta.ok ? resposta.json() : null)
+        .then(dados => { const id = dados?.conta?.id; if (typeof id === 'string' && CONTA.test(id)) contaSessao = id; })
+        .catch(() => { /* Unknown account: this browser keeps no copy; the server copy goes on. */ })
+        .finally(() => { pedidoConta = null; });
+    }
+    return pedidoConta.then(conta);
+  }
   const area = () => { try { return window.localStorage || null; } catch { return null; } };
-  const chave = alvo => `${PREFIXO}${conta()}:${alvo.caso}:${alvo.tela}`;
+  const chave = alvo => conta() ? `${PREFIXO}${conta()}:${alvo.caso}:${alvo.tela}` : null;
   const plano = valor => valor === null || ['string', 'number', 'boolean'].includes(typeof valor);
   function valido(conteudo) {
     return !!conteudo && typeof conteudo === 'object' && !Array.isArray(conteudo)
@@ -62,15 +77,17 @@ window.Rascunhos = (() => {
   const igual = (a, b) => ordenado(a) === ordenado(b);
   function lerLocal(alvo) {
     try {
-      const dados = JSON.parse(area()?.getItem(chave(alvo)) || 'null');
+      const nome = chave(alvo);
+      const dados = nome ? JSON.parse(area()?.getItem(nome) || 'null') : null;
       return dados && valido(dados.conteudo) && Number.isInteger(dados.versao) && typeof dados.em === 'string' ? dados : null;
     } catch { return null; }
   }
   function gravarLocal(alvo, dados) {
-    if (encerrado) return;
-    try { area()?.setItem(chave(alvo), JSON.stringify(dados)); } catch { /* Full or blocked: the server copy goes on. */ }
+    const nome = chave(alvo);
+    if (encerrado || !nome) return;
+    try { area()?.setItem(nome, JSON.stringify(dados)); } catch { /* Full or blocked: the server copy goes on. */ }
   }
-  function removerLocal(alvo) { try { area()?.removeItem(chave(alvo)); } catch { /* Nothing kept. */ } }
+  function removerLocal(alvo) { const nome = chave(alvo); if (!nome) return; try { area()?.removeItem(nome); } catch { /* Nothing kept. */ } }
   function hora(iso) {
     const data = new Date(iso);
     return Number.isNaN(data.getTime()) ? '' : `${String(data.getHours()).padStart(2, '0')}:${String(data.getMinutes()).padStart(2, '0')}`;
@@ -211,6 +228,8 @@ window.Rascunhos = (() => {
       return promessa;
     }
     async function carregar(novo, pedido) {
+      await contaPronta();
+      if (pedido !== sequencia || !mesmo(novo)) return;
       const local = lerLocal(atual);
       let servidor = null;
       try { servidor = await api('rascunhos-ler', {caso: atual.caso, tela: atual.tela}); } catch (erro) { if (erro.rede) semRede = true; }

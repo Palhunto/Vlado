@@ -177,10 +177,13 @@ def _todos(pasta: Path):
                 yield path, dados
 
 
-def _conferir_limites(pasta: Path, alvo: Path, tamanho: int) -> None:
+def _conferir_limites(pasta: Path, alvo: Path, tamanho: int, convidado: bool = False) -> None:
     valores = limites.RASCUNHOS
     limites.conferir_tamanho(tamanho, valores['bytes_por_rascunho'], 'Rascunho grande demais')
     abertos = [(path, dados) for path, dados in _todos(pasta) if path != alvo and not dados.get('descartado')]
+    if convidado and sum(1 for path, _ in abertos if path.parent == alvo.parent) + 1 > valores['rascunhos_por_convidado']:
+        raise ValueError(f'Rascunhos desta conta chegaram ao limite ({valores["rascunhos_por_convidado"]} abertos). '
+                         'Envie ou descarte alguma pergunta antes de começar outra.')
     if len(abertos) + 1 > valores['rascunhos_por_caso']:
         raise ValueError(f'Rascunhos desta apuração chegaram ao limite ({valores["rascunhos_por_caso"]} abertos). '
                          'Conclua ou descarte algum antes de começar outro.')
@@ -213,7 +216,7 @@ def listar(root, caso, conta) -> dict:
     return {'caso': caso, 'rascunhos': itens}
 
 
-def _gravar(root: Path, caso, conta, tela, versao, conteudo, *, descartar: bool) -> dict:
+def _gravar(root: Path, caso, conta, tela, versao, conteudo, *, descartar: bool, convidado: bool = False) -> dict:
     tela = _tela(tela)
     dono = _conta(conta)
     if type(versao) is not int or versao < 0:
@@ -239,7 +242,7 @@ def _gravar(root: Path, caso, conta, tela, versao, conteudo, *, descartar: bool)
             return _publico(atual, caso, tela)
         tamanho = 0 if descartar else _tamanho(conteudo)
         if not descartar:
-            _conferir_limites(pasta, alvo, tamanho)
+            _conferir_limites(pasta, alvo, tamanho, convidado)
         novo = {'formato': FORMATO, 'caso': caso, 'conta': dono, 'tela': tela, 'versao': gravada + 1,
                 'atualizado_em_utc': _agora(), 'descartado': descartar,
                 'conteudo': None if descartar else conteudo, 'bytes': tamanho}
@@ -248,9 +251,9 @@ def _gravar(root: Path, caso, conta, tela, versao, conteudo, *, descartar: bool)
         return _publico(novo, caso, tela)
 
 
-def salvar(root, caso, conta, tela, versao, conteudo) -> dict:
+def salvar(root, caso, conta, tela, versao, conteudo, convidado=False) -> dict:
     """Grava a versão ``versao + 1`` se ``versao`` for a gravada; senão ``ConflitoRascunho``."""
-    return _gravar(Path(root), caso, conta, tela, versao, conteudo, descartar=False)
+    return _gravar(Path(root), caso, conta, tela, versao, conteudo, descartar=False, convidado=convidado)
 
 
 def descartar(root, caso, conta, tela, versao) -> dict:
@@ -271,7 +274,7 @@ def executar(root, operation, data, conta=None, casos=None, convidado=False) -> 
     if convidado and operation != 'rascunhos-listar' and not (isinstance(tela, str) and TELAS_CONVIDADO.fullmatch(tela)):
         raise ValueError('Convidados guardam somente o rascunho da pergunta.')
     if operation == 'rascunhos-salvar':
-        return salvar(root, caso, conta, tela, data.get('versao'), data.get('conteudo'))
+        return salvar(root, caso, conta, tela, data.get('versao'), data.get('conteudo'), convidado=convidado)
     if operation == 'rascunhos-ler':
         return ler(root, caso, conta, tela)
     if operation == 'rascunhos-descartar':

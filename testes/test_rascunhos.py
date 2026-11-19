@@ -206,6 +206,21 @@ class RascunhosTest(unittest.TestCase):
                                    ANA, casos=['alpha'], convidado=True)
         self.assertEqual(salvo['versao'], 1)
 
+    def test_convidado_tem_limite_proprio_e_nao_esgota_o_caso(self):
+        def convidado(tela, conta=BIA):
+            return rascunhos.executar(self.root, 'rascunhos-salvar',
+                                      {'caso': 'alpha', 'tela': tela, 'versao': 0, 'conteudo': {'texto': 'x'}},
+                                      conta, casos=['alpha'], convidado=True)
+        with patch.dict(limites.RASCUNHOS, {'rascunhos_por_convidado': 2, 'rascunhos_por_caso': 5}):
+            convidado('pergunta/a1')
+            convidado('pergunta/a2')
+            with self.assertRaises(ValueError) as ctx:
+                convidado('pergunta/a3')
+            self.assertEqual(erros.codigo_de(str(ctx.exception)), ('rascunhos_conta_limite', {'limite': 2}))
+            convidado('pergunta/a3', conta=ANA)  # o limite é de cada conta
+            self.salvar(0, 'A redação continua salvando.', tela='caderno/N0001')
+            self.salvar(0, 'Administração sem o limite de convidado.', tela='caderno/N0002')
+
 
 class RascunhosRotasTest(unittest.TestCase):
     """Modo local: as quatro rotas, o 409 com a versão atual e o código de cada recusa."""

@@ -113,6 +113,7 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('rascunho_grande_demais', r'^Rascunho grande demais \(limite de (?P<limite>\d+) KB\)'),
     ('rascunhos_caso_cheio', r'^Rascunhos desta apuração ocupam o limite do caso \(limite de (?P<limite>\d+) KB\)'),
     ('rascunhos_caso_limite', r'^Rascunhos desta apuração chegaram ao limite \((?P<limite>\d+) abertos\)'),
+    ('rascunhos_conta_limite', r'^Rascunhos desta conta chegaram ao limite \((?P<limite>\d+) abertos\)'),
     ('rascunho_ilegivel', r'^Rascunho ilegível no servidor'),
     ('rascunho_invalido', r'^Rascunho inválido'),
     ('rascunho_so_pergunta', r'^Convidados guardam somente o rascunho da pergunta'),

@@ -1115,6 +1115,7 @@ window.VLADO_I18N_EN = {
     rascunho_grande_demais: "Draft too large (limit of {limite} KB). Shorten the text or split it into parts.",
     rascunhos_caso_cheio: "This investigation's drafts take up the case limit (limit of {limite} KB). Finish or discard some.",
     rascunhos_caso_limite: "This investigation reached its limit of {limite} open drafts. Finish or discard one before starting another.",
+    rascunhos_conta_limite: "This account reached its limit of {limite} open drafts. Send or discard a question before starting another.",
     rascunho_ilegivel: "Unreadable draft on the server; discard it to continue.",
     rascunho_invalido: "Invalid draft: send the screen fields as an object, with the version this tab knows.",
     rascunho_so_pergunta: "Guests keep only the draft of the question.",
