@@ -472,7 +472,7 @@ window.Continuidade = (() => {
   const etapa = nome => ETAPAS[nome] ? t(ETAPAS[nome]) : String(nome);
   const hora = iso => { const d = new Date(iso || ''); return Number.isNaN(d.getTime()) ? '--:--' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
   const rotuloTela = r => t((TELAS.find(([p]) => r.tela === p || r.tela.startsWith(p + '/')) || [null, 'Rascunho guardado às {hora}'])[1], {hora: hora(r.atualizado_em_utc)});
-  let sequencia = 0;
+  const sequencias = new WeakMap();  // container -> number of its latest montar() call
   const resumo = caso => api('continuidade-resumo', {caso});
   function ligacao(texto, area) {
     const item = element('li'), link = element('a', texto);
@@ -522,16 +522,18 @@ window.Continuidade = (() => {
     alvo.replaceChildren(caixa);
     return caixa;
   }
-  // Fetch and render into `alvo`; a newer call or a case change drops an older answer.
+  // Fetch and render into `alvo`; a newer call on the same container drops its older answer.
+  // The sequence is per container: two screens (home card and boards) can mount at the same time.
   async function montar(alvo, caso) {
-    const pedido = ++sequencia;
+    const pedido = (sequencias.get(alvo) || 0) + 1;
+    sequencias.set(alvo, pedido);
     alvo.replaceChildren(element('p', 'Verificando o que falta…', 'small'));
     try {
       const dados = await resumo(caso);
-      if (pedido !== sequencia || !alvo.isConnected) return null;
+      if (pedido !== sequencias.get(alvo) || !alvo.isConnected) return null;
       return renderResumo(alvo, dados);
     } catch (erro) {
-      if (pedido === sequencia) alvo.replaceChildren(element('p', 'Não foi possível montar o resumo agora.', 'notice'));
+      if (pedido === sequencias.get(alvo)) alvo.replaceChildren(element('p', 'Não foi possível montar o resumo agora.', 'notice'));
       return null;
     }
   }

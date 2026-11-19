@@ -405,6 +405,37 @@ test('resumo sem pendências e falha do servidor têm mensagens próprias', asyn
   assert.match(falha.mesa.doc.querySelector('.mesa-resume-progress').textContent, /Não foi possível montar o resumo agora\./);
 });
 
+test('dois contêineres montados ao mesmo tempo chegam os dois ao resumo final', async () => {
+  // Both answers arrive only after both mounts started (e.g. home card and boards on a case change).
+  let liberar;
+  const resposta = new Promise(resolver => { liberar = () => resolver(RESUMO); });
+  const t = await abrir({area: 'codex', resumo: resposta});
+  const {Continuidade} = t.mesa.janela;
+  const [a, b] = ['resumo-a', 'resumo-b'].map(id => { const no = t.mesa.doc.createElement('div'); no.id = id; t.mesa.doc.body.append(no); return no; });
+  const montagens = [Continuidade.montar(a, 'alfa'), Continuidade.montar(b, 'alfa')];
+  await t.mesa.esperar(4);
+  assert.match(a.textContent, /Verificando o que falta…/);
+  assert.match(b.textContent, /Verificando o que falta…/);
+  liberar();
+  const [ra, rb] = await Promise.all(montagens);
+  assert.ok(ra && rb, 'nenhuma das duas montagens descartou a resposta');
+  for (const alvo of [a, b]) {
+    assert.ok(alvo.querySelector('.continuidade-resumo'), `${alvo.id} mostra o resumo`);
+    assert.doesNotMatch(alvo.textContent, /Verificando o que falta…/);
+  }
+  // On one container, a newer call still wins over an older one.
+  let segunda;
+  const lenta = new Promise(resolver => { segunda = () => resolver({...RESUMO, titulo: 'antiga'}); });
+  const rapida = Promise.resolve(RESUMO);
+  const respostas = [lenta, rapida];
+  t.mesa.janela.api = async () => respostas.shift();
+  const antiga = Continuidade.montar(a, 'alfa');
+  const nova = Continuidade.montar(a, 'alfa');
+  assert.ok(await nova);
+  segunda();
+  assert.equal(await antiga, null, 'a resposta mais antiga do mesmo contêiner é descartada');
+});
+
 test('convidado não pede o resumo de retomada', async () => {
   const t = await abrir({area: 'inicio', papel: 'convidado'});
   await t.mesa.esperar(10);
