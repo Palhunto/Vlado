@@ -737,6 +737,7 @@ window.VLADO_I18N_EN = {
     "Conversas": "Conversations",
     "Notas do caderno": "Notebook notes",
     "Quadros de evidência": "Evidence boards",
+    "Fontes web capturadas": "Captured web sources",
     "Cópias que já estejam em backups feitos com scripts/backup.py não são apagadas por esta ação. Elas permanecem até expirar conforme a retenção de backups definida pelo operador.": "Copies already in backups made with scripts/backup.py are not deleted by this action. They stay until they expire under the backup retention the operator set.",
     "Digite o nome do item exatamente como mostrado para confirmar.": "Type the item's name exactly as shown to confirm.",
     "O conteúdo do item mudou desde a conferência. Revise o alcance e confirme novamente.": "The item's contents changed since you checked. Review the scope and confirm again.",

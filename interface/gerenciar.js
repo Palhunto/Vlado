@@ -7,7 +7,7 @@
     rodadas:'Rodadas de análise', indice_documental:'Índice da busca documental', indice_achados:'Índice dos achados',
     registros_achados:'Registros dos achados', revisoes_humanas:'Conferências humanas', conversas:'Conversas',
     caderno:'Trechos com fonte', diligencias:'Diligências', notas:'Notas do caderno',
-    quadros_evidencia:'Quadros de evidência'};
+    quadros_evidencia:'Quadros de evidência', fontes_web:'Fontes web capturadas'};
   const admin = document.body.dataset.papel !== 'convidado';
   const t = (text, vars) => window.I18N ? window.I18N.t(text, vars) : text;
   let data = null, sequence = 0, busy = false;

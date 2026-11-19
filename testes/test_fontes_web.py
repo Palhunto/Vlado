@@ -11,6 +11,7 @@ from pathlib import Path
 import socket
 import sys
 import threading
+import time
 import unittest
 from unittest import mock
 
@@ -71,6 +72,19 @@ class _Servidor(BaseHTTPRequestHandler):
             self._redirecionar('http://169.254.169.254/latest/meta-data/')
         elif self.path == '/laco':
             self._redirecionar('/laco')
+        elif self.path == '/lento':
+            # Headers arrive, then the body trickles in slower than the overall deadline.
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain')
+            self.send_header('Content-Length', '100')
+            self.end_headers()
+            try:
+                for _ in range(100):
+                    self.wfile.write(b'x')
+                    self.wfile.flush()
+                    time.sleep(0.2)
+            except OSError:
+                pass
         else:
             self._enviar(404, 'text/plain', b'nao encontrado')
 
@@ -175,6 +189,9 @@ class EnderecosTest(unittest.TestCase):
                         '::ffff:127.0.0.1', '::ffff:10.0.0.1', '2002:7f00:1::1', '::'):
             with self.subTest(address=address), self.assertRaises(fontes_web.EnderecoRecusado):
                 fontes_web.conferir_ip(address)
+        for address in ('64:ff9b::a00:1', '64:ff9b:1::a00:1'):  # NAT64 (S11)
+            with self.subTest(address=address), self.assertRaises(fontes_web.EnderecoRecusado):
+                fontes_web.conferir_ip(address)
         self.assertEqual(fontes_web.conferir_ip('8.8.8.8'), '8.8.8.8')
         self.assertEqual(fontes_web.conferir_ip('2001:4860:4860::8888'), '2001:4860:4860::8888')
 
@@ -190,6 +207,8 @@ class EnderecosTest(unittest.TestCase):
     def test_so_https_fora_do_modo_de_teste(self):
         self.assertEqual(fontes_web.conferir_url('https://www.exemplo.gov.br/a?b=1', 'www.exemplo.gov.br'),
                          'https://www.exemplo.gov.br/a?b=1')
+        self.assertEqual(fontes_web.conferir_url('https://www.exemplo.gov.br:443/a%C3%A7%C3%A3o', 'www.exemplo.gov.br'),
+                         'https://www.exemplo.gov.br:443/a%C3%A7%C3%A3o')
         with self.assertRaisesRegex(ValueError, 'https://'):
             fontes_web.conferir_url('http://www.exemplo.gov.br/', 'www.exemplo.gov.br')
         with self.assertRaisesRegex(ValueError, 'https://'):
@@ -201,7 +220,11 @@ class EnderecosTest(unittest.TestCase):
         for url in ('https://www.exemplo.gov.br.evil.example/', 'https://evil.example/@www.exemplo.gov.br',
                     'https://www.exemplo.gov.br@evil.example/', 'https://exemplo.gov.br/', 'ftp://www.exemplo.gov.br/',
                     'https://www.exemplo.gov.br:99999/', 'https://www.exemplo.gov.br\\@evil.example/',
-                    'https://www.exemplo.gov.br/ a', 'javascript:alert(1)', '//www.exemplo.gov.br/'):
+                    'https://www.exemplo.gov.br/ a', 'javascript:alert(1)', '//www.exemplo.gov.br/',
+                    # S5: only the default https port; S6/S12: no raw quotes, brackets or non-ASCII.
+                    'https://www.exemplo.gov.br:8443/', 'https://www.exemplo.gov.br:22/',
+                    'https://www.exemplo.gov.br/<svg/onload=alert(1)>', 'https://www.exemplo.gov.br/a"b',
+                    'https://www.exemplo.gov.br/ação'):
             with self.subTest(url=url), self.assertRaises(ValueError):
                 fontes_web.conferir_url(url, 'www.exemplo.gov.br')
 
@@ -370,6 +393,53 @@ class CapturaTest(_Base):
         with self.assertRaisesRegex(ValueError, 'Hash divergente'):
             fontes_web.capturar(self.root, 'web', self.base + '/texto')
 
+    def test_prazo_total_vale_mesmo_com_envio_lento(self):
+        """S1: a slow body cannot stretch the capture past TEMPO_TOTAL."""
+        self.criar_web()
+        with mock.patch.object(fontes_web, 'TEMPO_TOTAL', 1.0):
+            start = time.monotonic()
+            with self.assertRaisesRegex(ValueError, 'Tempo limite da captura esgotado'):
+                fontes_web.capturar(self.root, 'web', self.base + '/lento')
+        self.assertLess(time.monotonic() - start, 6)
+        self.assertNotIn('capturas_web', self.manifesto())
+
+    def test_trava_externa_e_liberada_se_a_do_projeto_falhar(self):
+        """S2: the Mesa lock is released when the project lock cannot be taken."""
+        self.criar_web()
+        outer = threading.Lock()
+
+        def falha(root):
+            raise RuntimeError('trava ocupada')
+        with mock.patch.object(cadastro, '_trava', falha), self.assertRaises(RuntimeError):
+            fontes_web.capturar(self.root, 'web', self.base + '/pagina', trava=outer)
+        self.assertTrue(outer.acquire(blocking=False))
+        outer.release()
+
+    def test_extracao_fora_das_travas(self):
+        """S3: the text extraction runs before the locks are taken again."""
+        self.criar_web()
+        original = fontes_web._derivados
+        seen = []
+
+        def derivados(*args):
+            with cadastro._trava(self.root):
+                seen.append('livre')
+            return original(*args)
+        with mock.patch.object(fontes_web, '_derivados', derivados):
+            fontes_web.capturar(self.root, 'web', self.base + '/pagina')
+        self.assertEqual(seen, ['livre'])
+
+    def test_apagamento_conta_fontes_web_em_categoria_propria(self):
+        import lixeira
+        self.criar_web()
+        fontes_web.capturar(self.root, 'web', self.base + '/pagina')
+        item = lixeira.adicionar(self.root, 'caso', 'web', 'Caso sintético')
+        alcance = lixeira.alcance(self.root, item['id'])
+        # conteúdo, texto, captura.json e registro.jsonl
+        self.assertEqual(alcance['categorias']['fontes_web']['arquivos'], 4)
+        self.assertIn("fontes_web:'Fontes web capturadas'",
+                      (Path(__file__).resolve().parents[1] / 'interface/gerenciar.js').read_text(encoding='utf-8'))
+
     def test_download_fora_das_travas(self):
         """The project lock is free while the page is fetched."""
         self.criar_web()
@@ -400,8 +470,9 @@ class RodadaTest(_Base):
         self.assertIn('entradas/' + capture['arquivo'], frozen)
         self.assertIn('entradas/' + capture['registro']['arquivo'], frozen)
         record = ler_json(run / 'registro.json')
+        # `web_usada` keeps meaning live navigation during the round (never); captures are counted apart.
         self.assertEqual((record['modo_fontes'], record['dominio_permitido'], record['capturas_web_congeladas'],
-                          record['web_usada']), ('documentos_web', '127.0.0.1', 1, True))
+                          record['web_usada']), ('documentos_web', '127.0.0.1', 1, False))
         hits = pesquisar(self.root, 'web', 'R001', 'valor global')['resultados']
         self.assertEqual({h['documento_id'] for h in hits}, {'W001'})
         lines = (run / 'entradas' / capture['derivados'][0]['arquivo']).read_text(encoding='utf-8').splitlines()

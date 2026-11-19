@@ -100,7 +100,7 @@ def _criar_rodada(root: Path, identifier: str, question: str, *, tipo='piloto', 
             'criada_em_utc': datetime.now(timezone.utc).isoformat(),
             'corpus_id': manifest['corpus_id'], 'versao_prompts': VERSAO_PROMPTS,
             'modelo_informado': modelo, 'modelo_observado_pelo_agente': None,
-            'ferramentas_usadas': [], 'web_usada': bool(manifest.get('capturas_web')),
+            'ferramentas_usadas': [], 'web_usada': False,  # live navigation; frozen captures are counted below
             'modo_fontes': modo_do_caso(manifest)['modo'],
             'dominio_permitido': modo_do_caso(manifest).get('dominio_permitido'),
             'capturas_web_congeladas': len(manifest.get('capturas_web', [])),
