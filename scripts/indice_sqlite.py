@@ -13,7 +13,7 @@ import uuid
 import unicodedata
 
 from comum import dentro, escrever_json, ler_json, sha256, pasta_preparacao
-from fontes_web import documentos_e_capturas
+from comum import documentos_e_capturas  # no network code: keeps the portable banco.py copy working
 
 # Copies of the working-copy markers, so banco.py + indice_sqlite.py + comum.py stay a
 # portable set; testes/test_extrair_office.py checks they match extrair_office and ocr.

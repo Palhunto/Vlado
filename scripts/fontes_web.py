@@ -33,7 +33,8 @@ import time
 import urllib.parse
 import uuid
 
-from comum import ROOT, conferir_arquivo, dentro, escrever_json, ler_json, sha256, pasta_preparacao
+from comum import (ROOT, capturas_como_documentos, conferir_arquivo, dentro, escrever_json, ler_json, sha256,
+                   pasta_preparacao)
 
 MODO_DOCUMENTAL = 'somente_documental'
 MODO_WEB = 'documentos_web'
@@ -499,11 +500,7 @@ def arquivos_web(root, manifest):
 def como_documentos(manifest) -> list[dict]:
     """Capture entries shaped like documents (id, arquivo, sha256, derivados) for indexing/reading."""
     modo_do_caso(manifest)
-    return [{'id': c['id'], 'arquivo': c['arquivo'], 'sha256': c['sha256'],
-             'nome_recebido': c['url_final'], 'tipo_fonte': 'captura_web',
-             'origem_informada': {'url_solicitada': c['url_solicitada'], 'url_final': c['url_final'],
-                                  'acessado_em_utc': c['acessado_em_utc']},
-             'derivados': c.get('derivados', [])} for c in manifest.get('capturas_web', [])]
+    return capturas_como_documentos(manifest)
 
 
 def documentos_e_capturas(manifest) -> list[dict]:
