@@ -116,6 +116,9 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('rascunho_ilegivel', r'^Rascunho ilegível no servidor'),
     ('rascunho_invalido', r'^Rascunho inválido'),
     ('rascunho_so_pergunta', r'^Convidados guardam somente o rascunho da pergunta'),
+    # Resume summary of the active case (continuidade.resumo_caso).
+    ('resumo_campos_invalidos', r'^Campos inválidos no resumo de retomada'),
+    ('resumo_sem_caso', r'^Selecione uma apuração para o resumo de retomada'),
 )
 _COMPILADOS = tuple((codigo, re.compile(padrao)) for codigo, padrao in PADROES)
 

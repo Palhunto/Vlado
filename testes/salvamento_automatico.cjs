@@ -39,10 +39,24 @@ function servidorRascunhos(inicial = {}) {
   }};
 }
 
-async function abrir({rascunhos = servidorRascunhos(), local = memoria(), semRede = () => false} = {}) {
+// Same shape as continuidade.resumo_caso (scripts/continuidade.py).
+const RESUMO = {esquema: 1, caso: 'alfa', titulo: 'Pauta Alfa',
+  documentos: {cadastrados: 3, pendentes: [{id: 'D002', nome: 'visual.pdf', motivo: 'paginas_sem_texto'}]},
+  rodada: {id: 'R002', total_rodadas: 2, etapas: ['inventario', 'plano', 'busca', 'geracao_inicial', 'revisao', 'sintese'],
+    aceitas: ['inventario', 'plano'], etapa_concluida: 'plano', proxima_etapa: 'busca', concluida: false, estado_legivel: true},
+  conversas_interrompidas: [{id: 'c'.repeat(32), titulo: 'Contratos da merenda', rodada: 'R002', area: 'codex'}],
+  quadros: [{quadro: 'hipoteses', pendentes: 2, total: 3, area: 'apuracao', erro: null},
+    {quadro: 'diligencias', pendentes: 0, total: 1, area: 'diligencias', erro: null},
+    {quadro: 'tabelas', pendentes: null, total: null, area: 'apuracao', erro: 'Histórico divergente.'}],
+  rascunhos: [{tela: 'pergunta', versao: 3, atualizado_em_utc: '2026-11-19T13:00:00Z', area: 'codex'}],
+  pendencias: [], aviso: 'Resumo dos registros da apuração; não confere conteúdo nem substitui a leitura dos originais.'};
+
+async function abrir({rascunhos = servidorRascunhos(), local = memoria(), semRede = () => false,
+  area = 'codex', resumo = RESUMO, papel = 'admin'} = {}) {
   const relogio = [], envios = [];
-  const mesa = criarMesa({catalogo: [ALFA], url: 'http://127.0.0.1:8765/?area=codex&caso=alfa',
+  const mesa = criarMesa({catalogo: [ALFA], url: `http://127.0.0.1:8765/?area=${area}&caso=alfa`, papel,
     api: (op, dados) => {
+      if (op === 'continuidade-resumo') { if (resumo instanceof Error) throw resumo; return resumo; }
       const resposta = op.startsWith('rascunhos-') ? rascunhos.responder(op, dados) : null;
       if (resposta) return resposta;
       if (op === 'codex-listar') return {conversas: []};
@@ -240,4 +254,81 @@ test('Sair apaga deste navegador os rascunhos das telas', async () => {
   assert.equal(local.getItem('vlado-idioma'), 'pt', 'preferências que não são rascunho ficam');
   await t.escrever('Depois de sair');
   assert.equal(local.getItem(PREFIXO + 'pergunta'), null, 'depois de sair nada é gravado');
+});
+
+// Header indicator (Rascunhos.indicador): the Interface consumes it without editing continuidade.js.
+test('indicador agregado: salvando, salvo às HH:MM e sem conexão, por assinatura e por evento', async () => {
+  let offline = false;
+  const t = await abrir({semRede: () => offline});
+  const indicador = t.mesa.janela.Rascunhos.indicador;
+  const vistos = [], eventos = [];
+  const cancelar = indicador.assinar(estado => vistos.push(estado));
+  t.mesa.doc.addEventListener('vlado:rascunho-estado', e => eventos.push(e.detail));
+  assert.equal(vistos[0].tipo, 'ocioso', 'a assinatura recebe o estado atual na hora');
+  await t.escrever('Quanto custou a merenda?');
+  await t.avancar();
+  assert.ok(vistos.some(v => v.tipo === 'salvando'));
+  assert.equal(indicador.estado().tipo, 'salvo');
+  assert.match(indicador.estado().hora, /^\d{2}:\d{2}$/);
+  assert.equal(eventos.at(-1).tipo, 'salvo');
+  offline = true;
+  await t.escrever('Sem rede agora');
+  await t.avancar();
+  assert.equal(indicador.estado().tipo, 'sem_rede');
+  assert.equal(indicador.estado().telas, 1, 'uma tela com envio pendente');
+  cancelar();
+  const total = vistos.length;
+  await t.escrever('Depois de cancelar');
+  await t.avancar();
+  assert.equal(vistos.length, total, 'quem cancelou não recebe mais avisos');
+});
+
+test('indicador mostra a escolha pendente num conflito entre abas', async () => {
+  const rascunhos = servidorRascunhos();
+  const t = await abrir({rascunhos});
+  rascunhos.telas.set('pergunta', {versao: 1, conteudo: {pergunta: 'Da outra aba'}, em: '2026-11-19T14:00:00Z'});
+  await t.escrever('Desta aba');
+  await t.avancar();
+  assert.equal(t.mesa.janela.Rascunhos.indicador.estado().tipo, 'decidir');
+});
+
+// Resume summary at the case entry (Continuidade.montar, called by the home card).
+test('entrada do caso mostra concluído e pendente com links para cada pendência', async () => {
+  const t = await abrir({area: 'inicio'});
+  await t.mesa.esperar(10);
+  assert.ok(t.mesa.chamadas.some(c => c.operacao === 'continuidade-resumo' && c.dados.caso === 'alfa'));
+  const caixa = t.mesa.doc.querySelector('.continuidade-resumo');
+  assert.ok(caixa, 'o resumo aparece na entrada do caso');
+  const feito = caixa.querySelector('.mesa-resume-done').textContent;
+  assert.match(feito, /3 documentos cadastrados/);
+  assert.match(feito, /Análise R002: concluída até a etapa «plano»/);
+  assert.match(feito, /Diligências encerradas: 1/);
+  const links = caixa.querySelector('.mesa-resume-pending').querySelectorAll('a');
+  const textos = links.map(a => a.textContent);
+  assert.deepEqual(textos, ['Páginas sem texto extraível: visual.pdf', 'Análise R002: próxima etapa «busca»',
+    'Conversa interrompida, pronta para retomar: Contratos da merenda', 'Hipóteses em aberto: 2',
+    'Não foi possível ler as tabelas.', textos.at(-1)]);
+  assert.match(textos.at(-1), /^Pergunta em preparo guardada às \d{2}:\d{2}$/);
+  assert.deepEqual(links.map(a => a.dataset.area), ['documentos', 'codex', 'codex', 'apuracao', 'apuracao', 'codex']);
+  assert.match(links[0].href, /area=documentos/);
+  links[0].click();
+  await t.mesa.esperar(6);
+  assert.equal(t.mesa.$('area-documentos').hidden, false, 'o link abre a área da pendência');
+});
+
+test('resumo sem pendências e falha do servidor têm mensagens próprias', async () => {
+  const vazio = {...RESUMO, documentos: {cadastrados: 1, pendentes: []}, rodada: null, conversas_interrompidas: [],
+    quadros: [], rascunhos: []};
+  const t = await abrir({area: 'inicio', resumo: vazio});
+  await t.mesa.esperar(10);
+  assert.match(t.mesa.doc.querySelector('.mesa-resume-pending').textContent, /Nada pendente nesta apuração\./);
+  const falha = await abrir({area: 'inicio', resumo: new Error('Apuração indisponível.')});
+  await falha.mesa.esperar(10);
+  assert.match(falha.mesa.doc.querySelector('.mesa-resume-progress').textContent, /Não foi possível montar o resumo agora\./);
+});
+
+test('convidado não pede o resumo de retomada', async () => {
+  const t = await abrir({area: 'inicio', papel: 'convidado'});
+  await t.mesa.esperar(10);
+  assert.ok(!t.mesa.chamadas.some(c => c.operacao === 'continuidade-resumo'));
 });

@@ -20,6 +20,32 @@ window.Rascunhos = (() => {
     : Object.entries(vars || {}).reduce((fim, [nome, valor]) => fim.split(`{${nome}}`).join(String(valor)), texto);
   const controles = new Set();
   let encerrado = false;
+  // Aggregate status for the header (Rascunhos.indicador). Each screen's line maps to one kind;
+  // the most urgent kind across screens wins. Consumers render the text themselves.
+  const TIPOS = {'': 'ocioso', 'Salvando…': 'salvando', 'Salvo às {hora}': 'salvo', [SEM_REDE]: 'sem_rede',
+    [SEM_CHAVE]: 'sem_chave', 'Escolha acima qual rascunho manter para continuar salvando.': 'decidir',
+    'Não foi possível guardar no servidor — salvo neste navegador. {erro}': 'erro'};
+  const URGENCIA = ['decidir', 'sem_chave', 'erro', 'sem_rede', 'salvando', 'salvo', 'ocioso'];
+  const situacoes = new Map(), ouvintes = new Set();
+  let ultimaHora = null;
+  function agregado() {
+    let tipo = 'ocioso', telas = 0;
+    for (const [controle, s] of situacoes) {
+      const atual = controle.estado().decidir ? 'decidir' : s;
+      if (URGENCIA.indexOf(atual) < URGENCIA.indexOf(tipo)) tipo = atual;
+      if (['salvando', 'sem_rede', 'erro'].includes(atual) || controle.estado().pendente) telas++;
+    }
+    return {tipo, hora: ultimaHora, telas};
+  }
+  function notificar() {
+    const dados = agregado();
+    for (const fn of ouvintes) { try { fn(dados); } catch { /* A consumer error never stops saving. */ } }
+    try { document.dispatchEvent(new CustomEvent('vlado:rascunho-estado', {detail: dados})); } catch { /* Old engines. */ }
+  }
+  const indicador = {
+    estado: agregado,
+    assinar(fn) { if (typeof fn !== 'function') return () => {}; ouvintes.add(fn); fn(agregado()); return () => ouvintes.delete(fn); },
+  };
   const conta = () => document.body.dataset.conta || (document.body.dataset.modo === 'local' ? 'local' : 'sessao');
   const area = () => { try { return window.localStorage || null; } catch { return null; } };
   const chave = alvo => `${PREFIXO}${conta()}:${alvo.caso}:${alvo.tela}`;
@@ -73,9 +99,14 @@ window.Rascunhos = (() => {
     estado.setAttribute('role', 'status'); estado.setAttribute('aria-live', 'polite'); estado.hidden = true;
     const oferta = element('div', undefined, 'rascunho-oferta notice'); oferta.hidden = true;
     ancora.after(estado, oferta);
-    let atual = null, versao = 0, timer = null, emVoo = null, denovo = false, decidir = false, sequencia = 0, semRede = false, abrindo = null;
+    let controle = null, atual = null, versao = 0, timer = null, emVoo = null, denovo = false, decidir = false, sequencia = 0, semRede = false, abrindo = null;
     const mesmo = a => !!a && !!atual && a.caso === atual.caso && a.tela === atual.tela;
-    function mostrar(texto, vars) { estado.textContent = texto ? preencher(texto, vars) : ''; estado.hidden = !texto; }
+    function mostrar(texto, vars) {
+      estado.textContent = texto ? preencher(texto, vars) : ''; estado.hidden = !texto;
+      const tipo = TIPOS[texto || ''] || 'erro';
+      if (tipo === 'salvo' && vars?.hora) ultimaHora = vars.hora;
+      if (controle) { situacoes.set(controle, tipo); notificar(); }
+    }
     function fecharOferta() { decidir = false; oferta.hidden = true; oferta.replaceChildren(); }
     function perguntar(texto, vars, opcoes) {
       decidir = true; oferta.replaceChildren(element('p', preencher(texto, vars)));
@@ -215,7 +246,7 @@ window.Rascunhos = (() => {
     function soltar() { despedir(); parar(); fecharOferta(); mostrar(''); atual = null; versao = 0; ++sequencia; }
     origem.addEventListener('input', mudou);
     origem.addEventListener('change', mudou);
-    const controle = {abrir, concluir, soltar, enviar, despedir, parar, estado: () => ({alvo: atual, versao, pendente: !!timer, semRede, decidir})};
+    controle = {abrir, concluir, soltar, enviar, despedir, parar, estado: () => ({alvo: atual, versao, pendente: !!timer, semRede, decidir})};
     controles.add(controle);
     return controle;
   }
@@ -253,9 +284,9 @@ window.Rascunhos = (() => {
       if (!armazenamento) return;
       for (let i = 0; i < armazenamento.length; i++) { const nome = armazenamento.key(i); if (nome?.startsWith(PREFIXO)) nomes.push(nome); }
       for (const nome of nomes) armazenamento.removeItem(nome);
-    } catch { /* Storage blocked: nothing was kept. */ }
+    } catch { /* Storage blocked: nothing was kept. */ } finally { situacoes.clear(); ultimaHora = null; notificar(); }
   }
-  return {registrar, lerFormulario, aplicarFormulario, limparTudo, PREFIXO, PAUSA};
+  return {registrar, lerFormulario, aplicarFormulario, limparTudo, indicador, PREFIXO, PAUSA};
 })();
 (() => {
   const dialog=$('continuidade-dialogo');
@@ -368,4 +399,89 @@ window.Rascunhos = (() => {
     const jsonButton=element('button','Dados técnicos · JSON','secondary');jsonButton.type='button';jsonButton.addEventListener('click',()=>window.exportarEditorial(data,`comparativo_${data.rodada_anterior}_${data.rodada_atual}`,'json'));target.append(jsonButton);
     target.append(exportButton,Leitura.tecnicos(element('pre',JSON.stringify(data,null,2),'raw-briefing')));
   };
+})();
+// Resume summary at the case entry (POST /api/continuidade-resumo): what is finished and what is
+// still open, each pending item linked to the Mesa area that resolves it. Metadata only: draft
+// text never leaves the drafts module. Other screens use Continuidade.resumo / renderResumo.
+window.Continuidade = (() => {
+  const t = (texto, vars) => window.I18N ? window.I18N.t(texto, vars)
+    : Object.entries(vars || {}).reduce((fim, [nome, valor]) => fim.split(`{${nome}}`).join(String(valor)), texto);
+  const ETAPAS = {inventario: 'inventário', plano: 'plano', busca: 'busca', geracao_inicial: 'geração inicial',
+    revisao: 'revisão', sintese: 'síntese'};
+  const MOTIVOS = {sem_extracao: 'PDF sem extração textual registrada: {nome}', protegido: 'PDF protegido por senha: {nome}',
+    falha_extracao: 'Falha na extração do texto: {nome}', paginas_com_erro: 'Páginas com falha de extração: {nome}',
+    paginas_sem_texto: 'Páginas sem texto extraível: {nome}'};
+  const QUADROS = {hipoteses: ['Hipóteses em aberto: {n}', 'Não foi possível ler o quadro de hipóteses.'],
+    diligencias: ['Diligências em andamento: {n}', 'Não foi possível ler as diligências.'],
+    tabelas: ['Tabelas com células pendentes: {n}', 'Não foi possível ler as tabelas.']};
+  const TELAS = [['pergunta', 'Pergunta em preparo guardada às {hora}'], ['quadro-revisao', 'Revisão de achado guardada às {hora}'],
+    ['quadro-caderno', 'Seleção para o caderno guardada às {hora}'], ['quadro-diligencias-resposta', 'Resposta de diligência guardada às {hora}'],
+    ['quadro-diligencias', 'Diligência em preparo guardada às {hora}'], ['caderno', 'Nota do caderno guardada às {hora}']];
+  const etapa = nome => ETAPAS[nome] ? t(ETAPAS[nome]) : String(nome);
+  const hora = iso => { const d = new Date(iso || ''); return Number.isNaN(d.getTime()) ? '--:--' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+  const rotuloTela = r => t((TELAS.find(([p]) => r.tela === p || r.tela.startsWith(p + '/')) || [null, 'Rascunho guardado às {hora}'])[1], {hora: hora(r.atualizado_em_utc)});
+  let sequencia = 0;
+  const resumo = caso => api('continuidade-resumo', {caso});
+  function ligacao(texto, area) {
+    const item = element('li'), link = element('a', texto);
+    link.href = window.enderecoAreaMesa ? window.enderecoAreaMesa(area) : `?area=${encodeURIComponent(area)}`;
+    link.dataset.area = area;
+    link.addEventListener('click', evento => {
+      if (evento.ctrlKey || evento.metaKey || evento.shiftKey || evento.altKey || evento.button) return;
+      evento.preventDefault(); showArea(area);
+    });
+    item.append(link); return item;
+  }
+  function concluidos(dados) {
+    const itens = [Leitura.quantidade(dados.documentos.cadastrados, 'documento cadastrado', 'documentos cadastrados')];
+    const r = dados.rodada;
+    if (r && r.concluida) itens.push(t('Análise {id} concluída: todas as etapas aceitas.', {id: r.id}));
+    else if (r && r.etapa_concluida) itens.push(t('Análise {id}: concluída até a etapa «{etapa}».', {id: r.id, etapa: etapa(r.etapa_concluida)}));
+    for (const q of dados.quadros) if (!q.erro && q.total && !q.pendentes) itens.push(t({hipoteses: 'Hipóteses sem pendência: {n}', diligencias: 'Diligências encerradas: {n}', tabelas: 'Tabelas sem célula pendente: {n}'}[q.quadro], {n: q.total}));
+    return itens;
+  }
+  function pendentes(dados) {
+    const itens = [];
+    for (const d of dados.documentos.pendentes) itens.push(ligacao(t(MOTIVOS[d.motivo] || 'Documento com limitação: {nome}', {nome: d.nome}), 'documentos'));
+    const r = dados.rodada;
+    if (r && !r.concluida) itens.push(ligacao(r.estado_legivel ? t('Análise {id}: próxima etapa «{etapa}»', {id: r.id, etapa: etapa(r.proxima_etapa)})
+      : t('Análise {id}: não foi possível ler o progresso.', {id: r.id}), 'codex'));
+    for (const c of dados.conversas_interrompidas) itens.push(ligacao(t('Conversa interrompida, pronta para retomar: {titulo}', {titulo: c.titulo || c.id}), c.area));
+    for (const q of dados.quadros) {
+      const [texto, erro] = QUADROS[q.quadro] || ['{n}', ''];
+      if (q.erro) itens.push(ligacao(t(erro), q.area)); else if (q.pendentes) itens.push(ligacao(t(texto, {n: q.pendentes}), q.area));
+    }
+    for (const r2 of dados.rascunhos) itens.push(ligacao(rotuloTela(r2), r2.area));
+    return itens;
+  }
+  // Pure rendering, for any container: two lists, "Concluído" and "Pendente".
+  function renderResumo(alvo, dados) {
+    const caixa = element('section', undefined, 'continuidade-resumo');
+    caixa.setAttribute('aria-label', 'Retomada da apuração');
+    const feito = element('div', undefined, 'mesa-resume-done'), falta = element('div', undefined, 'mesa-resume-pending');
+    const listaFeito = element('ul', undefined, 'mesa-resume-list');
+    for (const texto of concluidos(dados)) listaFeito.append(element('li', texto));
+    const itens = pendentes(dados), listaFalta = element('ul', undefined, 'mesa-resume-list');
+    if (itens.length) listaFalta.append(...itens); else listaFalta.append(element('li', 'Nada pendente nesta apuração.'));
+    feito.append(element('p', 'CONCLUÍDO', 'eyebrow'), listaFeito);
+    falta.append(element('p', 'PENDENTE', 'eyebrow'), listaFalta);
+    caixa.append(feito, falta, element('p', dados.aviso, 'small'));
+    caixa.dataset.caso = dados.caso;
+    alvo.replaceChildren(caixa);
+    return caixa;
+  }
+  // Fetch and render into `alvo`; a newer call or a case change drops an older answer.
+  async function montar(alvo, caso) {
+    const pedido = ++sequencia;
+    alvo.replaceChildren(element('p', 'Verificando o que falta…', 'small'));
+    try {
+      const dados = await resumo(caso);
+      if (pedido !== sequencia || !alvo.isConnected) return null;
+      return renderResumo(alvo, dados);
+    } catch (erro) {
+      if (pedido === sequencia) alvo.replaceChildren(element('p', 'Não foi possível montar o resumo agora.', 'notice'));
+      return null;
+    }
+  }
+  return {resumo, renderResumo, montar};
 })();
