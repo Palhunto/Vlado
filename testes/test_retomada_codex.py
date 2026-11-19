@@ -27,7 +27,9 @@ class Base(unittest.TestCase):
         return manager.eventos(identifier)['conversa']
 
     def aguardar_fim(self, manager, identifier):
-        esperar(lambda: manager.contexts[identifier]['meta']['estado'] in ENCERRADOS[1:])
+        # _finish sets estado before the situation and codex_execucao.json, all under the manager
+        # lock; reading through eventos() (which takes it) returns only after _finish completes.
+        esperar(lambda: self.estado(manager, identifier)['estado'] in ENCERRADOS[1:])
 
     def etapa(self, manager, identifier, stage, entregar=True, encerrar=True):
         """Drive one stage like the model would: wait for its turn, deliver, end the turn."""

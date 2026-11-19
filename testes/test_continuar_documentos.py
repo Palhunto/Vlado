@@ -10,7 +10,7 @@ from unittest.mock import patch
 import test_codex_integracao as fixture
 from agente_fluxo_fixture import completar, entrega, esperar
 from cadastrar_documentos import cadastrar
-from codex_apuracao import Conversas
+from codex_apuracao import ACTIVE, Conversas
 from comum import ler_json, sha256
 from interface_pesquisa import Servidor
 import continuidade
@@ -170,7 +170,9 @@ class ContinuarDocumentosTest(unittest.TestCase):
         for attempt in (1,2):
             esperar(lambda:ctx['meta'].get('etapa')=='comparacao' and ctx['meta'].get('tentativa_etapa')==attempt and ctx['meta'].get('turn_id'))
             self.manager.rpc.emit('turn/completed',{'turn':{'id':ctx['meta']['turn_id'],'status':'completed'}})
-        esperar(lambda:not ctx['busy'])
+        # _finish clears busy before writing codex_execucao.json, all under the manager lock;
+        # eventos() takes that lock, so the final state is only seen once the report exists.
+        esperar(lambda:self.manager.eventos(self.chat)['conversa']['estado'] not in ACTIVE)
         self.assertEqual(ctx['meta']['estado'],'incompleto')
         report=ler_json(ctx['run']/'saidas/codex_execucao.json')
         self.assertEqual(report['etapas_sem_registro'],['comparacao'])
