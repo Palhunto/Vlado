@@ -62,10 +62,50 @@ test('o texto comum continua formatado depois da limpeza', () => {
                '<p><strong>negrito</strong> e <a href="https://exemplo.org">link</a></p>');
 });
 
-test('a CSP da Mesa barra o que a limpeza deixa passar: iframe e imagem externos, script embutido', () => {
-  const {motor} = lute();
-  // A limpeza do Lute mantém <iframe>; quem o barra é a política da página.
-  assert.match(motor.Md2HTML('<iframe src="https://externo.example"></iframe>'), /<iframe/);
+// O Lute que o editor usa de fato: editor_notas.js carregado no mesmo contexto embrulha Lute.New.
+function luteDoEditor() {
+  const {ctx} = lute();
+  vm.runInContext(lido('interface/editor_notas.js'), ctx);
+  ctx.protegerLuteGlobal();
+  ctx.protegerLuteGlobal();  // repetir não embrulha duas vezes
+  const motor = ctx.Lute.New();
+  motor.SetSanitize(true);
+  return {motor, ctx};
+}
+
+const EMBUTIDOS = [
+  '<iframe src="/api/integracao"></iframe>',
+  '<iframe src="https://externo.example"></iframe>',
+  '<iframe srcdoc="<b>x</b>"></iframe>',
+  '<object data="/vendor/x.pdf"></object>',
+  '<embed src="/vendor/x.swf">',
+  'Antes <IFRAME SRC=/ width=1></IFRAME> depois',
+];
+const METODOS = ['Md2HTML', 'Md2VditorDOM', 'Md2VditorIRDOM', 'Md2VditorSVDOM'];
+
+test('iframe, object e embed somem de todo HTML do editor, inclusive com endereço da própria Mesa', () => {
+  const {motor: cru} = lute();
+  assert.match(cru.Md2HTML('<iframe src="/api/integracao"></iframe>'), /<iframe/, 'sem o editor, o Lute mantém o iframe');
+  const {motor} = luteDoEditor();
+  for (const md of EMBUTIDOS) {
+    for (const metodo of METODOS) {
+      const vivo = motor[metodo](md).replace(/<code[^>]*>[\s\S]*?<\/code>/g, '');
+      assert.doesNotMatch(vivo, /<\/?(?:iframe|object|embed)\b/i, `${metodo}: ${md}`);
+    }
+  }
+  assert.match(motor.Md2HTML('Antes <iframe src="/"></iframe> depois'), /Antes\s+depois/);
+  assert.equal(motor.Md2HTML('**negrito**').trim(), '<p><strong>negrito</strong></p>');
+});
+
+test('a etapa transform do editor também retira os embutidos', () => {
+  const {ctx} = luteDoEditor();
+  assert.equal(ctx.semEmbutidos('<p>a</p><iframe src="/"></iframe><object data="/x"></object><embed src="/y">'), '<p>a</p>');
+  assert.equal(ctx.semEmbutidos('&lt;iframe src="/"&gt;'), '&lt;iframe src="/"&gt;', 'texto escapado continua texto');
+  assert.match(lido('interface/editor_notas.js'), /return window\.semEmbutidos\(template\.innerHTML\)/);
+  assert.match(lido('interface/editor_notas.js'), /protegerLuteGlobal\(\);\s*this\.instance=new Vditor/);
+});
+
+test('a CSP da Mesa barra o que escapar da limpeza: iframe e imagem externos, script embutido', () => {
   const csp = lido('scripts/interface_pesquisa.py').match(/'Content-Security-Policy', "([^"]+)"/)[1];
   const diretivas = Object.fromEntries(csp.split(';').map(d => d.trim().split(/\s+/)).map(([nome, ...v]) => [nome, v]));
   assert.deepEqual(diretivas['script-src'], ["'self'"], 'sem unsafe-inline: atributos on* e <script> embutido não rodam');
