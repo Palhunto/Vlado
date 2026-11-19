@@ -480,6 +480,9 @@ html{scroll-padding-top:calc(var(--faixa-ambiente) + 96px)}
 .quadro-selo.suporte-sustentado{border-color:var(--green);font-weight:600}
 .quadro-vazio{color:var(--muted)}
 .quadro-contexto,.quadro-indisponiveis{margin-top:var(--espaco-3)}
+.tempo-filtro-caixa{margin:0 0 var(--espaco-4)}
+.tempo-filtro-caixa>summary{min-height:44px;display:flex;align-items:center}
+.tempo-filtro-caixa[open]>summary{margin-bottom:var(--espaco-2)}
 .tempo-filtro{display:flex;flex-wrap:wrap;gap:var(--espaco-1) var(--espaco-4);border:1px solid var(--quadro-borda);border-radius:var(--raio-cartao);padding:var(--espaco-3) var(--espaco-4);margin:0 0 var(--espaco-4)}
 .tempo-filtro legend{font-weight:600;padding:0 var(--espaco-1)}
 .tempo-filtro .tempo-opcao{flex-direction:row;align-items:center;gap:var(--espaco-2);font-weight:400;min-height:44px}
@@ -535,7 +538,9 @@ ins.comparar-incluido,p.comparar-incluido{background:var(--comparar-incluido-fun
 .mapa-alvo{stroke:transparent;stroke-width:16;cursor:pointer}
 .mapa-ligacao.traco-tracejado .mapa-linha{stroke-dasharray:8 5}
 .mapa-ligacao.traco-pontilhado .mapa-linha{stroke-dasharray:2 5}
-.mapa-ligacao:focus-visible{outline:none}
+/* No box outline around the SVG group (it drew a rectangle across the map); focus is a halo on the line itself. */
+.mapa-ligacao:focus,.mapa-ligacao:focus-visible{outline:none}
+.mapa-ligacao:focus-visible .mapa-alvo{stroke:var(--mapa-ligacao-destaque);stroke-opacity:.35;stroke-width:14}
 .mapa-ligacao:focus-visible .mapa-linha,.mapa-ligacao.is-ativa .mapa-linha,.mapa-ligacao:hover .mapa-linha{stroke:var(--mapa-ligacao-destaque);stroke-width:4}
 .mapa-legenda{display:flex;flex-wrap:wrap;gap:var(--espaco-1) var(--espaco-4);list-style:none;margin:0 0 var(--espaco-2);padding:0;font-size:var(--text-sm)}
 .mapa-legenda li::before{content:'';display:inline-block;width:14px;height:14px;margin-right:var(--espaco-1);vertical-align:-2px}
@@ -562,5 +567,7 @@ ins.comparar-incluido,p.comparar-incluido{background:var(--comparar-incluido-fun
 .save-indicator:is([data-tipo=sem_rede],[data-tipo=erro],[data-tipo=sem_chave],[data-tipo=decidir])::before{border-radius:1px;transform:rotate(45deg);background:currentColor}
 .quadros-retomada{margin:var(--espaco-3) 0;border:1px solid var(--quadro-borda);border-radius:var(--raio-cartao);padding:0 var(--espaco-4)}
 /* Phones: the map is read as its list; the drawing stays out of the way. */
-@media(max-width:720px){.mapa-visual{display:none}.tabela-fonte{position:static}}
+@media(max-width:720px){.mapa-visual{display:none}.tabela-fonte{position:static}
+ .quadros-abas{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity}
+ .quadros-abas [role=tab]{flex:0 0 auto;scroll-snap-align:start;white-space:nowrap}}
 @media(prefers-reduced-motion:reduce){.quadros-abas [role=tab]{transition:none}}

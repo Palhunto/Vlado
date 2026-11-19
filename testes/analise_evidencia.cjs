@@ -77,7 +77,7 @@ test('comparador destaca a diferença com o contexto dos dois lados, sem rótulo
   assert.equal(alt.querySelector('ins').textContent, 'R$ 10.937.500,00.');
   assert.equal(alt.querySelectorAll('.comparar-contexto').length, 2, 'linha anterior nos dois lados');
   assert.match(alt.textContent, /linha 6/);
-  assert.match(alt.textContent, /Diferença calculada \(b - a\): 2187500 R\$/);
+  assert.match(alt.textContent, /Diferença calculada \(b - a\): 2\.187\.500 R\$/);
   assert.match(painel.textContent, /páginas sem texto \(3\)/);
   assert.doesNotMatch(painel.textContent, /fraude|culpa|irregular/i);
 });
@@ -95,9 +95,13 @@ test('tabela conferível: fonte da célula no foco, célula corrigida marcada e 
   const fonte = painel.querySelector('#tabela-fonte');
   assert.match(fonte.textContent, /D003 · Pagamentos!B2/);
   assert.match(fonte.textContent, /Corrigida por Ana/);
-  assert.match(fonte.textContent, /Valor anterior: 1154\.50/);
+  assert.match(fonte.textContent, /Valor anterior: 1\.154,50/, 'colunas numéricas em notação brasileira');
+  assert.match(fonte.textContent, /1\.145,50 BRL/);
+  assert.equal(corrigida.querySelector('[translate=no]').textContent, '1.145,50');
+  assert.equal(celulas[2].querySelector('[translate=no]').textContent, '2024-02', 'datas ficam como registradas');
+  assert.match(painel.textContent, /3 com fonte · 1 corrigida · 2 pendentes/, 'singular e plural');
   assert.match(fonte.textContent, /Dígitos trocados/);
-  assert.deepEqual(fonte.querySelectorAll('[translate=no]').map(n => n.textContent).filter(x => ['Ana', '1154.50'].includes(x)), ['Ana', '1154.50'],
+  assert.deepEqual(fonte.querySelectorAll('[translate=no]').map(n => n.textContent).filter(x => ['Ana', '1.154,50'].includes(x)), ['Ana', '1.154,50'],
     'autor e valor anterior são dados, fora da tradução');
   assert.match(celulas[4].textContent, /pendente/);
   let anuncios = 0; celulas[2].addEventListener('focus', () => anuncios++);
@@ -113,7 +117,8 @@ test('painel de cálculo mostra operação, células usadas e resultado, e desta
   const m = mesa(); const painel = await aba(m, 'tabelas');
   const calc = painel.querySelector('.tabela-calculo');
   assert.match(calc.textContent, /Operação: Soma/);
-  assert.match(calc.textContent, /1200\.00 \+ 1145\.50 = 2345\.50 BRL/);
+  assert.match(calc.textContent, /1\.200,00 \+ 1\.145,50 = 2\.345,50 BRL/);
+  assert.match(calc.textContent, /L0002 · Valor: 1\.145,50/);
   assert.equal(calc.querySelectorAll('.tabela-usadas li').length, 2);
   calc.querySelector('button').click();
   const usadas = painel.querySelectorAll('td.is-usada').map(td => `${td.dataset.linha}|${td.dataset.coluna}`);
@@ -147,7 +152,10 @@ test('mapa em lista acessível e lista lateral de homônimos, sem fundir entidad
   const lista = painel.querySelector('.mapa-lista');
   assert.equal(lista.querySelectorAll('.mapa-entidade').length, 3, 'as duas grafias continuam no mapa');
   const lucia = lista.querySelectorAll('.mapa-entidade')[0];
-  assert.match(lucia.textContent, /fiscal de contrato com Construtora Exemplo Ltda\./);
+  assert.match(lucia.textContent, /Lúcia Prates — fiscal de contrato com — Construtora Exemplo Ltda\./);
+  const construtora = lista.querySelectorAll('.mapa-entidade')[2];
+  assert.match(construtora.textContent, /Lúcia Prates — fiscal de contrato com — Construtora Exemplo Ltda\./, 'a ligação se lê igual nas duas pontas');
+  assert.doesNotMatch(construtora.textContent, /\(fiscal de contrato com\)/);
   assert.match(lucia.textContent, /MATRICULA 7781/);
   lucia.querySelector('button').click();
   assert.match(painel.querySelector('.mapa-detalhe').textContent, /Ata registra a função\./);

@@ -32,10 +32,10 @@ const LINHA = {caso: 'alpha', total: 2, divergencias: [], fontes_indisponiveis: 
   entradas: [entrada('T1', 'assinatura', '2021', 'ano'), entrada('T2', 'fato', '2021-03-12', 'dia')]};
 
 const SCRIPTS = [...PILHA, 'quadros.js', 'analise.js', 'indicador_salvamento.js'];
-function mesa({integracao = {quadros_evidencia: true}, caso = 'alpha', api, papel = 'admin'} = {}) {
+function mesa({integracao = {quadros_evidencia: true}, caso = 'alpha', api, papel = 'admin', desktop = true} = {}) {
   const abertos = [];
   const m = criarMesa({
-    scripts: SCRIPTS, papel,
+    scripts: SCRIPTS, papel, desktop,
     api: api || ((operacao, dados) => {
       if (operacao === 'hipoteses-quadro') return QUADRO;
       if (operacao === 'linha-tempo-listar') return {...LINHA, entradas: LINHA.entradas.filter(e => !dados.tipos || dados.tipos.includes(e.data.tipo))};
@@ -62,7 +62,10 @@ test('hipóteses em três colunas, com localizador e selo de suporte em texto', 
   assert.deepEqual(colunas.map(c => c.querySelector('h4').textContent), ['Sustenta', 'Contraria', 'Falta']);
   assert.match(colunas[0].textContent, /D001 · p\. 4/);
   assert.match(colunas[0].textContent, /A fonte declara valor 12\./);
-  assert.match(colunas[0].textContent, /Sustentado/);
+  assert.match(colunas[0].textContent, /Avaliação: sustentado/);
+  assert.match(colunas[1].textContent, /Avaliação: sustentado/, 'na coluna Contraria o selo diz que é a avaliação do vínculo');
+  assert.equal(colunas[0].querySelector('.quadro-contagem').textContent, '1 item');
+  assert.equal(colunas[2].querySelector('.quadro-contagem').textContent, '2 itens');
   assert.equal(colunas[0].querySelector('blockquote').getAttribute('translate'), 'no');
   assert.match(colunas[1].textContent, /Outra nota indica 15\./);
   assert.equal(colunas[2].querySelectorAll('.quadro-lacuna').length, 2);
@@ -104,6 +107,21 @@ test('linha do tempo: filtro por tipo de data e distinção entre data exata e p
   assert.equal(m.$('quadros-tempo').querySelector('#tempo-tipo-assinatura').checked, false, 'a escolha continua marcada');
   eventos()[0].querySelector('button').click(); await m.esperar();
   assert.equal(m.chamadas.at(-1).operacao, 'achados-original', 'cada evento abre a evidência da sua data');
+});
+
+test('filtro de tipos de data: aberto no desktop, recolhido no celular, resumo com a escolha', async () => {
+  const largo = await mesa(); await abrir(largo);
+  largo.$('quadros-aba-tempo').click(); await largo.esperar(8);
+  const gaveta = () => largo.$('quadros-tempo').querySelector('details.tempo-filtro-caixa');
+  assert.equal(gaveta().open, true);
+  assert.equal(gaveta().querySelector('summary').textContent, 'Tipos de data: todos (3)');
+  const caixa = largo.$('quadros-tempo').querySelector('#tempo-tipo-fato');
+  caixa.checked = false; caixa.dispatchEvent(new Evento('change', {bubbles: true})); await largo.esperar(8);
+  assert.equal(gaveta().querySelector('summary').textContent, 'Tipos de data: 2 de 3');
+  const celular = await mesa({desktop: false}); await abrir(celular);
+  celular.$('quadros-aba-tempo').click(); await celular.esperar(8);
+  assert.equal(celular.$('quadros-tempo').querySelector('details.tempo-filtro-caixa').open, false, 'no celular o filtro não empurra os eventos');
+  assert.ok(celular.$('quadros-tempo').querySelector('.tempo-evento'));
 });
 
 test('evento retirado mostra o motivo como dado, fora da tradução', async () => {

@@ -58,3 +58,6 @@ tmp/
 /build/
 /entrega_intercept.*
 *.rar
+
+# Capturas de tela dos roteiros visuais (testes/qa_*.py); não são documentos da apuração
+/.qa_quadros_saida/

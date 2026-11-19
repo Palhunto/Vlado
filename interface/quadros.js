@@ -61,7 +61,8 @@ window.Quadros = (() => {
     }
     item.append(dado('blockquote', ev.trecho || t('Fonte visual: consulte o original.')));
     const selos = element('p', undefined, 'quadro-selos small');
-    selos.append(element('span', t(SUPORTE[vinculo.suporte] || vinculo.suporte), `quadro-selo suporte-${vinculo.suporte}`),
+    // The seal is the assessment of this link, also in the "contradicts" column: say so.
+    selos.append(element('span', t('Avaliação: {s}', {s: t(SUPORTE[vinculo.suporte] || vinculo.suporte).toLowerCase()}), `quadro-selo suporte-${vinculo.suporte}`),
       element('span', t(NATUREZA[vinculo.natureza] || vinculo.natureza), 'quadro-selo'));
     item.append(selos);
     if (vinculo.justificativa) item.append(dado('p', vinculo.justificativa, 'quadro-justificativa'));
@@ -135,8 +136,9 @@ window.Quadros = (() => {
     const secao = element('section', undefined, `quadro-coluna coluna-${classe}`);
     const cabeca = element('h4', t(titulo));
     const itens = h[campo] || [];
-    secao.setAttribute('aria-label', `${t(titulo)}: ${t('{n} itens', {n: itens.length})}`);
-    secao.append(cabeca, element('p', t('{n} itens', {n: itens.length}), 'small quadro-contagem'));
+    const contagem = t(itens.length === 1 ? '{n} item' : '{n} itens', {n: itens.length});
+    secao.setAttribute('aria-label', `${t(titulo)}: ${contagem}`);
+    secao.append(cabeca, element('p', contagem, 'small quadro-contagem'));
     const lista = element('ul', undefined, 'quadro-lista');
     if (campo === 'faltam') {
       for (const lacuna of itens) {
@@ -199,9 +201,18 @@ window.Quadros = (() => {
     const [a, m, d] = String(data.valor).split('-');
     return data.precisao === 'dia' ? `${d}/${m}/${a}` : data.precisao === 'mes' ? `${m}/${a}` : a;
   };
-  let tipos = null, escolhidos = null;
+  let tipos = null, escolhidos = null, filtroAberto = null;
+  // The filter sits in a <details>: open on wide screens, closed on phones (it would push the events
+  // a screen down); the summary says how many types are chosen, and the choice survives reloads.
   function filtro(painel, casoId, carregar) {
+    const gaveta = element('details', undefined, 'tempo-filtro-caixa');
+    filtroAberto ??= !window.matchMedia?.('(max-width: 720px)').matches;
+    gaveta.open = filtroAberto;
+    gaveta.addEventListener('toggle', () => { filtroAberto = gaveta.open; });
+    const total = Object.keys(tipos).length;
+    gaveta.append(element('summary', escolhidos ? t('Tipos de data: {n} de {total}', {n: escolhidos.length, total}) : t('Tipos de data: todos ({total})', {total})));
     const campo = element('fieldset', undefined, 'tempo-filtro');
+    gaveta.append(campo);
     campo.append(element('legend', t('Tipos de data')));
     for (const [tipo, rotulo] of Object.entries(tipos)) {
       const caixa = element('input'); caixa.type = 'checkbox'; caixa.value = tipo; caixa.id = `tempo-tipo-${tipo}`;
@@ -215,7 +226,7 @@ window.Quadros = (() => {
       });
       campo.append(etiqueta);
     }
-    return campo;
+    return gaveta;
   }
   function entrada(casoId, e) {
     const li = element('li', undefined, 'tempo-evento');

@@ -9,6 +9,12 @@
   const SVG = 'http://www.w3.org/2000/svg';
   const svg = (tag, atributos = {}) => { const no = document.createElementNS(SVG, tag); for (const [k, v] of Object.entries(atributos)) no.setAttribute(k, v); return no; };
   const campo = (rotulo, controle) => { const l = element('label'); l.append(element('span', rotulo), controle); return l; };
+  // Número decimal vindo do Core (ponto decimal) em notação pt-BR: milhar com ponto, decimal com vírgula. Outros valores passam como estão.
+  const formatarNumero = valor => {
+    const m = /^(-?)(\d+)(?:\.(\d+))?$/.exec(String(valor));
+    if (!m) return String(valor);
+    return `${m[1]}${m[2].replace(/\B(?=(\d{3})+(?!\d))/g, '.')}${m[3] !== undefined ? `,${m[3]}` : ''}`;
+  };
   const lugar = loc => loc?.pagina_pdf ? t('p. {p}, linha {l}', {p: loc.pagina_pdf, l: loc.linha_inicio}) : t('linha {l}', {l: loc?.linha_inicio ?? '?'});
 
   // ---------- Comparator: two documents of a round, differences with context ----------
@@ -45,7 +51,7 @@
     lados.append(ladoAlteracao(alt, 'a', nomes.a), ladoAlteracao(alt, 'b', nomes.b));
     art.append(lados);
     const c = alt.calculo;
-    if (c?.diferenca !== undefined && c?.diferenca !== null) art.append(element('p', t('Diferença calculada ({operacao}): {diferenca} {unidade}', {operacao: c.operacao, diferenca: c.diferenca, unidade: c.unidade || ''}).trim(), 'small comparar-calculo'));
+    if (c?.diferenca !== undefined && c?.diferenca !== null) art.append(element('p', t('Diferença calculada ({operacao}): {diferenca} {unidade}', {operacao: c.operacao, diferenca: formatarNumero(c.diferenca), unidade: c.unidade || ''}).trim(), 'small comparar-calculo'));
     else if (c?.motivo) art.append(element('p', t(MOTIVO[c.motivo] || c.motivo), 'small comparar-calculo'));
     return art;
   }
@@ -92,9 +98,12 @@
   // ---------- Verifiable tables: a source per cell, corrected cells, calculation panel ----------
   const ESTADO_CELULA = {extraido: 'com fonte', corrigido_manual: 'corrigida manualmente', pendente: 'pendente'};
   const unidadeColuna = c => [c.moeda, c.unidade].filter(Boolean).join(' ');
+  // Values stay as recorded; only numeric columns are shown in pt-BR notation (the stored text does not change).
+  const valorCelula = (coluna, valor) => ['numero', 'monetario'].includes(coluna?.tipo) ? formatarNumero(valor) : String(valor);
+  const numerosNaConta = texto => String(texto).replace(/-?\d+(?:\.\d+)?/g, formatarNumero);
   function detalheCelula(saida, linha, coluna, celula) {
     saida.replaceChildren(element('p', t('Célula {linha} · {coluna}', {linha, coluna: coluna.nome}), 'eyebrow'));
-    saida.append(dado('p', celula.valor === null ? t('(vazia)') : `${celula.valor}${unidadeColuna(coluna) ? ' ' + unidadeColuna(coluna) : ''}`, 'tabela-valor'),
+    saida.append(dado('p', celula.valor === null ? t('(vazia)') : `${valorCelula(coluna, celula.valor)}${unidadeColuna(coluna) ? ' ' + unidadeColuna(coluna) : ''}`, 'tabela-valor'),
       element('p', t('Estado: {estado}', {estado: t(ESTADO_CELULA[celula.estado] || celula.estado)}), 'small'));
     if (celula.fonte === null) saida.append(element('p', t('Sem fonte vinculada.'), 'notice'));
     else saida.append(dado('p', t('Fonte: {fonte}', {fonte: celula.fonte_legivel || ''}), 'small'),
@@ -104,7 +113,7 @@
       // Author and previous value are data: they keep their own language (translate="no").
       const linha = element('p', `${t('Corrigida por')} `, 'small');
       linha.append(dado('span', c.autor), ` ${t('em {quando}. Valor anterior:', {quando: new Date(c.em_utc).toLocaleString('pt-BR')})} `,
-        c.valor_anterior === null || c.valor_anterior === undefined ? element('span', t('(vazio)')) : dado('span', c.valor_anterior), '.');
+        c.valor_anterior === null || c.valor_anterior === undefined ? element('span', t('(vazio)')) : dado('span', valorCelula(coluna, c.valor_anterior)), '.');
       saida.append(linha, dado('p', t('Justificativa: {j}', {j: c.justificativa}), 'small'));
     }
   }
@@ -122,7 +131,7 @@
       tabela.colunas.forEach((coluna, j) => {
         const cel = linha.celulas[coluna.id], td = element('td', undefined, `tabela-celula estado-${cel.estado}`);
         td.tabIndex = (i === 0 && j === 0) ? 0 : -1; td.dataset.linha = linha.id; td.dataset.coluna = coluna.id;
-        td.append(dado('span', cel.valor === null ? '—' : cel.valor));
+        td.append(dado('span', cel.valor === null ? '—' : valorCelula(coluna, cel.valor)));
         if (cel.estado !== 'extraido') td.append(element('span', ` (${t(ESTADO_CELULA[cel.estado])})`, 'tabela-marca'));
         const mostrar = () => detalheCelula(saida, linha.id, coluna, cel);
         td.addEventListener('focus', mostrar); td.addEventListener('mouseenter', mostrar); td.addEventListener('click', () => td.focus());
@@ -150,11 +159,14 @@
       art.append(dado('h5', calc.nome || calc.id), element('p', t('Operação: {op}', {op: t(OPER[calc.operacao] || calc.operacao)}), 'small'));
       if (calc.estado === 'recusado') { art.append(element('p', t('Cálculo recusado: {erro}', {erro: calc.erro}), 'notice')); secao.append(art); continue; }
       const g = calc.grandeza || {};
-      art.append(dado('p', `${calc.expressao} = ${calc.resultado}${[g.moeda, g.unidade].filter(Boolean).length ? ' ' + [g.moeda, g.unidade].filter(Boolean).join(' ') : ''}`, 'tabela-expressao'));
+      art.append(dado('p', `${numerosNaConta(calc.expressao)} = ${numerosNaConta(calc.resultado)}${[g.moeda, g.unidade].filter(Boolean).length ? ' ' + [g.moeda, g.unidade].filter(Boolean).join(' ') : ''}`, 'tabela-expressao'));
       if (calc.arredondamento) art.append(element('p', t('Arredondado para {casas} casas.', {casas: calc.arredondamento.casas}), 'small'));
       art.append(element('p', calc.estado === 'com_fonte' ? t('Todas as células têm fonte.') : t('Há células pendentes ou fontes indisponíveis: resultado provisório.'), calc.estado === 'com_fonte' ? 'small' : 'notice'));
       const lista = element('ul', undefined, 'tabela-usadas');
-      for (const c of calc.celulas || []) lista.append(dado('li', `${c.linha} · ${c.nome_coluna || c.coluna}: ${c.valor ?? '—'} · ${c.fonte_legivel || t('sem fonte')}`, 'small'));
+      for (const c of calc.celulas || []) {
+        const coluna = tabela.colunas.find(col => col.id === c.coluna);
+        lista.append(dado('li', `${c.linha} · ${c.nome_coluna || c.coluna}: ${c.valor === null || c.valor === undefined ? '—' : valorCelula(coluna, c.valor)} · ${c.fonte_legivel || t('sem fonte')}`, 'small'));
+      }
       const ver = botao(t('Destacar células usadas'));
       ver.setAttribute('aria-pressed', 'false');
       ver.addEventListener('click', () => {
@@ -183,7 +195,9 @@
         fonte.append(element('p', t('Leve o foco a uma célula para ver a fonte, o estado e a última correção.'), 'small'));
         const {wrap, celulas} = grade(tabela, fonte);
         const n = tabela.celulas_por_estado || {};
-        area.replaceChildren(element('p', t('{e} com fonte · {c} corrigidas · {p} pendentes', {e: n.extraido || 0, c: n.corrigido_manual || 0, p: n.pendente || 0}), 'small'),
+        const contar = (q, um, varios) => t(q === 1 ? um : varios, {n: q});
+        area.replaceChildren(element('p', [contar(n.extraido || 0, '{n} com fonte', '{n} com fonte'), contar(n.corrigido_manual || 0, '{n} corrigida', '{n} corrigidas'),
+          contar(n.pendente || 0, '{n} pendente', '{n} pendentes')].join(' · '), 'small'),
           element('p', t('Use as setas para andar pelas células.'), 'small'), element('div', undefined, 'tabela-layout'));
         area.lastChild.append(wrap, fonte);
         area.append(painelCalculo(tabela, celulas), element('p', t(tabela.aviso || ''), 'small quadro-aviso'));
@@ -232,7 +246,11 @@
     for (const e of mapa.entidades) {
       const [x, y] = pos[e.id], g = svg('g', {class: `mapa-no ${e.tipo}`});
       g.append(e.tipo === 'organizacao' ? svg('rect', {x: x - 11, y: y - 11, width: 22, height: 22, rx: 3, class: 'mapa-forma'}) : svg('circle', {cx: x, cy: y, r: 12, class: 'mapa-forma'}));
-      const rotulo = svg('text', {x, y: y + 30, 'text-anchor': 'middle', class: 'mapa-rotulo', translate: 'no'}); rotulo.textContent = e.nome;
+      // Label on the outer side of the ring (above nodes in the top half, below in the bottom half),
+      // so links, which run towards the centre, do not cross it; side nodes anchor away from the centre.
+      const acima = n > 1 && y < cy, lado = Math.abs(x - cx) > raio * 0.6 ? (x < cx ? 'end' : 'start') : 'middle';
+      const rotulo = svg('text', {x: lado === 'middle' ? x : x + (lado === 'start' ? 18 : -18), y: lado === 'middle' ? (acima ? y - 20 : y + 30) : y + 5,
+        'text-anchor': lado, class: 'mapa-rotulo', translate: 'no'}); rotulo.textContent = e.nome;
       g.append(rotulo); desenho.append(g);
     }
     return desenho;
@@ -248,8 +266,8 @@
       const sub = element('ul', undefined, 'mapa-ligacoes');
       for (const r of ligacoes) {
         const item = element('li');
-        const outro = r.origem === e.id ? r.destino : r.origem;
-        item.append(dado('span', `${r.origem === e.id ? r.tipo : `(${r.tipo})`} ${nomes[outro]} `), element('span', `· ${t(SIT_RELACAO[r.situacao] || r.situacao)} `, 'small'));
+        // The link reads the same from both ends: origin — type — destination, as it was recorded.
+        item.append(dado('span', `${nomes[r.origem]} — ${r.tipo} — ${nomes[r.destino]} `), element('span', `· ${t(SIT_RELACAO[r.situacao] || r.situacao)} `, 'small'));
         const ver = botao(t('Ver evidências')); ver.dataset.relacao = r.id;
         ver.addEventListener('click', () => { detalheRelacao(casoId, saida, r, nomes); saida.focus?.(); });
         item.append(ver); sub.append(item);
