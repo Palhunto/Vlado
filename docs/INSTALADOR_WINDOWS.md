@@ -4,12 +4,18 @@ O `Vlado-Setup.exe` instala a Mesa do Vlado num computador Windows 10/11 (64 bit
 
 ## Arquivo desta versão
 
+O build 2.0.4 carrega o esquema de achados da pasta interna do executável. Na versão anterior, o backend procurava `modelos/ACHADOS.schema.json` na pasta do programa e falhava ao validar a geração inicial, antes da revisão. Feche o Vlado, instale a atualização e use **Tentar novamente** na conversa para continuar a mesma rodada, se a opção estiver disponível.
+
+Desde o 2.0.3, o instalador inclui `codex-rejected-cas.pem` quando esse arquivo acompanha o Python de build. Sua ausência no 2.0.2 causava `[Errno 2]` ao inicializar HTTPS, antes da primeira chamada à Anthropic ou à OpenAI.
+
+Desde o 2.0.2, a primeira pergunta e os complementos usam a mesma pasta temporária curta em `execucoes`. O teste de 16/11/2026 simulou os limites de caminho do Windows com PDFs sintéticos e um provedor simulado. As duas rodadas completaram as seis etapas, com R001 intacta e o original e o derivado preservados e consultáveis na R002.
+
 | Item | Valor |
 | --- | --- |
-| Arquivo | `dist/Vlado-Setup.exe` (gerado; fora do git) |
-| Versão | 2.0.0 |
-| Tamanho | 127,1 MB (133.245.221 bytes) |
-| SHA-256 | `0bc6a6ff78cb3f26c798eeaa3217e0e937fe54934c645e10cddce5d158321f70` |
+| Arquivo | `Vlado-Setup.exe` (gerado; fora do git) |
+| Versão | 2.0.4 |
+| Tamanho | 127,8 MiB (133.974.955 bytes) |
+| SHA-256 | `574da2e02d45c2744200373f01871e6fd30f6517d015c5fccf907e30d4cab5fe` |
 
 Confira o hash antes de instalar, no PowerShell:
 
@@ -54,6 +60,8 @@ Requisitos: Windows 64 bits, Python 3.12 em `.venv` com `requirements.txt` e `py
 ```
 
 O script baixa as dependências de `instalador/dependencias.json` (versão e SHA-256 fixados; arquivo divergente é recusado) para `.ferramentas\downloads`, extrai Tesseract e Ghostscript dos instaladores originais com 7-Zip (sem executá-los), monta `build\instalador\payload`, congela o `Vlado.exe` com `instalador\vlado.spec` (`console=False`) e compila `instalador\vlado.iss` com Inno Setup 6.5.4 (instalado por usuário em `.ferramentas\innosetup`). Saída: `dist\Vlado-Setup.exe` e `dist\Vlado-Setup.exe.sha256`. Nenhuma etapa abre janela de console.
+
+Antes de compilar o instalador, o script executa `Vlado.exe --verificar-https` para inicializar os clientes OpenAI e Anthropic com uma chave fictícia, sem chamadas de rede. O build para se algum deles falhar.
 
 Arquivos: `scripts/vlado_lancador.py` (lançador), `instalador/vlado.spec`, `instalador/vlado.iss`, `instalador/dependencias.json`, `scripts/gerar_instalador.py`. Avisos de licença: `docs/AVISOS_DE_LICENCA.md`.
 

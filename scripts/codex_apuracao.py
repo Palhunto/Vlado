@@ -12,11 +12,11 @@ import threading
 import time
 import uuid
 
-from comum import dentro, escrever_json, ler_json, sha256, pasta_preparacao
+from comum import dentro, escrever_json, ler_json, sha256
 from cadastrar_documentos import _atomico, _bytes, _trava, inventario
 from inferencia_api import CHAVES, ErroIA, ServidorAPI, seguro
 from indice_sqlite import _entradas, construir_snapshot, cobertura, ler_passagem, pesquisar
-from nova_rodada import _criar_rodada
+from nova_rodada import _criar_rodada, preparar_pasta_rodada
 from fluxo_codex import Fluxo, ETAPAS
 import lixeira
 import revisao_humana
@@ -503,9 +503,7 @@ class Conversas:
                 source = dentro(self.root, f'execucoes/{case}/{base_run}')
                 _entradas(source, case, base_run)  # hashes and authorization
                 destination = dentro(self.root, f'execucoes/{case}/{run_id}')
-                with pasta_preparacao(parent, '.preparacao_conversa_') as staging:
-                    run = Path(staging) / run_id
-                    run.mkdir()
+                with preparar_pasta_rodada(destination) as run:
                     shutil.copytree(source / 'entradas', run / 'entradas')
                     frozen = [x for x in ler_json(source / 'snapshot.json') if x['arquivo'].startswith('entradas/')]
                     (run / '00_pergunta_original.md').write_text(question, encoding='utf-8')
@@ -517,8 +515,7 @@ class Conversas:
                     escrever_json(run / 'registro.json', record, exclusivo=True)
                     (run / 'saidas').mkdir()
                     construir_snapshot(run, case, run_id)
-                    run.rename(destination)
-                    run = destination
+                run = destination
             manifest, _ = _entradas(run, case, run_id)
             followups = ctx.get('diligencias')
             if followups:

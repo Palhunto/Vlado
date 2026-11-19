@@ -1,19 +1,24 @@
 """Synthetic PDF ingestion, provenance, failure and snapshot integration tests."""
 import importlib.util
 import json
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
+import shutil
 import sys
 import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import cadastrar_documentos as cadastro
+import codex_apuracao
+import nova_rodada
+from agente_fluxo_fixture import completar, esperar
 from comum import escrever_json, ler_json, sha256
 from criar_caso import criar_caso
 from extrair_pdf import extrair_pdf
 from indice_sqlite import cobertura, pesquisar, ler_passagem
 from nova_rodada import criar_rodada
 from selecionar_caso import selecionar
+from test_codex_integracao import FakeServer
 import test_registros as fixtures
 
 HAS_PYPDF = importlib.util.find_spec('pypdf') is not None
@@ -88,6 +93,64 @@ class ExtracaoCadastroPDFTest(unittest.TestCase):
         units = [u for f in cobertura(self.root, 'alpha', 'R001')['cobertura']['documentos'][0]['fontes'] for u in f['unidades']]
         self.assertTrue(any(u['pagina_pdf'] == 2 and u['estado'] == 'sem_texto' for u in units))
         self.assertEqual(pesquisar(self.root, 'alpha', 'R001', 'EXTRAIVEL')['retornados'], 0)
+
+    @unittest.skipUnless(HAS_PYPDF, 'Instalar requirements.txt para testar extracao real')
+    def test_primeira_pergunta_e_complemento_com_limite_de_caminho_do_windows(self):
+        raiz_windows = PureWindowsPath(r'C:\Users\teste\AppData\Local\Vlado')
+
+        def conferir_caminho_win32(destino, limite):
+            caminho = str(raiz_windows / destino.relative_to(self.root))
+            if len(caminho.encode('utf-16-le')) // 2 > limite:
+                raise FileNotFoundError(2, 'Caminho acima do limite Win32 tradicional', caminho)
+
+        def copiar_com_limite_win32(origem, destino):
+            conferir_caminho_win32(destino.parent, 248)
+            conferir_caminho_win32(destino, 259)
+            return shutil.copyfile(origem, destino)
+
+        def copiar_arvore_com_limite_win32(origem, destino):
+            for item in origem.rglob('*'):
+                alvo = destino / item.relative_to(origem)
+                conferir_caminho_win32(alvo, 248 if item.is_dir() else 259)
+            return shutil.copytree(origem, destino)
+
+        for sufixo, nome_pdf in (('a', 'a.pdf'), ('b', 'B02_braskem_comunicado_2023-12-04.pdf')):
+            with self.subTest(nome_pdf=nome_pdf):
+                manager = codex_apuracao.Conversas(self.root, FakeServer)
+                self.addCleanup(manager.close)
+                caso = 'apuracao_' + sufixo * 32
+                source = pdf_sintetico(self.root / nome_pdf, ('Alfabeto sintetico. Valor 123.',))
+                cadastro.cadastrar(self.root, caso, [source], novo=True,
+                                   titulo='PDF sintetico', natureza='sinteticos')
+                doc = ler_json(self.root / 'casos' / caso / 'manifesto.json')['documentos'][0]
+                derivado, = doc['derivados']
+                with (patch.object(nova_rodada, 'shutil') as arquivos,
+                      patch.object(codex_apuracao, 'shutil') as arvore):
+                    arquivos.copyfile.side_effect = copiar_com_limite_win32
+                    arvore.copytree.side_effect = copiar_arvore_com_limite_win32
+                    dados = {'caso': caso, 'pergunta': 'Pergunta sintetica.'}
+                    for rodada in ('R001', 'R002'):
+                        conversa = manager.perguntar(dados)['conversa']
+                        ctx = manager.contexts[conversa]
+                        esperar(lambda: not ctx['busy'] or
+                                (ctx['meta']['rodada_pergunta'] == rodada and ctx['meta'].get('turn_id')))
+                        self.assertEqual(ctx['meta']['estado'], 'executando', ctx['meta']['situacao'])
+                        completar(manager, conversa)
+                        self.assertEqual(ctx['meta']['estado'], 'concluido', ctx['meta']['situacao'])
+                        dados = {'caso': caso, 'pergunta': 'Complemento sintetico.', 'conversa': conversa}
+                        if rodada == 'R001':
+                            primeira = ctx['run']
+                            arquivos_iniciais = {p.relative_to(primeira): sha256(p)
+                                                 for p in primeira.rglob('*') if p.is_file()}
+                self.assertEqual(ctx['meta']['rodadas'], ['R001', 'R002'])
+                self.assertEqual(ctx['run'], self.root / 'execucoes' / caso / 'R002')
+                self.assertEqual(ler_json(ctx['run'] / 'registro.json')['complemento_de'], 'R001')
+                self.assertEqual({p.relative_to(primeira): sha256(p)
+                                  for p in primeira.rglob('*') if p.is_file()}, arquivos_iniciais)
+                for entrada in (doc, derivado):
+                    self.assertEqual(sha256(ctx['run'] / 'entradas' / entrada['arquivo']), entrada['sha256'])
+                self.assertEqual(pesquisar(self.root, caso, 'R002', 'Alfabeto')['retornados'], 1)
+                self.assertEqual(list((self.root / 'execucoes').glob('.r_*')), [])
 
     @unittest.skipUnless(HAS_PYPDF, 'Instalar requirements.txt para testar extracao real')
     def test_duplicata_preparada_nao_reextrai_nem_muda_versao_ou_aprovacao(self):

@@ -3,7 +3,7 @@
 ; data in %LOCALAPPDATA%\Vlado (created by Vlado.exe, never touched by install, update or uninstall).
 
 #ifndef Versao
-  #define Versao "2.0.0"
+  #define Versao "2.0.4"
 #endif
 #ifndef Origem
   #define Origem "..\build\instalador"
@@ -34,7 +34,7 @@ WizardStyle=modern
 ; Vlado.exe holds this mutex while running: setup and uninstall ask to close it first.
 AppMutex=VladoMesaDeApuracao
 CloseApplications=yes
-LicenseFile={#Origem}\payload\licencas\AVISOS_DE_LICENCA.txt
+LicenseFile=TERMO_DE_USO.txt
 
 [Languages]
 Name: "ptbr"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"

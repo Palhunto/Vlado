@@ -1,6 +1,7 @@
 # PyInstaller spec for Vlado.exe (onedir, --noconsole). Run through scripts/gerar_instalador.py.
 # Paths are relative to the repository root (SPECPATH is this folder).
 from pathlib import Path
+import ssl
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
@@ -9,6 +10,11 @@ SCRIPTS = RAIZ / 'scripts'
 ICONE = RAIZ / 'build' / 'instalador' / 'vlado.ico'
 
 datas = [(str(RAIZ / 'interface'), 'interface')]
+# Some Python distributions load this distrust list from beside ssl.py on every TLS context.
+lista_ssl = Path(ssl.__file__).with_name('codex-rejected-cas.pem')
+if lista_ssl.is_file():
+    datas.append((str(lista_ssl), '.'))
+
 # Template of the data folder (%LOCALAPPDATA%\Vlado); copied by the launcher, never over user state.
 for relativo in ('AGENTS.md', 'README.md', 'configuracao.json', 'casos/catalogo.json', 'casos/README.md',
                  'execucoes/README.md', 'entrada/README.md'):

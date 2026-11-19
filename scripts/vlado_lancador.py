@@ -176,7 +176,22 @@ def _ocrmypdf(argumentos: list[str]) -> int:
     return int(run() or 0)
 
 
+def _verificar_https() -> int:
+    """Exercise the packaged clients' TLS initialization without making requests."""
+    from inferencia_api import Inferencia, criar_provedor_padrao
+
+    for codigo, nome in enumerate(('openai', 'anthropic'), start=1):
+        try:
+            provedor = criar_provedor_padrao(Inferencia(nome, 'verificacao', 1), 'vlado-build-test-key')
+            provedor.cliente.close()
+        except Exception:
+            return codigo
+    return 0
+
+
 def principal(argv: list[str]) -> int:
+    if argv == ['--verificar-https']:
+        return _verificar_https()
     if argv[:2] == ['-m', 'ocrmypdf']:
         return _ocrmypdf(argv[2:])
     dados = pasta_dados()

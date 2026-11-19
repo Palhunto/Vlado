@@ -4,7 +4,7 @@ Steps: download the pinned dependencies of instalador/dependencias.json (SHA-256
 .ferramentas/downloads), extract Tesseract and Ghostscript from their NSIS installers with 7-Zip
 (never running them), assemble the payload and the license notices, freeze scripts/vlado_lancador.py
 with PyInstaller (instalador/vlado.spec, --noconsole) and compile instalador/vlado.iss with Inno Setup.
-Every child process runs without a console window.
+Verify TLS initialization in the frozen executable before compiling. Every child process runs without a console window.
 
   .venv\\Scripts\\python.exe scripts/gerar_instalador.py
 Output: dist/Vlado-Setup.exe and dist/Vlado-Setup.exe.sha256
@@ -187,6 +187,9 @@ def main() -> int:
     icone()
     if not args.pular_pyinstaller:
         pyinstaller(deps)
+    print('Verificando clientes HTTPS no Vlado.exe (1: OpenAI, 2: Anthropic)…', flush=True)
+    pasta_executavel = BUILD / 'pyinstaller' / 'Vlado'
+    executar([pasta_executavel / 'Vlado.exe', '--verificar-https'], cwd=pasta_executavel, timeout=60)
     final = compilar(deps, config['versao_vlado'])
     tamanho = final.stat().st_size
     print(json.dumps({'arquivo': str(final), 'bytes': tamanho, 'mb': round(tamanho / 1024 / 1024, 1),
