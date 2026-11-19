@@ -32,6 +32,7 @@ import caderno
 import apuracao
 import exportar_apuracao
 import diligencias
+import rotas_evidencia
 import erros
 from codex_apuracao import Conversas
 from inferencia_api import resumo_inferencia, salvar_inferencia
@@ -155,8 +156,11 @@ def catalogo(root):
     return {'casos': result}
 
 
-def executar(root, operation, data, conta=None, originais_abertos=None):
-    """`conta` is the authenticated pilot account ({'id', 'nome'}); None in local mode."""
+def executar(root, operation, data, conta=None, originais_abertos=None, casos=None):
+    """`conta` is the authenticated pilot account ({'id', 'nome'}); None in local mode.
+
+    `casos` limits the evidence boards to the account's investigations (None: all, as for admins).
+    """
     if operation == 'analises':
         case = data.get('caso')
         if not isinstance(case, str) or not re.fullmatch(ID_CASO, case):
@@ -209,6 +213,9 @@ def executar(root, operation, data, conta=None, originais_abertos=None):
         if operation == 'caderno-exportar':
             return caderno.selecionar(root, case, data.get('selecoes'))
         raise ValueError('Operação do caderno desconhecida.')
+    if operation in rotas_evidencia.OPERACOES:
+        # Evidence boards: field whitelist and case checks live in rotas_evidencia; no model or network.
+        return rotas_evidencia.executar(root, operation, data, conta, casos)
     if operation == 'cadastrar':
         return receber_documentos(root, data)
     if operation == 'inventario':
@@ -514,7 +521,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/integracao':
             self._json(200, {'codex': True, 'protocolo_interface': 1, 'gerenciamento': True,
                              'apresentacao_editorial': True, 'preparacao_pdfs': True,
-                             'revisao_humana': True, 'continuar_observacoes': True, 'continuar_documentos': True, 'caderno_humano': True, 'diligencias': True,
+                             'revisao_humana': True, 'continuar_observacoes': True, 'continuar_documentos': True, 'caderno_humano': True, 'diligencias': True, 'quadros_evidencia': True,
                              'extracao_pdf': self.server.ambiente['extracao_pdf']})
             return
         if path == '/api/catalogo':
@@ -616,7 +623,8 @@ class Handler(BaseHTTPRequestHandler):
             maximum = (32768 if principal is not None and principal['papel'] != 'admin'
                        else 72 * 1024 * 1024 if operation in ('cadastrar', 'codex-documentos-cadastrar')
                        else 2 * 1024 * 1024 if operation in (*apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS)
-                       else 128 * 1024 if operation in ('caderno-salvar', 'diligencias-criar', 'diligencias-atualizar', 'diligencias-responder') else 32768)
+                       else 128 * 1024 if operation in ('caderno-salvar', 'diligencias-criar', 'diligencias-atualizar', 'diligencias-responder',
+                                                     *rotas_evidencia.SALVAR) else 32768)
             if not 0 < length <= maximum:
                 raise ValueError('Requisição vazia ou muito grande.')
             body = self.rfile.read(length)
@@ -641,7 +649,7 @@ class Handler(BaseHTTPRequestHandler):
         codex_operations = ('codex-status', 'codex-listar',
                             'codex-perguntar', 'codex-retomar', 'codex-eventos', 'codex-cancelar', 'codex-original',
                             'codex-desligar', 'codex-observacoes', 'codex-corpus-previa', 'codex-documentos-cadastrar', 'codex-caderno-previa', 'codex-diligencias-previa')
-        if operation not in (*codex_operations, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES, *DILIGENCIAS_OPERACOES, 'analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario',
+        if operation not in (*codex_operations, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES, *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, 'analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario',
                              'ambiente', 'preparar-pdfs',
                              'gerenciar-listar', 'excluir', 'restaurar', 'lixeira-alcance', 'lixeira-apagar', *IA_OPERACOES, *CONTAS_OPERACOES, 'sessao-sair',
                              'achados-revisao-salvar',
@@ -788,7 +796,7 @@ class Handler(BaseHTTPRequestHandler):
                 abertos = (self.server.originais_abertos(self._chave_originais(principal, data))
                            if operation == 'achados-revisao-salvar' else None)
                 with self.server.cadastro_lock:
-                    result = executar(self.server.root, operation, data, conta, abertos)
+                    result = executar(self.server.root, operation, data, conta, abertos, casos=principal['casos'])
             if operation in ('original', 'achados-original'):
                 # Resolve only the original returned by a validated passage, never a client path.
                 run = caminho_rodada(self.server.root, data['caso'], data['rodada'])

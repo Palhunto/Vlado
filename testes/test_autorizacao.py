@@ -32,7 +32,12 @@ SO_ADMIN = (
     'diligencias-listar', 'diligencias-criar', 'diligencias-atualizar', 'diligencias-responder',
     'diligencias-original', 'codex-observacoes', 'codex-corpus-previa', 'codex-documentos-cadastrar',
     'codex-caderno-previa', 'codex-diligencias-previa', 'codex-desligar', 'contas-listar', 'contas-criar',
-    'contas-atualizar', 'contas-desativar', 'contas-reativar', 'contas-recuperar')
+    'contas-atualizar', 'contas-desativar', 'contas-reativar', 'contas-recuperar',
+    # Evidence boards (scripts/rotas_evidencia.py): admin only.
+    'hipoteses-listar', 'hipoteses-detalhe', 'hipoteses-quadro', 'hipoteses-criar', 'hipoteses-atualizar',
+    'linha-tempo-listar', 'linha-tempo-detalhe', 'linha-tempo-criar', 'linha-tempo-atualizar',
+    'comparar-evidencias', 'comparar-documentos', 'mapa-ver', 'mapa-homonimos', 'mapa-entidade-criar',
+    'mapa-entidade-atualizar', 'mapa-relacao-criar', 'mapa-relacao-atualizar')
 
 
 class Http(unittest.TestCase):

@@ -20,6 +20,7 @@ REGRAS = {'adaptadores': 'texto_utf8_e_markdown_paginado_v1',
 ID_CASO = r'[a-z0-9][a-z0-9_-]{0,63}'
 ID_RODADA = r'R[0-9]{3,6}'
 ID_GERACAO = r'[a-z0-9][a-z0-9_-]{0,31}'
+ID_DOCUMENTO = r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}'
 PAGINA = re.compile(r'^## ([A-Za-z0-9_-]+) - pagina PDF ([1-9][0-9]*)$')
 LINHA = re.compile(r'^\[L([0-9]{4,})\] ?(.*)$')
 SEM_TEXTO = '[SEM TEXTO EXTRAIVEL NESTA PAGINA]'
@@ -124,7 +125,7 @@ def _entradas(run: Path, caso: str, rodada: str):
     sources, identifiers, paths = [], set(), set()
     for document in documents:
         identifier = document['id']
-        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', identifier) or identifier in identifiers:
+        if not re.fullmatch(ID_DOCUMENTO, identifier) or identifier in identifiers:
             raise ValueError('ID documental invalido ou repetido.')
         identifiers.add(identifier)
         for number, item in enumerate([document, *document.get('derivados', [])]):
