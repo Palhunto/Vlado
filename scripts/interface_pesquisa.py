@@ -115,7 +115,7 @@ def receber_documentos(root, data):
             case = 'apuracao_' + uuid.uuid4().hex
         return cadastrar(root, case, sources, titulo=data.get('titulo'),
                          natureza=data.get('natureza', 'nao_informada'), novo=data.get('novo', False),
-                         modo_fontes=data.get('modo_fontes'), dominio_web=data.get('dominio_web'))
+                         modo_fontes=data.get('modo_fontes'), dominio_permitido=data.get('dominio_permitido'))
 
 
 def catalogo(root):
@@ -226,11 +226,9 @@ def executar(root, operation, data, conta=None, originais_abertos=None, casos=No
         return receber_documentos(root, data)
     if operation == 'inventario':
         return inventario(root, data.get('caso'))
-    if operation == 'fontes-web-listar':
-        return fontes_web.listar(root, data.get('caso'))
-    if operation == 'fontes-web-capturar':
+    if operation in fontes_web.OPERACOES:
         # Network access only for cases created in the "documentos + web" mode, on their single domain.
-        return fontes_web.capturar(root, data.get('caso'), data.get('url'), observacao=data.get('observacao'))
+        return fontes_web.rota(root, operation, data)
     if operation == 'preparar-pdfs':
         if not diagnostico()['extracao_pdf']['disponivel']:
             raise ValueError('O extrator de PDF não está disponível nesta instância. Encerre a Mesa e abra pelo iniciador atualizado.')
@@ -577,6 +575,7 @@ class Handler(BaseHTTPRequestHandler):
                   '/diligencias.js': ('diligencias.js', 'text/javascript; charset=utf-8'),
                   '/observacoes.js': ('observacoes.js', 'text/javascript; charset=utf-8'),
                   '/continuidade.js': ('continuidade.js', 'text/javascript; charset=utf-8'),
+                  '/fontes_web.js': ('fontes_web.js', 'text/javascript; charset=utf-8'),
                   '/caderno.js': ('caderno.js', 'text/javascript; charset=utf-8'),
                   '/apuracao.js': ('apuracao.js', 'text/javascript; charset=utf-8'),
                   '/editor_notas.js': ('editor_notas.js', 'text/javascript; charset=utf-8'),
@@ -679,7 +678,7 @@ class Handler(BaseHTTPRequestHandler):
                             'codex-perguntar', 'codex-retomar', 'codex-eventos', 'codex-cancelar', 'codex-original',
                             'codex-desligar', 'codex-observacoes', 'codex-corpus-previa', 'codex-documentos-cadastrar', 'codex-caderno-previa', 'codex-diligencias-previa')
         if operation not in (*codex_operations, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES, *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, 'analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario',
-                             'fontes-web-listar', 'fontes-web-capturar',
+                             *fontes_web.OPERACOES,
                              'ambiente', 'preparar-pdfs',
                              'gerenciar-listar', 'excluir', 'restaurar', 'lixeira-alcance', 'lixeira-apagar', *IA_OPERACOES, *CONTAS_OPERACOES, 'sessao-sair',
                              'achados-revisao-salvar',
@@ -748,6 +747,9 @@ class Handler(BaseHTTPRequestHandler):
                     self._send(200, path.read_bytes(), 'application/octet-stream',
                                {'Content-Disposition': f'attachment; filename="original{path.suffix}"'})
                 return
+            elif operation == fontes_web.CAPTURAR:
+                # The fetch runs outside the cadastro lock; checking and publishing take it.
+                result = fontes_web.rota(self.server.root, operation, data, trava=self.server.cadastro_lock)
             elif operation == 'lixeira-alcance':
                 result = lixeira.alcance(self.server.root, data.get('item'))
             elif operation == 'lixeira-apagar':

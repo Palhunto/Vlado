@@ -95,19 +95,19 @@ def inventario(root, caso):
 
 
 def cadastrar(root, caso, sources, *, titulo=None, natureza='nao_informada', novo=False, ocr_imagens=False,
-              modo_fontes=None, dominio_web=None):
+              modo_fontes=None, dominio_permitido=None):
     """Register a batch. `ocr_imagens=True` explicitly asks for local OCR of standalone images.
 
-    `modo_fontes`/`dominio_web` are accepted only with `novo=True` (source mode is chosen at creation)."""
+    `modo_fontes`/`dominio_permitido` are accepted only with `novo=True` (source mode is chosen at creation)."""
     if not isinstance(caso, str) or not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}', caso):
         raise ValueError('ID do caso: letras minúsculas, números, hífen ou underscore; até 64 caracteres.')
     if natureza not in ('publicos', 'sinteticos', 'nao_informada'):
         raise ValueError('Natureza documental inválida.')
     if not sources:
         raise ValueError('Envie pelo menos um arquivo.')
-    if not novo and (modo_fontes or dominio_web):
+    if not novo and (modo_fontes or dominio_permitido):
         raise ValueError('O modo de fontes (somente documentos ou documentos + web) só é escolhido na criação do caso.')
-    fontes_web = fontes_web_mod.definir_modo(modo_fontes, dominio_web) if novo else None
+    fontes_web = fontes_web_mod.definir_modo(modo_fontes, dominio_permitido) if novo else None
     with _trava(root):
         return _cadastrar(root, caso, sources, titulo, natureza, novo, ocr_imagens=bool(ocr_imagens),
                           fontes_web=fontes_web)
@@ -401,8 +401,8 @@ def main():
                         help='Aplicar OCR local (Tesseract) às imagens avulsas do lote; desligado por padrão. '
                              'O texto reconhecido precisa ser conferido no original.')
     parser.add_argument('--modo-fontes', choices=fontes_web_mod.MODOS, default=None,
-                        help='Só com --novo: somente_documentos (padrão) ou documentos_e_web.')
-    parser.add_argument('--dominio-web', help='Só com --modo-fontes documentos_e_web: domínio único permitido.')
+                        help='Só com --novo: somente_documental (padrão) ou documentos_web.')
+    parser.add_argument('--dominio-permitido', help='Só com --modo-fontes documentos_web: domínio único permitido.')
     args = parser.parse_args()
     if args.preparar_pdfs:
         if args.novo or args.titulo or args.ocr_imagens:
@@ -411,7 +411,7 @@ def main():
     else:
         result = cadastrar(ROOT, args.caso, [Path(p) for p in args.documentos], titulo=args.titulo,
                            natureza=args.natureza, novo=args.novo, ocr_imagens=args.ocr_imagens,
-                           modo_fontes=args.modo_fontes, dominio_web=args.dominio_web)
+                           modo_fontes=args.modo_fontes, dominio_permitido=args.dominio_permitido)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

@@ -334,6 +334,7 @@ function toggleNewCase() {
     $(id).required = isNew;
     $(id).disabled = !isNew;
   }
+  window.FontesWeb?.alternarNovo(isNew);
 }
 function extractionMessage(info) {
   if (!info) return '';
@@ -394,6 +395,7 @@ function showInventory(data) {
   $('cadastro-preparacao').hidden = !pending.length;
   $('cadastro-preparacao-resumo').textContent = `${Leitura.quantidade(pending.length, 'PDF pendente de preparação', 'PDFs pendentes de preparação')}. Você pode tentar extrair o texto sem enviar os arquivos novamente.`;
   $('cadastro-preparar').disabled = !pdfAvailable || cadastroBusy;
+  window.FontesWeb?.mostrar(data);
 }
 function renderReceipt(result, preparation = false) {
   const list = element('ul', undefined, 'document-list');
@@ -473,7 +475,8 @@ $('cadastro').addEventListener('submit', async event => {
   const isNew = !$('cadastro-caso').value;
   if (isNew && !draftCaseId) draftCaseId = 'apuracao_' + crypto.randomUUID().replaceAll('-', '');
   const scope = {novo:isNew, caso:isNew ? draftCaseId : $('cadastro-caso').value,
-    titulo:$('cadastro-titulo-input').value, natureza:$('cadastro-natureza').value};
+    titulo:$('cadastro-titulo-input').value, natureza:$('cadastro-natureza').value,
+    ...(isNew ? window.FontesWeb?.escopoNovo() : {})};
   cadastroBusy = true; $('cadastro-preparar').disabled = true;
   ++inventorySequence;
   for (const control of $('cadastro').elements) control.disabled = true;
