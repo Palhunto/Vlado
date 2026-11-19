@@ -336,6 +336,28 @@ class TextoOcultoTest(unittest.TestCase):
         self.assertEqual([line for line in text.splitlines() if line], ['A', 'B', 'C', 'D'])
         self.assertFalse(info['contem_texto_oculto'])
 
+    def test_item_nao_fecha_o_oculto_atraves_de_elemento_especial(self):
+        """B1 (QA, fase 09): section, article and nav are special: the browser stops there, so the
+        new item stays inside the hidden one."""
+        for html, oculto in (('<ul><li hidden><section><li>OCULTO_A</li></section></li><li>Fim</li></ul>', 'OCULTO_A'),
+                             ('<ul><li hidden><article><li>OCULTO_B</li></article></li><li>Fim</li></ul>', 'OCULTO_B'),
+                             ('<dl><dd hidden><nav><dd>OCULTO_C</dd></nav></dd><dd>Fim</dd></dl>', 'OCULTO_C')):
+            with self.subTest(html=html):
+                text, info = self._extrair(html)
+                self.assertNotIn(oculto, text)
+                self.assertIn('Fim', text)
+                self.assertTrue(info['contem_texto_oculto'])
+
+    def test_item_fecha_o_anterior_atraves_de_div(self):
+        """div (like address and p) is not a boundary: the browser closes the outer item through it."""
+        text, info = self._extrair('<ul><li hidden><div><b>X<li>Y</ul>')
+        self.assertIn('Y', text)
+        self.assertNotIn('X', text)
+        self.assertTrue(info['contem_texto_oculto'])
+        text, _ = self._extrair('<dl><dt hidden><address>X<dd>Y</dl>')
+        self.assertIn('Y', text)
+        self.assertNotIn('X', text)
+
     def test_celula_nao_fecha_item_de_lista_de_fora(self):
         text, _ = self._extrair('<ul><li hidden>X<table><tr><td><li>Y</td></tr></table></li><li>Z</ul>')
         # The <li> inside the cell does not reach the hidden outer <li>: Y stays hidden.
