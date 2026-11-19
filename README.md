@@ -45,6 +45,25 @@ O projeto é genérico. Cada apuração possui documentos, manifesto, versão e 
 
 Para começar com outra pauta, basta enviar os arquivos no novo chat e dizer, por exemplo, que pertencem a uma nova apuração. Não é necessário editar os prompts. Para trocar de caso, selecione o desejado e use um chat novo em testes comparáveis. Só cruzar casos quando você pedir explicitamente e autorizar a seleção documental conjunta.
 
+## Fontes web por apuração
+
+Ao criar uma **nova apuração**, o jornalista escolhe o modo de fontes na tela de cadastro, ou com `--modo-fontes` e `--dominio-permitido` em `scripts/cadastrar_documentos.py --novo`:
+
+- **Somente documental** (`somente_documental`, padrão): a apuração usa apenas os documentos cadastrados, sem acesso à internet.
+- **Documentos + web** (`documentos_web`): além dos documentos, o jornalista pode capturar páginas de **um único site**, informado só pelo nome (ex.: `www.exemplo.gov.br`). Subdomínios e outros sites são recusados.
+
+O modo fica gravado no manifesto do caso e não muda depois. Para trocar, crie outra apuração.
+
+No modo com web, a captura é feita pelo painel "Fontes web desta apuração", na tela de cadastro, ou por `python scripts/fontes_web.py --caso ID --url https://…`, sempre a pedido explícito do jornalista ([AGENTS.md](AGENTS.md)):
+
+- **Rede:** só `https`, na porta padrão, e só o site do caso. Os redirecionamentos são seguidos um a um e conferidos a cada salto. O nome do site é resolvido e conferido antes de conectar, e endereços internos, privados ou reservados são recusados.
+- **Limites:** 20 MB por página e 60 segundos por captura. Só HTML, texto ou PDF, sem conteúdo comprimido.
+- **O que fica registrado:** cada captura recebe um ID `W001`, `W002`… e fica em `casos/<id>/fontes_web/`, separada dos documentos. Ela guarda o conteúdo exatamente como recebido, a cópia de texto, o endereço pedido e o final, a data e a hora do acesso (UTC), a situação HTTP, os cabeçalhos relevantes e o SHA-256. Também ganha uma linha no registro `fontes_web/registro.jsonl`, que só recebe acréscimos.
+- **Texto da página:** a cópia de texto deixa de fora scripts, estilos e o que estiver escondido pelo próprio HTML: o atributo `hidden`, `aria-hidden="true"` ou `display:none`/`visibility:hidden` no `style` do elemento. A captura é marcada com `contem_texto_oculto` quando algo foi descartado. Texto escondido de outras formas, como por CSS externo ou de um bloco `<style>`, não é detectado e pode aparecer na cópia. O conteúdo bruto fica preservado como recebido, e o texto é dado da fonte, nunca instrução.
+- **Uso na apuração:** as capturas são congeladas na rodada junto com os documentos, entram no índice e são citadas com o endereço e o horário do acesso. Uma captura registra o que o site entregou naquele momento. Ela não prova que a página continue igual e não substitui a conferência no original.
+
+Nenhuma página é aberta, pesquisada ou capturada sem o modo marcado no caso.
+
 ## O que foi migrado
 
 | Original | Operação nesta versão |

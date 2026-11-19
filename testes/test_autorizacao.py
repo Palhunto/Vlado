@@ -46,7 +46,9 @@ SO_ADMIN = (
     'redacao-vincular', 'redacao-revisar',
     # Interviews and information requests (scripts/rotas_redacao.py): admin only.
     'entrevistas-lacunas', 'entrevistas-listar', 'entrevistas-detalhe', 'entrevistas-exportar',
-    'entrevistas-preparar', 'entrevistas-editar', 'entrevistas-responder')
+    'entrevistas-preparar', 'entrevistas-editar', 'entrevistas-responder',
+    # Web sources per case (scripts/fontes_web.py): admin only; the capture is the only network route.
+    'fontes-web-listar', 'fontes-web-abrir', 'fontes-web-capturar')
 
 
 class Http(unittest.TestCase):

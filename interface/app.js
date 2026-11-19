@@ -334,6 +334,7 @@ function toggleNewCase() {
     $(id).required = isNew;
     $(id).disabled = !isNew;
   }
+  window.FontesWeb?.alternarNovo(isNew);
 }
 function extractionMessage(info) {
   if (!info) return '';
@@ -394,6 +395,7 @@ function showInventory(data) {
   $('cadastro-preparacao').hidden = !pending.length;
   $('cadastro-preparacao-resumo').textContent = `${Leitura.quantidade(pending.length, 'PDF pendente de preparação', 'PDFs pendentes de preparação')}. Você pode tentar extrair o texto sem enviar os arquivos novamente.`;
   $('cadastro-preparar').disabled = !pdfAvailable || cadastroBusy;
+  window.FontesWeb?.mostrar(data);
 }
 function renderReceipt(result, preparation = false) {
   const list = element('ul', undefined, 'document-list');
@@ -473,7 +475,8 @@ $('cadastro').addEventListener('submit', async event => {
   const isNew = !$('cadastro-caso').value;
   if (isNew && !draftCaseId) draftCaseId = 'apuracao_' + crypto.randomUUID().replaceAll('-', '');
   const scope = {novo:isNew, caso:isNew ? draftCaseId : $('cadastro-caso').value,
-    titulo:$('cadastro-titulo-input').value, natureza:$('cadastro-natureza').value};
+    titulo:$('cadastro-titulo-input').value, natureza:$('cadastro-natureza').value,
+    ...(isNew ? window.FontesWeb?.escopoNovo() : {})};
   cadastroBusy = true; $('cadastro-preparar').disabled = true;
   ++inventorySequence;
   for (const control of $('cadastro').elements) control.disabled = true;
@@ -595,7 +598,7 @@ function resetFindings() {
 }
 // Each view opens with its area name as the only h1 and the investigation as context.
 const areaNames = {inicio:'Visão geral',cadastro:'Cadastrar arquivos',documentos:'Documentos',codex:'Perguntar à IA',
-  achados:'Conferir achados',apuracao:'Caderno',caderno:'Caderno',diligencias:'Diligências',gerenciar:'Apurações e lixeira',configuracoes:'Configurações'};
+  achados:'Conferir achados',apuracao:'Caderno',caderno:'Caderno',diligencias:'Diligências',quadros:'Quadros de evidência',gerenciar:'Apurações e lixeira',configuracoes:'Configurações'};
 let currentArea = 'inicio';
 function areaHeading() {
   $('area-titulo').textContent = areaNames[currentArea];
@@ -611,7 +614,7 @@ function showArea(area) {
     $('area-' + name).hidden = area !== name;
     $('ver-' + name).setAttribute('aria-pressed', String(area === name));
   }
-  $('selecao-acervo').hidden = ['inicio','cadastro','codex','gerenciar','configuracoes','caderno','apuracao','diligencias'].includes(area);
+  $('selecao-acervo').hidden = ['inicio','cadastro','codex','gerenciar','configuracoes','caderno','apuracao','diligencias','quadros'].includes(area);
   currentArea = area; areaHeading(); versionChip();
   if (area === 'achados' && !defaultAnalysis() && !findingCatalog) loadFindingsCatalog();
   if (area === 'achados' && window.achadosDesatualizados && findingQuery) {
@@ -622,6 +625,7 @@ function showArea(area) {
   if (area === 'caderno') window.dispatchEvent(new Event('caderno-abrir'));
   if (area === 'apuracao') window.dispatchEvent(new Event('apuracao-abrir'));
   if (area === 'diligencias') window.dispatchEvent(new Event('diligencias-abrir'));
+  if (area === 'quadros') window.dispatchEvent(new Event('quadros-abrir'));
   if (area === 'codex') {
     window.dispatchEvent(new Event('codex-abrir'));
     fetch('/api/integracao').then(response => {
@@ -631,7 +635,7 @@ function showArea(area) {
     }).catch(() => { $('codex-conta').textContent = 'Servidor desconectado. Inicie a Mesa novamente.'; });
   }
 }
-for (const area of ['inicio','cadastro','documentos','achados','codex','gerenciar','configuracoes','caderno','apuracao','diligencias']) $('ver-' + area).addEventListener('click', () => showArea(area));
+for (const area of ['inicio','cadastro','documentos','achados','codex','gerenciar','configuracoes','caderno','apuracao','diligencias','quadros']) $('ver-' + area).addEventListener('click', () => showArea(area));
 window.addEventListener('acervo-alterado', () => {
   $('cadastro-recibo').hidden = true; $('cadastro-perguntar').hidden=true;
   $('cadastro-inventario').hidden = true;

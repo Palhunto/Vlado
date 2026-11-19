@@ -14,6 +14,8 @@
   const drafts = new Map();
   let draftContext = {caso:'', conversa:''}, trackingFailed = false, trackingPending = false;
   const draftKey = context => JSON.stringify([context.caso, context.conversa]);
+  // Durable copy of the question in preparation (localStorage + server), see continuidade.js.
+  let rascunhoPergunta = null;
   function saveDraft() {
     if (!draftContext.caso) return;
     const text = $('codex-pergunta').value;
@@ -25,7 +27,12 @@
     draftContext = {caso, conversa};
     $('codex-pergunta').value = drafts.get(draftKey(draftContext)) || '';
     destination();
+    rascunhoPergunta?.abrir();
   }
+  rascunhoPergunta = window.Rascunhos?.registrar({origem: $('codex-pergunta'), ancora: $('codex-pergunta').closest('label'),
+    alvo: () => draftContext.caso ? {caso: draftContext.caso, tela: draftContext.conversa ? `pergunta/${draftContext.conversa}` : 'pergunta'} : null,
+    ler: () => ({pergunta: $('codex-pergunta').value}),
+    aplicar: conteudo => { $('codex-pergunta').value = typeof conteudo.pergunta === 'string' ? conteudo.pergunta : ''; saveDraft(); }});
   function destination() {
     const title = $('codex-caso').selectedOptions[0]?.textContent;
     const selected = [...$('codex-conversa').options].find(option => option.value === conversation);
@@ -669,7 +676,7 @@
         ...(pendingNotebook ? {registros_caderno:pendingNotebook.request.selecoes} : {}),
         ...(pendingDiligences ? {diligencias:pendingDiligences.request.selecoes} : {}),
         ...(request ? {observacoes_humanas:Object.fromEntries(['rodada','revisao','geracao_achados','selecoes'].map(key => [key,request[key]]))} : {})});
-      drafts.delete(draftKey(draftContext));
+      drafts.delete(draftKey(draftContext)); rascunhoPergunta?.concluir();
       conversation = result.conversa;
       draftContext = {caso:$('codex-caso').value, conversa:conversation};
       pendingDiligences=null;diligencePreview();
@@ -677,7 +684,7 @@
       pendingCorpus=null;corpusPreview();
       if (pendingFeedback) { pendingFeedback = null; feedbackPreview(); window.limparObservacoes(); }
       $('codex-acervo').open = false;
-      $('codex-pergunta').value = '';
+      $('codex-pergunta').value = ''; rascunhoPergunta?.abrir();
       state(result.estado);
       watch();
     } catch (error) { fail(error.message); }

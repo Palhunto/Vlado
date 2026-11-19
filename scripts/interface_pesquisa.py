@@ -26,6 +26,7 @@ import webbrowser
 from comum import ROOT, dentro, ler_json, sha256
 from cadastrar_documentos import cadastrar, inventario, preparar_pdfs
 from ambiente import diagnostico
+import fontes_web
 import indice_achados
 import revisao_humana
 import caderno
@@ -35,6 +36,8 @@ import diligencias
 import rotas_evidencia
 import rotas_redacao
 import rotas_tabelas
+import rascunhos
+import continuidade
 import erros
 from codex_apuracao import Conversas
 from inferencia_api import resumo_inferencia, salvar_inferencia
@@ -59,7 +62,7 @@ IA_OPERACOES = ('ia-config', 'ia-config-salvar')
 CONTAS_OPERACOES = ('contas-listar', 'contas-criar', 'contas-atualizar', 'contas-desativar', 'contas-reativar',
                     'contas-recuperar')
 OPERACOES_CONVIDADO = ('codex-status', 'codex-listar', 'codex-perguntar', 'codex-eventos', 'codex-cancelar',
-                       'codex-retomar', 'codex-original', 'sessao-sair')
+                       'codex-retomar', 'codex-original', 'sessao-sair', *rascunhos.OPERACOES)
 # Guest operations on an existing conversation: the conversation's case is checked on every call.
 OPERACOES_CONVERSA = ('codex-eventos', 'codex-cancelar', 'codex-original', 'codex-retomar')
 # Before a session exists (hosted mode only): Origin + JSON, no CSRF, small bodies.
@@ -114,7 +117,8 @@ def receber_documentos(root, data):
         if data.get('novo') and not case:
             case = 'apuracao_' + uuid.uuid4().hex
         return cadastrar(root, case, sources, titulo=data.get('titulo'),
-                         natureza=data.get('natureza', 'nao_informada'), novo=data.get('novo', False))
+                         natureza=data.get('natureza', 'nao_informada'), novo=data.get('novo', False),
+                         modo_fontes=data.get('modo_fontes'), dominio_permitido=data.get('dominio_permitido'))
 
 
 def catalogo(root):
@@ -224,10 +228,16 @@ def executar(root, operation, data, conta=None, originais_abertos=None, casos=No
     if operation in rotas_redacao.OPERACOES:
         # Claim-by-claim review of the story text: human review only with the server's account; no model or network.
         return rotas_redacao.executar(root, operation, data, conta, casos)
+    if operation in rascunhos.OPERACOES:
+        # Unconfirmed drafts per account, case and screen; guests (casos is a list) keep only the question.
+        return rascunhos.executar(root, operation, data, conta, casos, convidado=casos is not None)
     if operation == 'cadastrar':
         return receber_documentos(root, data)
     if operation == 'inventario':
         return inventario(root, data.get('caso'))
+    if operation in fontes_web.OPERACOES:
+        # Network access only for cases created in the "documentos + web" mode, on their single domain.
+        return fontes_web.rota(root, operation, data)
     if operation == 'preparar-pdfs':
         if not diagnostico()['extracao_pdf']['disponivel']:
             raise ValueError('O extrator de PDF não está disponível nesta instância. Encerre a Mesa e abra pelo iniciador atualizado.')
@@ -479,7 +489,7 @@ class Handler(BaseHTTPRequestHandler):
                  'account activation link, or <a href="/entrar">sign in with your login and password</a>.</p>')
         self._send(410, (f'<!doctype html><html lang="pt-BR"><meta charset="utf-8">'
                          f'<meta name="viewport" content="width=device-width, initial-scale=1">'
-                         f'<title>Vlado</title><link rel="stylesheet" href="/style.css"><main class="panel">{texto}</main></html>'
+                         f'<title>Vlado</title><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/style.css"><main class="panel">{texto}</main></html>'
                          ).encode('utf-8'), 'text/html; charset=utf-8')
 
     def _ambiente_publico(self):
@@ -546,7 +556,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {'codex': True, 'protocolo_interface': 1, 'gerenciamento': True,
                              'apresentacao_editorial': True, 'preparacao_pdfs': True,
                              'revisao_humana': True, 'continuar_observacoes': True, 'continuar_documentos': True, 'caderno_humano': True, 'diligencias': True, 'quadros_evidencia': True,
-                             'tabelas_apuracao': True, 'conferencia_redacao': True, 'entrevistas': True, 'extracao_pdf': self.server.ambiente['extracao_pdf']})
+                             'tabelas_apuracao': True, 'continuidade_resumo': True, 'conferencia_redacao': True, 'entrevistas': True,
+                             'extracao_pdf': self.server.ambiente['extracao_pdf']})
             return
         if path == '/api/catalogo':
             try:
@@ -574,6 +585,7 @@ class Handler(BaseHTTPRequestHandler):
                   '/diligencias.js': ('diligencias.js', 'text/javascript; charset=utf-8'),
                   '/observacoes.js': ('observacoes.js', 'text/javascript; charset=utf-8'),
                   '/continuidade.js': ('continuidade.js', 'text/javascript; charset=utf-8'),
+                  '/fontes_web.js': ('fontes_web.js', 'text/javascript; charset=utf-8'),
                   '/caderno.js': ('caderno.js', 'text/javascript; charset=utf-8'),
                   '/apuracao.js': ('apuracao.js', 'text/javascript; charset=utf-8'),
                   '/editor_notas.js': ('editor_notas.js', 'text/javascript; charset=utf-8'),
@@ -594,8 +606,12 @@ class Handler(BaseHTTPRequestHandler):
                   '/icones/vlado-192.png': ('icones/vlado-192.png', 'image/png'),
                   '/icones/vlado-512.png': ('icones/vlado-512.png', 'image/png'),
                   '/icones/vlado-maskable-512.png': ('icones/vlado-maskable-512.png', 'image/png'),
+                  '/tokens.css': ('tokens.css', 'text/css; charset=utf-8'),
                   '/style.css': ('style.css', 'text/css; charset=utf-8'),
-                  '/caderno.css': ('caderno.css', 'text/css; charset=utf-8')}
+                  '/caderno.css': ('caderno.css', 'text/css; charset=utf-8'),
+                  '/quadros.js': ('quadros.js', 'text/javascript; charset=utf-8'),
+                  '/analise.js': ('analise.js', 'text/javascript; charset=utf-8'),
+                  '/indicador_salvamento.js': ('indicador_salvamento.js', 'text/javascript; charset=utf-8')}
         if path not in assets:
             self._json(404, {'erro': 'Página não encontrada.'})
             return
@@ -650,7 +666,7 @@ class Handler(BaseHTTPRequestHandler):
             maximum = (32768 if principal is not None and principal['papel'] != 'admin'
                        else 72 * 1024 * 1024 if operation in ('cadastrar', 'codex-documentos-cadastrar')
                        else 2 * 1024 * 1024 if operation in (*apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS,
-                                                             *rotas_tabelas.SALVAR)
+                                                             *rotas_tabelas.SALVAR, *rascunhos.SALVAR)
                        else 128 * 1024 if operation in ('caderno-salvar', 'diligencias-criar', 'diligencias-atualizar', 'diligencias-responder',
                                                      *rotas_evidencia.SALVAR, *rotas_redacao.SALVAR) else 32768)
             if not 0 < length <= maximum:
@@ -677,7 +693,8 @@ class Handler(BaseHTTPRequestHandler):
         codex_operations = ('codex-status', 'codex-listar',
                             'codex-perguntar', 'codex-retomar', 'codex-eventos', 'codex-cancelar', 'codex-original',
                             'codex-desligar', 'codex-observacoes', 'codex-corpus-previa', 'codex-documentos-cadastrar', 'codex-caderno-previa', 'codex-diligencias-previa')
-        if operation not in (*codex_operations, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES, *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, *rotas_redacao.OPERACOES, 'analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario',
+        if operation not in (*codex_operations, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES, *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, *rotas_redacao.OPERACOES, *rascunhos.OPERACOES, 'continuidade-resumo', 'analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario',
+                             *fontes_web.OPERACOES,
                              'ambiente', 'preparar-pdfs',
                              'gerenciar-listar', 'excluir', 'restaurar', 'lixeira-alcance', 'lixeira-apagar', *IA_OPERACOES, *CONTAS_OPERACOES, 'sessao-sair',
                              'achados-revisao-salvar',
@@ -746,6 +763,9 @@ class Handler(BaseHTTPRequestHandler):
                     self._send(200, path.read_bytes(), 'application/octet-stream',
                                {'Content-Disposition': f'attachment; filename="original{path.suffix}"'})
                 return
+            elif operation == fontes_web.CAPTURAR:
+                # The fetch runs outside the cadastro lock; checking and publishing take it.
+                result = fontes_web.rota(self.server.root, operation, data, trava=self.server.cadastro_lock)
             elif operation == 'lixeira-alcance':
                 result = lixeira.alcance(self.server.root, data.get('item'))
             elif operation == 'lixeira-apagar':
@@ -771,6 +791,13 @@ class Handler(BaseHTTPRequestHandler):
                                       if selected in {c['id'] for c in visible['casos']} else []}
                     else:
                         result = manager.gerenciar(operation, data)
+            elif operation == 'continuidade-resumo':
+                # Admin only (not a guest operation): metadata of the active case, never draft text.
+                conta = ({'id': principal['conta'], 'nome': principal['nome']}
+                         if self.server.com_contas else None)
+                with self.server.cadastro_lock:
+                    result = continuidade.executar_resumo(self.server.root, data, conta,
+                        lambda caso: self.server.conversas.listar(caso)['conversas'])
             elif operation in codex_operations:
                 manager = self.server.conversas
                 if operation == 'codex-desligar':
@@ -846,6 +873,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {'estado': 'erro', 'codigo': 'conferencia_sem_original', 'erro': str(exc), 'faltam': exc.faltam})
         except apuracao.ConflitoNota as exc:
             self._json(409, {'estado': 'erro', 'codigo': 'conflito', 'erro': str(exc), 'atual': exc.atual})
+        except rascunhos.ConflitoRascunho as exc:
+            self._json(409, {'estado': 'erro', 'codigo': 'rascunho_conflito', 'erro': str(exc), 'atual': exc.atual})
         except (ValueError, OSError, KeyError, TypeError, sqlite3.Error) as exc:
             convidado = principal['papel'] != 'admin'
             # Guests get user-facing ValueError messages only; internal errors stay generic.

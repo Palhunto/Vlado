@@ -123,6 +123,42 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('pergunta_sem_alteracao', r'^Nada mudou na pergunta'),
     ('pedido_destinatario_misto', r'^Para o pedido, selecione perguntas de pedido de informação'),
     ('exportacao_selecao_invalida', r'^Selecione de 1 a (?P<limite>\d+) perguntas para exportar'),
+    # Web sources per case (scripts/fontes_web.py).
+    ('fontes_web_caso_documental', r'^Este caso foi criado como apuração somente documental'),
+    ('fontes_web_modo_na_criacao', r'^O modo de fontes \(.*\) só é escolhido na criação'),
+    ('fontes_web_modo_mudou', r'^O modo de fontes do caso mudou durante a captura'),
+    ('fontes_web_dominio_invalido', r'^(Informe o domínio permitido|Domínio permitido)'),
+    ('fontes_web_dominio_recusado', r'^Domínio recusado: '),
+    ('fontes_web_endereco_interno', r'^O site aponta para um endereço de rede interno'),
+    ('fontes_web_https', r'^Endereço deve começar com https://'),
+    ('fontes_web_endereco_invalido', r'^(Informe o endereço completo da página|Endereço com |Porta inválida no endereço'
+                                     r'|Endereço de rede inválido)'),
+    ('fontes_web_resposta_http', r'^O site respondeu (?P<status>\d{3})'),
+    ('fontes_web_tipo_recusado', r'^Tipo de conteúdo não aceito'),
+    ('fontes_web_grande_demais', r'^Página excede 20 MB'),
+    ('fontes_web_redirecionamentos', r'^Redirecionamentos demais'),
+    ('fontes_web_tempo_esgotado', r'^Tempo limite da captura esgotado'),
+    ('fontes_web_inacessivel', r'^Não foi possível (acessar o endereço|resolver o nome do site)'),
+    ('fontes_web_conteudo_comprimido', r'^Conteúdo comprimido não aceito'),
+    ('fontes_web_limite', r'^Limite de (?P<limite>\d+) capturas web por caso'),
+    ('fontes_web_captura_inexistente', r'^Captura web inexistente'),
+    ('fontes_web_campos_invalidos', r'^Campos não permitidos na operação de fontes web'),
+    # Drafts (rascunhos): one per account, case and screen, with a growing version.
+    ('rascunho_conflito', r'^O rascunho mudou em outra aba'),
+    ('rascunho_sem_caso', r'^Selecione uma apuração para o rascunho'),
+    ('rascunho_tela_invalida', r'^Tela de rascunho inválida'),
+    ('rascunho_conta_invalida', r'^Conta do rascunho inválida'),
+    ('rascunho_com_chave', r'^Rascunhos não guardam chaves de API'),
+    ('rascunho_grande_demais', r'^Rascunho grande demais \(limite de (?P<limite>\d+) KB\)'),
+    ('rascunhos_caso_cheio', r'^Rascunhos desta apuração ocupam o limite do caso \(limite de (?P<limite>\d+) KB\)'),
+    ('rascunhos_caso_limite', r'^Rascunhos desta apuração chegaram ao limite \((?P<limite>\d+) abertos\)'),
+    ('rascunhos_conta_limite', r'^Rascunhos desta conta chegaram ao limite \((?P<limite>\d+) abertos\)'),
+    ('rascunho_ilegivel', r'^Rascunho ilegível no servidor'),
+    ('rascunho_invalido', r'^Rascunho inválido'),
+    ('rascunho_so_pergunta', r'^Convidados guardam somente o rascunho da pergunta'),
+    # Resume summary of the active case (continuidade.resumo_caso).
+    ('resumo_campos_invalidos', r'^Campos inválidos no resumo de retomada'),
+    ('resumo_sem_caso', r'^Selecione uma apuração para o resumo de retomada'),
 )
 _COMPILADOS = tuple((codigo, re.compile(padrao)) for codigo, padrao in PADROES)
 

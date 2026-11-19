@@ -14,6 +14,7 @@
     try { await api('sessao-sair', {}); } catch (_) { /* The session is dropped either way. */ }
     // Unsaved notebook drafts may hold unpublished reporting: never leave them behind on sign-out.
     try { window.limparRascunhosCaderno?.(); } catch (_) { /* Storage blocked: nothing was kept. */ }
+    try { window.Rascunhos?.limparTudo(); } catch (_) { /* Same for the question and panel drafts. */ }
     window.location.replace('/entrar');
   });
 
