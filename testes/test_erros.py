@@ -27,6 +27,18 @@ class CodigosTest(unittest.TestCase):
             'Cursor posterior ao histórico.': ('cursor_posterior', {}),
             'O conteúdo do item mudou desde a conferência. Revise o alcance e confirme novamente.': ('alcance_alterado', {}),
             'Não foi possível apagar tudo (arquivo em uso ou sem permissão).': ('apagamento_incompleto', {}),
+            'Apuração não liberada para esta conta.': ('caso_nao_liberado', {}),
+            'Selecione uma apuração para os quadros de evidência.': ('quadro_sem_caso', {}),
+            'Campos inválidos no pedido do quadro.': ('quadro_campos_invalidos', {}),
+            'Registro não encontrado nesta apuração.': ('registro_inexistente', {}),
+            'O registro mudou. Atualize antes de salvar; seu formulário foi preservado.': ('registro_mudou', {}),
+            'Evidência de outra apuração; vincule somente fontes desta apuração.': ('evidencia_outro_caso', {}),
+            'O quadro de hipóteses está sendo salvo em outra janela ou um salvamento foi interrompido.': ('quadro_em_uso', {}),
+            'Histórico do registro divergente (estado malformado); nenhuma atualização foi aplicada.':
+                ('historico_divergente', {}),
+            'Referência a fonte do caderno inválida.': ('referencia_evidencia_invalida', {}),
+            'Escolha dois documentos diferentes.': ('documentos_comparacao_invalidos', {}),
+            'Contexto deve ter de 0 a 10 linhas.': ('contexto_comparacao_invalido', {}),
             'O arquivo X está em execução em outro processo.': ('erro', {}),  # anchored patterns only
         }
         for mensagem, esperado in casos.items():
