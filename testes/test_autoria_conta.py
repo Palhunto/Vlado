@@ -100,8 +100,7 @@ class AutoriaCadernoDiligenciasTest(unittest.TestCase):
 
 class AutoriaRevisaoHumanaTest(unittest.TestCase):
     def setUp(self):
-        self.fx = Ambiente(); self.addCleanup(self.fx.cleanup)
-        self.fx.completo(quantidade=4)
+        self.fx, _ = Ambiente.copia_completa(quantidade=4); self.addCleanup(self.fx.cleanup)
         self.root = self.fx.root
 
     def save(self, identifier='A001', **kwargs):
@@ -137,8 +136,7 @@ class AutoriaRevisaoHumanaTest(unittest.TestCase):
 
 class ApuracaoNotasTest(unittest.TestCase):
     def setUp(self):
-        self.fx = Ambiente(); self.addCleanup(self.fx.cleanup)
-        self.fx.completo()
+        self.fx, _ = Ambiente.copia_completa(); self.addCleanup(self.fx.cleanup)
         self.root = self.fx.root
 
     def op(self, operation, conta=None, **data):

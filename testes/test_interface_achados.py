@@ -13,8 +13,7 @@ from interface_pesquisa import Servidor
 
 class InterfaceAchadosTest(unittest.TestCase):
     def setUp(self):
-        self.fx=Ambiente(); self.addCleanup(self.fx.cleanup)
-        self.fx.completo()
+        self.fx, _ = Ambiente.copia_completa(); self.addCleanup(self.fx.cleanup)
         self.server=Servidor(('127.0.0.1',0),self.fx.root)
         self.thread=threading.Thread(target=self.server.serve_forever,daemon=True)
         self.thread.start(); self.addCleanup(self.stop)

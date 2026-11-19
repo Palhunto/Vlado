@@ -22,9 +22,8 @@ import mapa_relacoes as mapa
 
 class QuadrosEvidenciaTest(unittest.TestCase):
     def setUp(self):
-        self.env = Ambiente(); self.addCleanup(self.env.cleanup)
+        self.env, (_, revised, _, second) = Ambiente.copia_completa(); self.addCleanup(self.env.cleanup)
         self.root = self.env.root
-        _, revised, _, second = self.env.completo()
         self.registros = second['manifesto']['registros_sha256']
         docs = caderno.documentos(self.root, 'alpha'); doc = docs['documentos'][0]
         self.nota = caderno.salvar(self.root, {

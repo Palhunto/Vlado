@@ -4,7 +4,6 @@ import base64
 import json
 from pathlib import Path
 import sys
-import tempfile
 import threading
 import unittest
 import importlib.util
@@ -16,29 +15,33 @@ from criar_caso import criar_caso
 from selecionar_caso import selecionar
 from nova_rodada import criar_rodada
 from interface_pesquisa import Servidor
+from modelo_pasta import copiar
 
 
 class InterfaceTest(unittest.TestCase):
-    def setUp(self):
-        temp = tempfile.TemporaryDirectory()
-        self.addCleanup(temp.cleanup)
-        self.root = Path(temp.name)
-        (self.root / 'prompts').mkdir()
+    @staticmethod
+    def montar(root):
+        (root / 'prompts').mkdir()
         for name in PARTES:
-            (self.root / 'prompts' / name).write_text('# Fixture sintética\n', encoding='utf-8')
-        (self.root / 'prompts/FLUXO_COMPLETO.md').write_bytes(fluxo_esperado(self.root))
-        escrever_json(self.root / 'prompts/manifesto_prompts.json', manifesto_prompts(self.root))
-        (self.root / 'AGENTS.md').write_text('Fixture técnica.', encoding='utf-8')
-        escrever_json(self.root / 'configuracao.json', {'caso_ativo': None, 'manifesto_ativo': None,
+            (root / 'prompts' / name).write_text('# Fixture sintética\n', encoding='utf-8')
+        (root / 'prompts/FLUXO_COMPLETO.md').write_bytes(fluxo_esperado(root))
+        escrever_json(root / 'prompts/manifesto_prompts.json', manifesto_prompts(root))
+        (root / 'AGENTS.md').write_text('Fixture técnica.', encoding='utf-8')
+        escrever_json(root / 'configuracao.json', {'caso_ativo': None, 'manifesto_ativo': None,
                        'maximo_documentos_inicial': 20, 'indice_sqlite': True})
         for case, word in [('alpha', 'Alfabeto'), ('beta', 'Betabetico')]:
-            source = self.root / f'{case}.txt'
+            source = root / f'{case}.txt'
             source.write_text(f'{word} sintético. Código AB-123. <script>alert(1)</script>\n' * 80,
                               encoding='utf-8')
-            criar_caso(self.root, case, 'Caso sintético ' + case, [source], 'sinteticos')
-            selecionar(self.root, case)
-            criar_rodada(self.root, 'R001', 'Pergunta de teste técnico sintético.')
-        selecionar(self.root, None)
+            criar_caso(root, case, 'Caso sintético ' + case, [source], 'sinteticos')
+            selecionar(root, case)
+            criar_rodada(root, 'R001', 'Pergunta de teste técnico sintético.')
+        selecionar(root, None)
+
+    def setUp(self):
+        # Dois casos com rodada e índice, construídos uma vez por processo e copiados para cada teste.
+        temp, self.root, _ = copiar('InterfaceTest', InterfaceTest.montar)
+        self.addCleanup(temp.cleanup)
         self.server = Servidor(('127.0.0.1', 0), self.root)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()

@@ -21,9 +21,8 @@ from interface_pesquisa import Servidor
 
 class ApuracaoTest(unittest.TestCase):
     def setUp(self):
-        self.fx = Ambiente(); self.addCleanup(self.fx.cleanup)
+        self.fx, _ = Ambiente.copia_completa(); self.addCleanup(self.fx.cleanup)
         self.root = self.fx.root
-        self.fx.completo()
         # Every preserved input/output must survive human mutations byte-for-byte.
         self.before = {p: sha256(p) for folder in ('casos/alpha/originais', 'execucoes/alpha/R001/entradas',
                                                   'execucoes/alpha/R001/saidas')
