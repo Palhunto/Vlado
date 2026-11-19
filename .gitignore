@@ -45,6 +45,7 @@ tmp/
 
 # Estado local de ferramentas de agente (Ruflo/claude-flow)
 /.claude-flow/
+.claude/
 /segredos/
 /ajustes/
 /acesso/

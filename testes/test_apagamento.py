@@ -52,12 +52,15 @@ class ApagamentoTest(unittest.TestCase):
 
     def test_alcance_do_caso_conta_categorias_e_nao_apaga(self):
         self.fx.completo()
+        quadro = self.root / ('casos/alpha/quadros/hipoteses/H' + '0' * 32)
+        quadro.mkdir(parents=True)
+        (quadro / f'00000001_{"0" * 32}.json').write_text('{}', encoding='utf-8')
         item = self.lixo('caso')
         antes = len(self.arquivos('alpha'))
         alc = lixeira.alcance(self.root, item['id'])
         self.assertEqual(len(self.arquivos('alpha')), antes)
         for categoria in ('originais', 'derivados', 'corpus', 'rodadas', 'indice_documental',
-                          'indice_achados', 'registros_achados', 'conversas'):
+                          'indice_achados', 'registros_achados', 'conversas', 'quadros_evidencia'):
             self.assertGreater(alc['categorias'][categoria]['arquivos'], 0, categoria)
         self.assertEqual(alc['categorias']['originais']['arquivos'], 3)  # a cópia congelada na rodada conta em 'rodadas'
         self.assertEqual(alc['totais']['arquivos'], sum(c['arquivos'] for c in alc['categorias'].values()))
