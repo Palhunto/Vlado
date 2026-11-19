@@ -108,6 +108,31 @@ class RascunhosTest(unittest.TestCase):
             self.salvar(1, 'Texto antigo.')
         self.assertEqual(self.salvar(2, 'Recomeço.')['versao'], 3)
 
+    def test_marcas_de_descarte_do_convidado_nao_se_acumulam(self):
+        teto = limites.RASCUNHOS['arquivos_por_convidado']
+        pasta = self.root / 'casos/alpha/rascunhos' / ANA['id']
+        aberto = rascunhos.salvar(self.root, 'alpha', ANA, 'pergunta', 0, {'texto': 'Aberta'}, convidado=True)
+        for i in range(teto * 3):  # salvar e descartar telas novas, em ciclo
+            tela = f'pergunta/x{i:03d}'
+            salvo = rascunhos.salvar(self.root, 'alpha', ANA, tela, 0, {'texto': f'Pergunta {i}'}, convidado=True)
+            rascunhos.descartar(self.root, 'alpha', ANA, tela, salvo['versao'])
+        arquivos = list(pasta.glob('*.json'))
+        self.assertLessEqual(len(arquivos), teto, 'as marcas de descarte ficam abaixo do teto de arquivos')
+        self.assertEqual(rascunhos.ler(self.root, 'alpha', ANA, 'pergunta')['conteudo'], {'texto': 'Aberta'},
+                         'o rascunho aberto nunca é apagado')
+        self.assertEqual(aberto['versao'], 1)
+        # As marcas que sobraram são as mais recentes; a mais antiga sumiu.
+        self.assertEqual(rascunhos.ler(self.root, 'alpha', ANA, 'pergunta/x000')['versao'], 0)
+        ultima = f'pergunta/x{teto * 3 - 1:03d}'
+        self.assertTrue(rascunhos.ler(self.root, 'alpha', ANA, ultima)['descartado'])
+        # Uma aba antiga com a versão de uma marca apagada recebe conflito, não grava por cima.
+        with self.assertRaises(rascunhos.ConflitoRascunho):
+            rascunhos.salvar(self.root, 'alpha', ANA, 'pergunta/x000', 2, {'texto': 'Aba antiga'}, convidado=True)
+        # Outra conta não é afetada pelo teto da Ana.
+        rascunhos.salvar(self.root, 'alpha', BIA, 'caderno/N0001', 0, {'texto': 'Nota da Bia'})
+        rascunhos.descartar(self.root, 'alpha', BIA, 'caderno/N0001', 1)
+        self.assertTrue(rascunhos.ler(self.root, 'alpha', BIA, 'caderno/N0001')['descartado'])
+
     def test_limites_por_rascunho_e_por_caso(self):
         with patch.dict(limites.RASCUNHOS, {'bytes_por_rascunho': 2048, 'bytes_rascunhos_por_caso': 3000,
                                             'rascunhos_por_caso': 3}):

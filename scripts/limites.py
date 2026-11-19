@@ -20,7 +20,9 @@ PADROES = {'tokens_por_consulta': 3_000_000, 'tokens_por_dia': 30_000_000}
 RASCUNHOS = {'bytes_por_rascunho': 1024 * 1024, 'bytes_rascunhos_por_caso': 16 * 1024 * 1024,
              'rascunhos_por_caso': 200,
              # A guest (convidado) keeps few drafts, so one guest cannot fill the case's limit for everyone.
-             'rascunhos_por_convidado': 10}
+             'rascunhos_por_convidado': 10,
+             # Files (open drafts + discard marks) per account and case; past it, the oldest marks are deleted.
+             'arquivos_por_convidado': 20, 'arquivos_por_conta': 200}
 _TRAVA = threading.Lock()
 
 
