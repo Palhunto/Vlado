@@ -21,7 +21,8 @@ const [origem, saida, caso, casoComparacao, chrome] = process.argv.slice(2);
         await page.locator('#ver-quadros').click();
         await page.locator('#area-quadros').waitFor({state: 'visible'});
       };
-      const foto = async rotulo => { const arquivo = path.join(saida, `${rotulo}-${nome}.png`); await page.screenshot({path: arquivo, fullPage: true}); resultado.capturas.push(arquivo); };
+      // Full-page captures start at the top: otherwise the sticky header is drawn mid-page.
+      const foto = async rotulo => { await page.evaluate(() => scrollTo(0, 0)); const arquivo = path.join(saida, `${rotulo}-${nome}.png`); await page.screenshot({path: arquivo, fullPage: true}); resultado.capturas.push(arquivo); };
       const aba = async id => { await page.locator(`#quadros-aba-${id}`).click(); await page.locator(`#quadros-${id}`).waitFor({state: 'visible'}); await page.waitForLoadState('networkidle'); };
       await page.goto(origem); await page.locator('#area-inicio').waitFor({state: 'visible'});
       await page.selectOption('#contexto-caso', caso);
