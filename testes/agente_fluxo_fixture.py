@@ -3,13 +3,52 @@ import json
 import time
 
 
-def esperar(predicate, timeout=30):
+def esperar(predicate, timeout=30, mensagem='Estado esperado não foi atingido pela fixture.'):
+    """Wait for a condition with a deadline; the condition is checked once more at the deadline."""
     deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if predicate():
-            return
+    while not predicate():
+        if time.monotonic() >= deadline:
+            raise AssertionError(mensagem)
         time.sleep(.01)
-    raise AssertionError('Estado esperado não foi atingido pela fixture.')
+
+
+def aguardar_fim(manager, identifier, timeout=30):
+    """Wait until the conversation's current execution has ended and return its final state.
+
+    Conversas._finish sets estado and busy=False first and only then writes
+    saidas/codex_execucao.json and the round checkpoint, all under manager.lock. Reading
+    estado or busy without that lock can therefore see the end before the record exists.
+    eventos() takes the lock, so an inactive estado read through it means _finish has
+    returned. It uses the interface's long poll, which wakes on each new event."""
+    from codex_apuracao import ACTIVE  # scripts/ is on sys.path once a test module is loaded
+    deadline = time.monotonic() + timeout
+    cursor = 0
+    while True:
+        resposta = manager.eventos(identifier, after=cursor, wait=1)
+        conversa = resposta['conversa']
+        if conversa['estado'] not in ACTIVE:
+            break
+        if time.monotonic() >= deadline:
+            raise AssertionError(f'A execução não terminou em {timeout} s '
+                                 f'(estado {conversa["estado"]}, etapa {conversa.get("etapa")}).')
+        cursor = resposta['cursor']
+    run = manager.contexts[identifier].get('run')
+    if run is not None and not (run / 'saidas/codex_execucao.json').is_file():
+        raise AssertionError('Execução encerrada sem saidas/codex_execucao.json na rodada atual.')
+    return conversa
+
+
+def aguardar_threads(manager, timeout=30):
+    """Wait until every execution thread started by the manager has returned."""
+    esperar(lambda: not any(worker.is_alive() for worker in manager.workers), timeout,
+            'Thread de execução ainda ativa.')
+
+
+def encerrar_gerenciador(manager, timeout=30):
+    """Test cleanup: close the manager and wait for its threads, which could otherwise still
+    be writing into the temporary folder that the next cleanup removes."""
+    manager.close()
+    aguardar_threads(manager, timeout)
 
 
 def entrega(stage, tool, refs, answer='Resposta técnica sintética.', *, valor='123'):
@@ -52,5 +91,4 @@ def completar(manager, identifier, answer='Resposta técnica sintética.'):
         manager.rpc.emit('item/completed', {'item': {'id': 'msg-' + turn, 'type': 'agentMessage',
                          'phase': 'final_answer', 'text': 'Etapa sintética entregue.'}})
         manager.rpc.emit('turn/completed', {'turn': {'id': turn, 'status': 'completed'}})
-    esperar(lambda: manager.eventos(identifier)['conversa']['estado'] not in
-            ('preparando', 'executando', 'publicando', 'aguardando_aprovacao', 'cancelando'))
+    aguardar_fim(manager, identifier)

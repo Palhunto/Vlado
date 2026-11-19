@@ -13,8 +13,7 @@ import revisao_humana as human
 
 class RevisaoHumanaTest(unittest.TestCase):
     def setUp(self):
-        self.fx = Ambiente(); self.addCleanup(self.fx.cleanup)
-        self.fx.completo(quantidade=4)
+        self.fx, _ = Ambiente.copia_completa(quantidade=4); self.addCleanup(self.fx.cleanup)
         self.root, self.run = self.fx.root, self.fx.run()
 
     def query(self, **kwargs):

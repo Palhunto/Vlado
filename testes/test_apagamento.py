@@ -258,10 +258,9 @@ class ApagamentoHttpTest(unittest.TestCase):
         import http.client
         from interface_pesquisa import Servidor
         self.http = http.client
-        self.fx = Ambiente()
+        self.fx, _ = Ambiente.copia_completa()
         self.addCleanup(self.fx.cleanup)
         self.root = self.fx.root
-        self.fx.completo()
         self.server = Servidor(('127.0.0.1', 0), self.root)
         thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         thread.start()

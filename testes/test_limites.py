@@ -11,7 +11,7 @@ from comum import escrever_json
 import limites
 from codex_apuracao import limitar_texto, limitar_argumentos
 import test_codex_integracao as integracao  # module import: its TestCase is not re-collected here
-from agente_fluxo_fixture import esperar
+from agente_fluxo_fixture import aguardar_fim
 
 
 class LimitesTest(unittest.TestCase):
@@ -74,7 +74,7 @@ class LimitesConversaTest(unittest.TestCase):
         identifier = self.start()
         rpc = self.manager.rpc
         rpc.emit('item/usage', {'turnId': 'turn-1', 'modelo': 'm', 'uso': {'entrada': 80, 'saida': 30}})
-        esperar(lambda: self.manager.eventos(identifier)['conversa']['estado'] not in ('executando', 'cancelando'))
+        aguardar_fim(self.manager, identifier)
         eventos = self.manager.eventos(identifier)['eventos']
         self.assertTrue(any(e['tipo'] == 'erro' and 'Limite de tokens por consulta' in e['dados']['mensagem'] for e in eventos))
         self.assertTrue(any(method == 'turn/interrupt' for method, _ in rpc.calls))

@@ -12,9 +12,24 @@ from nova_rodada import criar_rodada
 from indice_sqlite import pesquisar
 from registros_achados import publicar
 from indice_achados import construir
+from modelo_pasta import copiar
 
 
 class Ambiente:
+    @classmethod
+    def copia_completa(cls, quantidade=2):
+        """Ambiente equivalente a `Ambiente()` seguido de `completo(quantidade)`, em pasta temporária própria.
+
+        O modelo é construído pelo caminho normal uma vez por processo e por `quantidade` e depois copiado
+        (`modelo_pasta.copiar`); os registros guardam só caminhos relativos à raiz. Devolve
+        `(ambiente, resultado)`, em que `resultado` é uma cópia profunda do que `completo` devolveu.
+        """
+        temp, root, resultado = copiar(('Ambiente.completo', quantidade), lambda raiz: cls(raiz).completo(quantidade))
+        env = cls.__new__(cls)
+        env.temp, env.root = temp, root
+        env.text, env.pdf, env.tab = root / 'texto.txt', root / 'visual.pdf', root / 'tabela.csv'
+        return env, resultado
+
     def __init__(self, root=None):
         self.temp = tempfile.TemporaryDirectory() if root is None else None
         self.root = Path(self.temp.name) if self.temp else Path(root)
