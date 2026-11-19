@@ -14,6 +14,8 @@ SITUACOES = ('em_aberto', 'sustentada', 'contrariada', 'inconclusiva', 'descarta
 PADROES = {'enunciado': None, 'situacao': 'em_aberto', 'evidencias': [], 'lacunas': []}
 # Situação declarada → papel exigido de uma evidência sustentada de natureza documental.
 EXIGE = {'sustentada': 'suporte', 'contrariada': 'contradicao'}
+# Situações que encerram a hipótese sem afirmar nada: vínculos salvos cuja fonte sumiu são preservados.
+ENCERRAM = ('inconclusiva', 'descartada')
 
 
 def _base(links, papel):
@@ -51,7 +53,7 @@ def _normalizar(root, case, data, atual, _identificador):
     state = ev.mesclar(data, atual, PADROES)
     if state['situacao'] not in SITUACOES:
         raise ValueError('Situação da hipótese inválida.')
-    links = ev.vinculos(root, case, state['evidencias'])
+    links = ev.vinculos(root, case, state['evidencias'], preservar_indisponiveis=state['situacao'] in ENCERRAM)
     if not isinstance(state['lacunas'], list) or len(state['lacunas']) > 50:
         raise ValueError('Registre até 50 lacunas.')
     known = {g['diligencia_id'] for g in (atual or {}).get('lacunas', []) if g['diligencia_id']}
@@ -113,11 +115,14 @@ def quadro(root, case):
             faltam.append(entry)
         auto = lambda text: faltam.append({'origem': 'automatica', 'descricao': text, 'diligencia_id': None,
                                            'diligencia_estado': None})
-        support = [x for x in groups['suporte'] if x['natureza'] != 'pendencia']
+        # "Com evidência" exige suporte conferido, avaliado como sustentado e de natureza documental.
+        support = _base(checked, 'suporte')
         if not groups['suporte']:
             auto('Nenhuma evidência de suporte conferida.')
-        elif not support:
+        elif all(x['natureza'] == 'pendencia' for x in groups['suporte']):
             auto('Evidências de suporte ainda marcadas como pendência; indique o tipo de afirmação.')
+        elif not support:
+            auto('Nenhuma evidência de suporte avaliada como sustentada, de natureza documental.')
         pending = sum(1 for x in links if x['papel'] != 'contexto' and x['suporte'] == 'nao_revisado')
         if pending:
             auto(f'{pending} evidência(s) com suporte ainda não revisado.')

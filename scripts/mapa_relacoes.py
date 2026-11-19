@@ -257,7 +257,9 @@ def homonimos(root, case, entidades=None):
             kinds = {d['decisao'] for d in decisions}
             situation = 'pendente' if not decisions else kinds.pop() if len(kinds) == 1 else 'decisoes_divergentes'
             result.append({'entidades': [a['id'], b['id']], 'nomes': [sa['nome'], sb['nome']], 'motivo': reason,
-                           'identificadores_comuns': sorted(ia & ib),
+                           # Só a forma de exibição: a visão do mapa não devolve CPF/CNPJ completos.
+                           'identificadores_comuns': [{'tipo': t, 'valor_exibicao': mascarar(t, v)}
+                                                      for t, v in sorted(ia & ib)],
                            'identificadores_divergentes': sorted(t for t in shared_types
                                if {v for k, v in ia if k == t} != {v for k, v in ib if k == t}),
                            'conferencias': decisions, 'situacao': situation,
@@ -270,8 +272,11 @@ def _situacao_relacao(links):
     values = {x['suporte'] for x in support}
     if not support:
         return 'fonte_indisponivel'
-    if 'sustentado' in values:
+    documentary = {x['suporte'] for x in support if x['natureza'] in ev.NATUREZAS_DOCUMENTAIS}
+    if 'sustentado' in documentary:
         return 'documentada'
+    if 'sustentado' in values:
+        return 'inferida'  # sustentado, mas como inferência ou pendência: não é ligação documentada
     if 'parcial' in values:
         return 'suporte_parcial'
     if 'nao_revisado' in values:
@@ -297,7 +302,9 @@ def mapa(root, case, *, incluir_retirados=False):
         state = e['estado']
         links = ev.conferir_vinculos(root, case, state['evidencias'], cache)
         nodes.append({'id': e['id'], 'sha256': e['sha256'], **{k: state[k] for k in ('tipo', 'nome', 'variantes')},
-                      'identificadores': [{**i, 'valor_exibicao': mascarar(i['tipo'], i['valor'])}
+                      # A visão do mapa não devolve CPF/CNPJ completos; o valor salvo fica no detalhe do registro.
+                      'identificadores': [{**{k: v for k, v in i.items() if k != 'valor'},
+                                           'valor_exibicao': mascarar(i['tipo'], i['valor'])}
                                           for i in state['identificadores']],
                       'evidencias': links, 'situacao': _situacao_entidade(links),
                       'retirado': state['retirado'], 'motivo_retirada': state['motivo_retirada']})
@@ -317,4 +324,5 @@ def mapa(root, case, *, incluir_retirados=False):
     return {'caso': case, 'entidades': nodes, 'relacoes': edges, 'homonimos': homonimos(root, case, listed),
             'divergentes': broken,
             'aviso': 'Ligações registradas por pessoas a partir de evidências; não indicam culpa nem causalidade. '
-                     'Só é documentada a ligação com suporte conferido avaliado como sustentado.'}
+                     'Só é documentada a ligação com suporte conferido avaliado como sustentado, '
+                     'de natureza declaração documental ou alegação atribuída.'}

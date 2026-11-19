@@ -79,6 +79,10 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('documentos_comparacao_invalidos', r'^(Escolha dois documentos da rodada|Escolha dois documentos diferentes)'),
     ('documento_fora_da_rodada', r'^Documento não pertence a esta rodada'),
     ('contexto_comparacao_invalido', r'^Contexto deve ter de 0 a 10 linhas'),
+    ('achados_mudaram', r'^O conjunto de achados referenciado mudou de identidade'),
+    ('evidencia_fora_da_revisao', r'^Evidência não pertence a esta revisão'),
+    ('documento_sem_original', r'^Documento sem original congelado nesta rodada'),
+    ('documento_sem_texto', r'^(?P<documento>[A-Za-z0-9][A-Za-z0-9_-]{0,63}) não tem texto utilizável nesta rodada'),
 )
 _COMPILADOS = tuple((codigo, re.compile(padrao)) for codigo, padrao in PADROES)
 

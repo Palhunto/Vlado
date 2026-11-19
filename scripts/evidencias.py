@@ -458,7 +458,9 @@ class Colecao:
                         return current
             if operation == 'criar' and current:
                 raise ValueError('Registro já existe.')
-            if operation == 'atualizar' and (not current or data.get('anterior_sha256') != current['sha256']):
+            if operation == 'atualizar' and not current:
+                raise ValueError('Registro não encontrado nesta apuração.')
+            if operation == 'atualizar' and data.get('anterior_sha256') != current['sha256']:
                 raise ValueError('O registro mudou. Atualize antes de salvar; seu formulário foi preservado.')
             editable = {k: deepcopy(data[k]) for k in self.campos if k in data}
             state = self.normalizar(root, case, editable, deepcopy(current['estado']) if current else None, identifier)
@@ -475,10 +477,13 @@ class Colecao:
                      'origem_autoria': who['origem_autoria'],
                      **({'conta_id': who['conta_id']} if 'conta_id' in who else {}),
                      'observacao': note, 'em_utc': now, 'estado': state}
+            filename = f'{event["sequencia"]:08d}_{rid}.json'
+            # O evento passa pelas mesmas regras da leitura antes de gravado: nada salvo fica divergente.
+            self._evento(case, identifier, event, filename, current['historico'] if current else [],
+                         current['sha256'] if current else None)
             folder.mkdir(parents=True, exist_ok=True)
             with pasta_preparacao(folder, '.preparacao_') as staging:
                 staged = staging / 'evento.json'; escrever_json(staged, event, exclusivo=True)
-                filename = f'{event["sequencia"]:08d}_{rid}.json'
                 if current:
                     staged.rename(dentro(records, filename))
                 else:

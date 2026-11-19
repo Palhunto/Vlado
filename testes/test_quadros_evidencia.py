@@ -357,6 +357,67 @@ class QuadrosEvidenciaTest(unittest.TestCase):
         self.assertEqual(mapa.nome_normalizado('José  DOS Santos'), 'jose santos')
         self.assertEqual(mapa.nome_normalizado('Fornecedora Sintética Ltda.', 'organizacao'), 'fornecedora sintetica')
 
+    # Ajustes da revisão independente (Working/core-revisao-independente.md)
+    def test_hipotese_so_tem_evidencia_com_suporte_sustentado_documental(self):
+        casos = {'nao_revisado': ('nao_revisado', 'declaracao_documental'), 'inferencia': ('sustentado', 'inferencia'),
+                 'nao_sustentado': ('nao_sustentado', 'declaracao_documental'),
+                 'sustentado': ('sustentado', 'declaracao_documental')}
+        ids = {nome: hipoteses.salvar(self.root, self.base(enunciado=f'Hipótese {nome}.', evidencias=[
+            self.link(self.ia(), suporte=suporte, natureza=natureza)]))['id'] for nome, (suporte, natureza) in casos.items()}
+        rows = {r['id']: r for r in hipoteses.quadro(self.root, 'alpha')['hipoteses']}
+        for nome, identifier in ids.items():
+            with self.subTest(nome=nome):
+                esperado = 'com_evidencia' if nome == 'sustentado' else 'pendencia'
+                self.assertEqual((rows[identifier]['condicao'], rows[identifier]['natureza']),
+                                 (esperado, 'inferencia' if nome == 'sustentado' else 'pendencia'))
+
+    def test_hipotese_pode_ser_descartada_quando_a_fonte_some(self):
+        item = hipoteses.salvar(self.root, self.base(enunciado='Hipótese H', evidencias=[self.link(self.humana())]))
+        manifest = json.loads((self.root / 'casos/alpha/manifesto.json').read_text(encoding='utf-8'))
+        (self.root / manifest['documentos'][0]['arquivo']).write_text('alterado', encoding='utf-8')
+        with self.assertRaises(ValueError):
+            hipoteses.salvar(self.root, self.base(id=item['id'], anterior_sha256=item['sha256'], enunciado='Editada'),
+                             'atualizar')
+        saved = hipoteses.salvar(self.root, self.base(id=item['id'], anterior_sha256=item['sha256'], situacao='descartada'),
+                                 'atualizar')
+        self.assertEqual((saved['estado']['situacao'], len(saved['estado']['evidencias'])), ('descartada', 1))
+
+    def test_atualizar_registro_inexistente_responde_nao_encontrado(self):
+        with self.assertRaisesRegex(ValueError, 'não encontrado'):
+            hipoteses.salvar(self.root, self.base(id='H' + 'a' * 32, anterior_sha256='0' * 64, enunciado='X'), 'atualizar')
+
+    def test_mapa_so_documenta_relacao_de_natureza_documental_e_mascara_identificadores(self):
+        a = mapa.salvar_entidade(self.root, self.base(tipo='pessoa', nome='Maria Souza', evidencias=[self.link(self.ia())],
+            identificadores=[{'tipo': 'cpf', 'valor': '33333333333', 'fonte': 0}]))
+        b = mapa.salvar_entidade(self.root, self.base(tipo='pessoa', nome='Maria Pereira', evidencias=[self.link(self.humana())],
+            identificadores=[{'tipo': 'cpf', 'valor': '33333333333', 'fonte': 0}]))
+        mapa.salvar_relacao(self.root, self.base(origem=a['id'], destino=b['id'], tipo='sócia de', evidencias=[
+            self.link(self.ia(), suporte='sustentado', natureza='inferencia')]))
+        result = mapa.mapa(self.root, 'alpha')
+        self.assertEqual(result['relacoes'][0]['situacao'], 'inferida')
+        texto = json.dumps(result, ensure_ascii=False)
+        self.assertNotIn('33333333333', texto)
+        self.assertEqual(result['entidades'][0]['identificadores'][0]['valor_exibicao'], '***.333.333-**')
+        self.assertNotIn('33333333333', json.dumps(mapa.homonimos(self.root, 'alpha')))
+        self.assertEqual(mapa.detalhe_entidade(self.root, 'alpha', a['id'])['estado']['identificadores'][0]['valor'],
+                         '33333333333')
+
+    def test_classe_considera_so_as_marcas_que_mudaram(self):
+        result = comparador.comparar_textos('Em 12/03/2021 pagou R$ 10', 'Em 12/03/2021 pagou R$ 12')
+        self.assertEqual([c['classe'] for c in result['alteracoes']], ['valor'])
+
+    def test_bloco_grande_nao_derruba_a_comparacao_de_documentos(self):
+        a, b = self.root / 'v1.txt', self.root / 'v2.txt'
+        a.write_text('Linha comum.\nValor: R$ 10.\nFim.', encoding='utf-8')
+        b.write_text('Linha comum.\nValor: R$ 12.\nFim.', encoding='utf-8')
+        criar_caso(self.root, 'gamma', 'Comparação sintética', [a, b], 'sinteticos')
+        selecionar(self.root, 'gamma'); criar_rodada(self.root, 'R001', 'Teste técnico sintético.', indice=False)
+        selecionar(self.root, None)
+        from unittest import mock
+        with mock.patch.object(comparador, 'comparar_textos', side_effect=ValueError('grande demais')):
+            result = comparador.comparar_documentos(self.root, 'gamma', 'R001', 'D001', 'D002')
+        self.assertEqual([(c['classe'], c['palavras']) for c in result['alteracoes']], [('valor', None)])
+
 
 if __name__ == '__main__':
     unittest.main()

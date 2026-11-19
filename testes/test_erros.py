@@ -39,6 +39,11 @@ class CodigosTest(unittest.TestCase):
             'Referência a fonte do caderno inválida.': ('referencia_evidencia_invalida', {}),
             'Escolha dois documentos diferentes.': ('documentos_comparacao_invalidos', {}),
             'Contexto deve ter de 0 a 10 linhas.': ('contexto_comparacao_invalido', {}),
+            'O conjunto de achados referenciado mudou de identidade.': ('achados_mudaram', {}),
+            'Evidência não pertence a esta revisão/caso/rodada.': ('evidencia_fora_da_revisao', {}),
+            'Documento sem original congelado nesta rodada.': ('documento_sem_original', {}),
+            'D002 não tem texto utilizável nesta rodada; compare no original.':
+                ('documento_sem_texto', {'documento': 'D002'}),
             'O arquivo X está em execução em outro processo.': ('erro', {}),  # anchored patterns only
         }
         for mensagem, esperado in casos.items():

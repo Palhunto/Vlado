@@ -160,9 +160,12 @@ def _classe(before, after):
 
 
 def _classe_marcas(ma, mb):
-    kinds = {x['tipo'] for x in ma + mb}
+    ca = Counter((x['tipo'], x['normalizado']) for x in ma)
+    cb = Counter((x['tipo'], x['normalizado']) for x in mb)
+    # Só as marcas que mudaram decidem a classe: uma data repetida nos dois lados não é divergência de data.
+    kinds = {t for t, _ in (ca - cb) + (cb - ca)}
     dates = set(TIPOS_DATA_MARCA)
-    if Counter((x['tipo'], x['normalizado']) for x in ma) != Counter((x['tipo'], x['normalizado']) for x in mb):
+    if ca != cb:
         if kinds & dates and not kinds - dates:
             return 'data'
         if kinds - dates and not kinds & dates:
@@ -214,7 +217,7 @@ def comparar_evidencias(root, case, ref_a, ref_b):
     """Compara os trechos de duas evidências do mesmo caso (declarações, versões, respostas)."""
     cache = {}
     a, b = ev.resolver(root, case, ref_a, cache), ev.resolver(root, case, ref_b, cache)
-    if not a['trecho'].strip() or not b['trecho'].strip():
+    if not (a['trecho'] or '').strip() or not (b['trecho'] or '').strip():
         raise ValueError('Evidência sem trecho textual (leitura visual); compare no original.')
     return {'caso': case, 'a': a, 'b': b, **comparar_textos(a['trecho'], b['trecho']),
             'aviso': 'Comparação literal de trechos; diferenças não indicam qual fonte está correta.'}
@@ -270,7 +273,12 @@ def comparar_documentos(root, case, rodada, doc_a, doc_b, *, contexto=2):
         if len(changes) >= LIMITE_ALTERACOES:
             continue
         before, after = '\n'.join(na[i1:i2]), '\n'.join(nb[j1:j2])
-        detail = comparar_textos(before, after) if op == 'replace' else None
+        detail = None
+        if op == 'replace':
+            try:
+                detail = comparar_textos(before, after)
+            except ValueError:  # bloco grande demais para o detalhe por palavra; a alteração da linha continua
+                detail = None
         changes.append({'operacao': names[op], 'classe': _classe(before, after), 'a': before, 'b': after,
                         'localizador_a': _loc(la, i1, i2), 'localizador_b': _loc(lb, j1, j2),
                         'contexto_a': [{'pagina_pdf': p, 'linha': n, 'texto': t}
