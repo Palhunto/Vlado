@@ -10,11 +10,13 @@ from indice_achados import catalogo, consultar, verificar
 
 
 class FluxoAutomaticoTest(unittest.TestCase):
+    start = fixture.CodexIntegrationTest.start
+
     def setUp(self):
-        self.fx = fixture.CodexIntegrationTest()
-        self.addCleanup(self.fx.doCleanups)  # before setUp: a setUp failure still cleans up
-        self.fx.setUp()
-        self.manager, self.root = self.fx.manager, self.fx.root
+        # The fixture runs on this test, so its cleanups (threads, manager, temporary folder)
+        # are registered here and their errors are reported, as in ContinuarDocumentosTest.
+        fixture.CodexIntegrationTest.setUp(self)
+        self.fx = self
         self.identifier = self.fx.start()
         self.ctx = self.manager.contexts[self.identifier]
         self.refs = {}
