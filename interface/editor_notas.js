@@ -66,7 +66,18 @@ window.normalizarTarefas=text=>String(text).replace(/^(\s*(?:[-*+]|\d+[.)])[ \t]
 // so each Lute instance Vditor creates drops those tags too, even when they point at this origin.
 // Escaped text (&lt;iframe) is left as text; the Markdown field keeps what the writer typed.
 const EMBUTIDOS=/<\/?(?:iframe|object|embed)\b[^>]*>/gi;
-window.semEmbutidos=html=>String(html).replace(EMBUTIDOS,'');
+// Repeated until nothing changes, so a tag rebuilt by the removal itself (<ifr<iframe>ame>) also goes.
+// Past the limit, any "<" left is escaped: the result is shown as text rather than risk markup.
+const VOLTAS_EMBUTIDOS=10;
+window.semEmbutidos=html=>{
+  let atual=String(html);
+  for(let volta=0;volta<VOLTAS_EMBUTIDOS;volta++){
+    const limpo=atual.replace(EMBUTIDOS,'');
+    if(limpo===atual)return limpo;
+    atual=limpo;
+  }
+  return atual.replace(/</g,'&lt;');
+};
 window.protegerLute=lute=>{
   for(const name in lute){
     if(typeof lute[name]!=='function'||!/(?:DOM|HTML)$/.test(name))continue;

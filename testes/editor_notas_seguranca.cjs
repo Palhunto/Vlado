@@ -101,6 +101,15 @@ test('a etapa transform do editor também retira os embutidos', () => {
   const {ctx} = luteDoEditor();
   assert.equal(ctx.semEmbutidos('<p>a</p><iframe src="/"></iframe><object data="/x"></object><embed src="/y">'), '<p>a</p>');
   assert.equal(ctx.semEmbutidos('&lt;iframe src="/"&gt;'), '&lt;iframe src="/"&gt;', 'texto escapado continua texto');
+  // A remoção se repete até parar de mudar: a própria retirada não remonta a etiqueta.
+  for (const montado of ['<ifr<iframe>ame src="/">', '<obj<object>ect data="/x">', '<emb<embed>ed src="/y">',
+                         '<ifr<ifr<iframe>ame>ame src="/">', '<IFR<iframe>AME SRC=/>']) {
+    assert.doesNotMatch(ctx.semEmbutidos(montado), /<\/?(?:iframe|object|embed)\b/i, montado);
+  }
+  assert.equal(ctx.semEmbutidos('<p>a<ifr<iframe>ame src="/">b</p>'), '<p>ab</p>');
+  // Aninhamento além do limite de voltas: o "<" restante vira texto em vez de marcação.
+  const fundo = '<ifr'.repeat(12) + '<iframe>' + 'ame>'.repeat(12);
+  assert.doesNotMatch(ctx.semEmbutidos(fundo), /</);
   assert.match(lido('interface/editor_notas.js'), /return window\.semEmbutidos\(template\.innerHTML\)/);
   assert.match(lido('interface/editor_notas.js'), /protegerLuteGlobal\(\);\s*this\.instance=new Vditor/);
 });
