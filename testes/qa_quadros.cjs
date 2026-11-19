@@ -32,7 +32,27 @@ const [origem, saida, caso, casoComparacao, chrome] = process.argv.slice(2);
       await aba('tabelas'); await page.locator('td.tabela-celula').first().waitFor();
       await page.locator('td.estado-corrigido_manual').first().focus(); await foto('tabela');
       await aba('mapa'); await page.locator('.mapa-lista').waitFor();
-      if (viewport.width > 720) { await page.locator('.mapa-ligacao').first().focus(); assert.equal(await page.locator('svg.mapa-svg').isVisible(), true); }
+      if (viewport.width > 720) {
+        assert.equal(await page.locator('svg.mapa-svg').isVisible(), true);
+        // Real keyboard path: from the active tab, Tab until a link of the map has focus (focus-visible).
+        await page.locator('#quadros-aba-mapa').focus();
+        let chegou = false;
+        for (let i = 0; i < 40 && !chegou; i++) { await page.keyboard.press('Tab'); chegou = await page.evaluate(() => !!document.activeElement?.closest?.('.mapa-ligacao')); }
+        assert.ok(chegou, 'Tab chega a uma ligação do mapa');
+        const foco = await page.evaluate(() => {
+          const g = document.activeElement, linha = g.querySelector('.mapa-linha'), halo = g.querySelector('.mapa-alvo');
+          const s = getComputedStyle(g), l = getComputedStyle(linha), h = getComputedStyle(halo);
+          return {focusVisible: g.matches(':focus-visible'), outline: s.outlineStyle, linha: [l.stroke, l.strokeWidth], halo: [h.stroke, h.strokeOpacity, h.strokeWidth],
+            painel: document.querySelector('.mapa-detalhe').textContent.trim()};
+        });
+        resultado.foco_mapa = foco;
+        assert.equal(foco.focusVisible, true);
+        assert.equal(foco.outline, 'none', 'sem o retângulo do contorno padrão');
+        assert.equal(foco.linha[1], '4px', 'linha destacada no foco');
+        assert.match(foco.painel, /Escolha uma ligação/, 'o foco não troca o painel ao vivo');
+        const arquivo = path.join(saida, 'mapa-foco-teclado-desktop.png');
+        await page.locator('.mapa-visual').screenshot({path: arquivo}); resultado.capturas.push(arquivo);
+      }
       else assert.equal(await page.locator('svg.mapa-svg').isVisible(), false, 'no celular o mapa é a lista');
       await foto('mapa');
       await page.selectOption('#contexto-caso', casoComparacao);
