@@ -113,6 +113,16 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('redacao_afirmacoes_demais', r'^O texto tem mais de (?P<limite>\d+) afirmações'),
     ('revisao_humana_invalida', r'^(Revisão humana inválida|Escolha uma decisão de revisão válida)'),
     ('vinculos_afirmacao_invalidos', r'^Vínculos da afirmação inválidos'),
+    # Interviews and information requests (entrevistas, diligencias via rotas_redacao).
+    ('lacuna_origem_mudou', r'^A lacuna de origem mudou ou não existe mais'),
+    ('pergunta_origem_invalida', r'^Origem da pergunta inválida'),
+    ('contato_tipo_invalido', r'^Escolha o tipo de contato'),
+    ('resposta_sem_fonte', r'^Resposta respondida ou parcial precisa da fonte'),
+    ('resposta_situacao_invalida', r'^Situação da resposta inválida'),
+    ('resposta_fonte_invalida', r'^(Campos inválidos na fonte da resposta|A fonte da resposta deve ser um registro do caderno)'),
+    ('pergunta_sem_alteracao', r'^Nada mudou na pergunta'),
+    ('pedido_destinatario_misto', r'^Para o pedido, selecione perguntas de pedido de informação'),
+    ('exportacao_selecao_invalida', r'^Selecione de 1 a (?P<limite>\d+) perguntas para exportar'),
 )
 _COMPILADOS = tuple((codigo, re.compile(padrao)) for codigo, padrao in PADROES)
 
