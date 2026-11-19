@@ -205,6 +205,14 @@ class EntrarTest(Http):
             status, body = self.post(self.ana, 'codex-status', {})
         self.assertEqual((status, body['estado'], body['codigo']), (401, 'sem_sessao', 'sessao_expirada'))
 
+    def test_post_anonimo_pequeno_sempre_recebe_401_inteiro(self):
+        # Without draining the small body, Windows may reset the socket and lose the 401 (seen once under load).
+        corpo = json.dumps({'caso': 'alpha', 'texto': 'x' * 30000})
+        for _ in range(40):
+            status, _, body = self.request('POST', '/api/codex-status', corpo,
+                                           {'Content-Type': 'application/json', 'Origin': ORIGEM})
+            self.assertEqual((status, json.loads(body)['codigo']), (401, 'sessao_expirada'))
+
     def test_post_autenticado_exige_origem_csrf_e_json(self):
         self.assertEqual(self.post(self.ana, 'codex-status', {}, origin='http://127.0.0.1')[0], 403)
         self.assertEqual(self.post(self.ana, 'codex-status', {}, origin=None)[0], 403)

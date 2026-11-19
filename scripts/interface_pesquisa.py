@@ -443,6 +443,22 @@ class Handler(BaseHTTPRequestHandler):
     def _proibido(self, mensagem='Operação não permitida para este acesso.', codigo=None):
         self._json(403, {'estado': 'proibido', 'erro': mensagem, **({'codigo': codigo} if codigo else {})})
 
+    def _descartar_corpo_pequeno(self, limite=32768):
+        """Discard (never parse) a small anonymous body before answering and closing.
+
+        On Windows, closing a socket with unread bytes sends a TCP reset that can destroy the
+        response before the client reads it. Larger or invalid lengths are still never read.
+        """
+        try:
+            length = int(self.headers.get('Content-Length', '0'))
+        except ValueError:
+            return
+        if 0 < length <= limite:
+            try:
+                self.rfile.read(length)
+            except OSError:
+                pass
+
     def _sem_principal(self, api=False):
         if getattr(self, 'acesso_indisponivel', False):
             self._json(503, {'estado': 'indisponivel', 'erro': 'Registro de acesso indisponível. Avise a administração.'})
@@ -613,6 +629,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if self._principal() is None:
                 self.close_connection = True
+                self._descartar_corpo_pequeno()
                 self._sem_principal(api=True)
                 return
         # Consume bounded bodies even for rejected requests, avoiding TCP resets on Windows.
