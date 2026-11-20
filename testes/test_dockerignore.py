@@ -5,7 +5,10 @@ import unittest
 RAIZ = Path(__file__).resolve().parents[1]
 # Com `**/` para valer em qualquer nível do contexto, não só na raiz.
 EM_QUALQUER_NIVEL = ('**/.claude', '**/.maestri', '**/.maestro', '**/segredos', '**/acesso', '**/ajustes')
-NA_RAIZ = ('.git', '.venv', '.env', '.env.*', 'conversas', 'execucoes', 'lixeira')
+NA_RAIZ = ('.git', '.venv', '.env', '.env.*', 'conversas', 'execucoes', 'lixeira',
+           'deploy/ambientes/*.env', '**/*.pem', '**/*.key')
+# Exceções (`!`) permitidas: qualquer outra pode reabrir um segredo ou pasta de agente.
+EXCECOES_PERMITIDAS = {'!.env.example', '!entrada/README.md', '!casos/README.md', '!casos/catalogo.json'}
 
 
 class DockerignoreTest(unittest.TestCase):
@@ -21,6 +24,10 @@ class DockerignoreTest(unittest.TestCase):
         for padrao in NA_RAIZ:
             self.assertIn(padrao, self.regras, f'.dockerignore sem {padrao}')
         self.assertIn('!.env.example', self.regras)
+
+    def test_excecoes_so_da_lista_permitida(self):
+        excecoes = {r for r in self.regras if r.startswith('!')}
+        self.assertEqual(excecoes - EXCECOES_PERMITIDAS, set(), 'exceção "!" fora da lista permitida em .dockerignore')
 
     def test_nenhuma_regra_de_agente_sem_alcance_total(self):
         for nome in ('.claude', '.maestri', '.maestro', 'segredos', 'acesso', 'ajustes'):

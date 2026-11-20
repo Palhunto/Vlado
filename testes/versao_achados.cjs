@@ -34,6 +34,7 @@ async function abrir(consulta, {desktop = true, idioma = 'pt'} = {}) {
       estavel = mesa.chamadas.length === antes ? estavel + 1 : 0;
       antes = mesa.chamadas.length;
     }
+    if (estavel < 5) throw new Error('A interface não assentou em 200 voltas: as chamadas à API continuam chegando.');
   };
   await mesa.assentar();
   mesa.buscas = () => mesa.chamadas.filter(c => c.operacao === 'achados-buscar').map(c => [c.dados.rodada, c.dados.revisao, c.dados.geracao_achados].join('/'));
