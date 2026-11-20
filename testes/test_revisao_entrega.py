@@ -103,6 +103,47 @@ class EmpacotarRevisaoTest(unittest.TestCase):
                  'backups/v.tar', 'manifesto_distribuicao.json', 'docs/VLADO_HANDOFF.md', 'log/eventos.jsonl']
         self.assertEqual(empacotar_entrega.proibidos(ruins), ruins)
 
+    def test_pastas_de_agentes_ficam_fora_e_o_contrato_entra(self):
+        ruins = ['.claude/settings.local.json', '.claude/agents/x.md', '.maestri/roles/a/CLAUDE.md',
+                 '.maestro/equipe/PLANO_LANCAMENTO.md', '.maestro/playbooks/p/Working/n.md',
+                 '.maestro/CONTRATO_EVIDENCIA.md', '.maestro/equipe/CONTRATO_EVIDENCIA.md.orig',
+                 '.maestro/equipe/sub/CONTRATO_X.md', 'android/.claude/x.json']
+        self.assertEqual(empacotar_entrega.proibidos(ruins), ruins)
+        bons = ['.maestro/equipe/CONTRATO_EVIDENCIA.md', '.maestro/equipe/CONTRATO_CONTAS.md',
+                'docs/claude.md', 'docs/maestro.md', '.dockerignore']
+        self.assertEqual(empacotar_entrega.proibidos(bons), [])
+
+    def test_pastas_de_agentes_em_qualquer_caixa_e_contrato_so_na_raiz(self):
+        ruins = ['.Maestro/equipe/PLANO.md', '.MAESTRO/x.md', '.Claude/settings.json', 'docs/.CLAUDE/a.md',
+                 '.Maestri/roles/a.md', '.codex/config.toml', '.Codex/x', '.agents/a.md', 'sub/.agents/b.md',
+                 '.cursor/rules/r.mdc', '.CURSOR/x',
+                 # The contract exception holds only at the root and in the exact spelling of .gitignore.
+                 'tmp/.maestro/equipe/CONTRATO_X.md', 'a/b/.maestro/equipe/CONTRATO_EVIDENCIA.md',
+                 '.Maestro/equipe/CONTRATO_X.md', '.maestro/Equipe/CONTRATO_X.md',
+                 '.maestro/equipe/contrato_x.md', '.maestro/equipe/CONTRATO_X.MD']
+        self.assertEqual(empacotar_entrega.proibidos(ruins), ruins)
+        bons = ['.maestro/equipe/CONTRATO_contas.md', '.maestro/equipe/CONTRATO_Contas-v2.md',
+                '.maestro/equipe/CONTRATO_.md', 'docs/codex.md', 'scripts/codex_apuracao.py', 'agents.md',
+                'docs/cursor.md', '.claude-flow-nao/x']
+        self.assertEqual(empacotar_entrega.proibidos(bons), [])
+
+    def test_contrato_versionado_pelo_gitignore_e_o_que_o_pacote_aceita(self):
+        # Same names, exact case: git versions a file under .maestro/equipe/ exactly when the
+        # package lets it in, so a tracked contract never makes the whole delivery refuse.
+        import shutil
+        import subprocess
+        if shutil.which('git') is None:
+            self.skipTest('git indisponível')
+        raiz = Path(__file__).resolve().parents[1]
+        nomes = ['CONTRATO_EVIDENCIA.md', 'CONTRATO_contas.md', 'CONTRATO_Contas v2.md', 'CONTRATO_.md',
+                 'CONTRATO_X.md.orig', 'CONTRATO_X.txt', 'PLANO_LANCAMENTO.md', 'sub/CONTRATO_X.md']
+        for nome in nomes:
+            caminho = f'.maestro/equipe/{nome}'
+            ignorado = subprocess.run(['git', '-C', str(raiz), 'check-ignore', '--no-index', '-q', caminho],
+                                      capture_output=True).returncode == 0
+            barrado = bool(empacotar_entrega.proibidos([caminho]))
+            self.assertEqual(ignorado, barrado, caminho)
+
 
 if __name__ == '__main__':
     unittest.main()
