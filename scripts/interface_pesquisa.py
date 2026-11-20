@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import base64
 from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from http.cookies import SimpleCookie
@@ -11,20 +10,17 @@ import ipaddress
 import json
 import os
 from pathlib import Path
-from pathlib import PureWindowsPath
 import re
 import secrets
 import sqlite3
 import socket
 import sys
-import tempfile
 import threading
-import uuid
 from urllib.parse import quote, urlsplit
 import webbrowser
 
 from comum import ROOT, dentro, ler_json, sha256
-from cadastrar_documentos import cadastrar, inventario, preparar_pdfs
+from cadastrar_documentos import inventario, preparar_pdfs
 from ambiente import diagnostico
 import fontes_web
 import indice_achados
@@ -43,15 +39,13 @@ from codex_apuracao import Conversas
 from inferencia_api import resumo_inferencia, salvar_inferencia
 import acesso
 import lixeira
-from indice_sqlite import (ID_CASO, ID_RODADA, ID_GERACAO, caminho_rodada,
-                           cobertura, ler_passagem, pesquisar)
+from indice_sqlite import ID_CASO, caminho_rodada, cobertura, ler_passagem, pesquisar
+from rotas_documentos import MAX_UPLOAD, catalogo, receber_documentos  # noqa: F401
+from rotas_estaticas import ASSETS, RotasEstaticas
 
-# Inside the PyInstaller bundle the interface lives next to the frozen modules (sys._MEIPASS).
-ASSETS = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1])) / 'interface'
 # local: single operator without sign-in; local-contas: accounts over plain HTTP on 127.0.0.1
 # (installed Windows desk); piloto: accounts behind an HTTPS reverse proxy.
 MODOS = ('local', 'local-contas', 'piloto')
-MAX_UPLOAD = 50 * 1024 * 1024
 CADERNO_OPERACOES = ('caderno-documentos', 'caderno-listar', 'caderno-detalhe', 'caderno-salvar',
                      'caderno-cruzar', 'caderno-exportar', 'caderno-original')
 DILIGENCIAS_OPERACOES = ('diligencias-listar', 'diligencias-criar', 'diligencias-atualizar',
@@ -83,83 +77,6 @@ def _sem_internos(result):
         return result
     conversa = {k: v for k, v in result['conversa'].items() if k not in CAMPOS_INTERNOS_CONVERSA}
     return {**result, 'conversa': conversa}
-
-
-def receber_documentos(root, data):
-    files = data.get('arquivos')
-    if not isinstance(files, list) or not 1 <= len(files) <= 100:
-        raise ValueError('Envie de 1 a 100 arquivos por lote, até 50 MB no total.')
-    if type(data.get('novo', False)) is not bool:
-        raise ValueError('Indicação de novo caso inválida.')
-    with tempfile.TemporaryDirectory(prefix='envio_documental_') as folder:
-        sources, total = [], 0
-        for number, item in enumerate(files):
-            if not isinstance(item, dict):
-                raise ValueError('Arquivo enviado inválido; lote não cadastrado.')
-            name = item.get('nome')
-            if (not isinstance(name, str) or not name or len(name) > 255
-                    or PureWindowsPath(name).name != name or PureWindowsPath(name).is_reserved()
-                    or name.endswith(('.', ' '))
-                    or any(ord(c) < 32 or c in ':\\/<>"|?*' for c in name)):
-                raise ValueError('Nome de arquivo inválido; lote não cadastrado.')
-            encoded = item.get('base64')
-            if not isinstance(encoded, str):
-                raise ValueError('Conteúdo de arquivo inválido; lote não cadastrado.')
-            content = base64.b64decode(encoded, validate=True)
-            total += len(content)
-            if total > MAX_UPLOAD:
-                raise ValueError('O lote excede 50 MB; nenhum arquivo cadastrado.')
-            source = Path(folder) / str(number) / name
-            source.parent.mkdir()
-            source.write_bytes(content)
-            sources.append(source)
-        case = data.get('caso')
-        if data.get('novo') and not case:
-            case = 'apuracao_' + uuid.uuid4().hex
-        return cadastrar(root, case, sources, titulo=data.get('titulo'),
-                         natureza=data.get('natureza', 'nao_informada'), novo=data.get('novo', False),
-                         modo_fontes=data.get('modo_fontes'), dominio_permitido=data.get('dominio_permitido'))
-
-
-def catalogo(root):
-    """Read catalog metadata and directory names only; do not read inactive documents."""
-    path = root / 'casos/catalogo.json'
-    cases = ler_json(path)['casos'] if path.is_file() else []
-    result = []
-    removed = lixeira.ativos(root)
-    for case in cases:
-        identifier = case['id']
-        if not re.fullmatch(ID_CASO, identifier):
-            continue
-        if lixeira.excluido(root, identifier, itens=removed):
-            continue
-        rounds = []
-        folder = dentro(root, f'execucoes/{identifier}')
-        try:
-            runs = sorted(folder.iterdir()) if folder.is_dir() else []
-        except PermissionError:
-            result.append({'id': identifier, 'titulo': case.get('titulo', identifier),
-                           'rodadas': [], 'aviso': 'Sem permissão para listar rodadas deste caso.'})
-            continue
-        for run in runs:
-            if not re.fullmatch(ID_RODADA, run.name) or not run.is_dir():
-                continue
-            if lixeira.excluido(root, identifier, rodada=run.name, itens=removed):
-                continue
-            run = dentro(root, f'execucoes/{identifier}/{run.name}')
-            index = dentro(run, 'indice')
-            try:
-                generations = [item.name for item in sorted(index.iterdir())
-                               if re.fullmatch(ID_GERACAO, item.name)
-                               and dentro(index, item.name).is_dir()
-                               and dentro(index, f'{item.name}/manifesto.json').is_file()
-                               and dentro(index, f'{item.name}/apuracao.sqlite').is_file()] if index.is_dir() else []
-                rounds.append({'id': run.name, 'geracoes': generations})
-            except PermissionError:
-                rounds.append({'id': run.name, 'geracoes': [],
-                               'aviso': 'Sem permissão para listar índices desta rodada.'})
-        result.append({'id': identifier, 'titulo': case.get('titulo', identifier), 'rodadas': rounds})
-    return {'casos': result}
 
 
 def executar(root, operation, data, conta=None, originais_abertos=None, casos=None):
@@ -365,7 +282,7 @@ class Servidor(ThreadingHTTPServer):
         return 'HttpOnly; ' + ('Secure; ' if self.modo == 'piloto' else '') + 'SameSite=Strict; Path=/'
 
 
-class Handler(BaseHTTPRequestHandler):
+class Handler(RotasEstaticas, BaseHTTPRequestHandler):
     timeout = 60  # seconds per socket operation; long polls answer within 20 s
     def _send(self, status, content, content_type='application/json; charset=utf-8', extra=None, cache='no-store'):
         self.send_response(status)
@@ -569,76 +486,7 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, OSError, KeyError) as exc:
                 self._json(400, {'erro': str(exc)})
             return
-        assets = {'/': ('index.html', 'text/html; charset=utf-8'),
-                  '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
-                  '/codex.js': ('codex.js', 'text/javascript; charset=utf-8'),
-                  '/i18n.js': ('i18n.js', 'text/javascript; charset=utf-8'),
-                  '/i18n_en.js': ('i18n_en.js', 'text/javascript; charset=utf-8'),
-                  '/configuracao_ia.js': ('configuracao_ia.js', 'text/javascript; charset=utf-8'),
-                  '/piloto.js': ('piloto.js', 'text/javascript; charset=utf-8'),
-                  '/entrar.js': ('entrar.js', 'text/javascript; charset=utf-8'),
-                  '/entrar.css': ('entrar.css', 'text/css; charset=utf-8'),
-                  '/gerenciar.js': ('gerenciar.js', 'text/javascript; charset=utf-8'),
-                  '/leitura.js': ('leitura.js', 'text/javascript; charset=utf-8'),
-                  '/experiencia.js': ('experiencia.js', 'text/javascript; charset=utf-8'),
-                  '/desktop.js': ('desktop.js', 'text/javascript; charset=utf-8'),
-                  '/revisao.js': ('revisao.js', 'text/javascript; charset=utf-8'),
-                  '/diligencias.js': ('diligencias.js', 'text/javascript; charset=utf-8'),
-                  '/observacoes.js': ('observacoes.js', 'text/javascript; charset=utf-8'),
-                  '/continuidade.js': ('continuidade.js', 'text/javascript; charset=utf-8'),
-                  '/fontes_web.js': ('fontes_web.js', 'text/javascript; charset=utf-8'),
-                  '/caderno.js': ('caderno.js', 'text/javascript; charset=utf-8'),
-                  '/apuracao.js': ('apuracao.js', 'text/javascript; charset=utf-8'),
-                  '/editor_notas.js': ('editor_notas.js', 'text/javascript; charset=utf-8'),
-                  '/redacao.js': ('redacao.js', 'text/javascript; charset=utf-8'),
-                  '/redacao.css': ('redacao.css', 'text/css; charset=utf-8'),
-                  '/vendor/vditor/dist/index.min.js': ('vendor/vditor/dist/index.min.js', 'text/javascript; charset=utf-8'),
-                  '/vendor/vditor/dist/index.css': ('vendor/vditor/dist/index.css', 'text/css; charset=utf-8'),
-                  '/vendor/vditor/dist/js/lute/lute.min.js': ('vendor/vditor/dist/js/lute/lute.min.js', 'text/javascript; charset=utf-8'),
-                  '/vendor/vditor/dist/js/i18n/pt_BR.js': ('vendor/vditor/dist/js/i18n/pt_BR.js', 'text/javascript; charset=utf-8'),
-                  '/vendor/vditor/dist/js/icons/ant.js': ('vendor/vditor/dist/js/icons/ant.js', 'text/javascript; charset=utf-8'),
-                  '/vendor/vditor/dist/css/content-theme/light.css': ('vendor/vditor/dist/css/content-theme/light.css', 'text/css; charset=utf-8'),
-                  '/fonts/SourceSerif4-Roman.ttf': ('fonts/SourceSerif4-Roman.ttf', 'font/ttf'),
-                  '/fonts/SourceSans3-Upright.otf': ('fonts/SourceSans3-Upright.otf', 'font/otf'),
-                  '/vendor/pdfjs/legacy/build/pdf.min.mjs': ('vendor/pdfjs/legacy/build/pdf.min.mjs', 'text/javascript; charset=utf-8'),
-                  '/vendor/pdfjs/legacy/build/pdf.worker.min.mjs': ('vendor/pdfjs/legacy/build/pdf.worker.min.mjs', 'text/javascript; charset=utf-8'),
-                  '/manifest.webmanifest': ('manifest.webmanifest', 'application/manifest+json; charset=utf-8'),
-                  '/icones/vlado.svg': ('icones/vlado.svg', 'image/svg+xml'),
-                  '/icones/vlado-192.png': ('icones/vlado-192.png', 'image/png'),
-                  '/icones/vlado-512.png': ('icones/vlado-512.png', 'image/png'),
-                  '/icones/vlado-maskable-512.png': ('icones/vlado-maskable-512.png', 'image/png'),
-                  '/tokens.css': ('tokens.css', 'text/css; charset=utf-8'),
-                  '/style.css': ('style.css', 'text/css; charset=utf-8'),
-                  '/caderno.css': ('caderno.css', 'text/css; charset=utf-8'),
-                  '/quadros.js': ('quadros.js', 'text/javascript; charset=utf-8'),
-                  '/analise.js': ('analise.js', 'text/javascript; charset=utf-8'),
-                  '/indicador_salvamento.js': ('indicador_salvamento.js', 'text/javascript; charset=utf-8')}
-        if path not in assets:
-            self._json(404, {'erro': 'Página não encontrada.'})
-            return
-        name, content_type = assets[path]
-        content = (ASSETS / name).read_bytes()
-        if name == 'index.html':
-            principal = self._principal()
-            piloto = self.server.modo == 'piloto'
-            content = (content.replace(b'__SESSION_TOKEN__', principal['csrf'].encode('ascii'))
-                       .replace(b'__IDIOMA_PADRAO__', b'en' if piloto else b'pt')
-                       .replace(b'__PAPEL__', principal['papel'].encode('ascii'))
-                       .replace(b'__MODO__', self.server.modo.encode('ascii')))
-            extra = ({} if self.server.com_contas
-                     else {'Set-Cookie': f'apuracao_session={self.server.token}; HttpOnly; SameSite=Strict; Path=/'})
-            self._send(200, content, content_type, extra)
-        else:
-            # Static files revalidate on every load (no stale code after an update) but skip the
-            # download when unchanged; index.html stays no-store because it carries session tokens.
-            etag = '"' + hashlib.sha256(content).hexdigest()[:32] + '"'
-            # Third-party bundles requested with their version (?v=…) never change under that URL.
-            versionado = name.startswith('vendor/') and re.fullmatch(r'v=[0-9A-Za-z._-]{1,40}', urlsplit(self.path).query)
-            cache = 'public, max-age=31536000, immutable' if versionado else 'no-cache'
-            if self.headers.get('If-None-Match') == etag:
-                self._send(304, b'', content_type, {'ETag': etag}, cache=cache)
-            else:
-                self._send(200, content, content_type, {'ETag': etag}, cache=cache)
+        self._estatico(path)
 
     def do_POST(self):
         self.__dict__.pop('_principal_requisicao', None)
