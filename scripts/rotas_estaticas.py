@@ -1,7 +1,10 @@
 """Arquivos da interface servidos por ``GET`` (lista fechada; nenhum caminho vem do cliente).
 
-Separado de ``interface_pesquisa`` sem mudar comportamento. Só os caminhos de ``ARQUIVOS``
-são publicados; licenças, manifestos e demais arquivos de ``interface/`` não são rotas.
+Separado de ``interface_pesquisa`` sem mudar comportamento. ``_estatico`` publica só os
+caminhos de ``ARQUIVOS``; licenças, manifestos e demais arquivos de ``interface/`` não são
+rotas. Fora desta lista, ``do_GET`` serve ``entrar.html`` em ``/entrar`` e ``/ativar/<token>``
+(modos com contas) e em ``/primeiro-acesso`` (só ``local-contas``), e responde ``/saude`` e
+``/api/*`` em JSON.
 ``index.html`` leva o token da sessão e por isso nunca vai para cache; os demais revalidam
 por ETag, e os pacotes de terceiros pedidos com versão (``?v=…``) ficam em cache imutável.
 """
