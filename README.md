@@ -122,7 +122,7 @@ Pastas de trabalho de agentes (`.claude/` e `.maestro/`) estão fora do versiona
 - O OCR é local, mas seu texto é reconhecimento automático e não substitui a conferência no original.
 - A ausência de um resultado de busca não prova ausência no acervo.
 - Instruções de projeto (`AGENTS.md`) orientam o agente de chat, mas não constituem bloqueio técnico de rede ou de acesso a pastas.
-- A migração para a API ainda não tem chamada real registrada no projeto; o estado está em [docs/INTEGRACAO_API.md](docs/INTEGRACAO_API.md).
+- A integração por API teve três ensaios pagos com o provedor OpenAI, registrados em [docs/VERIFICACAO.md](docs/VERIFICACAO.md). O provedor Anthropic, que é o padrão, ainda não rodou com chave real. O estado está em [docs/INTEGRACAO_API.md](docs/INTEGRACAO_API.md).
 - Para a Mesa hospedada (ambientes separados, contas com login, Docker, HTTPS, limites de gasto, backup e recuperação), ver [docs/GUIA_TECNICO_IMPLANTACAO.md](docs/GUIA_TECNICO_IMPLANTACAO.md).
 
 ## Verificações técnicas
