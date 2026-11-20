@@ -25,7 +25,16 @@ const respostas = {
 async function abrir(consulta, {desktop = true, idioma = 'pt'} = {}) {
   const mesa = criarMesa({desktop, idioma, armazenamento: {'vlado-idioma': idioma}, catalogo: [ALFA, VAZIA],
     api: operacao => respostas[operacao] || {}, url: `http://127.0.0.1:8765/${consulta}`});
-  mesa.assentar = async () => { await new Promise(resolve => setTimeout(resolve, 250)); await mesa.esperar(12); };
+  // Waits for quiescence instead of a fixed delay: done once no new API call appeared for 5 polls in a row.
+  mesa.assentar = async () => {
+    let estavel = 0, antes = -1;
+    for (let i = 0; i < 200 && estavel < 5; i++) {
+      await new Promise(resolve => setTimeout(resolve, 20));
+      await mesa.esperar(12);
+      estavel = mesa.chamadas.length === antes ? estavel + 1 : 0;
+      antes = mesa.chamadas.length;
+    }
+  };
   await mesa.assentar();
   mesa.buscas = () => mesa.chamadas.filter(c => c.operacao === 'achados-buscar').map(c => [c.dados.rodada, c.dados.revisao, c.dados.geracao_achados].join('/'));
   return mesa;
