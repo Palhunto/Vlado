@@ -139,7 +139,7 @@ docker compose -p vlado-editorial --env-file deploy/ambientes/editorial.env exec
 - A restauração apaga as sessões (todos entram de novo) e restaura contas e senhas do momento do backup.
 - Ensaie a restauração num ambiente separado (`-p vlado-restauracao`) antes de depender dela, conferindo hashes dos documentos, contas, permissões, revisões humanas, referências do Caderno e históricos (registro do ensaio em `docs/VERIFICACAO.md`).
 
-`VLADO_VERSAO` é a etiqueta da imagem Docker, independente da versão da aplicação (`versao` em `configuracao.json`, hoje 1.4.0) e da do instalador Windows (2.1.0); os arquivos `.env.example` trazem `2.0.0` só como exemplo.
+`VLADO_VERSAO` é a etiqueta da imagem Docker. Hoje as três numerações (aplicação em `versao` de `configuracao.json`, instalador Windows e imagem) não estão alinhadas; o `2.0.0` dos `.env.example` vem da entrega de 15/11 e não foi atualizado. Use uma etiqueta nova a cada build. O alinhamento é decisão em aberto.
 
 Atualizar: backup → novo código → `VLADO_VERSAO` nova no `.env` → `up -d --build`. Reverter: `VLADO_VERSAO` anterior e `up -d` sem `--build`; se a versão nova mudou dados de forma incompatível, restaure o backup feito antes da atualização.
 

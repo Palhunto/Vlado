@@ -1,12 +1,12 @@
 # Inferência pela API do provedor na Mesa de apuração
 
-Atualizado em 13/11/2026. Perguntas e complementos enviados pela Mesa usam a API do provedor configurado: Anthropic ou OpenAI. A integração anterior, com `codex app-server` e login ChatGPT, foi removida. As seis etapas obrigatórias e a publicação verificada dos achados seguem o [fluxo automático](FLUXO_AUTOMATICO_CODEX.md). O histórico da adaptação está em [MIGRACAO.md](MIGRACAO.md).
+Atualizado em 20/11/2026. Perguntas e complementos enviados pela Mesa usam a API do provedor configurado: Anthropic ou OpenAI. A integração anterior, com `codex app-server` e login ChatGPT, foi removida. As seis etapas obrigatórias e a publicação verificada dos achados seguem o [fluxo automático](FLUXO_AUTOMATICO_CODEX.md). O histórico da adaptação está em [MIGRACAO.md](MIGRACAO.md).
 
 ## Estado da verificação
 
 - Os testes automatizados (`testes/test_inferencia_api.py`, `testes/test_provedores_api.py` e a suíte `unittest`) usam provedores roteirizados e clientes SDK simulados.
-- **Chamadas reais registradas:** três ensaios pagos com o provedor OpenAI (13/11 e 15/11/2026), descritos em [VERIFICACAO.md](VERIFICACAO.md) com tokens, tempo e custo estimado.
-- **Não verificado em execução real:** o provedor Anthropic, que é o padrão, nunca rodou com chave real; também não foram verificados limites de cobrança do provedor nem a recuperação após queda durante uma inferência.
+- **Chamadas reais registradas:** três ensaios concluídos e uma tentativa interrompida, também cobrada, com o provedor OpenAI (13/11 e 15/11/2026), descritos em [VERIFICACAO.md](VERIFICACAO.md) com tokens e custo estimado (tempo em dois deles).
+- **Não verificado em execução real:** para o provedor Anthropic, que é o padrão, não há execução registrada com chave real; também não foram verificados limites de cobrança do provedor nem a recuperação após queda durante uma inferência.
 - `testes/qa_fluxo_real.py` é o teste real opcional. Consome créditos do provedor configurado:
 
 ```powershell
