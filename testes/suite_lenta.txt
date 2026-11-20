@@ -1,0 +1,2 @@
+# Módulos de teste que ficam fora da suíte rápida (rodam antes de merge).
+# Um nome de módulo por linha, sem .py. Gerado a partir de `executar_suite.py --tempos`.

@@ -1,0 +1,66 @@
+name: testes
+
+on:
+  push:
+    branches: [main, 'lancamento/**']
+  pull_request:
+
+concurrency:
+  group: testes-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  VLADO_EXIGIR_NODE: '1'   # sem Node o teste falha em vez de pular
+  PYTHONUTF8: '1'
+
+jobs:
+  rapida:
+    name: Suíte rápida
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Dependências do sistema (OCR)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr ghostscript
+      - name: Dependências Python
+        run: python -m pip install -r requirements.txt
+      - name: Fluxo montado confere com os módulos
+        run: python scripts/montar_fluxo.py --check
+      - name: Verificação do projeto
+        run: python scripts/verificar_projeto.py
+      - name: Suíte rápida (Python e Node; os testes Node rodam por test_*.py)
+        run: python testes/executar_suite.py --rapida
+
+  lenta:
+    name: Suíte lenta
+    if: github.event_name == 'pull_request'
+    needs: rapida
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Dependências do sistema (OCR)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr ghostscript
+      - name: Dependências Python
+        run: python -m pip install -r requirements.txt
+      - name: Suíte lenta (Python)
+        run: python testes/executar_suite.py --lenta
