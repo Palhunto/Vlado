@@ -10,6 +10,20 @@ O [guia SQLite](docs/BANCO_SQLITE.md) documenta a pesquisa nos documentos. O [gu
 
 Para preparar outro Windows, use **[Preparar notebook.cmd](Preparar%20notebook.cmd)**. Ele usa o `.venv` do projeto ou um Python 3.12+ do sistema, cria o `.venv` e instala as dependências (`scripts/preparar_notebook.py`), e termina orientando a definir a chave da API no ambiente antes de abrir a Mesa. A versão distribuída abre com catálogo vazio.
 
+## Release 2.1.0 (instalador Windows)
+
+A [release v2.1.0](https://github.com/Palhunto/Vlado/releases/tag/v2.1.0) traz o **Vlado-Setup.exe** (127,5 MB) e o arquivo `Vlado-Setup.exe.sha256`. Antes de instalar, confira o hash:
+
+```powershell
+certutil -hashfile Vlado-Setup.exe SHA256
+```
+
+O valor deve ser igual ao do arquivo `.sha256` publicado na mesma release. A release foi gerada a partir da tag `v2.1.0`, no commit `e66aba0`.
+
+Esta versão reúne a lapidação das fases 01 a 09: contrato de evidência e quadros (hipóteses, linha do tempo, comparador e mapa de relações), tabelas de apuração com fonte por célula, leitura de DOCX e XLSX com localizador, fontes web por apuração (modo opcional, um único domínio, sempre a pedido do jornalista), conferência da redação, entrevistas e pedidos, salvamento automático de rascunhos e as correções de segurança da revisão da fase 09. O detalhamento está em [docs/CHANGELOG.md](docs/CHANGELOG.md).
+
+Duas versões convivem no projeto: `2.1.0` é a do instalador e da release, e `1.4.0` é a do campo `versao` de `configuracao.json`. Os prompts têm versão própria (`1.4.1`, em `scripts/comum.py`). O instalador ainda não foi testado numa instalação limpa neste ambiente; a verificação de instalação deve ser feita antes de distribuir.
+
 ## Trabalhar pela interface
 
 Para instalar num computador Windows sem Python, use o **Vlado-Setup.exe**: ele traz Tesseract, Ghostscript e todas as bibliotecas, cria atalhos e pede a criação do administrador na primeira abertura ([guia do instalador](docs/INSTALADOR_WINDOWS.md)). Pelo repositório, no Windows, abra **[Abrir mesa.vbs](Abrir%20mesa.vbs)** para iniciar em segundo plano e abrir o navegador, sem terminal visível. **[Iniciar pesquisa.cmd](Iniciar%20pesquisa.cmd)** continua disponível com console. Em **Perguntar à IA › Conexão e opções**, escolha o provedor (Anthropic ou OpenAI), cole a chave da API e salve; ela fica em `segredos/` (fora do git) e nunca volta ao navegador. Uma variável de ambiente `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` tem prioridade. O botão **English/Português** no topo troca o idioma da interface. Na **Mesa de apuração**, use **Começar uma apuração**, **Adicionar documentos** ou **Retomar trabalho**. O seletor no topo mantém a mesma apuração entre as áreas. Cadastre os documentos, confira o recibo e clique em **Perguntar sobre estes documentos**. Em **Conversa com os documentos**, confira **Verificar conexão** e envie a pergunta. Você pode acompanhar as respostas, abrir o original na página citada, baixar fontes, complementar a conversa e cancelar. O guia [INTEGRACAO_API.md](docs/INTEGRACAO_API.md) descreve chave, configuração, arquitetura, testes e limites. **Encerrar serviço** fecha o backend e interrompe as execuções ativas. Se já havia um servidor aberto antes desta atualização, encerre-o e inicie novamente.
