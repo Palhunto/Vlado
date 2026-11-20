@@ -162,5 +162,7 @@ Essas verificações confirmam integridade de arquivos e scripts. Não avaliam a
 **Versões**
 - `2.1.0` é a versão do instalador e da release (`instalador/vlado.iss` e `instalador/dependencias.json`).
 - `1.4.0` é a versão da aplicação, no campo `versao` de `configuracao.json`.
+- `VLADO_VERSAO` (hoje `2.0.0` em `.env.example` e em `deploy/ambientes/*.env.example`) é só a etiqueta da imagem Docker da Mesa hospedada, usada para reverter. Não é a versão da aplicação nem a do instalador, e o valor dos exemplos é apenas um ponto de partida: quem implanta escolhe a etiqueta.
+- As três versões são independentes de propósito: aplicação, instalador e imagem Docker seguem calendários próprios.
 - Os prompts têm versão própria (`1.4.1`, em `scripts/comum.py`).
 - O detalhamento das mudanças por versão está em [docs/CHANGELOG.md](docs/CHANGELOG.md).
