@@ -113,7 +113,7 @@ A versão distribuída abre com catálogo vazio.
 | `docs/` | Guias de uso, verificação, integração, migração e changelog ([CHANGELOG.md](docs/CHANGELOG.md)) |
 | `proveniencia/` | Origem do repositório de referência, sem uso como entrada de apuração |
 
-Pastas de trabalho de agentes (`.claude/` e `.maestro/`) estão fora do versionamento, com exceção de `.maestro/equipe/CONTRATO_EVIDENCIA.md`.
+Pastas de trabalho de agentes (`.claude/`, `.maestro/` e `.maestri/`) estão fora do versionamento, com exceção de `.maestro/equipe/CONTRATO_EVIDENCIA.md`.
 
 ## Privacidade e limites
 
@@ -122,7 +122,7 @@ Pastas de trabalho de agentes (`.claude/` e `.maestro/`) estão fora do versiona
 - O OCR é local, mas seu texto é reconhecimento automático e não substitui a conferência no original.
 - A ausência de um resultado de busca não prova ausência no acervo.
 - Instruções de projeto (`AGENTS.md`) orientam o agente de chat, mas não constituem bloqueio técnico de rede ou de acesso a pastas.
-- A migração para a API ainda não tem chamada real registrada no projeto; o estado está em [docs/INTEGRACAO_API.md](docs/INTEGRACAO_API.md).
+- A integração por API teve três ensaios concluídos e uma tentativa interrompida, também cobrada, com o provedor OpenAI, registrados em [docs/VERIFICACAO.md](docs/VERIFICACAO.md) com tokens e custo estimado (tempo em dois deles). Para o provedor Anthropic, que é o padrão, não há execução registrada com chave real. O estado está em [docs/INTEGRACAO_API.md](docs/INTEGRACAO_API.md).
 - Para a Mesa hospedada (ambientes separados, contas com login, Docker, HTTPS, limites de gasto, backup e recuperação), ver [docs/GUIA_TECNICO_IMPLANTACAO.md](docs/GUIA_TECNICO_IMPLANTACAO.md).
 
 ## Verificações técnicas
@@ -162,5 +162,7 @@ Essas verificações confirmam integridade de arquivos e scripts. Não avaliam a
 **Versões**
 - `2.1.0` é a versão do instalador e da release (`instalador/vlado.iss` e `instalador/dependencias.json`).
 - `1.4.0` é a versão da aplicação, no campo `versao` de `configuracao.json`.
+- `VLADO_VERSAO` (hoje `2.0.0` em `.env.example` e em `deploy/ambientes/*.env.example`) é a etiqueta da imagem Docker da Mesa hospedada, usada para reverter. Não é a versão da aplicação nem a do instalador, e o valor dos exemplos é apenas um ponto de partida: quem implanta escolhe a etiqueta.
+- Hoje as três numerações (aplicação, instalador e imagem Docker) não estão alinhadas; o `2.0.0` dos exemplos vem da entrega de 15/11 e não foi atualizado. Use uma etiqueta nova a cada build. O alinhamento é decisão em aberto.
 - Os prompts têm versão própria (`1.4.1`, em `scripts/comum.py`).
 - O detalhamento das mudanças por versão está em [docs/CHANGELOG.md](docs/CHANGELOG.md).
