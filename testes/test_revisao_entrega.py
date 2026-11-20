@@ -139,8 +139,12 @@ class EmpacotarRevisaoTest(unittest.TestCase):
                  'CONTRATO_X.md.orig', 'CONTRATO_X.txt', 'PLANO_LANCAMENTO.md', 'sub/CONTRATO_X.md']
         for nome in nomes:
             caminho = f'.maestro/equipe/{nome}'
-            ignorado = subprocess.run(['git', '-C', str(raiz), 'check-ignore', '--no-index', '-q', caminho],
-                                      capture_output=True).returncode == 0
+            codigo = subprocess.run(['git', '-C', str(raiz), 'check-ignore', '--no-index', '-q', caminho],
+                                    capture_output=True).returncode
+            if codigo not in (0, 1):
+                # 128: no repository here (an extracted delivery package has no .git).
+                self.skipTest(f'git check-ignore indisponível aqui (código {codigo})')
+            ignorado = codigo == 0
             barrado = bool(empacotar_entrega.proibidos([caminho]))
             self.assertEqual(ignorado, barrado, caminho)
 
