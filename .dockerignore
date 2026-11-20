@@ -8,10 +8,11 @@ dist
 entrega_intercept
 entrega_intercept.*
 android/saidas
-.claude-flow
-.claude
-.maestri
-.maestro
+# Pastas de agente em qualquer nível do contexto, não só na raiz.
+**/.claude-flow
+**/.claude
+**/.maestri
+**/.maestro
 **/__pycache__
 *.py[cod]
 *.log
@@ -34,9 +35,9 @@ docs/auditorias_integracao
 conversas
 execucoes
 lixeira
-segredos
-ajustes
-acesso
+**/segredos
+**/ajustes
+**/acesso
 entrada/*
 !entrada/README.md
 casos/*
