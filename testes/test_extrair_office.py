@@ -5,6 +5,7 @@ import json
 import struct
 import tempfile
 import unittest
+from auxiliar_node import pular_sem_ocr
 from unittest.mock import patch
 import zipfile
 import zlib
@@ -526,7 +527,7 @@ class CadastroOfficeTest(unittest.TestCase):
         self.assertEqual((hit['origem_texto'], hit['linha_inicio'], hit['linha_fim']), ('ocr', 1, 2))
         self.assertIn('conferir no original', hit['aviso_ocr'])
 
-    @unittest.skipUnless(__import__('ocr').diagnostico()['tesseract']['disponivel'], 'Tesseract local ausente')
+    @pular_sem_ocr(__import__('ocr').diagnostico()['tesseract']['disponivel'], 'Tesseract local ausente')
     def test_ocr_imagens_com_tesseract_real(self):
         image = png_branco(self.src / 'branca.png', size=64)
         result = self.cadastrar([image], ocr_imagens=True)

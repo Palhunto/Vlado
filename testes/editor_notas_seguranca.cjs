@@ -115,7 +115,9 @@ test('a etapa transform do editor também retira os embutidos', () => {
 });
 
 test('a CSP da Mesa barra o que escapar da limpeza: iframe e imagem externos, script embutido', () => {
-  const csp = lido('scripts/interface_pesquisa.py').match(/'Content-Security-Policy', "([^"]+)"/)[1];
+  const achada = lido('scripts/interface_pesquisa.py').match(/'Content-Security-Policy', "([^"]+)"/);
+  assert.ok(achada, 'A CSP não está mais em scripts/interface_pesquisa.py (_send). Se ela mudou de arquivo, atualize este teste para lê-la do novo lugar; não o remova.');
+  const csp = achada[1];
   const diretivas = Object.fromEntries(csp.split(';').map(d => d.trim().split(/\s+/)).map(([nome, ...v]) => [nome, v]));
   assert.deepEqual(diretivas['script-src'], ["'self'"], 'sem unsafe-inline: atributos on* e <script> embutido não rodam');
   assert.deepEqual(diretivas['frame-src'], ["'self'", 'blob:'], 'iframe de outra origem é bloqueado');

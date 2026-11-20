@@ -13,6 +13,8 @@ import sys
 import threading
 import time
 import unittest
+
+from auxiliar_node import localizar_node
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
@@ -650,8 +652,7 @@ class InterfaceTest(unittest.TestCase):
     def test_tela_de_fontes_web(self):
         import shutil
         import subprocess
-        node = shutil.which('node')
-        self.assertIsNotNone(node, 'Node.js é necessário para as regressões da interface.')
+        node = localizar_node(self)
         raiz = Path(__file__).resolve().parents[1]
         result = subprocess.run([node, '--test', str(raiz / 'testes/fontes_web.cjs')], cwd=raiz,
                                 capture_output=True, text=True, encoding='utf-8', timeout=90)

@@ -98,9 +98,12 @@ class InterfaceTest(unittest.TestCase):
         def observe(path):
             reads.append(Path(path))
             return read_json(path)
-        with patch('interface_pesquisa.ler_json', side_effect=observe):
+        # A leitura do catálogo mudou para rotas_documentos; observar os dois módulos mantém a verificação válida.
+        with patch('interface_pesquisa.ler_json', side_effect=observe), patch('rotas_documentos.ler_json', side_effect=observe):
             status, _, result = self.request('/api/analises', {'caso': 'alpha'})
         self.assertEqual(status, 200)
+        self.assertTrue(any(p.name == 'catalogo.json' for p in reads),
+                        'o observador deixou de ver as leituras de casos/catalogo.json')
         self.assertEqual(result['analises'][0]['pergunta'], 'Pergunta de teste técnico sintético.')
         self.assertTrue(result['analises'][0]['data'])
         self.assertFalse(any('execucoes/beta' in str(p).replace('\\', '/') for p in reads))
