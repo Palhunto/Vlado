@@ -16,6 +16,7 @@ permissions:
 env:
   VLADO_EXIGIR_NODE: '1'   # sem Node o teste falha em vez de pular
   VLADO_EXIGIR_OCR: '1'    # sem Tesseract (por, eng, osd) os testes de OCR falham em vez de pular
+  VLADO_EXIGIR_GIT: '1'    # git check-ignore com erro (ex.: dubious ownership) reprova em vez de pular
   PYTHONUTF8: '1'
 
 jobs:

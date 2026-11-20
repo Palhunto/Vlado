@@ -42,3 +42,10 @@ def pular_sem_ocr(disponivel, motivo):
             self.fail(mensagem)
         return falhar
     return decorador
+
+
+def pular_ou_falhar(teste, variavel, motivo):
+    """Pula o teste, ou o reprova quando `variavel=1` (CI): evita job verde sem ter rodado o teste."""
+    if os.environ.get(variavel) == '1':
+        teste.fail(f'{motivo}, e {variavel}=1 exige que o teste rode.')
+    teste.skipTest(motivo)
