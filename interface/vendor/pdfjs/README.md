@@ -6,4 +6,4 @@ Arquivos copiados sem alterações do pacote oficial (`npm pack pdfjs-dist@6.4.2
 
 Uso: `interface/experiencia.js` carrega a biblioteca sob demanda quando um PDF original é aberto, renderiza a página citada em `canvas` (navegação de páginas e zoom) e destaca o trecho citado quando a camada de texto o encontra. A configuração usa `isEvalSupported: false`; a política de segurança permite `worker-src 'self'`, sem `unsafe-eval`. Não há CDN, fontes padrão, CMaps nem WebAssembly incorporados: PDFs com fontes não incorporadas usam fontes do sistema; imagens JPEG 2000/JBIG2 e textos CJK sem fonte incorporada podem não aparecer — "Baixar original" continua disponível.
 
-O servidor publica só os dois `.mjs` listados explicitamente em `scripts/interface_pesquisa.py`. Atualizações devem preservar a licença, regenerar o manifesto e executar os testes de navegador com PDF sintético.
+O servidor publica só os dois `.mjs` listados explicitamente em `scripts/rotas_estaticas.py` (`ARQUIVOS`). Atualizações devem preservar a licença, regenerar o manifesto e executar os testes de navegador com PDF sintético.

@@ -6,6 +6,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from auxiliar_node import pular_ou_falhar
 from pathlib import Path
 from unittest import mock
 
@@ -133,7 +134,7 @@ class EmpacotarRevisaoTest(unittest.TestCase):
         import shutil
         import subprocess
         if shutil.which('git') is None:
-            self.skipTest('git indisponível')
+            pular_ou_falhar(self, 'VLADO_EXIGIR_GIT', 'git indisponível')
         raiz = Path(__file__).resolve().parents[1]
         nomes = ['CONTRATO_EVIDENCIA.md', 'CONTRATO_contas.md', 'CONTRATO_Contas v2.md', 'CONTRATO_.md',
                  'CONTRATO_X.md.orig', 'CONTRATO_X.txt', 'PLANO_LANCAMENTO.md', 'sub/CONTRATO_X.md']
@@ -143,7 +144,7 @@ class EmpacotarRevisaoTest(unittest.TestCase):
                                     capture_output=True).returncode
             if codigo not in (0, 1):
                 # 128: no repository here (an extracted delivery package has no .git).
-                self.skipTest(f'git check-ignore indisponível aqui (código {codigo})')
+                pular_ou_falhar(self, 'VLADO_EXIGIR_GIT', f'git check-ignore indisponível aqui (código {codigo})')
             ignorado = codigo == 0
             barrado = bool(empacotar_entrega.proibidos([caminho]))
             self.assertEqual(ignorado, barrado, caminho)

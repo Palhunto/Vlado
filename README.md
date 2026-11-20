@@ -154,8 +154,7 @@ Essas verificações confirmam integridade de arquivos e scripts. Não avaliam a
 
 **Pendências**
 - **Formulários da redação:** vincular evidência a uma afirmação e enviar nova versão do texto já existem nas rotas (`redacao-vincular`, `redacao-nova-versao`), mas ainda não têm formulário na Mesa. Estão previstos para a fase 10.
-- **Mensagens do preparador do notebook:** `Preparar notebook.cmd` e `scripts/preparar_notebook.py` indicam o arquivo `INSTALAR_NO_NOTEBOOK.md`, que não existe mais no repositório. A mensagem precisa ser corrigida.
-- **Testes sem executor:** dez arquivos `.cjs` em `testes/` (`compositor`, `conferencia_original`, `erros_en`, `i18n_codex_en`, `lixeira_apagar`, `primeiro_uso`, `qa_comportamentos`, `redacao_entrevistas`, `retomar_conversa` e `versao_achados`) testam funcionalidades, mas nenhum script os executa. Precisam de um `qa_*.py` que os chame ou devem ser removidos.
+- **Testes de navegador manuais:** os `qa_*.cjs` e `qa_*.py` dirigem o navegador e seguem sem execução automática.
 - **Instalação limpa:** o instalador 2.1.0 precisa de teste de instalação e primeiro uso antes de distribuição.
 - **Licença:** o repositório ainda não declara licença para o código; a decisão cabe ao grupo.
 
