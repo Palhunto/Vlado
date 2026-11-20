@@ -8,7 +8,7 @@ O [guia do fluxo automático](docs/FLUXO_AUTOMATICO_CODEX.md) descreve as etapas
 
 O [guia SQLite](docs/BANCO_SQLITE.md) documenta a pesquisa nos documentos. O [guia de achados da IA](docs/ACHADOS_IA.md) descreve registro, revisão, vínculo com o briefing e consulta dos cruzamentos estruturados. Cadastro e índice não executam inferência; a análise online ocorre somente quando uma pergunta é enviada pela Mesa. Resultados antigos não são importados automaticamente. A manutenção usa materiais sintéticos; não é piloto editorial.
 
-Para preparar outro Windows, use **[Preparar notebook.cmd](Preparar%20notebook.cmd)**, que orienta a definição da chave no ambiente. A versão distribuída abre com catálogo vazio. A base de código está na branch inicial main.
+Para preparar outro Windows, use **[Preparar notebook.cmd](Preparar%20notebook.cmd)**. Ele usa o `.venv` do projeto ou um Python 3.12+ do sistema, cria o `.venv` e instala as dependências (`scripts/preparar_notebook.py`), e termina orientando a definir a chave da API no ambiente antes de abrir a Mesa. A versão distribuída abre com catálogo vazio.
 
 ## Trabalhar pela interface
 
@@ -84,6 +84,8 @@ Decididas pelo usuário em 2026-11-19:
 Em aberto:
 
 - **Formulários ainda fora da tela:** vincular evidência a uma afirmação da redação e enviar uma nova versão do texto já existem nas rotas (`redacao-vincular`, `redacao-nova-versao`), mas ainda não têm formulário na Mesa. Estão previstos para a fase 10.
+- **Mensagens do preparador do notebook:** `Preparar notebook.cmd` e `scripts/preparar_notebook.py` mandam consultar `INSTALAR_NO_NOTEBOOK.md`, que não existe mais no repositório. O caminho correto é esta seção do README; a mensagem ainda precisa ser corrigida.
+- **Testes sem executor:** dez arquivos em `testes/` (`compositor`, `conferencia_original`, `erros_en`, `i18n_codex_en`, `lixeira_apagar`, `primeiro_uso`, `qa_comportamentos`, `redacao_entrevistas`, `retomar_conversa` e `versao_achados`, todos `.cjs`) testam funcionalidades reais, mas nenhum script os executa. Ou são ligados a um `qa_*.py`, ou são removidos.
 
 ## O que foi migrado
 
@@ -110,6 +112,14 @@ O resultado é uma migração do procedimento para operação por agente de chat
 - [execucoes](execucoes/README.md): snapshots e saídas por caso e rodada; inicialmente não há resultados de apuração.
 - [modelos](modelos/README.md): formatos vazios de registro e revisão.
 - [scripts](scripts/README.md): montagem, integridade, preparação de texto, criação de rodadas e integração com a API.
+- `interface`: Mesa de apuração em HTML, CSS e JavaScript sem etapa de build; `interface/vendor` traz Vditor e PDF.js, e `interface/fonts` traz as fontes incluídas.
+- `testes`: `test_*.py`, executados por `unittest discover`; `qa_*.py` que dirigem o navegador com o `.cjs` de mesmo nome; helpers `.cjs` avulsos (ver [Em aberto](#decisões-e-pendências)).
+- `instalador`: gerador do Vlado-Setup.exe (Inno Setup e PyInstaller) e o termo de uso exibido na instalação. A versão do instalador está em `instalador/vlado.iss` (2.0.4); a versão da aplicação está em `configuracao.json` (1.4.0).
+- `deploy`: Caddy e as variáveis de ambiente de cada ambiente (homologação, editorial, demonstração). Os arquivos `.env` reais ficam fora do git.
+- `android`: app Vlado Mesa, com os sabores `sala` e `redacao`; ver [docs/ANDROID.md](docs/ANDROID.md).
+- `docs/consolidacao`: revisão do diff da consolidação 2.0.4, como registro de processo.
+- `.claude/`: skills e configuração local de agentes, fora do git pelo `.gitignore`.
+- `.maestro/`: playbooks e coordenação da equipe de agentes. Só `.maestro/equipe/CONTRATO_EVIDENCIA.md` é rastreado.
 - [docs/MIGRACAO.md](docs/MIGRACAO.md): decisões, limites e fontes da adaptação.
 - [docs/PILOTO.md](docs/PILOTO.md): procedimento de calibração, sem gabarito.
 - [docs/BANCO_SQLITE.md](docs/BANCO_SQLITE.md): uso do índice, leitura de passagens, cobertura e gerações preservadas.
