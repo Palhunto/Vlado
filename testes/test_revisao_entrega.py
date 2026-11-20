@@ -103,6 +103,16 @@ class EmpacotarRevisaoTest(unittest.TestCase):
                  'backups/v.tar', 'manifesto_distribuicao.json', 'docs/VLADO_HANDOFF.md', 'log/eventos.jsonl']
         self.assertEqual(empacotar_entrega.proibidos(ruins), ruins)
 
+    def test_pastas_de_agentes_ficam_fora_e_o_contrato_entra(self):
+        ruins = ['.claude/settings.local.json', '.claude/agents/x.md', '.maestri/roles/a/CLAUDE.md',
+                 '.maestro/equipe/PLANO_LANCAMENTO.md', '.maestro/playbooks/p/Working/n.md',
+                 '.maestro/CONTRATO_EVIDENCIA.md', '.maestro/equipe/CONTRATO_EVIDENCIA.md.orig',
+                 '.maestro/equipe/sub/CONTRATO_X.md', 'android/.claude/x.json']
+        self.assertEqual(empacotar_entrega.proibidos(ruins), ruins)
+        bons = ['.maestro/equipe/CONTRATO_EVIDENCIA.md', '.maestro/equipe/CONTRATO_CONTAS.md',
+                'docs/claude.md', 'docs/maestro.md', '.dockerignore']
+        self.assertEqual(empacotar_entrega.proibidos(bons), [])
+
 
 if __name__ == '__main__':
     unittest.main()

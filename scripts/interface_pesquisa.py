@@ -1,10 +1,9 @@
-"""Optional loopback search UI. Uses existing snapshot/index validation and raw logs.
-
-Routes live in the ``rotas_*`` modules (accounts and sessions, conversation, management,
-downloads, static files, notebook, findings, evidence boards, tables, story review); this
-file keeps the server, request reading, origin/CSRF checks, the dispatch and ``main``.
-Route modules never import this one: it also runs as ``__main__``.
-"""
+"""Optional loopback search UI. Uses existing snapshot/index validation and raw logs."""
+# The docstring above is also the --help description. Routes live in the ``rotas_*`` modules
+# (accounts and sessions, conversation, management, downloads, static files, notebook,
+# findings, evidence boards, tables, story review); this file keeps the server, request
+# reading, origin/CSRF checks, the dispatch and ``main``. Route modules never import this
+# one: it also runs as ``__main__``.
 from __future__ import annotations
 
 import argparse

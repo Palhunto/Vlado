@@ -32,6 +32,8 @@ PROIBIDOS = [
     r'^referencia_original/', r'^transferencia/', r'^distribuicao/', r'^\.claude-flow/', r'(^|/)backups?/',
     r'^manifesto_distribuicao\.json$', r'^docs/VLADO_HANDOFF\.md$', r'^docs/VLADO_GUIA_TECNICO_DEPLOY\.md$',
     r'\.jsonl$', r'^dist/',
+    # Agent working folders. The evidence contract stays: code and docs of the delivery cite it.
+    r'(^|/)\.claude/', r'(^|/)\.maestri/', r'(^|/)\.maestro/(?!equipe/CONTRATO_[A-Z0-9_]+\.md$)',
 ]
 # Windows launchers belong to the local single-user install, not to this delivery.
 FORA_DA_ENTREGA = [r'^Abrir mesa\.vbs$', r'^Iniciar pesquisa\.cmd$', r'^Preparar notebook\.cmd$']
