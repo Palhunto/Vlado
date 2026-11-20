@@ -74,11 +74,16 @@ No modo com web, a captura é feita pelo painel "Fontes web desta apuração", n
 
 Nenhuma página é aberta, pesquisada ou capturada sem o modo marcado no caso.
 
-## Pendências e decisões em aberto
+## Decisões e pendências
 
-- **Texto escondido por CSS nas capturas (S2):** só o que o próprio HTML esconde é retirado e marcado com `contem_texto_oculto`. Ocultação por CSS externo ou de bloco `<style>`, `opacity:0`, `font-size:0`, posicionamento fora da tela e `<details>` fechado continua só com o aviso da seção anterior. Detectar esses casos exigiria renderizar a página num navegador; a decisão está com o usuário.
-- **`innerHTML` do editor de notas (S6):** é o único ponto da interface que monta HTML a partir do texto do usuário e fica como exceção aceita. A limpeza do Vditor (`sanitize`) retira scripts, atributos `on*` e `javascript:`; o editor retira também `<iframe>`, `<object>` e `<embed>`, mesmo com endereço da própria Mesa; e a política de segurança da página (CSP) barra script embutido, iframe e imagem de outra origem. `testes/editor_notas_seguranca.cjs` confere as três camadas.
-- **Formulários ainda fora da tela:** vincular evidência a uma afirmação da redação e enviar uma nova versão do texto já existem nas rotas (`redacao-vincular`, `redacao-nova-versao`), mas ainda não têm formulário na Mesa.
+Decididas pelo usuário em 2026-11-19:
+
+- **Texto escondido por CSS nas capturas (S2):** fica só o aviso da seção anterior. Só o que o próprio HTML esconde é retirado e marcado com `contem_texto_oculto`; ocultação por CSS externo ou de bloco `<style>`, `opacity:0`, `font-size:0`, posicionamento fora da tela e `<details>` fechado não é detectada. Se as fontes web passarem a alimentar o modelo sem leitura humana, a decisão é revista, e a opção nesse caso é renderizar a página num navegador.
+- **`innerHTML` do editor de notas (S6):** fica como exceção aceita, com três barreiras: a limpeza do Lute (`sanitize`), que retira scripts, atributos `on*` e `javascript:`; a remoção de `<iframe>`, `<object>` e `<embed>` pelo editor, mesmo com endereço da própria Mesa; e a política de segurança da página (CSP). `testes/editor_notas_seguranca.cjs` confere as três.
+
+Em aberto:
+
+- **Formulários ainda fora da tela:** vincular evidência a uma afirmação da redação e enviar uma nova versão do texto já existem nas rotas (`redacao-vincular`, `redacao-nova-versao`), mas ainda não têm formulário na Mesa. Estão previstos para a fase 10.
 
 ## O que foi migrado
 
