@@ -67,6 +67,7 @@ def medir():
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     g = ap.add_mutually_exclusive_group()
+    g.add_argument('--rapida', action='store_true', help='padrão')
     g.add_argument('--lenta', action='store_true')
     g.add_argument('--completa', action='store_true')
     g.add_argument('--tempos', action='store_true')

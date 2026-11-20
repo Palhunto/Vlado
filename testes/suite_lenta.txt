@@ -1,2 +1,12 @@
 # Módulos de teste que ficam fora da suíte rápida (rodam antes de merge).
 # Um nome de módulo por linha, sem .py. Gerado a partir de `executar_suite.py --tempos`.
+test_autorizacao
+test_continuar_documentos
+test_apagamento
+test_continuar_observacoes
+test_codex_integracao
+test_apuracao
+test_tabelas_apuracao
+test_autoria_conta
+test_caderno
+# Medido em 2026-11-20 (módulos >= 40 s; suíte completa 15 min, rápida cerca de 9).
