@@ -1,0 +1,286 @@
+"""Sessão, entrada, ativação e gestão de contas da Mesa (modos ``local-contas`` e ``piloto``).
+
+Separado de ``interface_pesquisa`` sem mudar comportamento. Aqui ficam quem chama (a conta
+relida do registro a cada requisição), o que cada papel alcança (``_negado``), as
+operações públicas antes da sessão (entrar, ativar, primeiro administrador) e a gestão de
+contas, que só o administrador alcança. Origem, CSRF e leitura do corpo continuam no
+servidor; este módulo nunca lê nem grava chaves de API.
+"""
+from __future__ import annotations
+
+from http.cookies import SimpleCookie
+import ipaddress
+import json
+import os
+from urllib.parse import quote
+
+import acesso
+import rascunhos
+from rotas_documentos import catalogo
+
+# Hosted mode: account management (admin only) and what a guest account may call.
+CONTAS_OPERACOES = ('contas-listar', 'contas-criar', 'contas-atualizar', 'contas-desativar', 'contas-reativar',
+                    'contas-recuperar')
+OPERACOES_CONVIDADO = ('codex-status', 'codex-listar', 'codex-perguntar', 'codex-eventos', 'codex-cancelar',
+                       'codex-retomar', 'codex-original', 'sessao-sair', *rascunhos.OPERACOES)
+# Guest operations on an existing conversation: the conversation's case is checked on every call.
+OPERACOES_CONVERSA = ('codex-eventos', 'codex-cancelar', 'codex-original', 'codex-retomar')
+# Before a session exists (hosted mode only): Origin + JSON, no CSRF, small bodies.
+OPERACOES_PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin')
+AMBIENTES = ('homologacao', 'editorial', 'demonstracao')
+SEM_SESSAO = 'Sessão expirada ou encerrada. Entre novamente.'
+# Asking and retrying both spend one of the guest's daily questions (given back if refused).
+OPERACOES_COM_COTA = ('codex-perguntar', 'codex-retomar')
+ATIVOS_CONVERSA = frozenset({'preparando', 'executando', 'publicando'})
+COOKIE_PILOTO ='vlado_sessao'
+
+
+class RotasContas:
+    """Mixin of the request handler: uses its ``_send``, ``_json``, ``headers`` and ``server``."""
+
+    def _sessao_piloto(self):
+        cookie = SimpleCookie()
+        try:
+            cookie.load(self.headers.get('Cookie', ''))
+        except Exception:  # noqa: BLE001 - malformed cookie header means no session
+            return None, None
+        morsel = cookie.get(COOKIE_PILOTO)
+        sid = morsel.value if morsel else None
+        if not sid:
+            return None, None
+        try:
+            return acesso.sessao(self.server.root, sid), sid
+        except (ValueError, OSError):
+            self.acesso_indisponivel = True  # answered with 503, never with a dropped connection
+            return None, sid
+
+    def _endereco_socket(self):
+        """The TCP peer, never a forwarded header."""
+        return self.client_address[0]
+
+    def _cliente_local(self):
+        """First-administrator form: loopback peer, local Host and local Origin, whatever proxy settings say."""
+        try:
+            loopback = ipaddress.ip_address(self._endereco_socket()).is_loopback
+        except ValueError:
+            loopback = False
+        return (self.server.modo == 'local-contas' and loopback
+                and self.headers.get('Host') == self.server.host_permitido
+                and self.headers.get('Origin') == self.server.origin)
+
+    def _primeiro_acesso(self):
+        try:
+            return acesso.primeiro_acesso_disponivel(self.server.root)
+        except (ValueError, OSError):
+            return False
+
+    def _principal(self):
+        """Who is calling: in local mode the single operator (admin); in hosted mode the account session.
+
+        Read once per request: the account is re-read from the store on every request, so deactivation,
+        role and case changes apply to the next one."""
+        if self.server.modo == 'local':
+            return {'papel': 'admin', 'conta': None, 'nome': None, 'login': None, 'casos': None,
+                    'csrf': self.server.token}
+        if not hasattr(self, '_principal_requisicao'):
+            self._principal_requisicao = self._sessao_piloto()[0]
+        return self._principal_requisicao
+
+    def _proibido(self, mensagem='Operação não permitida para este acesso.', codigo=None):
+        self._json(403, {'estado': 'proibido', 'erro': mensagem, **({'codigo': codigo} if codigo else {})})
+
+    def _sem_principal(self, api=False):
+        if getattr(self, 'acesso_indisponivel', False):
+            self._json(503, {'estado': 'indisponivel', 'erro': 'Registro de acesso indisponível. Avise a administração.'})
+        elif api:
+            self._json(401, {'estado': 'sem_sessao', 'codigo': 'sessao_expirada', 'erro': SEM_SESSAO})
+        else:
+            self._send(303, b'', 'text/plain; charset=utf-8', {'Location': '/entrar'})
+
+    def _convite_antigo(self):
+        """Old invitation links no longer sign anyone in; they point to the account sign-in page."""
+        texto = ('<p lang="pt-BR">Os convites por link foram substituídos por contas individuais. '
+                 'Peça à administração o link de ativação da sua conta, ou <a href="/entrar">entre com login e senha</a>.</p>'
+                 '<p lang="en">Invitation links were replaced by individual accounts. Ask the administrators for your '
+                 'account activation link, or <a href="/entrar">sign in with your login and password</a>.</p>')
+        self._send(410, (f'<!doctype html><html lang="pt-BR"><meta charset="utf-8">'
+                         f'<meta name="viewport" content="width=device-width, initial-scale=1">'
+                         f'<title>Vlado</title><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/style.css"><main class="panel">{texto}</main></html>'
+                         ).encode('utf-8'), 'text/html; charset=utf-8')
+
+    def _ambiente_publico(self):
+        if self.server.modo != 'piloto':
+            return None
+        valor = os.environ.get('VLADO_AMBIENTE', '').strip()
+        return valor if valor in AMBIENTES else 'homologacao'
+
+    def _ip(self):
+        """Socket address; behind a trusted proxy (VLADO_CONFIAR_PROXY=1) the last X-Forwarded-For hop."""
+        if self.server.modo == 'piloto' and os.environ.get('VLADO_CONFIAR_PROXY', '').strip() == '1':
+            saltos = [s.strip() for s in self.headers.get('X-Forwarded-For', '').split(',') if s.strip()]
+            try:
+                return str(ipaddress.ip_address(saltos[-1])) if saltos else self.client_address[0]
+            except ValueError:
+                pass  # garbage in the header: fall back to the socket address
+        return self.client_address[0]
+
+    def _sessao_atual(self):
+        principal = self._principal()
+        if principal is None:
+            self._sem_principal(api=True)
+            return
+        conta = {k: principal.get(k) for k in ('nome', 'login', 'papel', 'casos')}
+        conta['id'] = principal.get('conta')
+        self._json(200, {'conta': conta, 'csrf': principal['csrf'], 'ambiente': self._ambiente_publico(),
+                         'modo': self.server.modo, 'expira_em': principal.get('expira_em')})
+
+    def _sair(self):
+        acesso.encerrar(self.server.root, self._sessao_piloto()[1])
+        self._send(200, b'{"estado": "encerrada"}', extra={
+            'Set-Cookie': f'{COOKIE_PILOTO}=; {self.server.atributos_cookie()}; Max-Age=0'})
+
+    def _negado(self, operation, data, principal):
+        """Authorization by role, checked on every request. Returns (message, code) or None when allowed."""
+        if self.server.modo == 'piloto' and operation == 'codex-desligar':
+            return 'O serviço hospedado não pode ser encerrado pela interface.', 'servico_nao_encerravel'
+        if operation in CONTAS_OPERACOES and not self.server.com_contas:
+            return 'Contas só existem nos modos com login.', 'operacao_proibida'
+        if principal['papel'] == 'admin':
+            return None
+        if operation not in OPERACOES_CONVIDADO:
+            return 'Operação não permitida para esta conta.', 'operacao_proibida'
+        if operation in ('codex-listar', 'codex-perguntar') and data.get('caso') not in (principal['casos'] or []):
+            return 'Apuração não liberada para esta conta.', 'caso_nao_liberado'
+        if operation == 'codex-perguntar' and set(data) - {'caso', 'pergunta', 'conversa'}:
+            return 'Convidados enviam somente a pergunta e a conversa.', 'campos_nao_permitidos'
+        if operation == 'codex-retomar' and set(data) - {'conversa'}:
+            return 'Convidados enviam somente a conversa a retomar.', 'campos_nao_permitidos'
+        return None
+
+    def _contas(self, operation, data, principal):
+        """Account management (admin only, hosted mode). Activation links are returned once, never stored."""
+        root, por = self.server.root, principal['conta'] or 'cli'
+        if operation == 'contas-listar':
+            return {'contas': acesso.listar(root), 'eventos': acesso.eventos(root, 50)}
+        if operation in ('contas-criar', 'contas-atualizar') and data.get('casos') is not None:
+            casos = data.get('casos')
+            disponiveis = {c['id'] for c in catalogo(root)['casos']}
+            if not isinstance(casos, list) or not all(isinstance(c, str) for c in casos) or not set(casos) <= disponiveis:
+                raise ValueError('Escolha apurações existentes para a conta.')
+        horas = data.get('horas', acesso.ATIVACAO_HORAS)
+        if operation == 'contas-criar':
+            papel = data.get('papel', 'convidado')
+            registro, token = acesso.criar_conta(root, data.get('nome'), data.get('login'), papel=papel,
+                                                 casos=data.get('casos') or [], cota_diaria=data.get('cota_diaria', 20),
+                                                 horas=horas, por=por)
+            return {'conta': registro, 'link': f'{self.server.origin}/ativar/{token}'}
+        if operation == 'contas-recuperar':
+            registro, token = acesso.recuperar(root, data.get('id'), por=por, horas=horas)
+            return {'conta': registro, 'link': f'{self.server.origin}/ativar/{token}'}
+        if operation == 'contas-desativar':
+            registro = acesso.desativar(root, data.get('id'), por=por)
+            self._parar_execucoes(registro['id'], ())
+            return {'conta': registro}
+        if operation == 'contas-reativar':
+            return {'conta': acesso.reativar(root, data.get('id'), por=por)}
+        campos = {k: data[k] for k in ('nome', 'papel', 'casos', 'cota_diaria') if data.get(k) is not None}
+        registro = acesso.atualizar(root, data.get('id'), por=por, **campos)
+        if registro.get('papel') != 'admin':
+            self._parar_execucoes(registro['id'], registro.get('casos') or ())
+        return {'conta': registro}
+
+    def _parar_execucoes(self, conta_id, casos_mantidos):
+        """A deactivated account, or a case taken away, must not keep spending the API in the background."""
+        manager = self.server.conversas
+        with manager.lock:
+            alvos = [cid for cid, ctx in manager.contexts.items()
+                     if ctx['meta'].get('dono') == conta_id and ctx['meta'].get('caso') not in casos_mantidos
+                     and ctx['meta'].get('estado') in ATIVOS_CONVERSA]
+        for identificador in alvos:
+            try:
+                manager.cancelar(identificador)
+            except (ValueError, OSError, KeyError):
+                pass  # already finished or removed: nothing left to stop
+
+    def _publico(self, operation):
+        """Sign-in and activation, before any session: Origin + JSON, small body, generic refusals."""
+        try:
+            length = int(self.headers.get('Content-Length', '0'))
+        except ValueError:
+            length = -1
+        if not 0 < length <= 4096:
+            self.close_connection = True
+            self._json(400, {'erro': 'Requisição vazia ou muito grande.'})
+            return
+        body = self.rfile.read(length)
+        if (self.headers.get('Origin') != self.server.origin
+                or self.headers.get_content_type() != 'application/json'):
+            self._json(403, {'erro': 'Origem ou sessão não autorizada. Recarregue a página.'})
+            return
+        try:
+            data = json.loads(body)
+            if not isinstance(data, dict):
+                raise ValueError('Requisição deve ser um objeto JSON.')
+        except ValueError:
+            self._json(400, {'erro': 'Requisição deve ser um objeto JSON.'})
+            return
+        root = self.server.root
+        if operation == 'primeiro-admin':
+            self._primeiro_admin(data)
+            return
+        try:
+            if operation == 'entrar':
+                sid, csrf, conta = acesso.entrar(root, data.get('login'), data.get('senha'), ip=self._ip(),
+                                                 cliente=data.get('cliente', 'web'))
+                casos = conta.get('casos') or []
+                destino = ('/' if conta['papel'] == 'admin'
+                           else '/?area=codex' + (f'&caso={quote(casos[0], safe="")}' if len(casos) == 1 else ''))
+                publica = {k: conta[k] for k in ('id', 'nome', 'login', 'papel', 'casos')}
+                self._send(200, json.dumps({'conta': publica, 'csrf': csrf, 'destino': destino},
+                                           ensure_ascii=False).encode('utf-8'),
+                           extra={'Set-Cookie': f'{COOKIE_PILOTO}={sid}; {self.server.atributos_cookie()}'})
+            elif operation == 'ativacao-consultar':
+                acesso.limitar_ip(self._ip())
+                self._json(200, acesso.consultar_ativacao(root, data.get('token')))
+            else:
+                acesso.limitar_ip(self._ip())
+                conta = acesso.ativar(root, data.get('token'), data.get('senha'))
+                self._json(200, {'estado': 'senha_definida', 'login': conta['login']})
+        except acesso.RegistroIlegivel:
+            self._json(503, {'estado': 'indisponivel', 'erro': 'Registro de acesso indisponível. Avise a administração.'})
+        except acesso.Bloqueado as exc:
+            self._json(429, {'estado': 'bloqueado', 'codigo': 'bloqueado', 'erro': str(exc)})
+        except acesso.CredenciaisInvalidas as exc:
+            self._json(401, {'estado': 'credenciais', 'codigo': 'credenciais', 'erro': str(exc)})
+        except acesso.AtivacaoInvalida as exc:
+            self._json(400, {'estado': 'erro', 'codigo': 'ativacao_invalida', 'erro': str(exc)})
+        except (ValueError, OSError) as exc:
+            self._json(400, {'estado': 'erro', 'codigo': 'senha_invalida' if operation == 'ativar' else 'requisicao_invalida',
+                             'erro': str(exc) if isinstance(exc, ValueError) else 'Falha ao ler arquivos do servidor.'})
+
+    def _primeiro_admin(self, data):
+        """'Criar administrador': local mode with accounts, loopback only, while no account exists."""
+        if not self._cliente_local():
+            self._json(403, {'erro': 'Origem ou sessão não autorizada. Recarregue a página.'})
+            return
+        try:
+            acesso.limitar_ip(self._endereco_socket())
+            senha = data.get('senha')
+            if not isinstance(senha, str) or not acesso.SENHA_MIN <= len(senha) <= acesso.SENHA_MAX:
+                self._json(400, {'estado': 'erro', 'codigo': 'senha_invalida',
+                                 'erro': f'A senha deve ter de {acesso.SENHA_MIN} a {acesso.SENHA_MAX} caracteres.'})
+                return
+            if data.get('confirmacao') != senha:
+                self._json(400, {'estado': 'erro', 'codigo': 'senha_diferente', 'erro': 'As duas senhas não coincidem.'})
+                return
+            conta = acesso.criar_primeiro_admin(self.server.root, data.get('nome'), data.get('login'), senha)
+            self._json(200, {'estado': 'criada', 'login': conta['login']})
+        except acesso.PrimeiroAcessoEncerrado as exc:
+            self._json(410, {'estado': 'encerrado', 'codigo': 'primeiro_acesso_encerrado', 'erro': str(exc)})
+        except acesso.RegistroIlegivel:
+            self._json(503, {'estado': 'indisponivel', 'erro': 'Registro de acesso indisponível.'})
+        except acesso.Bloqueado as exc:
+            self._json(429, {'estado': 'bloqueado', 'codigo': 'bloqueado', 'erro': str(exc)})
+        except (ValueError, OSError) as exc:
+            self._json(400, {'estado': 'erro', 'codigo': 'dados_invalidos',
+                             'erro': str(exc) if isinstance(exc, ValueError) else 'Falha ao gravar a conta.'})
