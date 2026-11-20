@@ -1,4 +1,10 @@
-"""Optional loopback search UI. Uses existing snapshot/index validation and raw logs."""
+"""Optional loopback search UI. Uses existing snapshot/index validation and raw logs.
+
+Routes live in the ``rotas_*`` modules (accounts and sessions, conversation, management,
+downloads, static files, notebook, findings, evidence boards, tables, story review); this
+file keeps the server, request reading, origin/CSRF checks, the dispatch and ``main``.
+Route modules never import this one: it also runs as ``__main__``.
+"""
 from __future__ import annotations
 
 import argparse
@@ -21,48 +27,44 @@ from comum import ROOT, dentro, ler_json, sha256
 from cadastrar_documentos import inventario, preparar_pdfs
 from ambiente import diagnostico
 import fontes_web
-import indice_achados
 import revisao_humana
-import caderno
 import apuracao
-import exportar_apuracao
-import diligencias
+import rotas_achados
+import rotas_caderno
+import rotas_conversa
+import rotas_downloads
 import rotas_evidencia
+import rotas_gestao
 import rotas_redacao
 import rotas_tabelas
 import rascunhos
-import continuidade
 import erros
 from codex_apuracao import Conversas
-from inferencia_api import resumo_inferencia, salvar_inferencia
 import acesso
 import lixeira
 from indice_sqlite import ID_CASO, caminho_rodada, cobertura, ler_passagem, pesquisar
-from rotas_documentos import MAX_UPLOAD, catalogo, receber_documentos  # noqa: F401
-from rotas_estaticas import ASSETS, RotasEstaticas
+# Names also imported from here by the launcher, the tests and older callers.
+from rotas_caderno import CADERNO_OPERACOES, DILIGENCIAS_OPERACOES
 from rotas_contas import (RotasContas, CONTAS_OPERACOES, OPERACOES_CONVIDADO, OPERACOES_CONVERSA,  # noqa: F401
                           OPERACOES_PUBLICAS, AMBIENTES, SEM_SESSAO, OPERACOES_COM_COTA, ATIVOS_CONVERSA,
                           COOKIE_PILOTO)
+from rotas_conversa import RotasConversa, RESPONDIDO, CAMPOS_INTERNOS_CONVERSA, _sem_internos  # noqa: F401
+from rotas_documentos import MAX_UPLOAD, catalogo, receber_documentos  # noqa: F401
+from rotas_downloads import RotasDownloads
+from rotas_estaticas import ASSETS, RotasEstaticas
+from rotas_gestao import IA_OPERACOES, RotasGestao
 
 # local: single operator without sign-in; local-contas: accounts over plain HTTP on 127.0.0.1
 # (installed Windows desk); piloto: accounts behind an HTTPS reverse proxy.
 MODOS = ('local', 'local-contas', 'piloto')
-CADERNO_OPERACOES = ('caderno-documentos', 'caderno-listar', 'caderno-detalhe', 'caderno-salvar',
-                     'caderno-cruzar', 'caderno-exportar', 'caderno-original')
-DILIGENCIAS_OPERACOES = ('diligencias-listar', 'diligencias-criar', 'diligencias-atualizar',
-                        'diligencias-responder', 'diligencias-original')
-# Provider choice and API key; the key is write-only from the browser's point of view.
-IA_OPERACOES = ('ia-config', 'ia-config-salvar')
-CAMPOS_INTERNOS_CONVERSA = frozenset({'dono', 'thread_id', 'turn_id', 'politica'})
 MAXIMO_SESSOES_ORIGINAIS = 5000
-
-
-def _sem_internos(result):
-    """Guests see their conversation, not the owner id or provider thread/turn identifiers."""
-    if not isinstance(result, dict) or not isinstance(result.get('conversa'), dict):
-        return result
-    conversa = {k: v for k, v in result['conversa'].items() if k not in CAMPOS_INTERNOS_CONVERSA}
-    return {**result, 'conversa': conversa}
+# Case data answered by ``executar`` (frozen analyses, intake, search index).
+CONSULTA_OPERACOES = ('analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario', 'preparar-pdfs')
+# Every POST operation behind a session; anything else is 404 before the body is parsed.
+OPERACOES_API = (*rotas_conversa.OPERACOES, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES,
+                 *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, *rotas_redacao.OPERACOES,
+                 *rascunhos.OPERACOES, *fontes_web.OPERACOES, *rotas_gestao.OPERACOES, *CONTAS_OPERACOES, 'sessao-sair',
+                 *rotas_achados.OPERACOES, *CONSULTA_OPERACOES)
 
 
 def executar(root, operation, data, conta=None, originais_abertos=None, casos=None):
@@ -94,34 +96,9 @@ def executar(root, operation, data, conta=None, originais_abertos=None, casos=No
             except (ValueError, OSError, KeyError, StopIteration, TypeError) as exc:
                 result.append({**item, 'aviso': str(exc)})
         return {'caso': case, 'analises': result}
-    if operation.startswith('apuracao-'):
-        if operation == 'apuracao-listar':
-            return apuracao.listar(root, data.get('caso'))
-        if operation in apuracao.OPERACOES_NOTAS:
-            return apuracao.executar(root, operation, data, conta)
-        return apuracao.alterar(root, operation, data, conta)
-    if operation.startswith('diligencias-'):
-        if operation == 'diligencias-listar':
-            return diligencias.listar(root, data.get('caso'), estado=data.get('estado', ''),
-                responsavel=data.get('responsavel', ''), texto=data.get('texto', ''))
-        if operation in ('diligencias-criar', 'diligencias-atualizar', 'diligencias-responder'):
-            return diligencias.salvar(root, data, operation.split('-')[1], conta)
-        raise ValueError('Operação de diligência desconhecida.')
-    if operation.startswith('caderno-'):
-        case = data.get('caso')
-        if operation == 'caderno-documentos':
-            return caderno.documentos(root, case, data.get('rodada'))
-        if operation == 'caderno-listar':
-            return caderno.listar(root, case, texto=data.get('texto', ''), limite=data.get('limite', 20), deslocamento=data.get('deslocamento', 0))
-        if operation == 'caderno-detalhe':
-            return caderno.detalhe(root, case, data.get('registro_id'), data.get('sha256'))
-        if operation == 'caderno-salvar':
-            return caderno.salvar(root, data, conta)
-        if operation == 'caderno-cruzar':
-            return caderno.cruzar(root, data, conta)
-        if operation == 'caderno-exportar':
-            return caderno.selecionar(root, case, data.get('selecoes'))
-        raise ValueError('Operação do caderno desconhecida.')
+    if operation.startswith(rotas_caderno.PREFIXOS):
+        # Investigation notebook, notes, follow-ups and the human notebook (rotas_caderno).
+        return rotas_caderno.executar(root, operation, data, conta)
     if operation in rotas_evidencia.OPERACOES:
         # Evidence boards: field whitelist and case checks live in rotas_evidencia; no model or network.
         return rotas_evidencia.executar(root, operation, data, conta, casos)
@@ -148,36 +125,7 @@ def executar(root, operation, data, conta=None, originais_abertos=None, casos=No
     case, run = data.get('caso'), data.get('rodada')
     lixeira.conferir_disponivel(root, case, rodada=run)
     if operation.startswith('achados-'):
-        # Explicit identities; human annotations never alter canonical AI records.
-        if operation == 'achados-catalogo':
-            return indice_achados.catalogo(root, case, run)
-        revision, gen = data.get('revisao'), data.get('geracao_achados')
-        if operation == 'achados-revisao-salvar':
-            return revisao_humana.salvar(root, case, run, revision,
-                achado_id=data.get('achado_id'), achado_versao=data.get('achado_versao'),
-                registros_sha256=data.get('registros_sha256'), estado=data.get('estado'),
-                observacao=data.get('observacao', ''), anterior=data.get('anterior'), conta=conta,
-                originais_abertos=originais_abertos)
-        if operation == 'achados-briefing':
-            digest = data.get('artefato_sha256')
-            if not isinstance(digest, str) or not re.fullmatch(r'[a-f0-9]{64}', digest):
-                raise ValueError('Identidade de briefing inválida.')
-            return indice_achados.artefato(root, case, run, revision, digest)
-        if operation in ('achados-evidencia', 'achados-original'):
-            evidence_id = data.get('evidencia_id')
-            if not isinstance(evidence_id, str) or not re.fullmatch(r'E[0-9]{3,}', evidence_id):
-                raise ValueError('ID de evidência inválido.')
-            return indice_achados.evidencia(root, case, run, revision, evidence_id)
-        if operation == 'achados-detalhe':
-            claim_id = data.get('achado_id')
-            if not isinstance(claim_id, str) or not re.fullmatch(r'A[0-9]{3,}', claim_id):
-                raise ValueError('ID de achado inválido.')
-            return revisao_humana.detalhe(root, case, run, revision, gen, claim_id)
-        if operation in ('achados-buscar', 'achados-exportar'):
-            return revisao_humana.consultar(root, case, run, revision, gen,
-                       filtros=data.get('filtros'), limite=data.get('limite', 10),
-                       deslocamento=data.get('deslocamento', 0), completa=operation == 'achados-exportar')
-        raise ValueError('Operação de achados desconhecida.')
+        return rotas_achados.executar(root, operation, data, conta, case, run, originais_abertos)
     generation = data.get('geracao', 'v1')
     if not all(isinstance(value, str) for value in (case, run, generation)):
         raise ValueError('Selecione caso, rodada e geração.')
@@ -268,7 +216,7 @@ class Servidor(ThreadingHTTPServer):
         return 'HttpOnly; ' + ('Secure; ' if self.modo == 'piloto' else '') + 'SameSite=Strict; Path=/'
 
 
-class Handler(RotasContas, RotasEstaticas, BaseHTTPRequestHandler):
+class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEstaticas, BaseHTTPRequestHandler):
     timeout = 60  # seconds per socket operation; long polls answer within 20 s
     def _send(self, status, content, content_type='application/json; charset=utf-8', extra=None, cache='no-store'):
         self.send_response(status)
@@ -430,16 +378,7 @@ class Handler(RotasContas, RotasEstaticas, BaseHTTPRequestHandler):
             return
         operation = urlsplit(self.path).path.removeprefix('/api/')
         # Operation names keep the historical "codex-" prefix; inference now goes through the API adapter.
-        codex_operations = ('codex-status', 'codex-listar',
-                            'codex-perguntar', 'codex-retomar', 'codex-eventos', 'codex-cancelar', 'codex-original',
-                            'codex-desligar', 'codex-observacoes', 'codex-corpus-previa', 'codex-documentos-cadastrar', 'codex-caderno-previa', 'codex-diligencias-previa')
-        if operation not in (*codex_operations, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES, *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, *rotas_redacao.OPERACOES, *rascunhos.OPERACOES, 'continuidade-resumo', 'analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario',
-                             *fontes_web.OPERACOES,
-                             'ambiente', 'preparar-pdfs',
-                             'gerenciar-listar', 'excluir', 'restaurar', 'lixeira-alcance', 'lixeira-apagar', *IA_OPERACOES, *CONTAS_OPERACOES, 'sessao-sair',
-                             'achados-revisao-salvar',
-                             'achados-catalogo', 'achados-buscar', 'achados-detalhe',
-                             'achados-evidencia', 'achados-original', 'achados-exportar', 'achados-briefing'):
+        if operation not in OPERACOES_API:
             self._json(404, {'erro': 'Operação não encontrada.'})
             return
         try:
@@ -464,131 +403,18 @@ class Handler(RotasContas, RotasEstaticas, BaseHTTPRequestHandler):
             if operation in OPERACOES_COM_COTA and dono is not None:
                 acesso.registrar_consulta(self.server.root, dono)
                 consulta_contada = True
-            if operation == 'ambiente':
-                result = self.server.ambiente
-            elif operation == 'ia-config':
-                result = resumo_inferencia(self.server.root)
-            elif operation == 'ia-config-salvar':
-                result = salvar_inferencia(self.server.root, data)
-            elif operation == 'apuracao-exportar':
-                with self.server.cadastro_lock:
-                    state = apuracao.listar(self.server.root, data.get('caso'))
-                content, mime = exportar_apuracao.exportar(state, data.get('formato'))
-                self._send(200, content, mime, {'Content-Disposition': f'attachment; filename="caderno.{data["formato"]}"'})
-                return
-            elif operation == rotas_tabelas.EXPORTAR:
-                with self.server.cadastro_lock:
-                    name, content = rotas_tabelas.exportar(self.server.root, data, casos=principal['casos'])
-                self._send(200, content, 'text/csv; charset=utf-8',
-                           {'Content-Disposition': f'attachment; filename="{name}"'})
-                return
-            elif operation == 'apuracao-original':
-                with self.server.cadastro_lock:
-                    path = apuracao.original(self.server.root, data)
-                    self._send(200, path.read_bytes(), 'application/octet-stream',
-                               {'Content-Disposition': f'attachment; filename="original{path.suffix}"'})
-                return
-            elif operation == 'diligencias-original':
-                with self.server.cadastro_lock:
-                    path = diligencias.original_resposta(self.server.root, data)
-                    self._send(200, path.read_bytes(), 'application/octet-stream',
-                               {'Content-Disposition': f'attachment; filename="original{path.suffix}"'})
-                return
-            elif operation == 'caderno-original':
-                with self.server.cadastro_lock:
-                    path = (caderno.original_registro(self.server.root, data) if data.get('registro_id')
-                            else caderno.original_documento(self.server.root, data))
-                    self._send(200, path.read_bytes(), 'application/octet-stream',
-                               {'Content-Disposition': f'attachment; filename="original{path.suffix}"'})
+            if operation in rotas_downloads.OPERACOES:
+                self._baixar(operation, data, principal)
                 return
             elif operation == fontes_web.CAPTURAR:
                 # The fetch runs outside the cadastro lock; checking and publishing take it.
                 result = fontes_web.rota(self.server.root, operation, data, trava=self.server.cadastro_lock)
-            elif operation == 'lixeira-alcance':
-                result = lixeira.alcance(self.server.root, data.get('item'))
-            elif operation == 'lixeira-apagar':
-                with self.server.cadastro_lock:
-                    alcance = lixeira.alcance(self.server.root, data.get('item'))
-                    nome = data.get('nome')
-                    if (not isinstance(nome, str)
-                            or nome.strip().casefold() != str(alcance['nome_para_confirmar']).strip().casefold()):
-                        raise ValueError('Digite o nome do item exatamente como mostrado para confirmar.')
-                    result = lixeira.apagar_definitivamente(
-                        self.server.root, data.get('item'), data.get('confirmacao'),
-                        quem=principal.get('nome') or principal.get('conta') or 'operador local',
-                        gerenciador=self.server.conversas)
-            elif operation in ('gerenciar-listar', 'excluir', 'restaurar'):
-                with self.server.cadastro_lock:
-                    manager = self.server.conversas
-                    if operation == 'gerenciar-listar':
-                        with manager.lock:
-                            visible = catalogo(self.server.root)
-                            selected = data.get('caso')
-                            result = {**visible, 'lixeira': lixeira.ativos(self.server.root),
-                                      'conversas': manager.listar(selected)['conversas']
-                                      if selected in {c['id'] for c in visible['casos']} else []}
-                    else:
-                        result = manager.gerenciar(operation, data)
-            elif operation == 'continuidade-resumo':
-                # Admin only (not a guest operation): metadata of the active case, never draft text.
-                conta = ({'id': principal['conta'], 'nome': principal['nome']}
-                         if self.server.com_contas else None)
-                with self.server.cadastro_lock:
-                    result = continuidade.executar_resumo(self.server.root, data, conta,
-                        lambda caso: self.server.conversas.listar(caso)['conversas'])
-            elif operation in codex_operations:
-                manager = self.server.conversas
-                if operation == 'codex-desligar':
-                    self._json(200, {'estado': 'encerrando'})
-                    threading.Thread(target=self.server.shutdown, daemon=True).start()
+            elif operation in rotas_gestao.OPERACOES:
+                result = self._gestao(operation, data, principal)
+            elif operation in rotas_conversa.OPERACOES:
+                result = self._conversa(operation, data, dono, casos_liberados, consulta_contada)
+                if result is RESPONDIDO:
                     return
-                if operation == 'codex-original':
-                    path = manager.fonte(data.get('conversa'), data.get('referencia'), dono=dono, casos=casos_liberados)
-                    self._send(200, path.read_bytes(), 'application/octet-stream',
-                               {'Content-Disposition': f'attachment; filename="original{path.suffix}"'})
-                    return
-                if operation == 'codex-status':
-                    result = manager.status()
-                elif operation == 'codex-listar':
-                    result = manager.listar(data.get('caso'), dono=dono)
-                elif operation == 'codex-perguntar':
-                    try:
-                        result = manager.perguntar(data, dono=dono)
-                    except Exception:
-                        if consulta_contada:
-                            acesso.devolver_consulta(self.server.root, dono)
-                        raise
-                elif operation == 'codex-retomar':
-                    try:
-                        result = manager.retomar(data.get('conversa'), dono=dono, casos=casos_liberados)
-                    except FileNotFoundError as exc:
-                        if consulta_contada:
-                            acesso.devolver_consulta(self.server.root, dono)
-                        raise ValueError('Conversa indisponível para este acesso.') from exc
-                    except Exception:
-                        if consulta_contada:
-                            acesso.devolver_consulta(self.server.root, dono)
-                        raise
-                elif operation == 'codex-observacoes':
-                    result = manager.observacoes(data)
-                elif operation == 'codex-corpus-previa':
-                    result = manager.preparar_corpus(data)
-                elif operation == 'codex-caderno-previa':
-                    result = manager.caderno_previa(data)
-                elif operation == 'codex-diligencias-previa':
-                    result = manager.caderno_previa(data, diligencias)
-                elif operation == 'codex-documentos-cadastrar':
-                    with self.server.cadastro_lock, manager.lock:
-                        manager.conferir_para_documentos(data.get('caso'), data.get('conversa'))
-                        result = receber_documentos(self.server.root, {'caso': data.get('caso'),
-                            'arquivos': data.get('arquivos'), 'natureza': data.get('natureza', 'nao_informada')})
-                elif operation == 'codex-eventos':
-                    result = manager.eventos(data.get('conversa'), data.get('cursor', 0), data.get('espera', 0), dono=dono,
-                                             casos=casos_liberados)
-                elif operation == 'codex-cancelar':
-                    result = manager.cancelar(data.get('conversa'), dono=dono, casos=casos_liberados)
-                if dono is not None:
-                    result = _sem_internos(result)
             else:
                 conta = ({'id': principal['conta'], 'nome': principal['nome']}
                          if self.server.com_contas else None)
@@ -596,15 +422,8 @@ class Handler(RotasContas, RotasEstaticas, BaseHTTPRequestHandler):
                            if operation == 'achados-revisao-salvar' else None)
                 with self.server.cadastro_lock:
                     result = executar(self.server.root, operation, data, conta, abertos, casos=principal['casos'])
-            if operation in ('original', 'achados-original'):
-                # Resolve only the original returned by a validated passage, never a client path.
-                run = caminho_rodada(self.server.root, data['caso'], data['rodada'])
-                path = dentro(run, result['evidencia' if operation == 'achados-original' else 'passagem']['original'])
-                content = path.read_bytes()
-                if operation == 'achados-original':  # recorded before sending: the next save may race the download
-                    self.server.registrar_original(self._chave_originais(principal, data), data['evidencia_id'])
-                self._send(200, content, 'application/octet-stream',
-                           {'Content-Disposition': 'attachment; filename="original.bin"'})
+            if operation in rotas_downloads.ORIGINAIS_PASSAGEM:
+                self._enviar_original(operation, data, result, principal)
             else:
                 self._json(400 if result.get('estado') == 'erro_consulta' else 200, result)
         except revisao_humana.OriginalNaoConferido as exc:
