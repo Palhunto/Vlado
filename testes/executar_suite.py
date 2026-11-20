@@ -8,6 +8,7 @@
 Use o Python do `.venv`. `python -m unittest discover -s testes` continua rodando tudo.
 """
 import argparse
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -38,15 +39,36 @@ def folhas(suite):
             yield item
 
 
+def modulo_de(teste):
+    """Nome do módulo pelo id do teste; `_FailedTest` de módulo que não importa leva o nome do módulo."""
+    if type(teste).__name__ == '_FailedTest':
+        return teste._testMethodName.split('.')[0]
+    return teste.id().split('.')[0]
+
+
+class SelecaoInvalida(Exception):
+    pass
+
+
 def montar(selecao):
     lentos = modulos_lentos()
+    desconhecidos = sorted(lentos - set(modulos()))
+    if desconhecidos:
+        raise SelecaoInvalida('suite_lenta.txt cita módulos sem test_*.py: ' + ', '.join(desconhecidos))
     sys.path.insert(0, str(TESTES))
     todos = unittest.defaultTestLoader.discover(str(TESTES), top_level_dir=str(TESTES))
     suite = unittest.TestSuite()
+    por_modulo = {}
     for teste in folhas(todos):
-        modulo = type(teste).__module__.split('.')[0]
+        modulo = modulo_de(teste)
+        por_modulo[modulo] = por_modulo.get(modulo, 0) + 1
         if selecao == 'completa' or (selecao == 'lenta') == (modulo in lentos):
             suite.addTest(teste)
+    vazios = sorted(m for m in lentos if not por_modulo.get(m))
+    if vazios:
+        raise SelecaoInvalida('módulos de suite_lenta.txt sem nenhum teste descoberto: ' + ', '.join(vazios))
+    if suite.countTestCases() == 0:
+        raise SelecaoInvalida(f'a seleção "{selecao}" ficou vazia; um portão sem testes não pode passar.')
     return suite
 
 
@@ -72,10 +94,19 @@ def main():
     g.add_argument('--completa', action='store_true')
     g.add_argument('--tempos', action='store_true')
     a = ap.parse_args()
+    sys.stderr.reconfigure(encoding='utf-8')
     if a.tempos:
         return medir()
     selecao = 'completa' if a.completa else 'lenta' if a.lenta else 'rapida'
-    resultado = unittest.TextTestRunner(verbosity=1).run(montar(selecao))
+    if selecao in ('completa', 'lenta'):
+        # Portões de merge: sem Node o teste falha. O pulo fica só para a execução avulsa e a rápida local.
+        os.environ.setdefault('VLADO_EXIGIR_NODE', '1')
+    try:
+        suite = montar(selecao)
+    except SelecaoInvalida as erro:
+        print(f'ERRO: {erro}', file=sys.stderr)
+        return 2
+    resultado = unittest.TextTestRunner(verbosity=1).run(suite)
     return 0 if resultado.wasSuccessful() else 1
 
 
