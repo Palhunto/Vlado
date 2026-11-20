@@ -9,6 +9,9 @@ entrega_intercept
 entrega_intercept.*
 android/saidas
 .claude-flow
+.claude
+.maestri
+.maestro
 **/__pycache__
 *.py[cod]
 *.log
