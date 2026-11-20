@@ -114,7 +114,7 @@ O resultado é uma migração do procedimento para operação por agente de chat
 - [scripts](scripts/README.md): montagem, integridade, preparação de texto, criação de rodadas e integração com a API.
 - `interface`: Mesa de apuração em HTML, CSS e JavaScript sem etapa de build; `interface/vendor` traz Vditor e PDF.js, e `interface/fonts` traz as fontes incluídas.
 - `testes`: `test_*.py`, executados por `unittest discover`; `qa_*.py` que dirigem o navegador com o `.cjs` de mesmo nome; helpers `.cjs` avulsos (ver [Em aberto](#decisões-e-pendências)).
-- `instalador`: gerador do Vlado-Setup.exe (Inno Setup e PyInstaller) e o termo de uso exibido na instalação. A versão do instalador está em `instalador/vlado.iss` (2.0.4); a versão da aplicação está em `configuracao.json` (1.4.0).
+- `instalador`: gerador do Vlado-Setup.exe (Inno Setup e PyInstaller) e o termo de uso exibido na instalação. A versão do instalador está em `instalador/vlado.iss` (2.1.0); a versão da aplicação está em `configuracao.json` (1.4.0).
 - `deploy`: Caddy e as variáveis de ambiente de cada ambiente (homologação, editorial, demonstração). Os arquivos `.env` reais ficam fora do git.
 - `android`: app Vlado Mesa, com os sabores `sala` e `redacao`; ver [docs/ANDROID.md](docs/ANDROID.md).
 - `docs/consolidacao`: revisão do diff da consolidação 2.0.4, como registro de processo.

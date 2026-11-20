@@ -1,5 +1,5 @@
 {
-  "versao_vlado": "2.0.4",
+  "versao_vlado": "2.1.0",
   "observacao": "Downloads fixados por versão e SHA-256; scripts/gerar_instalador.py recusa qualquer arquivo divergente.",
   "downloads": {
     "7zr": {

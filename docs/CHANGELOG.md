@@ -1,5 +1,9 @@
 # Mudanças
 
+## 2.1.0 — 2026-11-20 — Instalador Windows com as fases 01 a 09
+
+Primeiro instalador com a lapidação completa: contrato de evidência e quadros, tabelas de apuração, leitura de DOCX e XLSX com localizador, fontes web por apuração (modo opcional de domínio único), conferência da redação, entrevistas e pedidos, salvamento automático de rascunhos e as correções de segurança da fase 09. O detalhamento de cada fase está na seção abaixo.
+
 ## 2026-11-19 — Lapidação: fases 01 a 09
 
 Novas áreas, integradas em `codex/lapidacao`: contrato de evidência e quadros (hipóteses, linha do tempo, comparador, mapa de relações), tabelas de apuração com fonte por célula, leitura de DOCX e XLSX com localizador e OCR de imagens a pedido, rascunhos com retomada do caso, design system com tokens, fontes web por caso com domínio único, conferência da redação por afirmação e preparação de entrevistas e pedidos de informação. Ver o README ("Quadros, redação e retomada" e "Fontes web por apuração") e [FLUXO_PONTA_A_PONTA.md](FLUXO_PONTA_A_PONTA.md).

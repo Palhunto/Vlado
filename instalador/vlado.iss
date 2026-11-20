@@ -3,7 +3,7 @@
 ; data in %LOCALAPPDATA%\Vlado (created by Vlado.exe, never touched by install, update or uninstall).
 
 #ifndef Versao
-  #define Versao "2.0.4"
+  #define Versao "2.1.0"
 #endif
 #ifndef Origem
   #define Origem "..\build\instalador"

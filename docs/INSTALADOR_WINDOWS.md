@@ -13,7 +13,7 @@ Desde o 2.0.2, a primeira pergunta e os complementos usam a mesma pasta temporá
 | Item | Valor |
 | --- | --- |
 | Arquivo | `Vlado-Setup.exe` (gerado; fora do git) |
-| Versão | 2.0.4 |
+| Versão | 2.1.0 |
 | Tamanho | 127,8 MiB (133.974.955 bytes) |
 | SHA-256 | `574da2e02d45c2744200373f01871e6fd30f6517d015c5fccf907e30d4cab5fe` |
 
