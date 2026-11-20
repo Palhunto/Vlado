@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sem_conexao_titulo">Sem conexão</string>
+    <string name="sem_conexao_texto">Não foi possível falar com o servidor do Vlado. Sua sessão continua guardada; confira a conexão e tente de novo.</string>
+    <string name="tls_titulo">Conexão não segura</string>
+    <string name="tls_texto">O certificado do servidor não pôde ser verificado. Por segurança, o app não continua. Avise a equipe responsável pelo Vlado.</string>
+    <string name="tentar_de_novo">Tentar de novo</string>
+    <string name="download_salvo_titulo">Arquivo salvo</string>
+    <string name="download_salvo_texto">%1$s foi salvo em Downloads/Vlado.</string>
+    <string name="download_salvo_texto_saf">%1$s foi salvo no local escolhido.</string>
+    <string name="abrir">Abrir</string>
+    <string name="fechar">Fechar</string>
+    <string name="download_falhou">Não foi possível salvar o arquivo.</string>
+    <string name="download_nao_suportado">Este download não é suportado no app. Atualize o Android System WebView e tente pelo botão de baixar da Mesa.</string>
+    <string name="sem_app_para_abrir">Nenhum app instalado consegue abrir este arquivo.</string>
+    <string name="download_ocupado">Aguarde: ainda estou salvando o arquivo anterior.</string>
+    <string name="renderizador_titulo">A página parou de responder</string>
+    <string name="renderizador_texto">O motor de páginas do Android foi encerrado duas vezes seguidas. Toque em tentar de novo para recarregar a Mesa; sua sessão continua guardada.</string>
+</resources>

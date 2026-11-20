@@ -2,6 +2,8 @@
 import copy
 import json
 from pathlib import Path
+from runpy import run_path
+from shutil import copyfile
 import sys
 import unittest
 from unittest.mock import patch
@@ -179,6 +181,19 @@ class AchadosTest(unittest.TestCase):
         self.assertEqual(carregar(self.root,'alpha','R001','r2')[0],data)
         from registros_achados import validar_esquema
         validar_esquema(json.loads((Path(__file__).parent/'fixtures/achados_exemplo.json').read_text(encoding='utf-8')))
+
+    def test_schema_carregado_do_pacote_windows(self):
+        projeto = Path(__file__).resolve().parents[1]
+        pacote = self.root / '_internal'
+        schema = pacote / 'modelo_dados' / 'modelos' / 'ACHADOS.schema.json'
+        schema.parent.mkdir(parents=True)
+        copyfile(projeto / 'modelos' / schema.name, schema)
+        amostra = json.loads((projeto / 'testes/fixtures/achados_exemplo.json').read_text(encoding='utf-8'))
+
+        with patch.object(sys, '_MEIPASS', str(pacote), create=True):
+            modulo = run_path(str(projeto / 'scripts/registros_achados.py'))
+        self.assertEqual(modulo['SCHEMA'], schema)
+        modulo['validar_esquema'](amostra)
 
 
 if __name__=='__main__':

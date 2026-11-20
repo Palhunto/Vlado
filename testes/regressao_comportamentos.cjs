@@ -127,27 +127,12 @@ test('continuação assistida recupera rascunho do destino sem sobrescrever outr
   await f.caseSelect('beta');assert.equal(f.get('codex-pergunta').value,'Rascunho Beta');
 });
 
-const approval=id=>({id,metodo:'item/tool/requestUserInput',motivo:'Decisão sintética',perguntas:[{id:'q1',question:'O que conferir?',options:[]}]});
-test('decisões mantêm nó, texto, seleção e foco mesmo com pedidos adicionados/removidos',async()=>{
+test('uso de tokens da API aparece nas atividades com total da análise',async()=>{
   const f=fixture();await f.caseSelect('alpha');await f.chatSelect('chat1');
-  await f.deliver(f.snapshot('aguardando_aprovacao',[approval('p1')]));
-  const panel=f.get('codex-aprovacoes').children[0],input=panel.querySelectorAll('input')[0];
-  input.value='Resposta em elaboração';input.selectionStart=2;input.selectionEnd=8;input.focus();
-  await f.deliver(f.snapshot('aguardando_aprovacao',[approval('p2'),approval('p1')]));
-  assert.equal(f.get('codex-aprovacoes').children[0],panel);assert.equal(panel.querySelectorAll('input')[0],input);
-  assert.equal(input.value,'Resposta em elaboração');assert.equal(input.selectionStart,2);assert.equal(input.selectionEnd,8);assert.equal(f.context.document.activeElement,input);
-  await f.deliver(f.snapshot('aguardando_aprovacao',[approval('p1')]));assert.equal(f.get('codex-aprovacoes').children.length,1);
-  const button=panel.querySelectorAll('button')[0];await button.fire('click');
-  await f.deliver(f.snapshot('aguardando_aprovacao',[approval('p1')]));assert.equal(button.disabled,true);
-  const sent=f.calls.find(c=>c.operation==='codex-aprovacao').data;assert.equal(sent.solicitacao,'p1');assert.equal(sent.respostas.q1.answers[0],input.value);
-  await f.deliver(f.snapshot());assert.equal(f.get('codex-aprovacoes').children.length,0);
-});
-
-test('falha ao responder decisão mantém texto e permite tentar novamente',async()=>{
-  const f=fixture();await f.caseSelect('alpha');await f.chatSelect('chat1');await f.deliver(f.snapshot('aguardando_aprovacao',[approval('p1')]));
-  const panel=f.get('codex-aprovacoes').children[0],input=panel.querySelectorAll('input')[0],button=panel.querySelectorAll('button')[0];
-  input.value='Não perder';const api=f.context.api;f.context.api=async(op,data)=>{if(op==='codex-aprovacao')throw new Error('falha sintética');return api(op,data);};
-  await button.fire('click');assert.equal(button.disabled,false);assert.equal(input.value,'Não perder');
+  await f.deliver(f.snapshot('executando',[],3,[{tipo:'uso',dados:{etapa:'busca',modelo:'m',uso:{entrada:120,saida:30,cache_leitura:80},total:{entrada:300,saida:60,cache_leitura:200}}}]));
+  const linha=f.get('codex-atividades').children.at(-1).textContent;
+  assert.match(linha,/Uso da API · busca: entrada 120, saída 30, cache 80 tokens/);
+  assert.match(linha,/total da análise: entrada 300, saída 60, cache 200/);
 });
 
 function observation(f,id='A001',event='e1') {
@@ -179,10 +164,10 @@ test('seleção de observações permanece entre páginas e não afeta caixas ex
 test('localizadores legíveis, completos ou parciais, sem serializar objetos ou inventar posição',()=>{
   const f=fixture(),format=f.context.window.Leitura.localizador;
   for(const [value,expected] of [
-    [{pagina_pdf:3},'página 3'],[{linha_inicio:2,linha_fim:8},'linhas 2–8'],[{linha_inicio:2},'linha 2'],
+    [{pagina_pdf:3},'p. 3'],[{linha_inicio:2,linha_fim:8},'linhas 2–8'],[{linha_inicio:2},'linha 2'],
     [{localizador:'Tabela 4, rodapé'},'Tabela 4, rodapé'],
     [{localizador:{tipo:'regiao',descricao:'Canto superior direito'}},'Canto superior direito'],
-    [{localizador:{pagina_pdf:6}},'página 6'],[{localizador:{linha_inicio:4,linha_fim:4}},'linha 4'],
+    [{localizador:{pagina_pdf:6}},'p. 6'],[{localizador:{linha_inicio:4,linha_fim:4}},'linha 4'],
     [{localizador:{aba:'Despesas',celula:'B12'}},'aba Despesas · célula B12'],
     [{localizador:{tabela:2,regiao:'rodapé'}},'tabela 2 · região rodapé'],
     [{descricao:'Anexo IV'},'Anexo IV'],[{localizador:{tipo:'regiao'}},'localizador não informado'],

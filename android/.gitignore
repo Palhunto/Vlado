@@ -1,0 +1,11 @@
+# Saídas e estado local do build Android
+/saidas/
+/.gradle/
+/build/
+/app/build/
+/local.properties
+/.kotlin/
+*.jks
+*.keystore
+*.p12
+keystore.properties

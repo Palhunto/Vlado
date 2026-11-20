@@ -1,4 +1,4 @@
-"""Browser acceptance with synthetic corpus and simulated app-server. No inference."""
+"""Browser acceptance with synthetic corpus and simulated API adapter. No inference."""
 import argparse
 import os
 from pathlib import Path
@@ -13,17 +13,7 @@ from agente_fluxo_fixture import entrega
 
 
 class BrowserFake(FakeServer):
-    authenticated = False
-
     def call(self, method, params=None):
-        if method == 'account/login/start':
-            self.login_started = True
-            self.login_reads = 0
-        if method == 'account/read' and getattr(self, 'login_started', False) and not self.authenticated:
-            self.login_reads += 1
-            if self.login_reads >= 2:
-                self.authenticated = True
-                self.emit('account/login/completed', {'success': True, 'loginId': 'login-fixture'})
         result = super().call(method, params)
         if method == 'turn/start':
             text = params['input'][0]['text']
@@ -36,7 +26,7 @@ class BrowserFake(FakeServer):
         if 'LIMITE' in text:
             self.emit('turn/completed', {'turn': {'id': turn_id, 'status': 'failed',
                       'error': {'message': 'Limite de uso sintético atingido. Tente mais tarde.',
-                                'codexErrorInfo': 'usageLimitExceeded'}}})
+                                'codexErrorInfo': 'limite'}}})
             return
         number = time.time_ns()
 

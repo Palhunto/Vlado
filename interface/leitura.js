@@ -19,24 +19,46 @@ window.Leitura = (() => {
     return title || 'Documento';
   }
   const quantidade = (n, singular, plural = singular + 's') => `${n} ${n === 1 ? singular : plural}`;
-  function localizador(hit) {
+  // Locator words follow the interface language; the values come from the record unchanged.
+  const PALAVRAS = {
+    pt: {pagina: 'p.', linhas: 'linhas', linha: 'linha', ausente: 'localizador não informado',
+      planilha: 'planilha', aba: 'aba', tabela: 'tabela', celula: 'célula', intervalo: 'intervalo', regiao: 'região', secao: 'seção'},
+    en: {pagina: 'page', linhas: 'lines', linha: 'line', ausente: 'locator not given',
+      planilha: 'sheet', aba: 'tab', tabela: 'table', celula: 'cell', intervalo: 'range', regiao: 'region', secao: 'section'},
+  };
+  function localizador(hit, lingua = window.I18N?.idioma?.() || 'pt') {
+    const words = PALAVRAS[lingua] || PALAVRAS.pt;
     const text = value => typeof value === 'string' ? value.trim() : typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
     const loc = hit.localizador && typeof hit.localizador === 'object' ? hit.localizador : {};
     const page = text(hit.pagina_pdf) || text(loc.pagina_pdf);
-    if (page) return `página ${page}`;
+    if (page) return `${words.pagina} ${page}`;
     const first = text(hit.linha_inicio) || text(loc.linha_inicio), last = text(hit.linha_fim) || text(loc.linha_fim);
-    if (first) return last && last !== first ? `linhas ${first}–${last}` : `linha ${first}`;
+    if (first) return last && last !== first ? `${words.linhas} ${first}–${last}` : `${words.linha} ${first}`;
     const description = text(hit.localizador) || text(loc.descricao) || text(hit.descricao);
     if (description) return description;
     const parts = [];
-    for (const [key, label] of [['planilha','planilha'],['aba','aba'],['tabela','tabela'],['celula','célula'],['intervalo','intervalo'],['regiao','região'],['secao','seção']]) {
+    for (const key of ['planilha','aba','tabela','celula','intervalo','regiao','secao']) {
       const value = text(loc[key]) || text(hit[key]);
-      if (value) parts.push(`${label} ${value}`);
+      if (value) parts.push(`${words[key]} ${value}`);
     }
-    return parts.join(' · ') || 'localizador não informado';
+    return parts.join(' · ') || words.ausente;
   }
-  function fonte(hit) {
-    return `${nome(hit)} · ${localizador(hit)}`;
+  function fonte(hit, lingua) {
+    return `${nome(hit)} · ${localizador(hit, lingua)}`;
+  }
+  // PDF page cited by a source, when the record states one; never inferred.
+  function pagina(hit) {
+    const loc = hit.localizador && typeof hit.localizador === 'object' ? hit.localizador : {};
+    const page = Number(hit.pagina_pdf ?? loc.pagina_pdf);
+    return Number.isSafeInteger(page) && page > 0 ? page : null;
+  }
+  // One label for the action that opens the original, wherever it appears.
+  const rotuloOriginal = page => page ? `Ver página ${page} no original` : 'Abrir original';
+  // Author of a human record: the pilot account signs it; otherwise the name was typed by the user.
+  const CONTA = new Set(['humana_autenticada_pela_conta_da_mesa', 'conta_autenticada_da_mesa']);
+  function autoria(nome, origem) {
+    const t = (texto, vars) => window.I18N ? window.I18N.t(texto, vars) : texto.replace('{nome}', vars?.nome ?? '').replace('{origem}', vars?.origem ?? '');
+    return t('Autor: {nome} · {origem}', {nome, origem:t(CONTA.has(origem) ? 'autenticado pela conta da Mesa' : 'declarado pelo usuário')});
   }
   function tecnicos(...content) {
     const details = node('details', undefined, 'technical');
@@ -48,7 +70,9 @@ window.Leitura = (() => {
     const info = doc.extracao_pdf, messages = [];
     if (info?.paginas_sem_texto?.length) messages.push(`Sem texto extraível: páginas ${info.paginas_sem_texto.join(', ')}. Consulte essas páginas no original; a busca textual não as cobre.`);
     if (info?.paginas_com_erro?.length) messages.push(`Falha de extração nas páginas ${info.paginas_com_erro.map(p => p.pagina_pdf).join(', ')}. O original foi preservado.`);
-    if (info?.estado === 'erro' && !info.paginas_com_erro?.length) messages.push('Não foi possível extrair o texto deste PDF. Consulte o original.');
+    if (info?.paginas_ocr?.length) messages.push(`Páginas ${info.paginas_ocr.join(', ')} vieram de OCR automático e podem conter erros. Confira essas páginas no original.`);
+    if (info?.protegido) messages.push('PDF protegido por senha: o texto não foi extraído. Consulte o original.');
+    else if (info?.estado === 'erro' && !info.paginas_com_erro?.length) messages.push('Não foi possível extrair o texto deste PDF. Consulte o original.');
     if (!info && /\.pdf$/i.test(doc.nome_recebido || doc.nome_documento || doc.arquivo || doc.original || '')) messages.push('PDF sem extração textual registrada. Consulte o original.');
     return messages;
   }
@@ -62,7 +86,14 @@ window.Leitura = (() => {
       }
       if (text.startsWith('[fonte:', i)) {
         const match = /^\[fonte:([^\]\n]{1,200})\]/.exec(text.slice(i));
-        if (match && citation) { flush(); parent.append(citation(match[1])); i += match[0].length; continue; }
+        if (match && citation) {
+          flush(); const cited = citation(match[1]); i += match[0].length;
+          // Punctuation right after a citation stays on its line.
+          const tail = /^[,.;:!?)\]»”]+/.exec(text.slice(i));
+          if (tail) { const keep = node('span', undefined, 'citation-keep'); keep.append(cited, node('span', tail[0])); parent.append(keep); i += tail[0].length; }
+          else parent.append(cited);
+          continue;
+        }
       }
       if (text[i] === '`') {
         const marker = /^`+/.exec(text.slice(i))[0], end = text.indexOf(marker, i + marker.length);
@@ -91,6 +122,7 @@ window.Leitura = (() => {
     flush();
   }
   function markdown(target, text, citation) {
+    target.setAttribute('translate', 'no');  // model/human text keeps its own language
     const fragment = document.createDocumentFragment(), lines = String(text).replace(/\r\n?/g, '\n').split('\n');
     const appendInline = (tag, value, parent = fragment) => {
       const item = node(tag); inline(item, value, citation); parent.append(item); return item;
@@ -142,5 +174,5 @@ window.Leitura = (() => {
     }
     target.replaceChildren(fragment);
   }
-  return {nome, fonte, localizador, tecnicos, lacunas, markdown, quantidade};
+  return {nome, fonte, localizador, pagina, rotuloOriginal, autoria, tecnicos, lacunas, markdown, quantidade};
 })();

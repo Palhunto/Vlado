@@ -1,10 +1,17 @@
 {
-  "versao": "1.3.0",
-  "ambiente": "Codex online",
+  "versao": "1.4.0",
+  "ambiente": "API online",
   "modo": "automatico_apos_pergunta",
   "caso_ativo": null,
   "manifesto_ativo": null,
-  "inferência": "modelo_da_sessao",
+  "inferência": "api_do_provedor",
+  "provedor": "anthropic",
+  "modelo_preferido": null,
+  "max_tokens_saida": 16000,
+  "limites": {
+    "tokens_por_consulta": 3000000,
+    "tokens_por_dia": 30000000
+  },
   "modelo_observado": null,
   "busca": "sqlite_fts5_por_rodada_e_leitura_documental",
   "indice_sqlite": true,

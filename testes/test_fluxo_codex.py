@@ -4,17 +4,19 @@ from unittest.mock import patch
 import unittest
 
 import test_codex_integracao as fixture
-from agente_fluxo_fixture import entrega, esperar, completar
+from agente_fluxo_fixture import aguardar_fim, entrega, esperar, completar
 from comum import ler_json, sha256
 from indice_achados import catalogo, consultar, verificar
 
 
 class FluxoAutomaticoTest(unittest.TestCase):
+    start = fixture.CodexIntegrationTest.start
+
     def setUp(self):
-        self.fx = fixture.CodexIntegrationTest()
-        self.fx.setUp()
-        self.addCleanup(self.fx.doCleanups)
-        self.manager, self.root = self.fx.manager, self.fx.root
+        # The fixture runs on this test, so its cleanups (threads, manager, temporary folder)
+        # are registered here and their errors are reported, as in ContinuarDocumentosTest.
+        fixture.CodexIntegrationTest.setUp(self)
+        self.fx = self
         self.identifier = self.fx.start()
         self.ctx = self.manager.contexts[self.identifier]
         self.refs = {}
@@ -45,8 +47,7 @@ class FluxoAutomaticoTest(unittest.TestCase):
                 return
 
     def terminal(self):
-        esperar(lambda: self.manager.eventos(self.identifier)['conversa']['estado'] not in
-                ('preparando', 'executando', 'publicando', 'cancelando', 'aguardando_aprovacao'))
+        aguardar_fim(self.manager, self.identifier)
 
     def test_complemento_publica_e_verifica_banco_sem_alterar_primeira_rodada(self):
         completar(self.manager, self.identifier)

@@ -11,6 +11,23 @@ from registros_achados import carregar
 
 ID = r'G[a-f0-9]{32}'
 ESTADOS = ('a_solicitar', 'em_andamento', 'aguardando_resposta', 'resposta_recebida', 'concluida', 'cancelada')
+# Campos opcionais de diligências de contato (entrevistas.py). Diligências antigas não os têm e continuam válidas.
+TIPOS = ('entrevista', 'pedido_informacao', 'pedido_lai')
+ID_PERGUNTA = r'J[a-f0-9]{32}'
+CAMPOS_CONTATO = ('tipo', 'destinatario', 'pergunta_id')
+
+
+def _contato(data):
+    """Tipo, destinatário e pergunta de origem, quando a diligência é um contato; ``{}`` se não for."""
+    if not any(k in data for k in CAMPOS_CONTATO):
+        return {}
+    if data.get('tipo') not in TIPOS:
+        raise ValueError('Escolha o tipo de contato: entrevista, pedido de informação ou pedido via LAI.')
+    question = data.get('pergunta_id')
+    if question is not None and (not isinstance(question, str) or not re.fullmatch(ID_PERGUNTA, question)):
+        raise ValueError('Pergunta de origem da diligência inválida.')
+    return {'tipo': data['tipo'], 'destinatario': caderno._texto(data.get('destinatario'), 'Destinatário', 200),
+            'pergunta_id': question}
 
 
 def _pasta(root, case):
@@ -71,13 +88,17 @@ def detalhe(root, case, identifier):
             raise ValueError('Histórico da diligência divergente; nenhuma atualização foi aplicada.')
         caderno._texto(event.get('autor'), 'Autor da atualização', 120)
         current = event['diligencia']
-        if (current.get('estado') not in ESTADOS or current.get('origem_autoria') != 'humana_declarada_na_interface'
+        if (current.get('estado') not in ESTADOS or current.get('origem_autoria') not in caderno.ORIGENS_AUTORIA
                 or not isinstance(current.get('respostas'), list)
                 or state and current['origem'] != state['origem']):
             raise ValueError('Estado ou origem da diligência inválidos.')
         caderno._texto(current.get('acao'), 'Ação', 1000)
         caderno._texto(current.get('responsavel'), 'Responsável', 120)
         _prazo(current.get('prazo'))
+        contact = {k: current[k] for k in CAMPOS_CONTATO if k in current}
+        if (contact and _contato(contact) != contact
+                or state and contact != {k: state[k] for k in CAMPOS_CONTATO if k in state}):
+            raise ValueError('Estado ou origem da diligência inválidos.')
         events.append(event); previous = sha256(path); state = current
     identity = state['origem']['identidade']
     origin = _origem(root, case, None if identity == {'tipo': 'livre'} else identity)
@@ -105,15 +126,17 @@ def listar(root, case, *, estado='', responsavel='', texto=''):
             continue
         item = detalhe(root, case, path.name); state = item['diligencia']
         if ((not estado or state['estado'] == estado) and (not who or who in state['responsavel'].casefold())
-                and (not query or query in (state['acao'] + ' ' + state['origem']['redacao']).casefold())):
+                and (not query or query in (state['acao'] + ' ' + state['origem']['redacao'] + ' '
+                                            + state.get('destinatario', '')).casefold())):
             result.append(item)
     result.sort(key=lambda item: (item['diligencia']['atualizada_em_utc'], item['id']), reverse=True)
     return {'caso': case, 'resultados': result, 'total': len(result)}
 
 
-def salvar(root, data, operation='criar'):
+def salvar(root, data, operation='criar', conta=None):
     fields = {'caso', 'requisicao_id', 'autor', 'observacao'}
-    fields |= {'origem', 'acao', 'responsavel', 'prazo'} if operation == 'criar' else {'diligencia_id', 'anterior_sha256'}
+    fields |= ({'origem', 'acao', 'responsavel', 'prazo', *CAMPOS_CONTATO} if operation == 'criar'
+               else {'diligencia_id', 'anterior_sha256'})
     fields |= {'acao', 'responsavel', 'prazo', 'estado'} if operation == 'atualizar' else set()
     fields |= {'origem_id', 'documentos'} if operation == 'responder' else set()
     if operation not in ('criar', 'atualizar', 'responder') or not isinstance(data, dict) or set(data) - fields:
@@ -125,9 +148,10 @@ def salvar(root, data, operation='criar'):
     identifier = 'G' + rid if operation == 'criar' else data.get('diligencia_id')
     if not isinstance(identifier, str) or not re.fullmatch(ID, identifier):
         raise ValueError('Diligência inválida.')
-    author = caderno._texto(data.get('autor'), 'Autor da atualização', 120)
+    who = caderno.autoria(conta, data.get('autor'), 'Autor da atualização')
+    author = who['autor']
     note = caderno._texto(data.get('observacao', ''), 'Observação', 5000, vazio=operation == 'criar')
-    request_hash = caderno._hash({'operacao': operation, **data})
+    request_hash = caderno._hash(caderno.com_conta({'operacao': operation, **data}, caderno.conta_valida(conta)))
     with caderno._trava(folder):
         records = dentro(folder, identifier)
         current = detalhe(root, case, identifier) if records.exists() else None
@@ -141,10 +165,10 @@ def salvar(root, data, operation='criar'):
             if current:
                 raise ValueError('Diligência já existe.')
             state = {'origem': _origem(root, case, data.get('origem')), 'estado': 'a_solicitar',
-                'origem_autoria': 'humana_declarada_na_interface', 'respostas': [],
+                'origem_autoria': who['origem_autoria'], 'respostas': [],
                 'acao': caderno._texto(data.get('acao'), 'Ação', 1000),
                 'responsavel': caderno._texto(data.get('responsavel'), 'Responsável', 120),
-                'prazo': _prazo(data.get('prazo'))}
+                'prazo': _prazo(data.get('prazo')), **_contato(data)}
         else:
             if not current or data.get('anterior_sha256') != current['sha256']:
                 raise ValueError('A diligência mudou. Atualize antes de salvar; seu formulário foi preservado.')
@@ -168,12 +192,13 @@ def salvar(root, data, operation='criar'):
                 _, source = caderno._original(root, origin, doc['documento_id'], doc['sha256'])
                 selected.append({**doc, 'nome_recebido': source.get('nome_recebido', doc['documento_id'])}); seen.add(doc['documento_id'])
             state['respostas'].append({'origem': origin, 'origem_id': oid, 'documentos': selected,
-                'observacao': note, 'autor': author, 'recebida_em_utc': datetime.now(timezone.utc).isoformat()})
+                'observacao': note, 'autor': author, 'origem_autoria': who['origem_autoria'], 'recebida_em_utc': datetime.now(timezone.utc).isoformat()})
             state['estado'] = 'resposta_recebida'
         state['atualizada_em_utc'] = datetime.now(timezone.utc).isoformat()
         event = {'esquema': 1, 'caso_id': case, 'id': identifier, 'sequencia': len(current['historico']) + 1 if current else 1,
             'anterior_sha256': current['sha256'] if current else None, 'operacao': operation,
             'requisicao_id': rid, 'solicitacao_sha256': request_hash, 'autor': author,
+            'origem_autoria': who['origem_autoria'], **({'conta_id': who['conta_id']} if 'conta_id' in who else {}),
             'observacao': note, 'em_utc': state['atualizada_em_utc'], 'diligencia': state}
         with pasta_preparacao(folder, '.preparacao_') as staging:
             staged = staging / 'evento.json'; escrever_json(staged, event, exclusivo=True)

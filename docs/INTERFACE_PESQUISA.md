@@ -1,6 +1,6 @@
 # Interface de pesquisa documental
 
-Interface da versão 1.3.0, com cadastro anterior à pergunta, extração textual de PDFs, conversa integrada ao Codex e consulta aos achados estruturados. A Mesa de apuração separa cadastro, busca documental e conferência de achados, com leitura do briefing junto às fontes. Usa Python e navegador, com `pypdf` para extração; a análise online é conduzida pela integração descrita em [INTEGRACAO_CODEX.md](INTEGRACAO_CODEX.md).
+Interface da versão 1.4.0, com cadastro anterior à pergunta, extração textual de PDFs, conversa com os documentos e consulta aos achados estruturados. A Mesa de apuração separa cadastro, busca documental e conferência de achados, com leitura do briefing junto às fontes. Usa Python e navegador, com `pypdf` para extração; a análise online é feita pela API do provedor configurado, conforme a integração descrita em [INTEGRACAO_API.md](INTEGRACAO_API.md).
 
 ## Abrir
 
@@ -12,7 +12,7 @@ Ou execute na pasta do projeto:
 python scripts/interface_pesquisa.py
 ```
 
-O navegador abre em [Pesquisa documental](http://127.0.0.1:8765). Se a porta estiver ocupada, use `--porta 8766`; `--sem-abrir` inicia sem abrir o navegador. O servidor escuta somente em `127.0.0.1`, no próprio computador. A análise por IA permanece online no Codex.
+O navegador abre em [Pesquisa documental](http://127.0.0.1:8765). Se a porta estiver ocupada, use `--porta 8766`; `--sem-abrir` inicia sem abrir o navegador. O servidor escuta somente em `127.0.0.1`, no próprio computador. A análise por IA é feita online, pela API do provedor configurado, somente depois do envio de uma pergunta.
 
 ## Usar
 
@@ -24,15 +24,17 @@ Quando um caso ativo tiver PDFs pendentes ou com falha de extração, **Preparar
 
 ## Leitura e apresentação
 
-O primeiro lote de correções de usabilidade preserva as abas e a identidade visual. **Reconectar acompanhamento** recupera apenas a observação da execução existente; rascunhos são separados por apuração/conversa, com destino indicado e aviso antes de sair da página. As decisões pendentes mantêm seus campos durante as atualizações. Consulte o [funcionamento e os limites dos rascunhos](INTEGRACAO_CODEX.md#recuperação-do-acompanhamento-e-rascunhos).
+O primeiro lote de correções de usabilidade preserva as abas e a identidade visual. **Reconectar acompanhamento** recupera apenas a observação da execução existente; rascunhos são separados por apuração/conversa, com destino indicado e aviso antes de sair da página. Consulte o [funcionamento e os limites dos rascunhos](INTEGRACAO_API.md#recuperação-do-acompanhamento-e-rascunhos).
 
 As seleções de observações dos achados atuam somente nos próprios controles: limpar ou atualizar essa seleção não modifica as caixas nem as seleções internas do caderno ou dos formulários de diligências. Localizadores estruturados são apresentados pelos campos existentes, como descrição, aba, tabela, célula ou região. Se não houver localização legível, aparece **localizador não informado**, sem inferir posição.
 
 Em uma conversa concluída, **Continuar com novos documentos** cadastra outro lote e mostra uma prévia da versão ampliada. Escolher essa versão e enviar a próxima pergunta mantém a conversa, cria outra rodada e acrescenta um comparativo com a última resposta concluída. Os complementos seguintes usam a nova versão. Originais, respostas e marcações anteriores permanecem preservados. O [guia da continuidade](CONTINUIDADE_DOCUMENTAL.md) detalha os estados e a nova conferência.
 
+A pergunta em preparo e os formulários dos quadros são salvos automaticamente: uma cópia imediata neste navegador e, após uma pausa curta (ou ao trocar de aba e ao fechar a página), a cópia no servidor. A linha de estado informa "Salvando…", "Salvo às HH:MM" ou "Sem conexão — salvo neste navegador"; ao reabrir a tela, um rascunho mais recente é oferecido para restaurar ou descartar. Na entrada do caso, a Mesa mostra o que já foi concluído e o que falta (documentos com limitação de extração, próxima etapa da análise, conversas interrompidas, quadros com pendências e rascunhos abertos), cada pendência com link para a área que a resolve. O resumo lê só os registros da apuração ativa e nunca o texto dos rascunhos.
+
 A interface usa a paleta verde profundo, papel, grafite, cobre e névoa, com Source Serif 4 nos títulos e Source Sans 3 na interface e leitura. Os arquivos das fontes e suas licenças estão incluídos em `interface/fonts`; o navegador não consulta servidores externos para carregá-los.
 
-Na conversa, **Conectado ao ChatGPT** resume a conexão. Login, verificação e encerramento continuam em **Conexão e opções**. Após a conclusão, os seletores de apuração/conversa e as atualizações de andamento se recolhem; a resposta permanece em destaque. Abra o resumo da apuração para trocar a conversa ou acessar a exclusão. Os textos originais, caminhos de saída, IDs, versões e hashes permanecem em **Detalhes técnicos**.
+Na conversa, **Conectado à API · Provedor · modelo** resume a conexão, ou **Chave de API ausente no servidor**, quando a chave não está definida no ambiente do servidor. A chave não aparece na tela. **Verificar conexão** e **Encerrar serviço** ficam em **Conexão e opções**. Após a conclusão, os seletores de apuração/conversa e as atualizações de andamento se recolhem; a resposta permanece em destaque. Abra o resumo da apuração para trocar a conversa ou acessar a exclusão. Os textos originais, caminhos de saída, IDs, versões e hashes permanecem em **Detalhes técnicos**.
 
 Durante a execução, **Atualizações de andamento** tem rolagem interna e altura de até metade da tela, limitada a 420 px. Novas mensagens acompanham o fim da lista sem rolar a página. Ao subir para ler mensagens anteriores, a posição é preservada. A região também aceita foco e rolagem pelo teclado. A resposta final permanece fora dessa limitação de altura.
 
@@ -42,7 +44,7 @@ As citações usam o nome recebido do documento e a página física observada, c
 
 **Limitações das fontes** aparece quando há páginas sem texto, erros de extração, metadados congelados indisponíveis ou referências finais sem fonte recuperada na própria rodada. As referências sem suporte ficam marcadas como **Fonte pendente**, com a identidade preservada no texto bruto. A extração continua sem OCR e as limitações semânticas descritas na resposta continuam visíveis.
 
-Em **Pesquisar documentos**, depois da pergunta no Codex:
+Em **Pesquisar documentos**, depois da pergunta na conversa:
 
 1. Escolha **apuração (caso)** e **rodada**; depois escolha a **versão da busca documental**. Nenhuma versão é escolhida automaticamente. A seleção da tela não altera `configuracao.json` ou o caso ativo na conversa. Após escolher a rodada, o seletor se recolhe, mantendo o nome/ID/rodada visíveis; **Escolher apuração e rodada** permite trocar a seleção.
 2. Confira a cobertura: documentos pesquisáveis, fontes sem adaptador, páginas sem texto e erros de extração são indicados.
@@ -54,7 +56,7 @@ Os modos são os mesmos da CLI: **Todas as palavras** (`comum`, com aspas para f
 
 ## Se não houver rodada ou índice
 
-A tela informa o que falta. Antes da pergunta, use **Cadastrar documentos** para cadastrar e conferir todos os lotes e a extração dos PDFs. No Codex, selecione a pauta e forneça uma pergunta real para preparar a rodada; depois clique em **Atualizar lista**. Rodada sem banco exige construção explícita pelo procedimento do [guia SQLite](BANCO_SQLITE.md). O cadastro da interface extrai texto dos PDFs, mas não congela rodadas, executa OCR ou constrói índices. Reabra o servidor da interface após atualizar seus scripts; atualize a página para carregar os novos arquivos visuais.
+A tela informa o que falta. Antes da pergunta, use **Cadastrar documentos** para cadastrar e conferir todos os lotes e a extração dos PDFs. Na conversa, selecione a pauta e envie uma pergunta real para preparar a rodada; depois clique em **Atualizar lista**. Rodada sem banco exige construção explícita pelo procedimento do [guia SQLite](BANCO_SQLITE.md). O cadastro da interface extrai texto dos PDFs, mas não congela rodadas, executa OCR ou constrói índices. Reabra o servidor da interface após atualizar seus scripts; atualize a página para carregar os novos arquivos visuais.
 
 O projeto continua sem caso ativo e sem rodada editorial após esta implementação. O exemplo incluído permanece inativo; não foi indexado para preencher a tela. A inspeção da lista usa metadados do catálogo e nomes de diretórios, sem ler os documentos dos casos.
 
@@ -64,13 +66,13 @@ O projeto continua sem caso ativo e sem rodada editorial após esta implementaç
 - Consultas abrem SQLite somente para leitura, validando hashes e vínculo ao snapshot. Pesquisa e leitura criam logs; cadastro preserva novos originais, recibos e versões do manifesto. A interface não sobrescreve originais, índices, prompts ou registros anteriores.
 - A interface serve somente os arquivos estáticos autorizados de HTML, CSS e JavaScript. Download de fonte exige uma referência de passagem validada; o envio recebe bytes e nomes, sem aceitar caminhos do computador como entrada. Requisições de operação exigem token da sessão, JSON e origem local; conteúdo documental é inserido como texto na página.
 - Resultados são trechos possivelmente sobrepostos. A busca textual não é recuperação semântica, validação factual ou OCR; ausência de resultado não prova ausência documental. Conferir os originais, sobretudo imagens e tabelas.
-- O servidor é um utilitário local, sem contas de usuário ou hospedagem pública. A implementação e seus testes sintéticos não constituem piloto editorial, inferência local ou garantia adicional sobre dados processados no Codex.
+- O servidor é um utilitário local, sem contas de usuário ou hospedagem pública. A implementação e seus testes sintéticos não constituem piloto editorial, inferência local ou garantia adicional sobre dados processados no provedor configurado.
 
 O servidor está em [interface_pesquisa.py](../scripts/interface_pesquisa.py); os arquivos visuais ficam em `interface/`. O iniciador e os caminhos internos são relativos ao pacote, permitindo sua cópia para outro diretório.
 
 ## Excluir e restaurar
 
-Abra **Gerenciar e lixeira**, escolha uma apuração e use **Excluir apuração**, **Excluir** em uma conversa ou **Excluir** em uma rodada avulsa. A tela **Perguntar ao Codex** também oferece **Excluir conversa** para a conversa selecionada. Uma caixa de confirmação informa o alcance antes de mover o item para a lixeira.
+Abra **Gerenciar e lixeira**, escolha uma apuração e use **Excluir apuração**, **Excluir** em uma conversa ou **Excluir** em uma rodada avulsa. A área **Perguntar à IA** também oferece **Excluir conversa** para a conversa selecionada. Uma caixa de confirmação informa o alcance antes de mover o item para a lixeira.
 
 - A exclusão da apuração retira suas conversas e rodadas das listas e consultas da interface.
 - A exclusão de uma conversa retira suas rodadas, incluindo perguntas complementares. Rodadas dessa conversa não podem ser excluídas separadamente, pois os complementos dependem do primeiro congelamento.
@@ -112,9 +114,9 @@ Use **Ler briefing** ou **Ver briefing e referências** para abrir o texto prese
 
 A interface funciona sem texto no índice documental. Não altera registros nem importa Markdown antigo. Erros não são exibidos como ausência de achados. Consulte [ACHADOS_IA.md](ACHADOS_IA.md). A reorganização visual e os testes sintéticos não constituem piloto com jornalistas nem validação editorial.
 
-# Conversa integrada ao Codex
+# Conversa com os documentos
 
 As áreas **Caderno da apuração** e **Diligências** permitem contribuições humanas e acompanhamento entre rodadas. O [caderno](CADERNO_APURACAO.md) guarda passagens com autor declarado, localização e fonte e permite cruzamentos e envio explícito à pergunta. As [diligências](DILIGENCIAS.md) ligam ações aos achados, registram responsáveis/estados e permitem cadastrar respostas e retomar a questão. Recebimento e conclusão são decisões distintas. Esses registros ficam separados das saídas da IA e não autenticam individualmente o jornalista.
 
-A área **Perguntar ao Codex** foi acrescentada à interface. O cadastro e a pesquisa manual continuam disponíveis. É possível selecionar um caso cadastrado, fazer login oficial com ChatGPT, enviar uma pergunta, acompanhar mensagens e ferramentas, conferir fontes, baixar originais, cancelar e retomar a conversa. **Abrir mesa.vbs** inicia o serviço sem console visível; **Iniciar pesquisa.cmd** mantém a opção com console. Consulte [INTEGRACAO_CODEX.md](INTEGRACAO_CODEX.md) para o fluxo atual. As descrições históricas abaixo sobre a interface não gerar inferência se aplicam às áreas anteriores de cadastro e consulta, não à nova área de conversa.
+A área **Perguntar à IA**, com a seção **Conversa com os documentos**, envia perguntas à API do provedor configurado. O cadastro e a pesquisa manual continuam disponíveis. É possível selecionar um caso cadastrado, enviar uma pergunta, acompanhar mensagens e ferramentas, conferir fontes, baixar originais, cancelar e retomar a conversa. **Abrir mesa.vbs** inicia o serviço sem console visível; **Iniciar pesquisa.cmd** mantém a opção com console. Consulte [INTEGRACAO_API.md](INTEGRACAO_API.md) para o fluxo atual. As descrições históricas abaixo sobre a interface não gerar inferência se aplicam às áreas anteriores de cadastro e consulta, não à nova área de conversa.
 

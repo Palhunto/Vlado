@@ -8,7 +8,6 @@ const http = require('node:http');
 const [output, chrome] = process.argv.slice(2);
 const interfaceRoot = path.resolve(__dirname, '../interface');
 const snapshot = (estado='concluido',aprovacoes=[],cursor=0,eventos=[]) => ({conversa:{estado},aprovacoes,cursor,eventos});
-const decision = id => ({id,metodo:'item/tool/requestUserInput',motivo:'Decisão sintética para regressão',perguntas:[{id:'q1',question:'Qual trecho deve ser conferido?',options:[]}]});
 const until = async predicate => { const end=Date.now()+10000;while(!predicate()){if(Date.now()>end)throw new Error('Espera sintética excedida');await new Promise(r=>setTimeout(r,10));} };
 (async()=>{
   await fs.mkdir(output,{recursive:true});
@@ -63,28 +62,15 @@ const until = async predicate => { const end=Date.now()+10000;while(!predicate()
     await page.locator('#codex-reconectar').waitFor();
     assert.equal(await page.isDisabled('#codex-cancelar'),false);assert.equal(await page.isDisabled('#codex-enviar'),true);
     const sends=calls.filter(c=>c.op==='codex-perguntar').length;
-    await page.click('#codex-reconectar');await respond(snapshot('aguardando_aprovacao',[decision('p1')],6));
-    await page.locator('[data-solicitacao="p1"] input').waitFor();
+    await page.click('#codex-reconectar');await respond(snapshot('executando',[],6,[{tipo:'uso',dados:{etapa:'busca',uso:{entrada:10,saida:2},total:{entrada:10,saida:2}}}]));
+    await page.locator('#codex-atividades li').nth(1).waitFor();
     assert.equal(calls.filter(c=>c.op==='codex-perguntar').length,sends);
     assert.equal(calls.filter(c=>c.op==='codex-eventos').at(-2).data.cursor,5);
-    assert.equal(await page.locator('#codex-atividades li').count(),1);
+    assert.equal(await page.locator('#codex-atividades li').count(),2);
     checks.push('Queda HTTP e reconexão no cursor existente sem reenvio da pergunta; histórico preservado e cancelamento disponível.');
-    const field=page.locator('[data-solicitacao="p1"] input');await field.fill('Resposta sintética em elaboração');
-    await field.evaluate(input=>{window.__regressionInput=input;input.focus();input.setSelectionRange(3,12,'backward');});
-    await respond(snapshot('aguardando_aprovacao',[decision('p2'),decision('p1')],7));
-    await page.locator('[data-solicitacao="p2"]').waitFor();
-    assert.deepEqual(await field.evaluate(input=>({same:input===window.__regressionInput,value:input.value,start:input.selectionStart,end:input.selectionEnd,direction:input.selectionDirection,focused:document.activeElement===input})),
-      {same:true,value:'Resposta sintética em elaboração',start:3,end:12,direction:'backward',focused:true});
-    await page.screenshot({path:path.join(output,'decisao-desktop.png'),fullPage:true});
-    await respond(snapshot('aguardando_aprovacao',[decision('p1')],8));
-    await page.locator('[data-solicitacao="p2"]').waitFor({state:'detached'});
-    await page.locator('[data-solicitacao="p1"] button').click();
-    await until(()=>calls.some(c=>c.op==='codex-aprovacao'));
-    assert.equal(calls.find(c=>c.op==='codex-aprovacao').data.respostas.q1.answers[0],'Resposta sintética em elaboração');
-    await respond(snapshot('executando',[],9));await page.locator('#codex-aprovacoes').waitFor({state:'hidden'});
     await page.click('#codex-cancelar');await until(()=>calls.some(c=>c.op==='codex-cancelar'));await respond(snapshot('interrompido',[],10));
     await page.locator('#codex-enviar:not([disabled])').waitFor({state:'attached'});
-    checks.push('Atualizações reais do DOM preservam campo, texto, seleção, direção e foco; adição/remoção de outros pedidos e envio da resposta; cancelamento da execução existente.');
+    checks.push('Uso de tokens exibido nas atividades; cancelamento da execução existente.');
     const isolation=await page.evaluate(()=>{
       window.mostrarRegistrosCaderno($('caderno-resultados'),{caso_id:'alpha',registros:[{sha256:'sintetico',registro:{id:'H001',tipo:'trecho',titulo:'Registro sintético',autor:'Teste',criado_em_utc:'2026-11-09T00:00:00Z',fontes:[],vinculos:[]}}]},true);
       const foreign=$('caderno-resultados').querySelector('input');foreign.click();

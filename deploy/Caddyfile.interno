@@ -1,0 +1,11 @@
+# Homologação local: HTTPS com a CA interna do Caddy (o navegador e o emulador precisam
+# confiar no certificado raiz em caddy_data/caddy/pki/authorities/local/root.crt).
+# Nunca use no ambiente editorial nem na demonstração pública.
+{$VLADO_DOMINIO} {
+	tls internal
+	encode gzip
+	request_body {
+		max_size 80MB
+	}
+	reverse_proxy vlado:8765
+}

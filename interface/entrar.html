@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Entrar · Vlado</title>
+  <meta name="theme-color" content="#171d1a">
+  <link rel="stylesheet" href="/tokens.css">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/entrar.css">
+  <script src="/entrar.js" defer></script>
+</head>
+<body class="entrar-pagina">
+  <main id="conteudo" class="entrar-cartao">
+    <header class="entrar-topo">
+      <span class="brand" translate="no">Vlado<span>.</span></span>
+      <div class="entrar-preferencias">
+        <button id="entrar-idioma" class="secondary" type="button" translate="no">English</button>
+        <button id="entrar-tema" class="secondary" type="button">Modo claro</button>
+      </div>
+    </header>
+
+    <section id="entrar-secao" hidden aria-labelledby="entrar-titulo">
+      <h1 id="entrar-titulo" data-t="titulo_entrar">Entrar na Mesa de apuração</h1>
+      <p class="small" data-t="intro_entrar">Use o login e a senha da sua conta.</p>
+      <form id="entrar-form" novalidate>
+        <label for="entrar-login"><span data-t="rotulo_login">Login</span>
+          <input id="entrar-login" name="username" type="text" autocomplete="username" autocapitalize="none"
+                 autocorrect="off" spellcheck="false" inputmode="text" maxlength="64" required>
+        </label>
+        <label for="entrar-senha"><span data-t="rotulo_senha">Senha</span>
+          <span class="entrar-senha-linha">
+            <input id="entrar-senha" name="password" type="password" autocomplete="current-password"
+                   maxlength="256" required>
+            <button class="secondary entrar-mostrar" type="button" aria-pressed="false" aria-controls="entrar-senha"
+                    data-t="mostrar">Mostrar</button>
+          </span>
+        </label>
+        <button id="entrar-enviar" type="submit" data-t="botao_entrar">Entrar</button>
+      </form>
+      <p class="small" data-t="esqueci">Esqueceu a senha? Peça à administração um novo link de acesso.</p>
+    </section>
+
+    <section id="ativar-secao" hidden aria-labelledby="ativar-titulo">
+      <h1 id="ativar-titulo" data-t="titulo_ativar">Definir sua senha</h1>
+      <p class="small" data-t="intro_ativar">Este link vale uma única vez. Escolha uma senha com pelo menos 12 caracteres.</p>
+      <form id="ativar-form" novalidate>
+        <label for="ativar-login"><span data-t="rotulo_login">Login</span>
+          <input id="ativar-login" name="username" type="text" autocomplete="username" readonly translate="no">
+        </label>
+        <label for="ativar-senha"><span data-t="rotulo_nova">Nova senha</span>
+          <span class="entrar-senha-linha">
+            <input id="ativar-senha" name="new-password" type="password" autocomplete="new-password"
+                   minlength="12" maxlength="256" required aria-describedby="ativar-dica">
+            <button class="secondary entrar-mostrar" type="button" aria-pressed="false" aria-controls="ativar-senha"
+                    data-t="mostrar">Mostrar</button>
+          </span>
+        </label>
+        <p id="ativar-dica" class="small" data-t="dica_senha">De 12 a 256 caracteres. Uma frase longa é mais fácil de lembrar.</p>
+        <label for="ativar-confirmar"><span data-t="rotulo_confirmar">Repita a nova senha</span>
+          <input id="ativar-confirmar" name="confirm-password" type="password" autocomplete="new-password"
+                 minlength="12" maxlength="256" required>
+        </label>
+        <button id="ativar-enviar" type="submit" data-t="botao_ativar">Definir senha</button>
+      </form>
+      <p id="ativar-pronto" hidden><a href="/entrar" data-t="ir_entrar">Entrar com a nova senha</a></p>
+    </section>
+
+    <section id="primeiro-secao" hidden aria-labelledby="primeiro-titulo">
+      <h1 id="primeiro-titulo" data-t="titulo_primeiro">Criar administrador</h1>
+      <p class="small" data-t="intro_primeiro">Primeira abertura do Vlado neste computador. Crie a conta de administração; depois, a Mesa sempre pedirá login e senha.</p>
+      <form id="primeiro-form" novalidate>
+        <label for="primeiro-nome"><span data-t="rotulo_nome">Nome</span>
+          <input id="primeiro-nome" name="name" type="text" autocomplete="name" maxlength="120" required>
+        </label>
+        <label for="primeiro-login"><span data-t="rotulo_login">Login</span>
+          <input id="primeiro-login" name="username" type="text" autocomplete="username" autocapitalize="none"
+                 autocorrect="off" spellcheck="false" maxlength="64" required aria-describedby="primeiro-dica-login">
+        </label>
+        <p id="primeiro-dica-login" class="small" data-t="dica_login">De 3 a 64 letras minúsculas, números, ponto, hífen ou sublinhado.</p>
+        <label for="primeiro-senha"><span data-t="rotulo_senha">Senha</span>
+          <span class="entrar-senha-linha">
+            <input id="primeiro-senha" name="new-password" type="password" autocomplete="new-password"
+                   minlength="12" maxlength="256" required aria-describedby="primeiro-dica">
+            <button class="secondary entrar-mostrar" type="button" aria-pressed="false" aria-controls="primeiro-senha"
+                    data-t="mostrar">Mostrar</button>
+          </span>
+        </label>
+        <p id="primeiro-dica" class="small" data-t="dica_senha">De 12 a 256 caracteres. Uma frase longa é mais fácil de lembrar.</p>
+        <label for="primeiro-confirmar"><span data-t="rotulo_confirmar_senha">Repita a senha</span>
+          <input id="primeiro-confirmar" name="confirm-password" type="password" autocomplete="new-password"
+                 minlength="12" maxlength="256" required>
+        </label>
+        <button id="primeiro-enviar" type="submit" data-t="botao_primeiro">Criar administrador</button>
+      </form>
+      <p id="primeiro-pronto" hidden><a href="/entrar" data-t="ir_entrar_conta">Entrar com a nova conta</a></p>
+    </section>
+
+    <p id="entrar-mensagem" class="entrar-mensagem" role="alert" aria-live="assertive" tabindex="-1" hidden></p>
+    <noscript><p>Ative o JavaScript para entrar. / Enable JavaScript to sign in.</p></noscript>
+  </main>
+</body>
+</html>

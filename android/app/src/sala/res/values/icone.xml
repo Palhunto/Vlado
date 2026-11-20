@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sala (demonstração): fundo laranja. -->
+    <color name="icone_fundo">#C2410C</color>
+</resources>

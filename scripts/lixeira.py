@@ -82,3 +82,15 @@ def restaurar(root, identifier):
     item['restaurado_em_utc'] = datetime.now(timezone.utc).isoformat()
     salvar(root, itens)
     return item
+
+
+def alcance(root, identificador):
+    """Alcance do apagamento definitivo (sem apagar). Veja scripts/apagamento.py."""
+    from apagamento import alcance_publico
+    return alcance_publico(root, identificador)
+
+
+def apagar_definitivamente(root, identificador, confirmacao, *, quem, gerenciador=None, ativa=None):
+    """Apaga de vez um item da lixeira, com confirmação derivada do alcance."""
+    from apagamento import apagar
+    return apagar(root, identificador, confirmacao, quem=quem, gerenciador=gerenciador, ativa=ativa)

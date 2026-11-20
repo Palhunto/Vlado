@@ -10,7 +10,9 @@
     const label = theme === 'dark' ? 'Modo claro' : 'Modo escuro';
     button.textContent = label;
     button.setAttribute('aria-label', `Ativar ${label.toLowerCase()}`);
-    meta.content = theme === 'dark' ? '#171d1a' : '#f6f5f0';
+    // The browser chrome follows the page background token of the applied theme.
+    const background = getComputedStyle(document.documentElement).getPropertyValue('--theme-background').trim();
+    if (background) meta.content = background;
   }
   let saved;
   try { saved = localStorage.getItem(key); } catch (_) { /* Storage may be blocked. */ }
@@ -31,7 +33,6 @@
   const navigation = [...document.querySelectorAll('.areas button:not([hidden])')].map(button => ({button,id:button.id,link:null}));
   const metadata = new Map();
   let body = null, toolbar = null, toggle = null, caption = null, collapsed = false, hadAnswer = false;
-  let savedDetails = null;
   let findingControls = null, findingFormNodes = null;
   let findingSearchPosition = null;
   let appliedDesktop = null;
@@ -49,9 +50,10 @@
     }
   }
   function geometry() {
+    // The composer height keeps anchored content clear of the sticky form at every width.
+    document.documentElement.style.setProperty('--mesa-composer-height',`${form.getBoundingClientRect().height}px`);
     if (!desktop.matches) return;
     document.documentElement.style.setProperty('--mesa-header-height',`${header.getBoundingClientRect().height}px`);
-    document.documentElement.style.setProperty('--mesa-composer-height',`${form.getBoundingClientRect().height}px`);
   }
   const resize = new ResizeObserver(geometry);
   resize.observe(header);resize.observe(form);
@@ -66,30 +68,39 @@
     if (caption.textContent !== text) caption.textContent = text;
   }
   window.abrirComposicaoMesa = () => {
-    if (!desktop.matches || !body) return;
+    if (!body) return;
     collapsed = false;renderComposer();
   };
+  // The composer folds at every width. On a desktop it gives way to an answer; on a narrow
+  // screen, where it would hold a third of the viewport, it gives way to the conversation.
+  function buildComposer() {
+    body = element('div');body.id = 'desktop-composicao';
+    body.append(...form.childNodes);
+    toolbar = element('div',undefined,'desktop-composer-toolbar');
+    caption = element('span','Sua pergunta','small');
+    toggle = element('button','Recolher pergunta','secondary');toggle.type = 'button';
+    toggle.id = 'desktop-composicao-alternar';toggle.setAttribute('aria-controls',body.id);
+    toggle.addEventListener('click',() => {
+      collapsed = !collapsed;renderComposer();
+      if (!collapsed) $('codex-pergunta').focus();
+      else toggle.focus();
+    });
+    toolbar.append(caption,toggle);form.append(toolbar,body);
+  }
   function composerState() {
-    if (!body || !desktop.matches) return;
-    const hasAnswer = !!$('codex-mensagens').querySelector('.codex-answer');
+    if (!body) return;
+    const hasAnswer = !!$('codex-mensagens').querySelector(desktop.matches ? '.codex-answer' : '.codex-user,.codex-answer');
     const hasPending = [...body.querySelectorAll('.feedback-preview')].some(panel => !panel.hidden);
     if (hasPending) collapsed = false;
-    else if (hasAnswer && !hadAnswer && !$('codex-pergunta').value.trim() && !form.contains(document.activeElement)) collapsed = true;
+    else if (hasAnswer && !hadAnswer && !$('codex-pergunta').value.trim() && document.activeElement !== $('codex-pergunta')) collapsed = true;
     else if (!hasAnswer && hadAnswer) collapsed = false;
     hadAnswer = hasAnswer;
     renderComposer();
   }
   function compactFindings() {
+    // The version chip (app.js) folds the analysis selectors at every width.
     if (!desktop.matches || activeArea() !== 'achados' || !findingResult) return;
-    const analysis = $('rodada').selectedOptions[0]?.textContent || $('rodada').value;
-    const review = $('achados-revisao').selectedOptions[0]?.textContent || '';
-    const generation = $('achados-geracao').selectedOptions[0]?.textContent || '';
-    $('acervo-escolha').open = false;
-    $('acervo-escolha').querySelector('summary').textContent = `${analysis} · trocar análise`;
-    $('achados-versoes').open = false;
-    $('achados-versoes-resumo').textContent = `${review} · ${generation} · trocar versão`;
     if (findingControls) findingControls.open = false;
-    $('selecao-acervo').classList.add('desktop-scope-ready');
   }
   function feedbackState() {
     if (!desktop.matches) return;
@@ -100,7 +111,6 @@
     if (appliedDesktop === desktop.matches) return;
     appliedDesktop = desktop.matches;
     if (desktop.matches) {
-      savedDetails = [$('acervo-escolha'),$('achados-versoes')].map(node => ({node,open:node.open,summary:node.querySelector('summary').textContent}));
       for (const item of navigation) {
         const link = element('a',item.button.textContent);
         link.id = item.id;link.className = item.button.className;
@@ -112,19 +122,7 @@
         // Keep the original node and all its action listeners for mobile and resize.
         item.button.removeAttribute('id');item.button.replaceWith(link);item.link = link;
       }
-      body = element('div');body.id = 'desktop-composicao';
-      body.append(...form.childNodes);
-      toolbar = element('div',undefined,'desktop-composer-toolbar');
-      caption = element('span','Sua pergunta','small');
-      toggle = element('button','Recolher pergunta','secondary');toggle.type = 'button';
-      toggle.id = 'desktop-composicao-alternar';toggle.setAttribute('aria-controls',body.id);
-      toggle.addEventListener('click',() => {
-        collapsed = !collapsed;renderComposer();
-        if (!collapsed) $('codex-pergunta').focus();
-        else toggle.focus();
-      });
-      toolbar.append(caption,toggle);form.append(toolbar,body);
-      collapsed = false;hadAnswer = false;composerState();
+      window.limitarNavegacaoConvidado?.();
       const findingsForm = $('achados-form');
       findingFormNodes = [...findingsForm.childNodes];
       findingControls = element('details',undefined,'desktop-finding-filters');
@@ -151,41 +149,47 @@
         item.button.setAttribute('aria-pressed',String(item.link.getAttribute('aria-current') === 'page'));
         item.link.replaceWith(item.button);item.link = null;
       }
-      if (body) {form.replaceChildren(...body.childNodes);body = null;toolbar = null;}
       if (findingSearchPosition) {
         const {button,parent,next}=findingSearchPosition;parent.insertBefore(button,next);
         findingSearchPosition=null;
       }
       if (findingFormNodes) $('achados-form').replaceChildren(...findingFormNodes);
       findingControls = null;findingFormNodes = null;
-      form.classList.remove('desktop-composer-closed');
-      $('selecao-acervo').classList.remove('desktop-scope-ready');
       document.querySelector('.feedback-selection').classList.remove('desktop-no-selection');
-      for (const item of savedDetails || []) {item.node.open = item.open;item.node.querySelector('summary').textContent = item.summary;}
       for (const [field,attrs] of metadata) for (const [name,value] of Object.entries(attrs)) {
         if (value === null) field.removeAttribute(name);else field.setAttribute(name,value);
       }
       metadata.clear();
       document.documentElement.style.removeProperty('--mesa-header-height');
-      document.documentElement.style.removeProperty('--mesa-composer-height');
     }
+    composerState();geometry();
   }
   const originalArea = showArea;
   showArea = name => {originalArea(name);navigationState();geometry();};
   window.addEventListener('mesa-rota-alterada',navigationState);
   window.addEventListener('mesa-consulta',event => {if (event.detail.area === 'achados') compactFindings();});
-  for (const id of ['caso','rodada']) $(id).addEventListener('change',() => {
-    if (!desktop.matches) return;
-    $('selecao-acervo').classList.remove('desktop-scope-ready');
-    $('acervo-escolha').querySelector('summary').textContent = 'Escolher análise e conjunto de documentos';
-    $('acervo-escolha').open = true;
-  });
   new MutationObserver(composerState).observe($('codex-mensagens'),{childList:true,subtree:true});
   new MutationObserver(composerState).observe(form,{attributes:true,attributeFilter:['hidden'],subtree:true});
   new MutationObserver(feedbackState).observe($('observacoes-contagem'),{childList:true});
   $('codex-pergunta').addEventListener('input',() => {if (body) renderComposer();});
   desktop.addEventListener('change',activate);
+  buildComposer();
   activate();
+})();
+
+// Phones: language, theme and sign-out move into the navigation drawer, leaving the
+// header to the menu and the investigation selector.
+(() => {
+  const phone = matchMedia('(max-width: 720px)');
+  const header = document.querySelector('.app-header');
+  const controls = ['mesa-idioma','mesa-sair','mesa-tema'].map(id => $(id));
+  const drawer = element('div', undefined, 'mesa-drawer-controls');
+  function place() {
+    if (phone.matches) { drawer.append(...controls); $('mesa-sidebar').querySelector('.areas').after(drawer); }
+    else { header.append(...controls); drawer.remove(); }
+  }
+  phone.addEventListener('change', place);
+  place();
 })();
 
 'use strict';
@@ -200,20 +204,11 @@
     apuracao:'M3 4h7l2 2 2-2h7v15h-7l-2 2-2-2H3zM12 6v15',
     diligencias:'M5 21V3h13l-2 4 2 4H5',
     gerenciar:'M3 6h7l2 3h9v11H3z',
+    configuracoes:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12h2M3 12h2M12 3v2M12 19v2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4',
     plus:'M12 5v14M5 12h14',menu:'M4 6h16M4 12h16M4 18h16'
   };
-  const labels={inicio:'Visão geral',cadastro:'Cadastrar arquivos',documentos:'Documentos',codex:'Perguntar à IA',achados:'Conferir achados',apuracao:'Caderno',diligencias:'Diligências',gerenciar:'Apurações e lixeira'};
-  const titles={
-    inicio:['CLAREZA PARA INVESTIGAR','Sua próxima reportagem começa aqui.','Documentos organizados, perguntas com contexto e fontes sempre à mão.'],
-    cadastro:['PRIMEIRO, AS FONTES','Reúna os documentos.','Cadastre cada envio e confira o recebimento antes de perguntar.'],
-    documentos:['SEU ACERVO','Documentos, com tudo no lugar.','Cadastre, pesquise e volte ao original sem perder o contexto.'],
-    codex:['CONVERSA COM O ACERVO','Pergunte. Explore. Volte à fonte.','Converse com os documentos desta apuração. A análise da IA acontece online.'],
-    achados:['A FONTE ANTES DA CONCLUSÃO','Confira o que os documentos sustentam.','Afirmação, evidência e limite de interpretação no mesmo lugar.'],
-    apuracao:['ONDE A HISTÓRIA TOMA FORMA','Seu caderno de apuração.','Notas, redação e trechos com fonte, no mesmo espaço.'],
-    caderno:['CONTRIBUIÇÕES HUMANAS','Suas leituras também fazem parte da história.','Guarde trechos, registre achados e construa cruzamentos com autoria humana identificada.'],
-    diligencias:['O QUE AINDA FALTA SABER','Transforme pendências em próximos passos.','Acompanhe solicitações e retome a pergunta quando houver novas fontes.'],
-    gerenciar:['CUIDE DO SEU ESPAÇO','Suas apurações, organizadas.','Retome uma pauta ou restaure um item movido para a lixeira.']
-  };
+  // Navigation labels are the area headings (app.js); the hidden notebook tab keeps its own.
+  const labels=Object.fromEntries(Object.entries(areaNames).filter(([name])=>name!=='caderno'));
   let inventory=null, loadedCase=null, sequence=0, loading=false;
   const scopePanel=$('selecao-acervo');
   const svg=name=>{const s=document.createElementNS('http://www.w3.org/2000/svg','svg');s.setAttribute('viewBox','0 0 24 24');s.setAttribute('aria-hidden','true');s.classList.add('mesa-icon');const p=document.createElementNS(s.namespaceURI,'path');p.setAttribute('d',icons[name]||icons.documentos);s.append(p);return s;};
@@ -221,7 +216,16 @@
   const active=()=>new URL(location.href).searchParams.get('area')||'inicio';
   const current=()=>window.contextoCaso?.()||'';
   const navigate=name=>showArea(name);
-  function closeMenu(){document.body.classList.remove('mesa-menu-open');$('mesa-menu').setAttribute('aria-expanded','false');$('mesa-menu').setAttribute('aria-label','Abrir navegação');}
+  function closeMenu(){
+    document.body.classList.remove('mesa-menu-open');$('mesa-menu').setAttribute('aria-expanded','false');$('mesa-menu').setAttribute('aria-label','Abrir navegação');
+    window.camadaMesa?.fechada('menu');
+  }
+  function openMenu(){
+    document.body.classList.add('mesa-menu-open');$('mesa-menu').setAttribute('aria-expanded','true');$('mesa-menu').setAttribute('aria-label','Fechar navegação');
+    // Back closes the drawer (Android); focus moves into it for keyboard and screen readers.
+    window.camadaMesa?.abrir('menu',()=>{closeMenu();$('mesa-menu').focus();return true;});
+    $('mesa-sidebar').querySelector('.areas button:not([hidden]),.areas a:not([hidden])')?.focus();
+  }
   function navigation(){
     for(const [name,label]of Object.entries(labels)){
       const node=$('ver-'+name);if(!node)continue;
@@ -241,7 +245,16 @@
     else if(scopePanel.parentElement===$('mesa-pesquisa')){$('area-documentos').before(scopePanel);scopePanel.hidden=active()!=='achados';}
   }
   function chooseTab(value){$('documentos-aba').value=value;$('documentos-aba').dispatchEvent(new Event('change'));tab();}
+  // First run: with an empty catalog there is nothing to continue, only one first step.
+  function firstRun(){
+    const empty=catalogLoaded&&!cases.length;
+    $('mesa-continuar').hidden=empty;
+    text('mesa-primeiro-titulo',empty?'Comece sua primeira apuração':'Nova apuração');
+    text('mesa-primeiro-texto',empty?'Dê um nome à pauta e envie os arquivos. Cada um recebe um recibo, e você já pode perguntar à IA sobre eles.'
+      :'Cadastre os documentos da pauta, pergunte à IA e confira cada achado na página do original.');
+  }
   function home(){
+    firstRun();
     const target=$('mesa-retomada'),caseData=cases.find(c=>c.id===current());target.replaceChildren();
     if(!caseData){target.append(element('h3','Escolha sua próxima história.'),element('p','Selecione uma apuração no topo da mesa para retomar seu trabalho.'));return;}
     const info=element('div'),next=element('div',undefined,'mesa-resume-next');
@@ -250,6 +263,12 @@
     info.append(element('p',counts.join(' · '),'small'));
     next.append(element('p','SUA PRÓXIMA AÇÃO','eyebrow'),element('p',caseData.rodadas.length?'Retome a conversa e confira as fontes antes de avançar.':'Confira o recebimento dos documentos e faça sua primeira pergunta.'));
     const button=element('button','Retomar trabalho →');button.type='button';button.addEventListener('click',()=>$('inicio-retomar').click());next.append(button);target.append(info,next);
+    // Resume summary (continuidade.js): done and pending items, each linked to its area. Admin only.
+    // Shown only when /api/integracao announces `continuidade_resumo` (Continuidade.disponivel).
+    if(window.Continuidade?.disponivel&&document.body.dataset.papel!=='convidado'){
+      const slot=element('div',undefined,'mesa-resume-progress'),caso=caseData.id;target.append(slot);
+      window.Continuidade.disponivel().then(ok=>{if(!ok){slot.remove();return;}if(slot.isConnected&&current()===caso)window.Continuidade.montar(slot,caso);});
+    }
   }
   function formatBytes(n){if(!Number.isFinite(n))return '';return new Intl.NumberFormat('pt-BR',{maximumFractionDigits:1}).format(n>=1048576?n/1048576:n/1024)+(n>=1048576?' MB':' KB');}
   function documentTable(){
@@ -270,7 +289,7 @@
       contents.append(element('span',pdf?.paginas_pdf!=null?Leitura.quantidade(pdf.paginas_pdf,'página'):(doc.nome_recebido.split('.').pop()||'Arquivo').toUpperCase()));
       const badge=element('span',pdf?(limited?'Com limitação de extração':'Texto extraído'):'Original preservado',limited?'mesa-pill warning':'mesa-pill');coverage.append(badge);
       if(pdf)coverage.append(element('small',extractionMessage(pdf)));
-      const open=element('button','Conferir original','secondary');open.type='button';open.addEventListener('click',()=>openDocument(doc,open));actions.append(open);
+      const open=element('button',Leitura.rotuloOriginal(null),'secondary');open.type='button';open.addEventListener('click',()=>openDocument(doc,open));actions.append(open);
       row.append(name,contents,coverage,actions);tbody.append(row);
     }
     table.append(tbody);wrapper.append(table);target.append(wrapper);
@@ -297,21 +316,22 @@
     text('mesa-acervo-status','Conferindo os documentos cadastrados…');text('mesa-versao','Conferindo acervo…');
     try{
       const result=await api('inventario',{caso:caseId});if(ticket!==sequence||caseId!==current())return;
-      inventory=result;documentTable();home();text('mesa-versao',result.corpus_id);text('mesa-acervo-status',`${Leitura.quantidade(result.total_documentos,'documento')} cadastrado(s). Os originais estão preservados; a extração não substitui a conferência.`);
+      inventory=result;documentTable();home();text('mesa-versao',`Versão dos documentos: ${result.corpus_id}`);text('mesa-acervo-status',`${Leitura.quantidade(result.total_documentos,'documento')} cadastrado(s). Os originais estão preservados; a extração não substitui a conferência.`);
     }catch(error){if(ticket===sequence){$('mesa-acervo-erro').textContent=error.message;$('mesa-acervo-erro').hidden=false;text('mesa-acervo-status','A conferência do acervo falhou. Isso não equivale a um acervo vazio.');text('mesa-versao','Acervo indisponível');}}
     finally{if(ticket===sequence){loading=false;$('mesa-atualizar-acervo').disabled=false;}}
   }
   function sync(){
-    const area=active(),copy=titles[area];if(copy){['area-etiqueta','area-titulo','area-descricao'].forEach((id,i)=>text(id,copy[i]));}
+    const area=active();
     document.body.dataset.mesaArea=area;navigation();tab();
     const stages=[['cadastro','Documentos'],['codex','Pergunta'],['achados','Conferência'],['apuracao','Caderno']],stage={cadastro:0,documentos:0,codex:1,achados:2,apuracao:3,caderno:3}[area];
-    $('mesa-etapas').hidden=stage===undefined;
+    // Guests only ask questions; every other step is closed to them.
+    $('mesa-etapas').hidden=stage===undefined||document.body.dataset.papel==='convidado';
     if(stage!==undefined&&$('mesa-etapas').dataset.stage!==String(stage)){$('mesa-etapas').dataset.stage=String(stage);$('mesa-etapas').replaceChildren(...stages.map(([name,label],i)=>{const a=element('a');a.href=window.enderecoAreaMesa(name);a.dataset.mesaArea=name;a.append(element('span',String(i+1)),document.createTextNode(label));if(i===stage)a.setAttribute('aria-current','step');return a;}));}
     closeMenu();if(['inicio','documentos'].includes(area))loadInventory();
   }
   $('mesa-menu').replaceChildren(svg('menu'));
   $('ver-cadastro').before($('ver-documentos'));
-  $('mesa-menu').addEventListener('click',()=>{const open=document.body.classList.toggle('mesa-menu-open');$('mesa-menu').setAttribute('aria-expanded',String(open));$('mesa-menu').setAttribute('aria-label',open?'Fechar navegação':'Abrir navegação');});
+  $('mesa-menu').addEventListener('click',()=>{if(document.body.classList.contains('mesa-menu-open'))closeMenu();else openMenu();});
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.body.classList.contains('mesa-menu-open')){closeMenu();$('mesa-menu').focus();}});
   document.addEventListener('click',event=>{
     const link=event.target.closest('a[data-mesa-area]');
@@ -351,4 +371,40 @@
   for(const field of document.querySelectorAll('input[id],textarea[id],select[id]')){if(!field.name)field.name=field.id;if(!field.hasAttribute('autocomplete')&&['text','search'].includes(field.type))field.autocomplete='off';}
   const params=new URL(location.href).searchParams;if(!params.has('documentos-aba')&&['consulta','geracao','rodada'].some(k=>params.has(k)))$('documentos-aba').value='pesquisa';
   sync();
+})();
+
+// Keyboard shortcuts. Ctrl/Cmd+Enter sends the question; J and K (or Alt+↓ and Alt+↑) move
+// between findings. Both are listed under "Como começar" in the sidebar.
+(() => {
+  const announce = message => { $('codex-anuncio').textContent = window.I18N.t(message); };
+  $('codex-pergunta').addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    // The button carries every reason sending may be blocked: no case, a run in progress, lost tracking.
+    if ($('codex-enviar').disabled) { announce('O envio não está disponível agora.'); return; }
+    if (!$('codex-pergunta').value.trim()) { announce('Escreva a pergunta antes de enviar.'); return; }
+    announce('Pergunta enviada.');
+    $('codex-form').requestSubmit();
+  });
+
+  const typing = target => Boolean(target?.closest?.('input,textarea,select,[contenteditable="true"],.vditor'));
+  function findingStep(event) {
+    if (event.ctrlKey || event.metaKey || event.shiftKey) return 0;
+    if (event.altKey) return event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
+    return event.key === 'j' ? 1 : event.key === 'k' ? -1 : 0;
+  }
+  document.addEventListener('keydown', event => {
+    const step = findingStep(event);
+    if (!step || event.defaultPrevented || event.isComposing || typing(event.target)) return;
+    if ($('area-achados').hidden || $('mesa-achados').hidden || document.querySelector('dialog[open]')) return;
+    const findings = [...$('achados-resultados').querySelectorAll('.finding-open')];
+    if (!findings.length) return;
+    const current = findings.findIndex(button => button.getAttribute('aria-pressed') === 'true');
+    const next = Math.min(findings.length - 1, Math.max(0, current + step));
+    event.preventDefault();
+    if (next === current) return;
+    // The button's own handler opens the finding and moves focus to its heading.
+    findings[next].click();
+    findings[next].scrollIntoView({block: 'nearest'});
+  });
 })();

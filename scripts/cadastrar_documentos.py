@@ -1,4 +1,9 @@
-"""Register each explicitly supplied batch before a question; never start a round."""
+"""Register each explicitly supplied batch before a question; never start a round.
+
+PDFs, DOCX and XLSX get a located working copy (derivative) recorded with hash, origin
+and method in the manifest. Standalone images get OCR only with the explicit
+`--ocr-imagens` option (off by default). No model calls, no network.
+"""
 from __future__ import annotations
 
 import argparse
@@ -12,12 +17,20 @@ import re
 import shutil
 import sys
 import tempfile
+import time
 import uuid
 
 from comum import ROOT, arquivos_do_corpus, dentro, escrever_json, ler_json, sha256, pasta_preparacao
 from criar_caso import EXTENSOES
+import ocr
+from extrair_office import EXTENSOES as EXTENSOES_OFFICE, EXTENSOES_MACRO, extrair_office, formato_office
 from extrair_pdf import extrair_pdf
 from lixeira import conferir_disponivel
+import fontes_web as fontes_web_mod
+
+# Macro-enabled Office files are kept as originals with a readable pending extraction.
+ACEITOS = EXTENSOES | EXTENSOES_MACRO
+OFFICE = set(EXTENSOES_OFFICE) | EXTENSOES_MACRO
 
 
 @contextmanager
@@ -41,7 +54,16 @@ def _atomico(path, content):
         temp = Path(stream.name)
         stream.write(content)
     try:
-        os.replace(temp, path)
+        # Windows refuses os.replace while another writer or an antivirus scan holds the
+        # destination for a moment; retry briefly instead of failing the whole operation.
+        for tentativa in range(40):
+            try:
+                os.replace(temp, path)
+                break
+            except PermissionError:
+                if tentativa == 39:
+                    raise
+                time.sleep(0.025)
     finally:
         temp.unlink(missing_ok=True)
 
@@ -63,20 +85,32 @@ def inventario(root, caso):
             'documentos': [{'id': d['id'], 'nome_recebido': d.get('nome_recebido', Path(d['arquivo']).name),
                             'arquivo': d['arquivo'], 'sha256': d['sha256'], 'bytes': d.get('bytes'),
                             'derivados': len(d.get('derivados', [])),
-                            'extracao_pdf': d.get('extracao_pdf')} for d in manifest['documentos']],
+                            'extracao_pdf': d.get('extracao_pdf'),
+                            'extracao_office': d.get('extracao_office'),
+                            'ocr_imagem': d.get('ocr_imagem')} for d in manifest['documentos']],
             'recibos': manifest.get('registros_cadastro', []),
+            'fontes_web': fontes_web_mod.modo_do_caso(manifest),
+            'capturas_web': len(manifest.get('capturas_web', [])),
             'estado': 'cadastrado_aguardando_pergunta'}
 
 
-def cadastrar(root, caso, sources, *, titulo=None, natureza='nao_informada', novo=False):
+def cadastrar(root, caso, sources, *, titulo=None, natureza='nao_informada', novo=False, ocr_imagens=False,
+              modo_fontes=None, dominio_permitido=None):
+    """Register a batch. `ocr_imagens=True` explicitly asks for local OCR of standalone images.
+
+    `modo_fontes`/`dominio_permitido` are accepted only with `novo=True` (source mode is chosen at creation)."""
     if not isinstance(caso, str) or not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}', caso):
         raise ValueError('ID do caso: letras minúsculas, números, hífen ou underscore; até 64 caracteres.')
     if natureza not in ('publicos', 'sinteticos', 'nao_informada'):
         raise ValueError('Natureza documental inválida.')
     if not sources:
         raise ValueError('Envie pelo menos um arquivo.')
+    if not novo and (modo_fontes or dominio_permitido):
+        raise ValueError('O modo de fontes (somente documentos ou documentos + web) só é escolhido na criação do caso.')
+    fontes_web = fontes_web_mod.definir_modo(modo_fontes, dominio_permitido) if novo else None
     with _trava(root):
-        return _cadastrar(root, caso, sources, titulo, natureza, novo)
+        return _cadastrar(root, caso, sources, titulo, natureza, novo, ocr_imagens=bool(ocr_imagens),
+                          fontes_web=fontes_web)
 
 
 def preparar_pdfs(root, caso):
@@ -94,7 +128,65 @@ def preparar_pdfs(root, caso):
                           operacao='preparacao_pdfs_cadastrados')
 
 
-def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_documentos'):
+def _precisa_reprocessar_ocr(info):
+    """A prepared PDF still lacks OCR it could now receive (never attempted, or pages that failed)."""
+    if not info or info.get('estado') == 'erro' or not ocr.diagnostico()['disponivel']:
+        return False
+    falhou = any(p.get('etapa') == 'ocr' for p in info.get('paginas_com_erro', []))
+    return falhou or (bool(info.get('paginas_sem_texto')) and not info.get('ocr_tentado'))
+
+
+def _resumo_pdfs(pdfs, processed):
+    infos = [d['extracao_pdf'] for d in pdfs.values()]
+    return {'pdfs': len(pdfs), 'processados_agora': processed,
+            **{state: sum(i['estado'] == state for i in infos) for state in ('extraido', 'parcial', 'sem_texto', 'erro')},
+            'paginas_texto_nativo': sum(len(i['paginas_texto_nativo']) if 'paginas_texto_nativo' in i
+                                        else i.get('paginas_com_texto', 0) for i in infos),
+            'paginas_ocr': sum(len(i.get('paginas_ocr', [])) for i in infos),
+            'paginas_sem_texto': sum(len(i.get('paginas_sem_texto', [])) for i in infos),
+            'paginas_com_erro': sum(len(i.get('paginas_com_erro', [])) for i in infos),
+            'protegidos': sum(bool(i.get('protegido')) for i in infos)}
+
+
+def _resumo_office(offices, processed):
+    infos = [d['extracao_office'] for d in offices.values()]
+
+    def total(key):
+        return sum(i.get('contagens', {}).get(key, 0) for i in infos)
+    refused = {}
+    for info in infos:
+        if info.get('recusa'):
+            refused[info['recusa']] = refused.get(info['recusa'], 0) + 1
+    return {'documentos': len(offices), 'processados_agora': processed,
+            'docx': sum(i['formato'] == 'docx' for i in infos), 'xlsx': sum(i['formato'] == 'xlsx' for i in infos),
+            **{state: sum(i['estado'] == state for i in infos) for state in ('extraido', 'parcial', 'sem_texto', 'erro')},
+            'paragrafos': total('paragrafos'), 'tabelas': total('tabelas'), 'celulas_tabela': total('celulas_tabela'),
+            'abas': total('abas'), 'celulas': total('celulas'), 'formulas': total('formulas'),
+            'falhas': sum(len(i.get('falhas', [])) for i in infos), 'recusados': refused}
+
+
+def _resumo_imagens(images, processed, requested):
+    infos = [d.get('ocr_imagem') for d in images.values()]
+    summary = {'solicitado': requested, 'imagens': len(images), 'processadas_agora': processed,
+               **{state: sum(bool(i) and i['estado'] == state for i in infos)
+                  for state in ('extraido', 'sem_texto', 'pendente', 'erro')},
+               'sem_ocr': sum(not i for i in infos)}
+    if summary['extraido']:
+        summary['aviso'] = ocr.AVISO_OCR_IMAGEM
+    return summary
+
+
+def _substituir_derivado(doc, entry):
+    """A new version replaces the prior working copy of the same type; old rounds keep theirs."""
+    old = [d for d in doc.get('derivados', []) if d.get('tipo') == entry['tipo']]
+    doc['derivados'] = [d for d in doc.get('derivados', []) if d.get('tipo') != entry['tipo']]
+    if old:
+        entry['substitui_sha256'] = old[-1]['sha256']
+    doc['derivados'].append(entry)
+
+
+def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_documentos', ocr_imagens=False,
+               fontes_web=None):
     conferir_disponivel(root, caso)
     destination = dentro(root, f'casos/{caso}')
     catalog_path = dentro(root, 'casos/catalogo.json')
@@ -110,6 +202,7 @@ def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_do
         manifest_before = None
         manifest = {'versao': '1.0.0', 'caso_id': caso, 'titulo': title.strip(),
                     'natureza_informada': nature, 'corpus_id': f'{caso}_v1',
+                    'fontes_web': fontes_web or fontes_web_mod.definir_modo(),
                     'estado': 'preparado_sem_piloto_de_apuracao',
                     'protocolo': {'piloto_estabilizado': False, 'teste_principal_autorizado': False},
                     'documentos': [], 'registros_cadastro': []}
@@ -127,10 +220,10 @@ def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_do
     batch = uuid.uuid4().hex
     prefix = f'casos/{caso}/cadastros/{batch}'
     incoming, receipts = [], []
-    pdfs = {}
+    pdfs, offices, images = {}, {}, {}
     for item in sources:
         source = Path(item).resolve()
-        if not source.is_file() or source.suffix.lower() not in EXTENSOES:
+        if not source.is_file() or source.suffix.lower() not in ACEITOS:
             raise ValueError(f'Lote não cadastrado: arquivo ausente ou formato não aceito: {source.name}. Nenhum arquivo deste lote foi confirmado.')
         digest = sha256(source)
         if digest in known:
@@ -154,6 +247,10 @@ def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_do
                          'bytes': source.stat().st_size, 'estado': status})
         if source.suffix.lower() == '.pdf':
             pdfs[doc['id']] = doc
+        elif source.suffix.lower() in OFFICE:
+            offices[doc['id']] = doc
+        elif source.suffix.lower() in ocr.EXTENSOES_IMAGEM:
+            images[doc['id']] = doc
     maximum = ler_json(root / 'configuracao.json')['maximo_documentos_inicial']
     if len(manifest['documentos']) > maximum:
         raise ValueError(f'Lote não cadastrado: ultrapassaria o limite de {maximum} documentos. Nenhum arquivo deste lote foi confirmado.')
@@ -172,7 +269,8 @@ def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_do
             # A repeated successful/empty/partial extraction is not silently replaced.
             # Re-sending an errored PDF explicitly permits another attempt in a new batch.
             existing = doc.get('extracao_pdf')
-            if existing and existing['estado'] != 'erro':
+            reprocess = operacao == 'preparacao_pdfs_cadastrados' and _precisa_reprocessar_ocr(existing)
+            if existing and existing['estado'] != 'erro' and not reprocess:
                 continue
             source = (work / 'originais' / Path(doc['arquivo']).name if identifier in copied
                       else dentro(root, doc['arquivo']))
@@ -180,11 +278,47 @@ def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_do
             doc['extracao_pdf'] = extrair_pdf(source, identifier, target)
             doc['paginas_pdf'] = doc['extracao_pdf']['paginas_pdf']
             if target.is_file():
-                doc.setdefault('derivados', []).append({
-                    'arquivo': f'{prefix}/derivados/{target.name}', 'sha256': sha256(target),
-                    'tipo': 'texto_extraido_pdf', 'origem_sha256': doc['sha256'],
-                    'metodo': doc['extracao_pdf']['metodo']})
+                _substituir_derivado(doc, {'arquivo': f'{prefix}/derivados/{target.name}', 'sha256': sha256(target),
+                                           'tipo': 'texto_extraido_pdf', 'origem_sha256': doc['sha256'],
+                                           'metodo': doc['extracao_pdf']['metodo'],
+                                           'paginas_origem': doc['extracao_pdf']['paginas_origem']})
             processed += 1
+        office_processed = 0
+        for identifier, doc in offices.items():
+            # Same rule as PDF: a readable result is kept; re-sending a refused/failed file retries it.
+            existing = doc.get('extracao_office')
+            if existing and existing['estado'] != 'erro':
+                continue
+            source = (work / 'originais' / Path(doc['arquivo']).name if identifier in copied
+                      else dentro(root, doc['arquivo']))
+            kind = formato_office(Path(doc['arquivo']).suffix)
+            target = work / 'derivados' / f'{identifier}_texto_{kind}.md'
+            doc['extracao_office'] = extrair_office(source, identifier, target)
+            if target.is_file():
+                info = doc['extracao_office']
+                _substituir_derivado(doc, {'arquivo': f'{prefix}/derivados/{target.name}', 'sha256': sha256(target),
+                                           'tipo': f'texto_extraido_{kind}', 'origem': info['origem'],
+                                           'versao_extrator': info['versao_extrator'],
+                                           'origem_sha256': doc['sha256'], 'metodo': info['metodo']})
+            office_processed += 1
+        image_processed = 0
+        for identifier, doc in (images.items() if ocr_imagens else ()):
+            # OCR of standalone images only on explicit request; pending/failed attempts may be retried.
+            existing = doc.get('ocr_imagem')
+            if existing and existing['estado'] not in ('pendente', 'erro'):
+                continue
+            source = (work / 'originais' / Path(doc['arquivo']).name if identifier in copied
+                      else dentro(root, doc['arquivo']))
+            target = work / 'derivados' / f'{identifier}_texto_ocr.md'
+            doc['ocr_imagem'] = ocr.ocr_imagem(source, identifier, target)
+            if target.is_file():
+                info = doc['ocr_imagem']
+                _substituir_derivado(doc, {'arquivo': f'{prefix}/derivados/{target.name}', 'sha256': sha256(target),
+                                           'tipo': 'texto_ocr_imagem', 'origem': 'ocr',
+                                           'origem_sha256': doc['sha256'], 'metodo': info['metodo'],
+                                           'motor': info['motor'], 'versoes': info['versoes'],
+                                           'idiomas': info['idiomas'], 'aviso': ocr.AVISO_OCR_IMAGEM})
+            image_processed += 1
         changed = manifest['documentos'] != previous['documentos']
         if changed:
             suffix = re.fullmatch(re.escape(caso) + r'_v([0-9]+)', previous['corpus_id'])
@@ -199,14 +333,20 @@ def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_do
             if doc['id'] in pdfs:
                 item['extracao_pdf'] = deepcopy(doc['extracao_pdf'])
                 item['derivados'] = deepcopy(doc['derivados'])
-        summary = {'pdfs': len(pdfs), 'processados_agora': processed,
-                   **{state: sum(d['extracao_pdf']['estado'] == state for d in pdfs.values())
-                      for state in ('extraido', 'parcial', 'sem_texto', 'erro')}}
+            elif doc['id'] in offices:
+                item['extracao_office'] = deepcopy(doc['extracao_office'])
+                item['derivados'] = deepcopy(doc['derivados'])
+            elif doc['id'] in images and doc.get('ocr_imagem'):
+                item['ocr_imagem'] = deepcopy(doc['ocr_imagem'])
+                item['derivados'] = deepcopy(doc['derivados'])
+        summary = _resumo_pdfs(pdfs, processed)
         receipt = {'lote_id': batch, 'caso_id': caso, 'corpus_id': manifest['corpus_id'],
                    'operacao': operacao, 'recebido_em_utc': datetime.now(timezone.utc).isoformat(),
                    'recebidos': len(receipts), 'novos': len(incoming),
                    'duplicados': len(receipts) - len(incoming), 'total_documentos': len(manifest['documentos']),
                    'arquivos': receipts, 'extracao_pdf_resumo': summary,
+                   'extracao_office_resumo': _resumo_office(offices, office_processed),
+                   'ocr_imagens_resumo': _resumo_imagens(images, image_processed, ocr_imagens),
                    'estado': 'cadastrado_aguardando_pergunta'}
         escrever_json(work / 'recibo.json', receipt, exclusivo=True)
         receipt_record = {'arquivo': f'{prefix}/recibo.json', 'sha256': sha256(work / 'recibo.json')}
@@ -257,14 +397,21 @@ def main():
     parser.add_argument('--novo', action='store_true')
     parser.add_argument('--titulo')
     parser.add_argument('--natureza', choices=['publicos', 'sinteticos', 'nao_informada'], default='nao_informada')
+    parser.add_argument('--ocr-imagens', action='store_true',
+                        help='Aplicar OCR local (Tesseract) às imagens avulsas do lote; desligado por padrão. '
+                             'O texto reconhecido precisa ser conferido no original.')
+    parser.add_argument('--modo-fontes', choices=fontes_web_mod.MODOS, default=None,
+                        help='Só com --novo: somente_documental (padrão) ou documentos_web.')
+    parser.add_argument('--dominio-permitido', help='Só com --modo-fontes documentos_web: domínio único permitido.')
     args = parser.parse_args()
     if args.preparar_pdfs:
-        if args.novo or args.titulo:
-            parser.error('--preparar-pdfs é para caso existente, sem --novo ou --titulo.')
+        if args.novo or args.titulo or args.ocr_imagens:
+            parser.error('--preparar-pdfs é para caso existente, sem --novo, --titulo ou --ocr-imagens.')
         result = preparar_pdfs(ROOT, args.caso)
     else:
         result = cadastrar(ROOT, args.caso, [Path(p) for p in args.documentos], titulo=args.titulo,
-                           natureza=args.natureza, novo=args.novo)
+                           natureza=args.natureza, novo=args.novo, ocr_imagens=args.ocr_imagens,
+                           modo_fontes=args.modo_fontes, dominio_permitido=args.dominio_permitido)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

@@ -10,7 +10,7 @@ import stat
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSAO_PROMPTS = '1.3.0'
+VERSAO_PROMPTS = '1.4.1'
 PARTES = (
     '00_REGRAS.md', '01_DESCREVER_CORPUS.md', '02_PLANEJAR.md',
     '03_BUSCAR_E_CRUZAR.md', '04_REVISAR_SUPORTE.md',
@@ -47,6 +47,31 @@ def escrever_json(path: Path, value, exclusivo: bool = False):
     with path.open('x' if exclusivo else 'w', encoding='utf-8', newline='\n') as stream:
         json.dump(value, stream, ensure_ascii=False, indent=2)
         stream.write('\n')
+
+
+@contextmanager
+def trava_arquivo(caminho: Path):
+    """Exclusive advisory lock across processes (server and CLI) for a small JSON store."""
+    import os
+    trava = Path(str(caminho) + '.lock')
+    trava.parent.mkdir(parents=True, exist_ok=True)
+    with open(trava, 'a+b') as stream:
+        if os.name == 'nt':
+            import msvcrt
+            stream.seek(0)
+            msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK, 1)  # retries for ~10 s, then OSError
+            try:
+                yield
+            finally:
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(stream, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(stream, fcntl.LOCK_UN)
 
 
 @contextmanager
@@ -126,6 +151,27 @@ def arquivos_do_corpus(root: Path, manifest: dict):
             seen_paths.add(relative)
             path = conferir_arquivo(root, relative, item['sha256'])
             yield relative, path
+
+
+def capturas_como_documentos(manifest: dict) -> list[dict]:
+    """Web captures shaped like documents (id, arquivo, sha256, derivados), for indexing and reading.
+
+    Kept here, with no network code, so the portable copy of `banco.py` (banco, indice_sqlite,
+    comum) keeps working. Mode and domain are checked in `fontes_web`; a manifest with captures
+    but without the "documentos_web" mode is refused.
+    """
+    captures = manifest.get('capturas_web') or []
+    if captures and (manifest.get('fontes_web') or {}).get('modo') != 'documentos_web':
+        raise ValueError('Caso somente documental não pode ter domínio ou capturas web.')
+    return [{'id': c['id'], 'arquivo': c['arquivo'], 'sha256': c['sha256'],
+             'nome_recebido': c['url_final'], 'tipo_fonte': 'captura_web',
+             'origem_informada': {'url_solicitada': c['url_solicitada'], 'url_final': c['url_final'],
+                                  'acessado_em_utc': c['acessado_em_utc']},
+             'derivados': c.get('derivados', [])} for c in captures]
+
+
+def documentos_e_capturas(manifest: dict) -> list[dict]:
+    return [*manifest.get('documentos', []), *capturas_como_documentos(manifest)]
 
 
 def fluxo_esperado(root: Path = ROOT) -> bytes:

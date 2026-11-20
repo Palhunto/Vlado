@@ -6,13 +6,16 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
+import sys
 import uuid
 
 from comum import dentro, escrever_json, ler_json, sha256, pasta_preparacao
 from indice_sqlite import (_entradas, _adaptar, caminho_rodada, ler_passagem,
                            ID_GERACAO)
 
-SCHEMA = Path(__file__).resolve().parents[1] / 'modelos/ACHADOS.schema.json'
+RAIZ_MODELOS = (Path(sys._MEIPASS) / 'modelo_dados' if hasattr(sys, '_MEIPASS')
+                else Path(__file__).resolve().parents[1])
+SCHEMA = RAIZ_MODELOS / 'modelos/ACHADOS.schema.json'
 NATUREZAS = ('declaracao_documental', 'alegacao_atribuida', 'inferencia', 'pendencia')
 SUPORTES = ('nao_revisado', 'sustentado', 'parcial', 'nao_sustentado', 'ilegivel')
 DESTINOS = ('incluido', 'pendencia', 'retirado', 'substituido')

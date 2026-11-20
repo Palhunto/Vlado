@@ -1,0 +1,15 @@
+﻿Vlado — Termo de uso para teste
+
+1. Finalidade do teste
+O Vlado é um protótipo acadêmico de apoio à apuração jornalística. Esta versão foi disponibilizada para você testar a busca, a leitura e o cruzamento de documentos.
+
+2. Processamento e custos
+O Vlado guarda cópias dos documentos, o histórico e os resultados no seu computador. Quando você faz uma pergunta à IA, o aplicativo envia ao provedor escolhido, OpenAI ou Anthropic, a pergunta e o contexto da conversa, que pode incluir trechos de documentos e imagens de páginas. O provedor processa esse conteúdo online, conforme as políticas de dados aplicáveis à conta. Eventuais cobranças da API são feitas na conta vinculada à chave usada.
+
+3. Conferência editorial
+As respostas podem conter erros, omissões ou referências incorretas. Confira toda informação que pretenda usar nas fontes originais antes de citar, compartilhar ou publicar. A decisão editorial cabe à jornalista ou à redação.
+
+4. Dúvidas e feedback
+Para relatar uma falha ou dar feedback sobre o teste, fale com quem enviou o instalador. Ao relatar um problema, preserve sua chave de API e o sigilo de suas fontes.
+
+Ao aceitar este acordo, você concorda com as condições acima para participar do teste.

@@ -3,6 +3,8 @@
   const dialog=$('diligencias-dialogo'), responseDialog=$('diligencias-resposta-dialogo');
   let session=null, response=null, documents=null, busy=false, version=0, lastAuthor='';
   const requestId=()=>crypto.randomUUID().replaceAll('-','');
+  // In the pilot the server records the account name as the author and ignores a typed one.
+  if(document.body.dataset.modo!=='local')for(const id of ['diligencias-autor','diligencias-resposta-autor']){$(id).required=false;$(id).closest('label').hidden=true;}
   function deadline(value,state){const [y,m,d]=value.split('-');const today=new Date();const local=[today.getFullYear(),String(today.getMonth()+1).padStart(2,'0'),String(today.getDate()).padStart(2,'0')].join('-');return `prazo ${d}/${m}/${y}${!['concluida','cancelada'].includes(state)&&value<local?' · vencida':value===local?' · hoje':''}`;}
   $('diligencias-nova').addEventListener('click',()=>{const caso=window.contextoCaso?.() || $('diligencias-caso').value;if(!caso){fail('diligencias-erro','Escolha uma apuração no topo da mesa.');return;}window.abrirDiligencia({caso});});
   function fail(id,message=''){$(id).textContent=message;$(id).hidden=!message;}
@@ -71,13 +73,13 @@
       else{const note=await api('caderno-detalhe',{caso:item.caso,registro_id:link.registro_id,sha256:link.sha256});const details=element('details');details.open=true;details.append(element('summary','Registro humano de origem'));const body=element('div');window.mostrarRegistrosCaderno(body,{caso_id:item.caso,registros:[note]});details.append(body);origin.after(details);origin.disabled=true;}
     }catch(error){fail('diligencias-erro',error.message);}});if(state.origem.identidade.tipo!=='livre')actions.append(origin);card.append(actions);
     for(const [r,reply]of state.respostas.entries()){
-      const block=element('section',undefined,'notebook-source');block.append(element('h4','Resposta recebida'),element('p',reply.observacao),element('p',`Registro de ${reply.autor} · ${new Date(reply.recebida_em_utc).toLocaleString('pt-BR')}`,'small'));
+      const block=element('section',undefined,'notebook-source');block.append(element('h4','Resposta recebida'),element('p',reply.observacao),element('p',`${Leitura.autoria(reply.autor,reply.origem_autoria)} · ${new Date(reply.recebida_em_utc).toLocaleString('pt-BR')}`,'small'));
       for(const [d,doc]of reply.documentos.entries()){
         const button=element('button',`Baixar ${Leitura.nome(doc)}`,'secondary');button.type='button';button.addEventListener('click',async()=>{button.disabled=true;try{download(await api('diligencias-original',{caso:item.caso,diligencia_id:item.id,sha256:item.sha256,resposta_indice:r,documento_indice:d},true),doc.nome_recebido);}catch(error){fail('diligencias-erro',error.message);}finally{button.disabled=false;}});block.append(button);
       }card.append(block);
     }
     const history=element('details');history.append(element('summary','Histórico de responsáveis e estados'));
-    for(const event of item.historico)history.append(element('p',`${new Date(event.em_utc).toLocaleString('pt-BR')} · ${event.autor} · ${pretty(event.diligencia.estado)} · responsável: ${event.diligencia.responsavel}${event.diligencia.prazo?' · '+deadline(event.diligencia.prazo,event.diligencia.estado):''} · ${event.observacao||'Diligência criada.'}`));
+    for(const event of item.historico)history.append(element('p',`${new Date(event.em_utc).toLocaleString('pt-BR')} · ${Leitura.autoria(event.autor,event.origem_autoria)} · ${pretty(event.diligencia.estado)} · responsável: ${event.diligencia.responsavel}${event.diligencia.prazo?' · '+deadline(event.diligencia.prazo,event.diligencia.estado):''} · ${event.observacao||'Diligência criada.'}`));
     card.append(history,Leitura.tecnicos(element('pre',JSON.stringify(item,null,2),'raw-briefing')));return card;
   }
   function renderBoard(items){

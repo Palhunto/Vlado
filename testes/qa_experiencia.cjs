@@ -72,7 +72,9 @@ const fs=require('node:fs/promises');
       const blob=await api('caderno-original',{caso:'alpha',origem_id:docs.origem_id,documento_id:doc.documento_id,documento_sha256:doc.sha256},true);
       await window.abrirOriginal(blob,doc.nome_recebido,1,'Afirmação sintética para conferência lado a lado.');
     });
-    assert.match(await page.locator('#original-conteudo iframe').getAttribute('src'),/#page=1$/);
+    // pdf.js (frente C) draws the cited page in a canvas; the iframe stays only as a fallback.
+    await page.locator('#original-conteudo .pdf-status').filter({hasText:'Página 1 de 1'}).waitFor({timeout:20000});
+    assert.equal(await page.locator('#original-pdf-pagina').inputValue(),'1');
     await page.waitForTimeout(1200);
     await fs.mkdir('docs/qa_experiencia',{recursive:true});
     await page.screenshot({path:'docs/qa_experiencia/leitor.png'});

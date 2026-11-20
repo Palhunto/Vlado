@@ -12,12 +12,8 @@ const [origin,output,chrome] = process.argv.slice(2);
   try {
     await page.goto(origin);
     await page.click('#ver-codex');
-    await page.locator('#codex-conta').filter({hasText:'Conecte sua conta ChatGPT'}).waitFor();
-    await page.click('#codex-login');
-    await page.locator('#codex-login-alternativa').waitFor();
-    assert.equal(await page.locator('#codex-login-alternativa a').getAttribute('href'),'/codex-login/browser');
-    await page.locator('#codex-conta').filter({hasText:'Conectado ao ChatGPT'}).waitFor();
-    assert.equal(await page.locator('#codex-login-alternativa').isVisible(),false);
+    await page.locator('#codex-conta').filter({hasText:'Conectado à API'}).waitFor();
+    assert.equal(await page.locator('#codex-login').count(),0);
     await page.selectOption('#codex-caso','alpha');
     await page.locator('#codex-inventario').locator('..').locator('summary').click();
     await page.locator('#codex-inventario').filter({hasText:'1 documento'}).waitFor();
@@ -78,7 +74,7 @@ const [origin,output,chrome] = process.argv.slice(2);
     assert.deepEqual(errors,[]);
     await fs.writeFile(path.join(output,'resultado.json'), JSON.stringify({
       estado:'ok',natureza:'sintético; app-server simulado; sem inferência',
-      verificacoes:['login simulado e alternativa visível quando abertura automática falha','conexão e seleção explícita','pergunta e ferramentas via protocolo','referência clicável e original',
+      verificacoes:['status da API sem login nem chave no navegador','conexão e seleção explícita','pergunta e ferramentas via protocolo','referência clicável e original',
         'HTML documental inerte','complemento em nova rodada','recarga e recuperação da conversa',
         'consulta automática dos achados publicados na revisão final','320–1365 px sem transbordamento','cancelamento','erro de limite','separação de casos'],erros_js:errors},null,2));
     console.log('QA Codex: OK');

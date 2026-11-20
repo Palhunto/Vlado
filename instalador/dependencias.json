@@ -1,0 +1,62 @@
+{
+  "versao_vlado": "2.0.4",
+  "observacao": "Downloads fixados por versão e SHA-256; scripts/gerar_instalador.py recusa qualquer arquivo divergente.",
+  "downloads": {
+    "7zr": {
+      "versao": "24.09",
+      "url": "https://github.com/ip7z/7zip/releases/download/24.09/7zr.exe",
+      "sha256": "d2c0045523cf053a6b43f9315e9672fc2535f06aeadd4ffa53c729cd8b2b6dfe",
+      "uso": "ferramenta de build: abre o pacote do 7-Zip completo"
+    },
+    "7zip": {
+      "versao": "24.09",
+      "url": "https://github.com/ip7z/7zip/releases/download/24.09/7z2409-x64.exe",
+      "sha256": "bdd1a33de78618d16ee4ce148b849932c05d0015491c34887846d431d29f308e",
+      "uso": "ferramenta de build: extrai os instaladores NSIS do Ghostscript e do Tesseract sem executá-los"
+    },
+    "ghostscript": {
+      "versao": "10.05.1",
+      "licenca": "AGPL-3.0",
+      "url": "https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10051/gs10051w64.exe",
+      "sha256": "a0e49d912d21d8193ff0cb89ef741a47b21286fbb0a0e35dd0192b0097d35766",
+      "codigo_fonte": "https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10051/ghostscript-10.05.1.tar.gz",
+      "uso": "embutido em {app}\\ghostscript\\bin (OCRmyPDF)"
+    },
+    "tesseract": {
+      "versao": "5.4.0.20240606 (UB Mannheim)",
+      "licenca": "Apache-2.0",
+      "url": "https://github.com/UB-Mannheim/tesseract/releases/download/v5.4.0.20240606/tesseract-ocr-w64-setup-5.4.0.20240606.exe",
+      "sha256": "c885fff6998e0608ba4bb8ab51436e1c6775c2bafc2559a19b423e18678b60c9",
+      "codigo_fonte": "https://github.com/tesseract-ocr/tesseract",
+      "uso": "embutido em {app}\\tesseract"
+    },
+    "tessdata_por": {
+      "versao": "tessdata 4.1.0",
+      "licenca": "Apache-2.0",
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata/4.1.0/por.traineddata",
+      "sha256": "016c6a371bb1e4c48fe521908cf3ba3d751fade0ab846ad5d4086b563f5c528c"
+    },
+    "tessdata_eng": {
+      "versao": "tessdata 4.1.0",
+      "licenca": "Apache-2.0",
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata/4.1.0/eng.traineddata",
+      "sha256": "daa0c97d651c19fba3b25e81317cd697e9908c8208090c94c3905381c23fc047"
+    },
+    "tessdata_osd": {
+      "versao": "tessdata 4.1.0",
+      "licenca": "Apache-2.0",
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata/4.1.0/osd.traineddata",
+      "sha256": "e19f2ae860792fdf372cf48d8ce70ae5da3c4052962fe22e9de1f680c374bb0e"
+    },
+    "innosetup": {
+      "versao": "6.5.4",
+      "url": "https://github.com/jrsoftware/issrc/releases/download/is-6_5_4/innosetup-6.5.4.exe",
+      "sha256": "fa73bf47a4da250d185d07561c2bfda387e5e20db77e4570004cf6a133cc10b1",
+      "uso": "ferramenta de build: compilador ISCC, instalado por usuário em .ferramentas/innosetup"
+    }
+  },
+  "python": {
+    "pyinstaller": "6.16.0",
+    "requisitos": ["requirements.txt"]
+  }
+}

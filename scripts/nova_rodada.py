@@ -1,6 +1,7 @@
 """Freeze authorized inputs for a new round without invoking a model."""
 from __future__ import annotations
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 import re
@@ -8,6 +9,20 @@ import shutil
 from comum import (ROOT, arquivos_do_corpus, arquivos_do_cadastro, carregar_corpus, conferir_projeto,
                    escrever_json, sha256, VERSAO_PROMPTS, pasta_preparacao)
 from cadastrar_documentos import _trava
+from fontes_web import arquivos_web, modo_do_caso
+
+
+@contextmanager
+def preparar_pasta_rodada(destino: Path):
+    if destino.exists():
+        raise FileExistsError(f'Rodada ja existe e nao sera sobrescrita: {destino.name}')
+    # Both initial questions and follow-ups stage on the same volume without
+    # repeating the case ID. Publish only after the caller finishes the snapshot.
+    with pasta_preparacao(destino.parent.parent, '.r_') as staging:
+        work = staging / destino.name
+        work.mkdir()
+        yield work
+        work.rename(destino)
 
 
 def criar_rodada(root: Path, identifier: str, question: str, *, tipo='piloto', modelo=None, indice=None, caso=None):
@@ -51,15 +66,14 @@ def _criar_rodada(root: Path, identifier: str, question: str, *, tipo='piloto', 
     parent = root / 'execucoes' / case_id
     parent.mkdir(parents=True, exist_ok=True)
     destination = parent / identifier
-    if destination.exists():
-        raise FileExistsError(f'Rodada ja existe e nao sera sobrescrita: {identifier}')
-    with pasta_preparacao(parent, '.preparacao_') as staging:
-        temp = Path(staging)
-        work = temp / identifier
+    with preparar_pasta_rodada(destination) as work:
         inputs = work / 'entradas'
         inputs.mkdir(parents=True)
         paths = list(arquivos_do_corpus(root, manifest))
         paths += list(arquivos_do_cadastro(root, manifest))
+        # Web captures exist only in cases created in the "documentos + web" mode.
+        web = list(arquivos_web(root, manifest))
+        paths += web
         paths += [(str(manifest_path.relative_to(root)), manifest_path)]
         paths += [('AGENTS.md', root / 'AGENTS.md'), ('configuracao.json', root / 'configuracao.json')]
         if (root / 'README.md').is_file():
@@ -86,7 +100,11 @@ def _criar_rodada(root: Path, identifier: str, question: str, *, tipo='piloto', 
             'criada_em_utc': datetime.now(timezone.utc).isoformat(),
             'corpus_id': manifest['corpus_id'], 'versao_prompts': VERSAO_PROMPTS,
             'modelo_informado': modelo, 'modelo_observado_pelo_agente': None,
-            'ferramentas_usadas': [], 'web_usada': False, 'conferencia_humana': 'nao_realizada',
+            'ferramentas_usadas': [], 'web_usada': False,  # live navigation; frozen captures are counted below
+            'modo_fontes': modo_do_caso(manifest)['modo'],
+            'dominio_permitido': modo_do_caso(manifest).get('dominio_permitido'),
+            'capturas_web_congeladas': len(manifest.get('capturas_web', [])),
+            'conferencia_humana': 'nao_realizada',
             'etapas_concluidas': [], 'contaminacao_conhecida': None,
             'observacao': 'Snapshot de arquivos; nao captura automaticamente a conversa nem comprova inferencia.',
         }
@@ -95,7 +113,6 @@ def _criar_rodada(root: Path, identifier: str, question: str, *, tipo='piloto', 
         if usar_indice:
             from indice_sqlite import construir_snapshot
             construir_snapshot(work, case_id, identifier)
-        work.rename(destination)
     return destination
 
 

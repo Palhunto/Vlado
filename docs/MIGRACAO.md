@@ -1,5 +1,7 @@
 # Migração para operação online no Codex
 
+> **Nota de 13/11/2026.** Este registro é histórico e não foi reescrito. As referências abaixo ao `codex app-server`, ao login ChatGPT e ao perfil de permissões do Codex descrevem a integração anterior. Na versão atual, a Mesa de apuração envia a inferência à API do provedor configurado (Anthropic ou OpenAI), com a chave apenas nas variáveis de ambiente do servidor. O estado atual está em [INTEGRACAO_API.md](INTEGRACAO_API.md).
+
 Versão 1.0.0, preparada em 02/11/2026. Origem técnica: `NHagar/semantic-search-assistant`, commit `0d5fa4cbe2c98e9c961a16c52a47d7bc0d708f6c`. A migração foi solicitada pelo usuário para testar o procedimento no próprio Codex antes de continuar a avaliação local.
 
 Este registro descreve a migração inicial. Em 04/11/2026, a versão **1.1.0** acrescentou [SQLite/FTS5 por rodada](BANCO_SQLITE.md), derivado das entradas congeladas, com cobertura e logs de consulta. Os prompts foram versionados; não há recuperação por embeddings, reprodução dos experimentos do original ou validação editorial decorrente dessa mudança.

@@ -28,6 +28,9 @@ def markdown(state):
              'Anotações humanas e seleções de fontes. A inclusão não representa conferência ou aprovação da IA.']
     for note in state['notas']:
         parts.extend(['## ' + note['titulo'].replace('\n', ' '), note['texto']])
+        autor = (note.get('atualizado_por') or note.get('criado_por') or {}).get('nome')
+        if autor:
+            parts.append(f'Autoria (conta autenticada da Mesa): {autor}')
         if note['fontes']:
             parts.append('### Referências da nota ' + note['titulo'].replace('\n', ' '))
             parts.extend(ref.replace('\n', '\n\n') for ref in referencias(note))

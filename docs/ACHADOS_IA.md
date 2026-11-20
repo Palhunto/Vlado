@@ -1,8 +1,8 @@
-# Achados da IA — versão 1.3.0
+# Achados da IA — versão 1.4.0
 
-Esta entrega registra os achados produzidos pelo agente durante busca, revisão e síntese. O registro é explícito: scripts não fazem inferência, não capturam o chat e não extraem achados de briefings antigos. Os documentos e o FTS documental permanecem separados das conclusões da IA. Conferir hashes/localizadores não comprova a veracidade nem o suporte semântico de uma afirmação.
+Esta entrega registra os achados produzidos durante busca, revisão e síntese, seja pelo agente de chat, seja pela Mesa, cuja inferência usa a API do provedor configurado. O registro é explícito: os scripts de registro, consulta e índice não fazem inferência, não capturam o chat e não extraem achados de briefings antigos. Os documentos e o FTS documental permanecem separados das conclusões da IA. Conferir hashes/localizadores não comprova a veracidade nem o suporte semântico de uma afirmação.
 
-## Operação no Codex
+## Operação pelo agente de chat
 
 Com pergunta e rodada já autorizadas, seguir os módulos 03–06. Não criar uma rodada apenas para experimentar a funcionalidade. Para cada etapa, preparar candidato JSON em arquivo novo dentro de `saidas/`, usando o [contrato](../modelos/ACHADOS.schema.json). A publicação canônica usa diretório exclusivo, trava por rodada e renomeação de diretório preparado. Não editar esses registros ou o SQLite manualmente.
 

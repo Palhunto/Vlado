@@ -8,7 +8,8 @@ from comum import ROOT, dentro, ler_json, sha256
 EXTENSOES = {'.pdf','.png','.jpg','.jpeg','.txt','.md','.csv','.tsv','.xlsx','.docx'}
 
 
-def criar_caso(root: Path, case_id: str, title: str, sources: list[Path], natureza='nao_informada'):
+def criar_caso(root: Path, case_id: str, title: str, sources: list[Path], natureza='nao_informada',
+               modo_fontes=None, dominio_permitido=None):
     if not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}',case_id):
         raise ValueError('ID do caso: letras minusculas, numeros, hifen ou underscore; ate 64 caracteres.')
     if not title.strip():
@@ -34,7 +35,8 @@ def criar_caso(root: Path, case_id: str, title: str, sources: list[Path], nature
     # Keep the legacy validation contract, but all entry points share extraction,
     # receipts, locking and transactional publication with the current registrar.
     from cadastrar_documentos import cadastrar
-    cadastrar(root, case_id, resolved, titulo=title, natureza=natureza, novo=True)
+    cadastrar(root, case_id, resolved, titulo=title, natureza=natureza, novo=True,
+              modo_fontes=modo_fontes, dominio_permitido=dominio_permitido)
     return destination
 
 
@@ -44,8 +46,11 @@ def main():
     parser.add_argument('--titulo',required=True)
     parser.add_argument('--documentos',nargs='+',required=True)
     parser.add_argument('--natureza',choices=['publicos','sinteticos','nao_informada'],default='nao_informada')
+    parser.add_argument('--modo-fontes',choices=['somente_documental','documentos_web'],default=None)
+    parser.add_argument('--dominio-permitido',help='Dominio unico permitido no modo documentos_web.')
     args=parser.parse_args()
-    print(criar_caso(ROOT,args.id,args.titulo,[Path(p) for p in args.documentos],args.natureza))
+    print(criar_caso(ROOT,args.id,args.titulo,[Path(p) for p in args.documentos],args.natureza,
+                     args.modo_fontes,args.dominio_permitido))
     print('Caso cadastrado e inativo; selecionar explicitamente antes de apurar.')
 
 

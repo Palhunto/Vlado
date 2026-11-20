@@ -13,8 +13,7 @@ from interface_pesquisa import Servidor
 
 class InterfaceAchadosTest(unittest.TestCase):
     def setUp(self):
-        self.fx=Ambiente(); self.addCleanup(self.fx.cleanup)
-        self.fx.completo()
+        self.fx, _ = Ambiente.copia_completa(); self.addCleanup(self.fx.cleanup)
         self.server=Servidor(('127.0.0.1',0),self.fx.root)
         self.thread=threading.Thread(target=self.server.serve_forever,daemon=True)
         self.thread.start(); self.addCleanup(self.stop)
@@ -80,6 +79,35 @@ class InterfaceAchadosTest(unittest.TestCase):
         self.assertEqual(preview['conteudo']['observacoes'][0]['observacao'],'É o valor total do contrato.')
         self.assertEqual(preview['conteudo']['observacoes'][0]['redacao_anterior'],detail['achado']['redacao'])
         self.assertIsNone(self.server.conversas.rpc)
+
+    def test_conferida_no_original_exige_abrir_cada_original_citado_nesta_sessao(self):
+        detail=self.request('achados-detalhe',self.scope(achado_id='A001'))[1]
+        payload=self.scope(achado_id='A001',achado_versao=detail['achado']['versao'],
+            registros_sha256=detail['registros_sha256'],estado='conferida_no_original',observacao='',anterior=None)
+        status,erro=self.request('achados-revisao-salvar',payload)
+        self.assertEqual((status,erro['codigo']),(400,'conferencia_sem_original'))
+        faltam=erro['faltam']
+        self.assertTrue(faltam)
+        self.assertIn('abra', erro['erro'])
+        # Opening it under another revision does not count for this one.
+        self.request('achados-original',self.scope(revisao='r1',geracao_achados='g1',evidencia_id=faltam[0]),binary=True)
+        self.assertEqual(self.request('achados-revisao-salvar',payload)[1]['faltam'],faltam)
+        for evidence in faltam[:-1]:
+            self.assertEqual(self.request('achados-original',self.scope(evidencia_id=evidence),binary=True)[0],200)
+        self.assertEqual(self.request('achados-revisao-salvar',payload)[1]['faltam'],faltam[-1:])
+        self.request('achados-original',self.scope(evidencia_id=faltam[-1]),binary=True)
+        status,saved=self.request('achados-revisao-salvar',payload)
+        self.assertEqual(status,200,saved)
+        self.assertEqual(saved['revisao_humana']['estado'],'conferida_no_original')
+
+    def test_vditor_tem_cache_longo_e_demais_estaticos_revalidam(self):
+        def get(path):
+            con=http.client.HTTPConnection('127.0.0.1',self.server.server_port,timeout=10)
+            con.request('GET',path); r=con.getresponse(); r.read(); con.close()
+            return r.status,r.getheader('Cache-Control')
+        self.assertEqual(get('/vendor/vditor/dist/index.css?v=3.11.1'),(200,'public, max-age=31536000, immutable'))
+        self.assertEqual(get('/vendor/vditor/dist/index.css'),(200,'no-cache'))  # unversioned URL keeps revalidating
+        self.assertEqual(get('/style.css?v=1'),(200,'no-cache'))
 
     def test_conferencia_humana_por_http_e_exportacao_protegidas(self):
         detail = self.request('achados-detalhe',self.scope(achado_id='A001'))[1]

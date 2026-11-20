@@ -1,0 +1,10 @@
+# HTTPS reverse proxy for the VLADO pilot. Caddy obtains and renews the certificate
+# for {$VLADO_DOMINIO} automatically (ports 80 and 443 must reach this host).
+{$VLADO_DOMINIO} {
+	encode gzip
+	request_body {
+		max_size 80MB
+	}
+	# The original Host header is forwarded; the app checks it against https://{$VLADO_DOMINIO}.
+	reverse_proxy vlado:8765
+}

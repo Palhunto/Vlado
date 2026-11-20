@@ -1,6 +1,3 @@
-# Compatibilidade com instalacoes antigas; a extracao agora e padrao no cadastro.
-# A lista principal esta em requirements.txt. Nao executa modelos nem OCR.
-pypdf==6.10.0
-# Leitura visual de páginas de PDF na ferramenta delimitada do Codex (sem OCR).
-# O fluxo textual funciona sem esta dependência; a ausência é informada ao modelo.
+# Leitura visual de páginas de PDF pela ferramenta consultar_acervo (opcional; sem OCR).
+# Sem esta dependência o fluxo textual funciona e a limitação é informada ao modelo.
 PyMuPDF>=1.24,<2

@@ -2,34 +2,45 @@
 <html lang="pt-BR" data-theme="dark">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="session-token" content="__SESSION_TOKEN__">
   <title>Vlado</title>
   <meta name="theme-color" content="#171d1a">
-  <link rel="stylesheet" href="/vendor/vditor/dist/index.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icones/vlado.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icones/vlado-192.png">
+  <link rel="stylesheet" href="/tokens.css">
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/caderno.css">
   <link rel="preload" href="/fonts/SourceSans3-Upright.otf" as="font" type="font/otf" crossorigin media="(min-width: 1051px)">
+  <link rel="stylesheet" href="/redacao.css">
+  <script src="/i18n_en.js" defer></script>
+  <script src="/i18n.js" defer></script>
   <script src="/leitura.js" defer></script>
   <script src="/app.js" defer></script>
+  <script src="/fontes_web.js" defer></script>
   <script src="/revisao.js" defer></script>
   <script src="/observacoes.js" defer></script>
   <script src="/continuidade.js" defer></script>
   <script src="/caderno.js" defer></script>
-  <script src="/vendor/vditor/dist/index.min.js" defer></script>
-  <script id="vditorLuteScript" src="/vendor/vditor/dist/js/lute/lute.min.js" defer></script>
-  <script src="/vendor/vditor/dist/js/i18n/pt_BR.js" defer></script>
-  <script id="vditorIconScript" src="/vendor/vditor/dist/js/icons/ant.js" defer></script>
   <script src="/editor_notas.js" defer></script>
   <script src="/apuracao.js" defer></script>
   <script src="/diligencias.js" defer></script>
+  <script src="/quadros.js" defer></script>
+  <script src="/analise.js" defer></script>
+  <script src="/indicador_salvamento.js" defer></script>
   <script src="/codex.js" defer></script>
+  <script src="/configuracao_ia.js" defer></script>
+  <script src="/piloto.js" defer></script>
   <script src="/gerenciar.js" defer></script>
   <script src="/experiencia.js" defer></script>
   <script src="/desktop.js" defer></script>
+  <script src="/redacao.js" defer></script>
 </head>
-<body>
+<body data-idioma-padrao="__IDIOMA_PADRAO__" data-papel="__PAPEL__" data-modo="__MODO__">
   <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
-  <header class="app-header"><button id="mesa-menu" type="button" class="secondary" aria-label="Abrir navegação" aria-expanded="false" aria-controls="mesa-sidebar">☰</button><span class="brand mobile-brand">Vlado<span>.</span></span><label class="persistent-context"><span>APURAÇÃO ATUAL</span><select id="contexto-caso"><option value="">Escolha uma apuração</option></select></label><span id="mesa-versao" class="header-note">Documentos, achados e fontes</span><button id="mesa-tema" class="secondary" type="button" aria-label="Ativar modo claro">Modo claro</button></header>
+  <p id="mesa-ambiente" class="env-banner" role="note" hidden></p>
+  <header class="app-header"><button id="mesa-menu" type="button" class="secondary" aria-label="Abrir navegação" aria-expanded="false" aria-controls="mesa-sidebar">☰</button><span class="brand mobile-brand">Vlado<span>.</span></span><label class="persistent-context"><span>APURAÇÃO ATUAL</span><select id="contexto-caso"><option value="">Escolha uma apuração</option></select></label><span id="mesa-versao" class="header-note">Documentos, achados e fontes</span><button id="mesa-idioma" class="secondary" type="button" translate="no" aria-label="Switch to English">English</button><button id="mesa-sair" class="secondary" type="button" hidden>Sair</button><button id="mesa-tema" class="secondary" type="button" aria-label="Ativar modo claro">Modo claro</button></header>
   <div class="app-layout">
   <aside class="sidebar" id="mesa-sidebar">
     <a class="brand sidebar-brand" href="/?area=inicio" data-mesa-area="inicio">Vlado<span>.</span></a><p class="brand-sub">SUA MESA DE TRABALHO</p>
@@ -43,20 +54,22 @@
       <button id="ver-achados" type="button" aria-pressed="false" aria-controls="area-achados">Achados da IA</button>
       <button id="ver-apuracao" type="button" aria-pressed="false" aria-controls="area-apuracao">Caderno</button>
       <button id="ver-diligencias" type="button" aria-pressed="false" aria-controls="area-diligencias">Diligências</button>
+      <button id="ver-quadros" type="button" aria-pressed="false" aria-controls="area-quadros">Quadros de evidência</button>
       <button id="ver-caderno" type="button" aria-pressed="false" aria-controls="area-caderno" hidden>Trechos com fonte</button>
       <p class="eyebrow">ESPAÇO DE TRABALHO</p>
       <button id="ver-gerenciar" type="button" aria-pressed="false" aria-controls="area-gerenciar">Apurações e lixeira</button>
+      <button id="ver-configuracoes" type="button" aria-pressed="false" aria-controls="area-configuracoes" hidden>Configurações</button>
     </nav>
-    <details class="first-use"><summary>Como começar</summary><ol><li>Cadastre os arquivos e confira o recibo de cada envio.</li><li>Abra Perguntar à IA, entre com ChatGPT e escolha o caso.</li><li>Envie a pergunta e acompanhe a resposta e as fontes nesta tela.</li></ol><p>O Codex roda em segundo plano no computador; a análise pelo modelo é online.</p></details>
+    <details class="first-use"><summary>Como começar</summary><ol><li>Cadastre os arquivos e confira o recibo de cada envio.</li><li>Abra Perguntar à IA, confira a conexão com a API e escolha o caso.</li><li>Envie a pergunta e acompanhe a resposta e as fontes nesta tela.</li></ol><p>A análise é feita online pela API do provedor configurado, com cobrança por uso.</p><p>Atalhos: Ctrl+Enter (⌘+Enter no Mac) envia a pergunta. Em Conferir achados, J e K (ou Alt+↓ e Alt+↑) passam ao achado seguinte e ao anterior.</p></details>
     <p class="mesa-processing">IA com processamento online<span>Conferência editorial por você</span></p>
   </aside>
   <main id="conteudo" tabindex="-1">
     <p id="experiencia-status" class="small" role="status" aria-live="polite"></p>
-    <section class="intro"><p class="eyebrow" id="area-etiqueta">CONSULTAR O ACERVO</p><h1 id="area-titulo">Encontre a informação.<br>Confira a fonte.</h1><p id="area-descricao">Pesquise nos documentos de uma rodada preparada no Codex.</p></section>
+    <div class="intro"><h1 id="area-titulo">Visão geral</h1><p id="area-descricao">Nenhuma apuração selecionada</p></div>
     <nav id="mesa-etapas" aria-label="Etapas da apuração" hidden></nav>
     <section id="area-inicio" aria-label="Começar ou retomar" hidden>
-      <div class="mesa-hero"><div><p class="eyebrow">DA PRIMEIRA FONTE À SUA REDAÇÃO</p><h2>Menos dispersão.<br>Mais espaço para apurar.</h2><p>Reúna seus documentos e explore o que eles permitem afirmar. Cada descoberta volta à fonte.</p><button id="inicio-nova" type="button">Começar uma apuração</button></div><div class="mesa-hero-art" aria-hidden="true"><div class="mesa-paper-back"></div><div class="mesa-paper"><span>CADERNO DE APURAÇÃO</span><h3>A apuração está<br>nos detalhes.</h3><i></i><i></i><i class="highlight"></i><i></i><i></i><small>Toda afirmação,<br>uma fonte por perto.</small></div></div></div>
-      <section class="mesa-home-section"><div class="section-heading"><h2>Continue de onde parou</h2><a href="/?area=gerenciar" data-mesa-area="gerenciar">Ver apurações →</a></div><div id="mesa-retomada" class="panel"><h3>Escolha sua próxima história.</h3><p>Selecione uma apuração no topo da mesa para retomar seu trabalho.</p></div><div class="start-actions"><button id="inicio-adicionar" type="button" class="secondary">Adicionar documentos</button><button id="inicio-retomar" type="button" class="secondary">Retomar trabalho</button></div></section>
+      <div class="panel mesa-primeiro-passo"><div><h2 id="mesa-primeiro-titulo">Nova apuração</h2><p id="mesa-primeiro-texto">Cadastre os documentos da pauta, pergunte à IA e confira cada achado na página do original.</p></div><button id="inicio-nova" type="button">Começar uma apuração</button></div>
+      <section id="mesa-continuar" class="mesa-home-section"><div class="section-heading"><h2>Continue de onde parou</h2><a href="/?area=gerenciar" data-mesa-area="gerenciar">Ver apurações →</a></div><div id="mesa-retomada" class="panel"><h3>Escolha sua próxima história.</h3><p>Selecione uma apuração no topo da mesa para retomar seu trabalho.</p></div><div class="start-actions"><button id="inicio-adicionar" type="button" class="secondary">Adicionar documentos</button><button id="inicio-retomar" type="button" class="secondary">Retomar trabalho</button></div></section>
       <section class="mesa-home-section"><h2>Um caminho claro para cada pauta</h2><div class="mesa-workflow"><a href="/?area=cadastro" data-mesa-area="cadastro"><span>01</span><h3>Reúna os documentos →</h3><p>Cadastre os arquivos e confira o recibo.</p></a><a href="/?area=codex" data-mesa-area="codex"><span>02</span><h3>Faça sua pergunta →</h3><p>Explore o acervo com a ajuda da IA.</p></a><a href="/?area=achados" data-mesa-area="achados"><span>03</span><h3>Confira cada achado →</h3><p>Leia a fonte e registre sua avaliação.</p></a><a href="/?area=apuracao" data-mesa-area="apuracao"><span>04</span><h3>Construa sua história →</h3><p>Reúna notas e trechos no caderno.</p></a></div></section>
     </section>
     <nav id="caderno-abas" class="actions notebook-tabs" aria-label="Caderno" hidden><button id="caderno-aba-notas" type="button" class="secondary" aria-pressed="true">Notas e redação</button><button id="caderno-aba-trechos" type="button" class="secondary" aria-pressed="false">Trechos com fonte e contribuições</button></nav>
@@ -64,10 +77,19 @@
       <div class="panel">
         <div class="section-heading"><h2 id="codex-titulo">Conversa com os documentos</h2><p id="codex-conta" class="connection-status" role="status" aria-live="polite">Verificando conexão…</p></div>
         <details id="codex-conexao" class="connection-options"><summary>Conexão e opções</summary>
-        <div class="actions"><button id="codex-conectar" type="button" class="secondary">Verificar conexão</button><button id="codex-login" type="button">Entrar com ChatGPT</button><button id="codex-cancelar-login" type="button" class="secondary" hidden>Cancelar login</button><button id="codex-desligar" type="button" class="secondary" title="Encerra o serviço local e interrompe as execuções ativas">Encerrar serviço</button></div>
-        <p id="codex-login-erro" role="alert" hidden></p>
-        <p id="codex-login-alternativa" hidden><a href="/codex-login/browser" target="_blank" rel="noopener noreferrer">Abrir página de login</a> · Use este link se nenhuma janela apareceu.</p>
-        <p class="small">Processamento online pelo acesso do seu plano ChatGPT, sujeito aos limites da conta. Credenciais sob gestão do Codex.</p>
+        <div class="actions"><button id="codex-conectar" type="button" class="secondary">Verificar conexão</button><button id="codex-desligar" type="button" class="secondary" title="Encerra o serviço local e interrompe as execuções ativas">Encerrar serviço</button></div>
+        <form id="ia-config" class="ia-config" autocomplete="off" data-somente-admin>
+          <h3>Provedor e chave da API</h3>
+          <label>Provedor<select id="ia-provedor"><option value="anthropic">Anthropic (Claude)</option><option value="openai">OpenAI (GPT)</option></select></label>
+          <label>Modelo (opcional)<input id="ia-modelo" type="text" maxlength="100" spellcheck="false" placeholder="Padrão: claude-sonnet-5-5"></label>
+          <p class="small">Deixe em branco para usar o modelo padrão do provedor.</p>
+          <label>Chave da API<input id="ia-chave" type="password" maxlength="300" spellcheck="false" autocomplete="new-password" placeholder="Cole a chave da API"></label>
+          <p id="ia-chave-estado" class="small" role="status" aria-live="polite"></p>
+          <p class="small">A chave é salva no servidor e nunca volta ao navegador. Deixe o campo vazio para manter a chave atual.</p>
+          <div class="actions"><button id="ia-salvar" type="submit">Salvar provedor e chave</button><button id="ia-remover" type="button" class="secondary" hidden>Remover chave salva</button></div>
+          <p id="ia-config-mensagem" class="small" role="status" aria-live="polite"></p>
+        </form>
+        <p class="small">Processamento online pela API do provedor escolhido, cobrado por uso.</p>
         <div id="codex-conexao-tecnica"></div></details>
         <details id="codex-acervo" class="codex-scope" open><summary id="codex-acervo-resumo">Escolher apuração e conversa</summary>
         <div class="filters"><label>Apuração<select id="codex-caso"><option value="">Selecione uma apuração</option></select></label><button id="codex-atualizar" type="button" class="secondary">Atualizar apurações</button></div>
@@ -80,14 +102,23 @@
       <p id="codex-erro" role="alert" hidden></p>
       <details id="codex-recibo-alerta" class="notice" hidden><summary>Recibo dos documentos enviados · confira as limitações antes de perguntar</summary></details>
       <button id="codex-reconectar" type="button" class="secondary" hidden>Reconectar acompanhamento</button>
+      <section id="codex-execucao" class="codex-run" aria-labelledby="codex-execucao-pergunta" hidden>
+        <div class="codex-run-head"><span id="codex-execucao-selo" class="run-badge"></span><h3 id="codex-execucao-pergunta" translate="no"></h3></div>
+        <p id="codex-conexao-estado" class="run-connection" aria-live="polite"></p>
+        <p id="codex-execucao-mensagem"></p>
+        <p id="codex-execucao-causa" class="small" hidden></p>
+        <ol id="codex-execucao-etapas" class="codex-run-steps" aria-label="Etapas desta pergunta"></ol>
+        <p id="codex-execucao-aviso" class="small" role="status" aria-live="polite" hidden></p>
+        <div class="actions"><button id="codex-retomar" type="button" hidden>Tentar novamente</button></div>
+        <p id="codex-retomar-cota" class="small" hidden>A nova tentativa conta como uma pergunta da sua cota diária. Se o servidor recusar, a pergunta volta para a cota.</p>
+      </section>
       <section id="codex-limitacoes" class="notice source-limitations" aria-labelledby="codex-limitacoes-titulo" hidden><h3 id="codex-limitacoes-titulo">Limitações das fontes</h3><ul id="codex-limitacoes-lista"></ul></section>
-      <div id="codex-aprovacoes" class="panel" hidden></div>
       <div class="actions"><button id="codex-continuar-documentos" type="button" class="secondary" disabled>Continuar com novos documentos</button></div>
       <div class="codex-workspace">
         <div><section id="codex-mensagens" aria-label="Perguntas e respostas"></section><details id="codex-andamento" class="technical panel"><summary>Detalhes técnicos</summary><p id="codex-escopo" class="small path">Nenhuma conversa selecionada.</p><h3>Andamento e ferramentas</h3><ol id="codex-atividades"></ol></details></div>
         <details id="codex-painel-fontes" class="panel codex-fontes"><summary>Fontes consultadas · abrir para conferir</summary><p class="small">As citações abrem o trecho e sua localização no documento.</p><div id="codex-fontes"></div></details>
       </div>
-      <form id="codex-form" class="panel"><section id="codex-diligencias" class="feedback-preview" hidden><h3>Diligências para esta pergunta</h3><p class="small">Confira as respostas nas fontes; receber um documento não encerra automaticamente a pendência.</p><div id="codex-diligencias-lista"></div><button id="codex-diligencias-retirar" type="button" class="secondary">Retirar diligências desta pergunta</button></section><section id="codex-caderno" class="feedback-preview" hidden><h3>Contribuições humanas para esta pergunta</h3><p class="small">A IA deverá reexaminar as fontes e distinguir suas interpretações das contribuições dos autores declarados.</p><div id="codex-caderno-lista"></div><button id="codex-caderno-retirar" type="button" class="secondary">Retirar registros desta pergunta</button></section><section id="codex-corpus-novo" class="feedback-preview" hidden><h3>Nova versão para esta pergunta</h3><div id="codex-corpus-previa"></div><button id="codex-corpus-retirar" type="button" class="secondary">Manter a versão atual da conversa</button><p class="small">Retirar da pergunta não apaga os documentos cadastrados.</p></section><section id="codex-observacoes" class="feedback-preview" aria-labelledby="codex-observacoes-titulo" hidden><h3 id="codex-observacoes-titulo">Observações para esta pergunta</h3><p class="small">Revise a seleção e envie a pergunta. A IA deverá reexaminar as fontes; suas observações não aprovam automaticamente a nova resposta.</p><div id="codex-observacoes-lista"></div><button id="codex-observacoes-remover" type="button" class="secondary">Retirar observações desta pergunta</button></section><p id="codex-destino" class="small" role="status" aria-live="polite"></p><label>Pergunta ou complemento<textarea aria-describedby="codex-destino" id="codex-pergunta" rows="4" maxlength="16000" required placeholder="O que os documentos permitem afirmar sobre…?"></textarea></label><div class="actions"><button id="codex-enviar">Enviar pergunta</button><button id="codex-cancelar" type="button" class="secondary" disabled>Cancelar execução</button></div><p class="small">Análise da IA. Confira as fontes antes de publicar.</p></form>
+      <form id="codex-form" class="panel"><section id="codex-diligencias" class="feedback-preview" hidden><h3>Diligências para esta pergunta</h3><p class="small">Confira as respostas nas fontes; receber um documento não encerra automaticamente a pendência.</p><div id="codex-diligencias-lista"></div><button id="codex-diligencias-retirar" type="button" class="secondary">Retirar diligências desta pergunta</button></section><section id="codex-caderno" class="feedback-preview" hidden><h3>Contribuições humanas para esta pergunta</h3><p class="small">A IA deverá reexaminar as fontes e distinguir suas interpretações das contribuições dos autores declarados.</p><div id="codex-caderno-lista"></div><button id="codex-caderno-retirar" type="button" class="secondary">Retirar registros desta pergunta</button></section><section id="codex-corpus-novo" class="feedback-preview" hidden><h3>Nova versão para esta pergunta</h3><div id="codex-corpus-previa"></div><button id="codex-corpus-retirar" type="button" class="secondary">Manter a versão atual da conversa</button><p class="small">Retirar da pergunta não apaga os documentos cadastrados.</p></section><section id="codex-observacoes" class="feedback-preview" aria-labelledby="codex-observacoes-titulo" hidden><h3 id="codex-observacoes-titulo">Observações para esta pergunta</h3><p class="small">Revise a seleção e envie a pergunta. A IA deverá reexaminar as fontes; suas observações não aprovam automaticamente a nova resposta.</p><div id="codex-observacoes-lista"></div><button id="codex-observacoes-remover" type="button" class="secondary">Retirar observações desta pergunta</button></section><p id="codex-destino" class="small" role="status" aria-live="polite"></p><label>Pergunta ou complemento<textarea aria-describedby="codex-destino" aria-keyshortcuts="Control+Enter Meta+Enter" id="codex-pergunta" rows="4" maxlength="16000" required placeholder="O que os documentos permitem afirmar sobre…?"></textarea></label><div class="actions"><button id="codex-enviar" title="Ctrl+Enter">Enviar pergunta</button><button id="codex-cancelar" type="button" class="secondary" disabled>Cancelar execução</button></div><p class="small">Análise da IA. Confira as fontes antes de publicar.</p></form>
     </section>
     <section id="area-diligencias" aria-labelledby="diligencias-titulo" hidden>
       <div class="panel"><h2 id="diligencias-titulo">O que falta apurar</h2><p>Assuma ações ligadas aos achados, acompanhe solicitações e retome a questão com a resposta documental. O acompanhamento é humano; receber uma resposta não comprova sua conclusão.</p>
@@ -96,22 +127,42 @@
         <label>Conversa para retomar a questão<select id="diligencias-conversa"><option value="">Nova conversa com os documentos cadastrados</option></select></label><label class="feedback-choice"><input id="diligencias-incorporar" type="checkbox"><span>Incorporar os documentos novos na conversa selecionada. A prévia aparecerá antes do envio da pergunta.</span></label>
       </div><p id="diligencias-status" role="status" aria-live="polite">Selecione uma apuração.</p><p id="diligencias-erro" role="alert" hidden></p><div id="diligencias-resultados"></div>
     </section>
-    <section id="area-apuracao" aria-labelledby="apuracao-titulo" hidden>
-      <div class="panel"><h2 id="apuracao-titulo">Caderno editável</h2><p>Combine suas notas e seleções de fontes. Salve as alterações antes de exportar. A inclusão de uma evidência não aprova a resposta da IA.</p>
-        <div class="filters"><label>Apuração selecionada<select id="apuracao-caso"><option value="">Selecione uma apuração</option></select></label><button id="apuracao-atualizar" type="button" class="secondary">Reabrir notas salvas</button></div>
-        <div class="actions"><button id="apuracao-nova" type="button" disabled>Nova nota</button><label>Formato de exportação<select id="apuracao-formato"><option value="md">Markdown</option><option value="pdf">PDF</option><option value="docx">DOCX editável</option></select></label><button id="apuracao-exportar" type="button" class="secondary" disabled>Exportar caderno salvo</button></div>
+    <section id="area-quadros" aria-labelledby="quadros-titulo" hidden>
+      <div class="panel quadros">
+        <div class="section-heading"><h2 id="quadros-titulo">Quadros de evidência</h2></div>
+        <p class="small">Hipóteses e acontecimentos registrados por pessoas a partir das evidências desta apuração. Cada evidência abre o original conferido; os quadros organizam e apontam lacunas, sem avaliar veracidade.</p>
+        <div id="quadros-abas" class="quadros-abas" role="tablist" aria-label="Quadros de evidência"></div>
+        <div id="quadros-paineis"></div>
       </div>
-      <p id="apuracao-status" role="status" aria-live="polite">Selecione uma apuração.</p><p id="apuracao-erro" role="alert" hidden></p>
-      <div class="notebook-workspace"><nav id="apuracao-notas" aria-label="Notas salvas"></nav>
-        <section id="apuracao-editor" class="panel" hidden><form id="apuracao-form">
-          <label>Título da nota<input id="apuracao-nota-titulo" maxlength="200" required></label>
-          <span id="apuracao-texto-rotulo">Texto da nota</span>
-          <p id="apuracao-editor-ajuda" class="small">Escreva com formatação visual. Use “Alternar modo de edição” na barra para renderização instantânea ou Markdown. Salve para guardar suas alterações.</p>
+    </section>
+    <section id="area-apuracao" aria-labelledby="apuracao-titulo" hidden>
+      <h2 id="apuracao-titulo" class="sr-only">Caderno editável</h2>
+      <div class="notebook-toolbar">
+        <div class="actions"><button id="apuracao-nova" type="button" disabled>Nova nota</button><button id="apuracao-inserir" type="button" class="secondary" aria-expanded="false" aria-controls="apuracao-inserir-ajuda" disabled>Inserir trecho com fonte</button><label>Formato de exportação<select id="apuracao-formato"><option value="md">Markdown</option><option value="pdf">PDF</option><option value="docx">DOCX editável</option></select></label><button id="apuracao-exportar" type="button" class="secondary" disabled>Exportar</button><button id="apuracao-atualizar" type="button" class="secondary">Reabrir notas salvas</button></div>
+      </div>
+      <div class="filters"><label>Apuração selecionada<select id="apuracao-caso"><option value="">Selecione uma apuração</option></select></label></div>
+      <div id="apuracao-inserir-ajuda" class="notice notebook-insert-help" hidden><p>Selecione um trecho em Pesquisar documentos ou em Achados da IA e use Inserir em nota. O trecho entra na nota aberta com a fonte.</p><div class="actions"><button id="apuracao-ir-documentos" type="button" class="secondary">Pesquisar documentos</button><button id="apuracao-ir-achados" type="button" class="secondary">Achados da IA</button></div></div>
+      <p class="small notebook-note">As notas são salvas enquanto você escreve. Inserir um trecho com fonte não aprova a resposta da IA.</p>
+      <p id="apuracao-status" class="small" role="status" aria-live="polite"></p><p id="apuracao-erro" role="alert" hidden></p>
+      <div id="apuracao-conflito" class="notice notebook-conflict" role="alert" hidden><p>Conflito: a nota foi alterada em outra aba. Nada foi sobrescrito e o salvamento automático parou. Copie seu texto e depois recarregue a nota.</p><div class="actions"><button id="apuracao-copiar" type="button">Copiar meu texto</button><button id="apuracao-recarregar" type="button" class="secondary">Recarregar nota</button></div><p id="apuracao-conflito-status" class="small" role="status" aria-live="polite"></p><textarea id="apuracao-conflito-texto" rows="6" readonly hidden aria-label="Seu texto para copiar"></textarea></div>
+      <div id="apuracao-rascunho" class="notice caderno-rascunho" role="alert" hidden><p id="apuracao-rascunho-texto"></p><div class="actions"><button id="apuracao-rascunho-restaurar" type="button">Restaurar rascunho</button><button id="apuracao-rascunho-descartar" type="button" class="secondary">Descartar rascunho</button></div></div>
+      <div class="caderno-gavetas" role="group" aria-label="Painéis do caderno"><button id="apuracao-ver-notas" type="button" class="secondary" aria-expanded="false" aria-controls="apuracao-lista-painel">Notas</button><button id="apuracao-ver-fontes" type="button" class="secondary" aria-expanded="false" aria-controls="apuracao-fontes-painel">Fontes da nota</button></div>
+      <div id="apuracao-gaveta-fundo" class="caderno-fundo" hidden></div>
+      <div class="notebook-workspace notebook-grid is-empty">
+        <nav id="apuracao-lista-painel" class="notebook-notes caderno-painel" aria-labelledby="apuracao-notas-titulo"><div class="caderno-painel-topo"><h3 id="apuracao-notas-titulo">Notas</h3><button id="apuracao-nova-lista" type="button" class="caderno-nova-lista">Nova nota</button><button id="apuracao-fechar-notas" type="button" class="secondary caderno-fechar">Fechar</button></div><label class="caderno-busca">Buscar notas<input id="apuracao-busca" type="search" autocomplete="off" placeholder="Título da nota…"></label><p id="apuracao-busca-status" class="small" role="status" aria-live="polite"></p><ul id="apuracao-notas"></ul><p id="apuracao-notas-vazio" class="small" hidden>Nenhuma nota ainda. Use Nova nota.</p></nav>
+        <section id="apuracao-editor" class="panel" aria-label="Nota aberta" hidden><form id="apuracao-form">
+          <label class="caderno-titulo">Título da nota<input id="apuracao-nota-titulo" maxlength="200" required></label>
+          <div class="caderno-nota-barra"><p id="apuracao-salvamento" class="save-state" role="status" aria-live="polite"></p><p id="apuracao-tarefas" class="caderno-tarefas" hidden></p><p id="apuracao-autoria" class="small" hidden></p></div>
+          <span id="apuracao-texto-rotulo" class="sr-only">Texto da nota</span>
+          <p id="apuracao-editor-ajuda" class="small">Escreva com formatação visual; Markdown e outros comandos ficam em Mais. Clique em [Fonte n] para ver a fonte.</p>
           <p id="apuracao-editor-aviso" class="small" role="status" hidden></p>
+          <button id="apuracao-editor-tentar" type="button" class="secondary" hidden>Tentar carregar o editor de novo</button>
+          <div id="apuracao-formatar" class="caderno-formatar" role="toolbar" aria-label="Formatação da nota" hidden><label class="caderno-estilo"><span class="sr-only">Estilo do parágrafo</span><select id="apuracao-estilo"><option value="p">Texto normal</option><option value="h2">Título da seção</option><option value="h3">Subtítulo</option></select></label><button id="apuracao-negrito" type="button" class="caderno-comando" data-comando="bold" aria-label="Negrito" title="Negrito (Ctrl+B)"><b aria-hidden="true">N</b></button><button id="apuracao-italico" type="button" class="caderno-comando" data-comando="italic" aria-label="Itálico" title="Itálico (Ctrl+I)"><i aria-hidden="true">I</i></button><button id="apuracao-marcadores" type="button" class="caderno-comando" data-comando="list" aria-label="Lista com marcadores" title="Lista com marcadores"><span aria-hidden="true">•</span> <span class="caderno-rotulo">Lista</span></button><button id="apuracao-tarefa" type="button" class="caderno-comando" data-comando="check"><span class="caderno-caixa" aria-hidden="true"></span> Lista de tarefas</button><button id="apuracao-mais" type="button" class="caderno-comando" aria-expanded="false">Mais</button></div>
           <div id="apuracao-vditor" aria-labelledby="apuracao-texto-rotulo" aria-describedby="apuracao-editor-ajuda"></div>
           <label id="apuracao-texto-alternativo" hidden>Texto em Markdown<textarea id="apuracao-texto" rows="16" maxlength="200000"></textarea></label>
-          <div class="actions"><button id="apuracao-salvar">Salvar nota</button><button id="apuracao-excluir" type="button" class="secondary">Excluir nota</button></div>
-        </form><h3>Pré-visualização</h3><div id="apuracao-previa" class="markdown-body"></div><h3>Fontes preservadas desta nota</h3><div id="apuracao-fontes"></div></section>
+          <div class="actions"><button id="apuracao-excluir" type="button" class="danger">Excluir nota</button></div>
+        </form><h3>Pré-visualização</h3><div id="apuracao-previa" class="markdown-body"></div></section>
+        <aside id="apuracao-fontes-painel" class="notebook-sources caderno-painel" aria-labelledby="apuracao-fontes-titulo" hidden><div class="caderno-painel-topo"><h3 id="apuracao-fontes-titulo">Fontes da nota</h3><button id="apuracao-fechar-fontes" type="button" class="secondary caderno-fechar">Fechar</button></div><div id="apuracao-fontes"></div></aside>
       </div>
     </section>
     <dialog id="apuracao-adicionar-dialogo" class="human-review-dialog" aria-labelledby="apuracao-adicionar-titulo">
@@ -120,7 +171,7 @@
       <form id="apuracao-adicionar-form"><label>Nota de destino<select id="apuracao-destino"><option value="">Criar nova nota</option></select></label><button id="apuracao-adicionar-salvar">Adicionar seleção</button></form><p id="apuracao-adicionar-erro" role="alert" hidden></p>
     </dialog>
     <section id="area-caderno" aria-labelledby="caderno-titulo" hidden>
-      <div class="panel"><h2 id="caderno-titulo">Contribuições do jornalista</h2><p>Trechos, achados e cruzamentos de autoria humana, separados dos resultados da IA. A autoria é declarada por quem salva; não há autenticação individual nesta versão.</p>
+      <div class="panel"><h2 id="caderno-titulo">Contribuições do jornalista</h2><p id="caderno-descricao">Trechos, achados e cruzamentos de autoria humana, separados dos resultados da IA. A autoria é declarada por quem salva; não há autenticação individual nesta versão.</p>
       <div class="filters"><label>Apuração<select id="caderno-caso"><option value="">Selecione uma apuração</option></select></label><button id="caderno-atualizar" type="button" class="secondary">Atualizar</button></div>
       <div class="actions"><button id="caderno-novo" type="button" disabled>Registrar trecho com fonte</button></div>
       <form id="caderno-pesquisa"><label>Pesquisar por trecho, anotação ou autoria<input id="caderno-texto" type="search" maxlength="500"></label><button id="caderno-buscar" disabled>Pesquisar no caderno</button></form>
@@ -133,7 +184,7 @@
     <section id="area-cadastro" aria-labelledby="cadastro-titulo" hidden>
     <div class="workflow" aria-label="Fluxo de entrada"><span class="current">1 · Cadastrar e conferir</span><span>2 · Perguntar à IA</span><span>3 · Conferir a resposta e as fontes</span></div>
     <div class="panel">
-      <p class="eyebrow">ETAPA 1 · ANTES DA PERGUNTA</p><h2 id="cadastro-titulo">Cadastrar documentos</h2>
+      <h2 id="cadastro-titulo">Cadastrar documentos</h2>
       <div id="pdf-ambiente-aviso" class="notice" role="status" hidden></div>
       <div id="pdf-ambiente-tecnico"></div>
       <form id="cadastro">
@@ -143,6 +194,8 @@
         </div>
         <div class="filters" id="novo-caso-campos">
           <label>Nome da apuração<input id="cadastro-titulo-input" maxlength="200" placeholder="Ex.: Transporte escolar…" required><span class="small">Escolha um nome para reconhecer esta apuração.</span></label>
+          <label>Fontes da apuração<select id="cadastro-modo-fontes"><option value="somente_documental">Somente documentos</option><option value="documentos_web">Documentos + um site</option></select><span class="small">Escolhido só na criação. Sem a opção do site, a apuração não acessa a internet.</span></label>
+          <label id="cadastro-dominio-campo" hidden>Site permitido<input id="cadastro-dominio" maxlength="253" placeholder="www.exemplo.gov.br" autocomplete="off" spellcheck="false" translate="no"><span class="small">Só páginas deste site poderão ser capturadas. Informe o nome, sem https:// nem caminho.</span></label>
         </div>
         <label class="file-label">Arquivos deste envio<input id="cadastro-arquivos" type="file" multiple required></label>
         <p id="arquivos-selecionados" class="small">Selecione todos os arquivos do lote. Até 50 MB por envio; o limite de documentos do caso é conferido no cadastro.</p>
@@ -150,37 +203,94 @@
       </form>
       <p id="cadastro-status" role="status" aria-live="polite"></p>
       <p id="cadastro-erro" role="alert" hidden></p>
-      <div id="cadastro-preparacao" class="notice" hidden><p id="cadastro-preparacao-resumo"></p><button id="cadastro-preparar" type="button" class="secondary">Preparar PDFs pendentes</button><p class="small">Usa as cópias já cadastradas, sem reenvio. A nova preparação vale para próximas conversas; rodadas anteriores são preservadas.</p></div>
+      <div id="cadastro-preparacao" class="notice" hidden><p id="cadastro-preparacao-resumo"></p><button id="cadastro-preparar" type="button" class="secondary">Preparar PDFs pendentes</button><p class="small">Usa as cópias já cadastradas, sem reenvio. A nova preparação vale para próximas conversas; análises anteriores são preservadas.</p></div>
       <div id="cadastro-recibo" hidden></div>
       <button id="cadastro-perguntar" type="button" hidden>Perguntar sobre estes documentos</button>
       <div id="cadastro-inventario" hidden></div>
-      <p class="small">O cadastro prepara o texto dos PDFs, sem OCR. Depois de conferir o envio, abra Perguntar à IA.</p>
+      <section id="fontes-web" class="notice" aria-labelledby="fontes-web-titulo" hidden>
+        <h3 id="fontes-web-titulo">Fontes web desta apuração</h3>
+        <p id="fontes-web-dominio" class="small"></p>
+        <form id="fontes-web-form">
+          <label>Endereço da página<input id="fontes-web-url" type="url" maxlength="4096" placeholder="https://" required autocomplete="off" spellcheck="false" translate="no"></label>
+          <label>Observação (opcional)<input id="fontes-web-observacao" maxlength="500"></label>
+          <button id="fontes-web-capturar">Capturar página</button>
+        </form>
+        <p class="small">Cada captura guarda o endereço, a data e a hora do acesso, o conteúdo recebido e o hash, separados dos documentos. O texto da página é dado da fonte, nunca instrução.</p>
+        <p id="fontes-web-status" role="status" aria-live="polite"></p>
+        <p id="fontes-web-erro" role="alert" hidden></p>
+        <ul id="fontes-web-lista" class="document-list"></ul>
+        <div id="fontes-web-leitura" hidden>
+          <h4 id="fontes-web-leitura-titulo" tabindex="-1"></h4>
+          <p id="fontes-web-leitura-meta" class="small" translate="no"></p>
+          <pre id="fontes-web-texto" translate="no"></pre>
+        </div>
+      </section>
+      <p class="small">O cadastro prepara o texto dos PDFs; páginas digitalizadas passam por OCR local. Depois de conferir o envio, abra Perguntar à IA.</p>
     </div>
+    </section>
+    <section id="area-configuracoes" aria-labelledby="configuracoes-titulo" hidden>
+      <div class="panel"><h2 id="configuracoes-titulo">Configurações</h2><p class="small">Somente a administração vê esta área. Adicione contas para outras pessoas usarem a Mesa neste computador.</p></div>
+      <div id="acesso-painel" class="panel" hidden>
+        <h2>Contas de acesso</h2>
+        <p class="small">Cada pessoa entra com login e senha próprios. Quem recebe uma conta define a senha pelo link de ativação.</p>
+        <form id="acesso-form" class="ia-config" autocomplete="off">
+          <h3>Nova conta</h3>
+          <label>Nome<input id="acesso-nome" type="text" maxlength="120" required></label>
+          <label>Login<input id="acesso-login" type="text" maxlength="64" required autocapitalize="none" autocorrect="off" spellcheck="false" pattern="[a-z0-9][a-z0-9._\-]{2,63}" aria-describedby="acesso-login-dica"></label>
+          <p id="acesso-login-dica" class="small">De 3 a 64 caracteres: letras minúsculas, números, ponto, hífen ou sublinhado.</p>
+          <label>Papel<select id="acesso-papel"><option value="convidado">Convidado (só pergunta à IA)</option><option value="admin">Administração</option></select></label>
+          <label id="acesso-casos-rotulo">Apurações liberadas<select id="acesso-casos" multiple size="4"></select></label>
+          <label id="acesso-cota-rotulo">Consultas por dia<input id="acesso-cota" type="number" min="1" max="500" value="20" required></label>
+          <label>Validade do link (horas)<input id="acesso-horas" type="number" min="1" max="168" value="72" required></label>
+          <div class="actions"><button type="submit">Criar conta</button></div>
+        </form>
+        <div id="acesso-link-caixa" class="notice" hidden>
+          <p id="acesso-link-aviso">Link de ativação de <strong id="acesso-link-quem" translate="no"></strong>. Envie por um canal seguro (pessoalmente ou mensageiro cifrado). Ele vale uma única vez e não será mostrado de novo.</p>
+          <div class="inline-actions"><input id="acesso-link" type="text" readonly translate="no" aria-labelledby="acesso-link-aviso"><button id="acesso-copiar" class="secondary" type="button">Copiar link</button><button id="acesso-link-fechar" class="secondary" type="button">Já enviei</button></div>
+        </div>
+        <p id="acesso-mensagem" class="small" role="status" aria-live="polite"></p>
+        <h3>Contas</h3>
+        <ul id="acesso-lista" class="manage-list"></ul>
+      </div>
     </section>
     <section id="area-gerenciar" aria-labelledby="gerenciar-titulo" hidden>
       <div class="panel">
-        <div class="section-heading"><div><p class="eyebrow">SEU ESPAÇO DE TRABALHO</p><h2 id="gerenciar-titulo">Apurações e conversas</h2></div><button id="gerenciar-atualizar" type="button" class="secondary">Atualizar lista</button></div>
+        <div class="section-heading"><h2 id="gerenciar-titulo">Apurações e conversas</h2><button id="gerenciar-atualizar" type="button" class="secondary">Atualizar lista</button></div>
         <p class="small">Exclua o que saiu da sua mesa. Os itens vão para a lixeira e podem ser restaurados; os arquivos continuam preservados no projeto.</p>
         <label>Escolha uma apuração<select id="gerenciar-caso"><option value="">Selecione uma apuração</option></select></label>
         <div id="gerenciar-selecao" hidden>
           <div class="manage-case"><div><h3 id="gerenciar-nome"></h3><p id="gerenciar-resumo" class="small"></p><div id="gerenciar-tecnicos"></div></div><button id="gerenciar-excluir-caso" type="button" class="danger">Excluir apuração</button></div>
           <h3>Conversas e perguntas complementares</h3>
-          <p class="small">Excluir uma conversa também retira suas rodadas das consultas. A conversa e seus complementos são restaurados juntos.</p>
+          <p class="small">Excluir uma conversa também retira suas análises das consultas. A conversa e seus complementos são restaurados juntos.</p>
           <ul id="gerenciar-conversas" class="manage-list"></ul>
-          <h3>Rodadas avulsas</h3>
-          <p class="small">Rodadas sem vínculo com uma conversa podem ser excluídas separadamente.</p>
+          <h3>Análises avulsas</h3>
+          <p class="small">Análises sem vínculo com uma conversa podem ser excluídas separadamente.</p>
           <ul id="gerenciar-rodadas" class="manage-list"></ul>
         </div>
       </div>
       <p id="gerenciar-status" role="status" aria-live="polite"></p>
       <p id="gerenciar-erro" role="alert" hidden></p>
-      <section class="panel" aria-labelledby="lixeira-titulo"><div class="section-heading"><h2 id="lixeira-titulo">Lixeira</h2><span id="lixeira-contagem" class="support-badge"></span></div><p class="small">Restaurar devolve o item às listas. Se a apuração também foi excluída, restaure-a primeiro. Esta lixeira não apaga arquivos definitivamente nem altera o caso ativo global.</p><ul id="gerenciar-lixeira" class="manage-list"></ul></section>
+      <section class="panel" aria-labelledby="lixeira-titulo"><div class="section-heading"><h2 id="lixeira-titulo">Lixeira</h2><span id="lixeira-contagem" class="support-badge"></span></div><p class="small">Restaurar devolve o item às listas. Se a apuração também foi excluída, restaure-a primeiro. Apagar definitivamente remove do projeto os arquivos do item e não pode ser desfeito.</p><ul id="gerenciar-lixeira" class="manage-list"></ul></section>
     </section>
     <dialog id="excluir-dialogo" aria-labelledby="excluir-titulo" aria-describedby="excluir-descricao">
       <form method="dialog"><p class="eyebrow">MOVER PARA A LIXEIRA</p><h2 id="excluir-titulo"></h2><p id="excluir-descricao"></p><p class="small">Você poderá restaurar em Apurações e lixeira. Documentos e registros serão preservados.</p><div class="actions"><button value="cancelar" class="secondary" autofocus>Cancelar</button><button value="excluir" class="danger">Mover para a lixeira</button></div></form>
     </dialog>
+    <dialog id="apagar-dialogo" class="delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="apagar-titulo" aria-describedby="apagar-descricao">
+      <h2 id="apagar-titulo">Apagar definitivamente</h2>
+      <p id="apagar-item" class="delete-item"></p>
+      <p id="apagar-descricao">Os arquivos listados saem do projeto. A Mesa não consegue recuperá-los depois.</p>
+      <p id="apagar-status" class="small" role="status" aria-live="polite"></p>
+      <div id="apagar-alcance" hidden>
+        <table class="delete-scope"><caption class="sr-only">O que será apagado</caption><thead><tr><th scope="col">Categoria</th><th scope="col">Arquivos</th><th scope="col">Tamanho</th></tr></thead><tbody id="apagar-categorias"></tbody><tfoot><tr><th scope="row">Total</th><td id="apagar-total" colspan="2"></td></tr></tfoot></table>
+        <p id="apagar-preservadas" class="small" hidden></p>
+        <p id="apagar-backup" class="notice"></p>
+        <label class="delete-confirm"><span id="apagar-nome-rotulo"></span><input id="apagar-nome" type="text" maxlength="300" autocomplete="off" spellcheck="false" translate="no"></label>
+      </div>
+      <p id="apagar-erro" role="alert" hidden></p>
+      <div class="actions"><button id="apagar-cancelar" type="button" class="secondary" autofocus>Cancelar</button><button id="apagar-confirmar" type="button" class="danger" disabled>Apagar definitivamente</button></div>
+    </dialog>
     <section id="selecao-acervo" class="panel scope-panel" aria-label="Selecionar acervo">
-      <div class="section-heading"><div><p class="eyebrow">DOCUMENTOS DESTA ANÁLISE</p><h2 id="contexto-pauta">Selecione uma apuração</h2></div><button type="button" id="atualizar" class="secondary">Atualizar lista</button></div>
+      <div class="section-heading"><div><h2 id="contexto-pauta">Selecione uma apuração</h2></div><button type="button" id="atualizar" class="secondary">Atualizar lista</button></div>
       <details id="acervo-escolha" open><summary>Escolher análise e conjunto de documentos</summary>
       <div class="selectors">
         <label>Apuração (caso)<select id="caso"><option value="">Selecione um caso</option></select></label>
@@ -213,7 +323,7 @@
     <p id="status" role="status" aria-live="polite">Carregando casos…</p>
     <p id="erro" role="alert" hidden></p>
     <div id="busca-limitacoes" class="notice" role="status" hidden></div>
-    <section id="inicio" class="empty"><h2>Selecione um caso para começar</h2><p>A pesquisa usa os documentos preservados de uma rodada existente.</p></section>
+    <section id="inicio" class="empty"><h2>Selecione um caso para começar</h2><p>A pesquisa usa os documentos preservados de uma análise existente.</p></section>
     <details id="cobertura" class="panel" hidden><summary id="cobertura-resumo">O que pode ser pesquisado neste acervo</summary><div id="cobertura-dados"></div></details>
     <section id="saida" aria-label="Resultados da pesquisa" hidden>
       <div class="section-heading"><h2 id="total" tabindex="-1"></h2><label>Formato<select id="pesquisa-formato"><option value="md">Texto com referências · Markdown</option><option value="json">Dados técnicos · JSON</option></select></label><button id="exportar" class="secondary" type="button">Exportar esta página</button></div>
@@ -228,14 +338,15 @@
       <div class="panel">
         <h2 id="titulo-achados" tabindex="-1">Achados da IA</h2>
         <p class="small">Consulte as afirmações, suas fontes e os limites. Suporte revisado pela IA e conferência humana são informações distintas.</p>
-        <details id="achados-versoes" open><summary id="achados-versoes-resumo">Análise e versão dos resultados</summary>
+        <button id="achados-versao-chip" type="button" class="secondary version-chip" aria-expanded="false" aria-controls="selecao-acervo achados-versoes" hidden></button>
+        <details id="achados-versoes" open><summary id="achados-versoes-resumo">Etapa da análise e versão dos resultados</summary>
         <div class="filters version-selectors">
           <label>Etapa da análise<select id="achados-revisao" disabled><option value="">Selecione a etapa</option></select></label>
           <label>Versão dos resultados<select id="achados-geracao" disabled><option value="">Selecione a versão</option></select></label>
         </div>
         </details>
         <form id="achados-form">
-          <div class="human-review-toolbar"><div id="achados-progresso-humano" hidden><p id="achados-progresso-texto"></p><progress id="achados-progresso" value="0" max="1" aria-label="Progresso da conferência humana"></progress><p class="small">Nesta revisão dos achados, independentemente dos filtros e da página.</p></div><div class="human-review-filter"><label>Conferência do jornalista<select id="achados-marcacao"><option value="">Todos os estados</option><option value="pendente">Pendente</option><option value="conferida_no_original">Conferida no original</option><option value="precisa_de_ajuste">Precisa de ajuste</option><option value="sem_suporte_suficiente">Sem suporte suficiente</option></select></label><button id="achados-so-pendentes" type="button" class="secondary" aria-pressed="false">Só pendentes</button></div></div>
+          <div class="human-review-toolbar"><div id="achados-progresso-humano" hidden><p id="achados-progresso-texto"></p><progress id="achados-progresso" value="0" max="1" aria-label="Progresso da conferência humana"></progress><p class="small">Nesta etapa da análise, independentemente dos filtros e da página.</p></div><div class="human-review-filter"><label>Conferência do jornalista<select id="achados-marcacao"><option value="">Todos os estados</option><option value="pendente">Pendente</option><option value="conferida_no_original">Conferida no original</option><option value="precisa_de_ajuste">Precisa de ajuste</option><option value="sem_suporte_suficiente">Sem suporte suficiente</option></select></label><button id="achados-so-pendentes" type="button" class="secondary" aria-pressed="false">Só pendentes</button></div></div>
           <label class="query-label">Pesquisar nos achados<input id="achados-texto" type="search" maxlength="2000" placeholder="Redação ou justificativas"></label>
           <details id="achados-filtros"><summary>Filtros avançados</summary>
           <div class="filters">
@@ -252,10 +363,10 @@
           <div class="actions"><button id="achados-buscar" disabled>Pesquisar achados</button><label>Formato<select id="achados-formato"><option value="md">Texto com referências · Markdown</option><option value="json">Dados técnicos · JSON</option></select></label><button id="achados-exportar" type="button" class="secondary" disabled>Exportar seleção inteira</button></div>
         </form>
       </div>
-      <p id="achados-status" role="status" aria-live="polite">Selecione caso e rodada.</p>
+      <p id="achados-status" role="status" aria-live="polite">Escolha uma apuração para ver os achados da análise mais recente.</p>
       <p id="achados-erro" role="alert" hidden></p>
       <p id="achados-revisao-feedback" role="status" aria-live="polite"></p>
-      <section class="feedback-selection" aria-label="Observações selecionadas"><p id="observacoes-contagem" role="status" aria-live="polite">Nenhuma observação selecionada.</p><p class="small">Marque as avaliações salvas que deseja levar à próxima pergunta, até 20. A seleção permanece ao mudar de página ou filtro desta revisão.</p><div class="actions"><button id="observacoes-continuar" type="button" disabled>Continuar com estas observações</button><button id="observacoes-limpar" type="button" class="secondary" disabled>Limpar seleção</button></div><p id="observacoes-erro" role="alert" hidden></p></section>
+      <section class="feedback-selection" aria-label="Observações selecionadas"><p id="observacoes-contagem" role="status" aria-live="polite">Nenhuma observação selecionada.</p><p class="small">Marque as avaliações salvas que deseja levar à próxima pergunta, até 20. A seleção permanece ao mudar de página ou filtro desta etapa.</p><div class="actions"><button id="observacoes-continuar" type="button" disabled>Continuar com estas observações</button><button id="observacoes-limpar" type="button" class="secondary" disabled>Limpar seleção</button></div><p id="observacoes-erro" role="alert" hidden></p></section>
       <div id="achados-briefings" class="actions" aria-label="Briefings disponíveis"></div>
       <section id="leitor-briefing" class="briefing-reader" aria-label="Leitura do briefing com fontes" hidden>
         <section id="achados-briefing-painel" class="panel" aria-label="Briefing e referências" hidden></section>
@@ -282,8 +393,8 @@
     <dialog id="caderno-dialogo" class="human-review-dialog" aria-labelledby="caderno-dialogo-titulo">
       <div class="section-heading"><h2 id="caderno-dialogo-titulo">Registrar trecho com fonte</h2><button id="caderno-fechar" type="button" class="secondary">Fechar</button></div>
       <p id="caderno-escopo" class="small"></p><p id="caderno-form-erro" role="alert" hidden></p>
-      <form id="caderno-form"><section id="caderno-fonte-form"><label>Documento<select id="caderno-documento" required></select></label><div class="actions"><button id="caderno-original" type="button" class="secondary">Baixar original para conferir</button><button id="caderno-fontes-atualizar" type="button" class="secondary">Atualizar documentos</button></div><label id="caderno-pagina-label">Página física do PDF<input id="caderno-pagina" type="number" min="1" step="1"></label><label>Localização no original<input id="caderno-localizador" maxlength="260" placeholder="Linhas, célula, tabela ou região observável; em PDF, detalhe opcional."></label><label>Trecho ou transcrição<textarea id="caderno-trecho" rows="5" maxlength="12000" required></textarea></label><label class="feedback-choice"><input id="caderno-manual" type="checkbox"><span>Conferi o original e registro uma transcrição manual caso o extrator não localize este trecho.</span></label><label>Tipo de contribuição<select id="caderno-tipo"><option value="trecho">Trecho selecionado pelo jornalista</option><option value="achado">Achado registrado pelo jornalista</option></select></label></section>
-      <div id="caderno-cruzamento-fontes" hidden></div><label>Título<input id="caderno-titulo-input" maxlength="200" required></label><label>Anotação ou interpretação humana<textarea id="caderno-anotacao" rows="4" maxlength="5000"></textarea></label><label>Autoria<input id="caderno-autor" maxlength="120" autocomplete="name" required placeholder="Nome de quem registra esta contribuição"></label><p class="small">O nome identifica a autoria informada, sem autenticação individual. Registrar uma anotação não aprova conclusões da IA.</p><button id="caderno-salvar">Registrar trecho com fonte</button><p id="caderno-form-status" role="status" aria-live="polite"></p></form>
+      <form id="caderno-form"><section id="caderno-fonte-form"><label>Documento<select id="caderno-documento" required></select></label><div class="actions"><button id="caderno-original" type="button" class="secondary">Abrir original</button><button id="caderno-fontes-atualizar" type="button" class="secondary">Atualizar documentos</button></div><label id="caderno-pagina-label">Página física do PDF<input id="caderno-pagina" type="number" min="1" step="1"></label><label>Localização no original<input id="caderno-localizador" maxlength="260" placeholder="Linhas, célula, tabela ou região observável; em PDF, detalhe opcional."></label><label>Trecho ou transcrição<textarea id="caderno-trecho" rows="5" maxlength="12000" required></textarea></label><label class="feedback-choice"><input id="caderno-manual" type="checkbox"><span>Conferi o original e registro uma transcrição manual caso o extrator não localize este trecho.</span></label><label>Tipo de contribuição<select id="caderno-tipo"><option value="trecho">Trecho selecionado pelo jornalista</option><option value="achado">Achado registrado pelo jornalista</option></select></label></section>
+      <div id="caderno-cruzamento-fontes" hidden></div><label>Título<input id="caderno-titulo-input" maxlength="200" required></label><label>Anotação ou interpretação humana<textarea id="caderno-anotacao" rows="4" maxlength="5000"></textarea></label><label>Autoria<input id="caderno-autor" maxlength="120" autocomplete="name" required placeholder="Nome de quem registra esta contribuição"></label><p id="caderno-autoria-ajuda" class="small">O nome identifica a autoria informada, sem autenticação individual. Registrar uma anotação não aprova conclusões da IA.</p><button id="caderno-salvar">Registrar trecho com fonte</button><p id="caderno-form-status" role="status" aria-live="polite"></p></form>
     </dialog>
     <dialog id="continuidade-dialogo" class="human-review-dialog" aria-labelledby="continuidade-titulo">
       <div class="section-heading"><h2 id="continuidade-titulo">Continuar com novos documentos</h2><button id="continuidade-fechar" type="button" class="secondary">Fechar</button></div>
@@ -291,16 +402,16 @@
       <form id="continuidade-cadastro"><label>Documentos novos<input id="continuidade-arquivos" type="file" multiple required></label><label>Natureza dos documentos<select id="continuidade-natureza"><option value="nao_informada">Não informada</option><option value="publicos">Públicos</option><option value="sinteticos">Sintéticos de teste</option></select></label><button id="continuidade-cadastrar">Cadastrar documentos</button></form>
       <p id="continuidade-status" role="status" aria-live="polite"></p><p id="continuidade-erro" role="alert" hidden></p><div id="continuidade-recibo" hidden></div>
       <button id="continuidade-atualizar" type="button" class="secondary">Conferir documentos já cadastrados</button>
-      <section id="continuidade-previa" hidden><h3>Documentos que entrarão na próxima rodada</h3><div id="continuidade-documentos"></div><button id="continuidade-usar" type="button">Usar esta versão na próxima pergunta</button></section>
+      <section id="continuidade-previa" hidden><h3>Documentos que entrarão na próxima análise</h3><div id="continuidade-documentos"></div><button id="continuidade-usar" type="button">Usar esta versão na próxima pergunta</button></section>
     </dialog>
     <dialog id="revisao-dialogo" class="human-review-dialog" aria-labelledby="revisao-titulo">
-      <div class="section-heading"><div><p class="eyebrow">CONFERÊNCIA HUMANA</p><h2 id="revisao-titulo">Conferir achado</h2></div><button id="revisao-fechar" type="button" class="secondary">Fechar</button></div>
+      <div class="section-heading"><h2 id="revisao-titulo">Conferir achado</h2><button id="revisao-fechar" type="button" class="secondary">Fechar</button></div>
       <p id="revisao-afirmacao" class="review-claim"></p>
       <div class="human-review-workspace"><section aria-labelledby="revisao-fontes-titulo"><h3 id="revisao-fontes-titulo">Trechos citados</h3><div id="revisao-fontes"></div></section>
-      <form id="revisao-form"><h3>Sua avaliação</h3><p class="small">Confira as fontes e escolha o estado. A marcação e a observação serão registradas separadamente do texto original da IA.</p><label>Estado da conferência<select id="revisao-estado" aria-describedby="revisao-significado"><option value="pendente">Pendente</option><option value="conferida_no_original">Conferida no original</option><option value="precisa_de_ajuste">Precisa de ajuste</option><option value="sem_suporte_suficiente">Sem suporte suficiente</option></select></label><p id="revisao-significado" class="small"></p><label>Observação (opcional)<textarea id="revisao-observacao" rows="4" maxlength="500" placeholder="Ex.: valor correto, mas refere-se ao total do contrato."></textarea></label><p class="small" id="revisao-caracteres">0 de 500 caracteres</p><p id="revisao-erro" role="alert" hidden></p><button id="revisao-salvar">Salvar marcação</button><p id="revisao-situacao" role="status" aria-live="polite"></p><div id="revisao-historico"></div></form></div>
+      <form id="revisao-form"><h3>Sua avaliação</h3><p class="small">Confira as fontes e escolha o estado. A marcação e a observação serão registradas separadamente do texto original da IA.</p><label>Estado da conferência<select id="revisao-estado" aria-describedby="revisao-significado revisao-guarda"><option value="pendente">Pendente</option><option value="conferida_no_original">Conferida no original</option><option value="precisa_de_ajuste">Precisa de ajuste</option><option value="sem_suporte_suficiente">Sem suporte suficiente</option></select></label><p id="revisao-guarda" class="small" hidden></p><p id="revisao-significado" class="small"></p><label>Observação (opcional)<textarea id="revisao-observacao" rows="4" maxlength="500" placeholder="Ex.: valor correto, mas refere-se ao total do contrato."></textarea></label><p class="small" id="revisao-caracteres">0 de 500 caracteres</p><p id="revisao-erro" role="alert" hidden></p><button id="revisao-salvar">Salvar marcação</button><p id="revisao-situacao" role="status" aria-live="polite"></p><div id="revisao-historico"></div></form></div>
     </dialog>
-    <dialog id="original-dialogo" aria-labelledby="original-titulo"><div class="section-heading"><h2 id="original-titulo">Conferir original</h2><button id="original-fechar" type="button" class="secondary">Voltar à fonte</button></div><p id="original-localizacao" class="small"></p><div class="original-workspace"><blockquote id="original-referencia" hidden></blockquote><div id="original-conteudo"></div></div><button id="original-baixar" type="button" class="secondary">Baixar original</button></dialog>
-    <footer>A interpretação por IA acontece online no Codex. A conferência dos originais e a decisão editorial são humanas.</footer>
+    <dialog id="original-dialogo" aria-labelledby="original-titulo"><div class="section-heading"><h2 id="original-titulo">Conferir original</h2><button id="original-fechar" type="button" class="secondary">Fechar original</button></div><p id="original-localizacao" class="small"></p><div class="original-workspace"><blockquote id="original-referencia" tabindex="0" hidden></blockquote><div id="original-conteudo"></div></div><button id="original-baixar" type="button" class="secondary">Baixar original</button></dialog>
+    <footer>A interpretação por IA acontece online, pela API do provedor configurado. A conferência dos originais e a decisão editorial são humanas.</footer>
   </main>
   </div>
 </body>

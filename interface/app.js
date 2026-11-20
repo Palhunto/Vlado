@@ -31,13 +31,29 @@ function reset() {
   $('pagina').value = ''; $('status').textContent = ''; error();
   resetFindings();
 }
+// A failure marked `rede` never reached the application: no network, or a gateway answering for
+// an unreachable server. Callers may retry it; the operation itself may still be running.
+function networkFailure(message, cause) {
+  const failure = new Error(message);
+  failure.rede = true; failure.cause = cause;
+  return failure;
+}
 async function api(operation, data, binary = false) {
-  const response = await fetch(`/api/${operation}`, {method: 'POST',
-    headers: {'Content-Type': 'application/json', 'X-Session-Token': token}, body: JSON.stringify(data)});
+  let response;
+  try {
+    response = await fetch(`/api/${operation}`, {method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-Session-Token': token}, body: JSON.stringify(data)});
+  } catch (cause) { throw networkFailure('Sem conexão com o servidor.', cause); }
   if (binary && response.ok) return response.blob();
-  const result = await response.json();
+  let result;
+  try { result = await response.json(); }
+  catch (cause) {
+    if ([502, 503, 504].includes(response.status)) throw networkFailure('Sem conexão com o servidor.', cause);
+    throw new Error(window.I18N?.erro ? window.I18N.erro({}) : 'Não foi possível completar a operação.');
+  }
   if (!response.ok) {
-    const failure = new Error(result.erro || 'Não foi possível completar a operação.');
+    // One place turns server errors into the interface language (by `codigo` in English).
+    const failure = new Error(window.I18N?.erro ? window.I18N.erro(result) : result.erro || 'Não foi possível completar a operação.');
     failure.result = result;
     throw failure;
   }
@@ -48,9 +64,9 @@ async function loadCatalog() {
   reset();
   const version = epoch;
   options('caso', [], 'Carregando casos…');
-  options('rodada', [], 'Selecione uma rodada'); options('geracao', [], 'Selecione a versão');
+  options('rodada', [], 'Selecione uma análise'); options('geracao', [], 'Selecione a versão');
   updateScopeHeading();
-  empty('Selecione um caso para começar', 'A pesquisa usa o acervo congelado de uma rodada existente.');
+  empty('Selecione um caso para começar', 'A pesquisa usa os documentos preservados de uma análise existente.');
   try {
     const response = await fetch('/api/catalogo');
     const data = await response.json();
@@ -81,11 +97,11 @@ $('atualizar').addEventListener('click', loadCatalog);
 $('caso').addEventListener('change', () => {
   reset();
   const current = cases.find(c => c.id === $('caso').value);
-  options('rodada', (current?.rodadas || []).map(r => ({value:r.id, label:`Análise ${parseInt(r.id.slice(1), 10)} · documentos preservados (${r.id})`})), 'Selecione uma rodada');
+  options('rodada', (current?.rodadas || []).map(r => ({value:r.id, label:`Análise ${parseInt(r.id.slice(1), 10)} · documentos preservados (${r.id})`})), 'Selecione uma análise');
   options('geracao', [], 'Selecione a versão');
-  if (!current) empty('Selecione um caso para começar', 'A pesquisa usa o acervo congelado de uma rodada existente.');
-  else if (!current.rodadas.length) empty('Este caso ainda não tem rodadas', 'Abra Perguntar à IA e envie sua pergunta. Os documentos já cadastrados serão preservados nesta análise.');
-  else empty('Escolha uma rodada', 'Cada rodada mantém sua própria versão dos documentos e do índice.');
+  if (!current) empty('Selecione um caso para começar', 'A pesquisa usa os documentos preservados de uma análise existente.');
+  else if (!current.rodadas.length) empty('Esta apuração ainda não tem análises', 'Abra Perguntar à IA e envie sua pergunta. Os documentos já cadastrados serão preservados nesta análise.');
+  else empty('Escolha uma análise', 'Cada análise mantém sua própria versão dos documentos e da busca.');
   if (current) {
     const captured = epoch;
     api('analises',{caso:current.id}).then(result=>{
@@ -96,8 +112,9 @@ $('caso').addEventListener('change', () => {
         const date=analysis.data?new Date(analysis.data).toLocaleDateString('pt-BR'):'';
         option.textContent=analysis.pergunta?`${date} · ${analysis.pergunta.replace(/\s+/g,' ').slice(0,160)} (${analysis.id})`:`Análise ${analysis.id} · metadados indisponíveis`;
         option.dataset.descricao=analysis.pergunta?`${analysis.pergunta} · Documentos: ${analysis.documentos} · ${date}`:analysis.aviso;
+        option.dataset.dia=analysis.data?new Date(analysis.data).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}):'';
       }
-      updateScopeHeading();
+      updateScopeHeading();versionChip();
     }).catch(failure=>{if(captured===epoch)$('status').textContent=`Não foi possível carregar os títulos das análises: ${failure.message}`;});
   }
 });
@@ -106,15 +123,15 @@ $('rodada').addEventListener('change', () => {
   const current = cases.find(c => c.id === $('caso').value)?.rodadas.find(r => r.id === $('rodada').value);
   options('geracao', (current?.geracoes || []).map(g => ({value:g, label:`Versão ${g.replace(/^g/,'')} (${g})`})), 'Selecione a versão');
   $('busca-tecnica').open = Boolean(current);
-  empty(current && !current.geracoes.length ? 'Rodada sem índice disponível' : 'Escolha a versão do índice',
-    current && !current.geracoes.length ? 'Esta rodada precisa de construção explícita do índice pelo Codex. A tela não reconstrói nem sobrescreve índices.' : 'A cobertura será conferida antes da pesquisa.');
+  empty(current && !current.geracoes.length ? 'Análise sem busca disponível' : 'Escolha a versão da busca',
+    current && !current.geracoes.length ? 'A busca desta análise ainda não foi construída. A tela não a constrói nem sobrescreve.' : 'A cobertura será conferida antes da pesquisa.');
 });
 function updateScopeHeading() {
   const current = cases.find(c => c.id === $('caso').value);
   $('contexto-pauta').textContent = current?.titulo || 'Selecione uma apuração';
   $('contexto-rodada').textContent = current
     ? `${current.titulo} · ${$('rodada').value ? `Análise ${parseInt($('rodada').value.slice(1),10)} (${$('rodada').value})` : 'Nenhuma análise selecionada.'} · Versão da busca: ${$('geracao').value || 'não selecionada'}`
-    : 'Nenhuma rodada selecionada.';
+    : 'Nenhuma análise selecionada.';
   if($('rodada').selectedOptions[0]?.dataset.descricao)$('contexto-rodada').textContent+=' · '+$('rodada').selectedOptions[0].dataset.descricao;
 }
 for (const id of ['caso','rodada','geracao']) $(id).addEventListener('change', updateScopeHeading);
@@ -122,7 +139,7 @@ $('rodada').addEventListener('change', () => { if ($('rodada').value) $('acervo-
 $('geracao').addEventListener('change', async () => {
   reset();
   const version = epoch;
-  if (!$('geracao').value) { empty('Escolha a versão do índice', 'A cobertura será conferida antes da pesquisa.'); return; }
+  if (!$('geracao').value) { empty('Escolha a versão da busca', 'A cobertura será conferida antes da pesquisa.'); return; }
   $('busca-tecnica').open = true;
   $('status').textContent = 'Conferindo índice e cobertura…';
   try {
@@ -165,7 +182,7 @@ $('geracao').addEventListener('change', async () => {
     $('status').textContent = 'Acervo conferido e pronto para consulta.';
     empty(ready ? 'Acervo pronto para pesquisar' : 'Não há texto pesquisável neste índice', ready
       ? 'Digite um termo ou uma expressão. Abra os filtros para restringir por documento ou página.'
-      : 'Consulte a cobertura. PDFs e imagens precisam de cópias textuais autorizadas ou leitura direta no Codex.');
+      : 'Consulte a cobertura. PDFs e imagens precisam de cópias textuais autorizadas ou leitura direta pela IA.');
   } catch (failure) {
     if (version === epoch) { $('status').textContent = 'Índice indisponível.'; error(failure.message); empty('Não foi possível consultar este índice', 'Confira o erro antes de continuar. Uma falha no índice não equivale a uma pesquisa sem resultados.'); }
   }
@@ -178,9 +195,23 @@ $('modo').addEventListener('change', () => {
   }[$('modo').value];
 });
 function download(blob, name) {
+  // App Android: o WebMessageListener injeta window.VladoAndroid só na origem autorizada
+  // ({nome, tipo, base64}); a WebView não grava `blob:` sozinha. Ver docs/ANDROID.md.
+  const ponte = window.VladoAndroid;
+  if (ponte && typeof ponte.postMessage === 'function') {
+    if (blob.size > 25 * 1024 * 1024) { window.alert?.('Arquivo grande demais para baixar pelo app (limite de 25 MB). Use a Mesa no navegador.'); return; }
+    const leitor = new FileReader();
+    leitor.onload = () => {
+      const dados = String(leitor.result);
+      ponte.postMessage(JSON.stringify({nome: name, tipo: blob.type || '', base64: dados.slice(dados.indexOf(',') + 1)}));
+    };
+    leitor.onerror = () => window.alert?.('Não foi possível preparar o arquivo para download.');
+    leitor.readAsDataURL(blob);
+    return;
+  }
   const url = URL.createObjectURL(blob), anchor = element('a');
   anchor.href = url; anchor.download = name; document.body.append(anchor); anchor.click(); anchor.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  setTimeout(() => URL.revokeObjectURL(url), 120000); // slow WebViews may still be reading a large file
 }
 function renderHit(hit, scope, version) {
   const card = element('article', undefined, 'result');
@@ -189,7 +220,7 @@ function renderHit(hit, scope, version) {
     element('pre', hit.trecho));
   const actions = element('div', undefined, 'actions');
   const contextButton = element('button', 'Ver contexto completo', 'secondary');
-  const originalButton = element('button', 'Conferir original', 'secondary');
+  const originalButton = element('button', Leitura.rotuloOriginal(Leitura.pagina(hit)), 'secondary');
   const copy = element('button', 'Copiar referência', 'secondary');
   const context = element('div', undefined, 'context'); context.hidden = true;
   const feedback = element('p', '', 'small'); feedback.setAttribute('role', 'status');
@@ -276,11 +307,12 @@ $('proximo').addEventListener('click', () => { if (lastResult?.proximo_deslocame
 $('exportar').addEventListener('click', () => {
   if (lastResult) window.exportarEditorial(lastResult,`pesquisa_${lastResult.caso_id}_${lastResult.rodada}_${lastResult.geracao}`,$('pesquisa-formato').value);
 });
-let inventorySequence = 0, draftCaseId = '', pdfAvailable = false, cadastroBusy = false;
+let inventorySequence = 0, draftCaseId = '', pdfAvailable = false, ocrAvailable = false, cadastroBusy = false;
 async function loadPdfEnvironment() {
   try {
     const environment = await api('ambiente', {});
     pdfAvailable = Boolean(environment.extracao_pdf?.disponivel);
+    ocrAvailable = Boolean(environment.ocr?.disponivel);
     $('pdf-ambiente-aviso').textContent = pdfAvailable ? '' : 'O extrator de PDF está indisponível nesta instância. Encerre a Mesa e reabra pelo iniciador atualizado. Os arquivos enviados serão preservados, mas os PDFs ficarão sem texto preparado.';
     $('pdf-ambiente-aviso').hidden = pdfAvailable;
     $('pdf-ambiente-tecnico').replaceChildren(Leitura.tecnicos(element('pre', JSON.stringify(environment, null, 2), 'raw-briefing')));
@@ -302,44 +334,80 @@ function toggleNewCase() {
     $(id).required = isNew;
     $(id).disabled = !isNew;
   }
+  window.FontesWeb?.alternarNovo(isNew);
 }
 function extractionMessage(info) {
   if (!info) return '';
   const labels = {extraido:'Texto extraído', parcial:'Extração parcial',
-    sem_texto:'Sem texto extraível; pode precisar de OCR', erro:'Falha na extração; original preservado'};
+    sem_texto: info.ocr_tentado ? 'Sem texto extraível, mesmo após OCR' : 'Sem texto extraível; pode precisar de OCR',
+    erro: info.protegido ? 'PDF protegido por senha; texto não extraído; original preservado' : 'Falha na extração; original preservado'};
   let message = labels[info.estado] || 'Extração não informada';
   if (info.paginas_pdf != null) message += ` · ${info.paginas_com_texto} de ${info.paginas_pdf} página(s) com texto`;
   if (info.paginas_sem_texto?.length) message += ` · Sem texto: página(s) ${info.paginas_sem_texto.join(', ')}`;
   if (info.paginas_com_erro?.length) message += ` · Com erro: página(s) ${info.paginas_com_erro.map(p => p.pagina_pdf).join(', ')}`;
   return message;
 }
+function extractionDetails(info) {
+  // One short line per fact so each line can be translated as a whole.
+  const lines = [], pages = list => list.join(', ');
+  if (!info || info.paginas_pdf == null) return lines;
+  const native = info.paginas_texto_nativo;
+  if (native?.length) lines.push(`Texto nativo: ${native.length} página(s)`);
+  if (info.paginas_ocr?.length) {
+    lines.push(`Reconhecidas por OCR: página(s) ${pages(info.paginas_ocr)}`);
+    const engine = info.ocr_motor;
+    if (engine) lines.push(`Motor de OCR: ${engine.motor} ${Object.entries(engine.versoes || {}).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join(', ')} · idiomas ${engine.idiomas}`);
+    lines.push('O texto de OCR é reconhecimento automático e pode conter erros; confira o original.');
+  }
+  const ocrFailures = (info.paginas_com_erro || []).filter(p => p.etapa === 'ocr').map(p => p.pagina_pdf);
+  if (ocrFailures.length) lines.push(`Falha no OCR: página(s) ${pages(ocrFailures)}`);
+  if (info.ocr_indisponivel && info.paginas_sem_texto?.length) lines.push(`OCR não executado: ${info.ocr_indisponivel}`);
+  return lines;
+}
+function appendExtraction(row, info, limited) {
+  if (!info) return;
+  row.append(element('p', extractionMessage(info), limited ? 'limitation' : 'small'));
+  for (const line of extractionDetails(info)) row.append(element('p', line, 'small'));
+}
+function ocrNeeded(doc) {
+  const info = doc.extracao_pdf;
+  return Boolean(ocrAvailable && info && info.estado !== 'erro'
+    && ((info.paginas_sem_texto?.length && !info.ocr_tentado) || (info.paginas_com_erro || []).some(p => p.etapa === 'ocr')));
+}
+function pageSummary(result) {
+  const s = result.extracao_pdf_resumo;
+  if (!s || s.paginas_ocr === undefined) return null;
+  return `Páginas: ${s.paginas_texto_nativo} com texto nativo · ${s.paginas_ocr} por OCR · ${s.paginas_sem_texto} sem texto · ${s.paginas_com_erro} com falha`;
+}
 function showInventory(data) {
   const list = element('ul', undefined, 'document-list');
   for (const doc of data.documentos) {
     const row = element('li');
     row.append(element('strong', Leitura.nome(doc)));
-    if (doc.extracao_pdf) row.append(element('p', extractionMessage(doc.extracao_pdf), Leitura.lacunas(doc).length ? 'limitation' : 'small'));
+    appendExtraction(row, doc.extracao_pdf, Leitura.lacunas(doc).length);
     row.append(Leitura.tecnicos(element('pre', JSON.stringify(doc, null, 2), 'raw-briefing')));
     list.append(row);
   }
   $('cadastro-inventario').replaceChildren(element('h3', `${Leitura.quantidade(data.total_documentos, 'documento')} nesta apuração`), list,
     Leitura.tecnicos(`Apuração: ${data.caso_id} · Corpus: ${data.corpus_id}`));
   $('cadastro-inventario').hidden = false;
-  const pending = data.documentos.filter(doc => /\.pdf$/i.test(doc.nome_recebido || doc.arquivo || '') && (!doc.extracao_pdf || doc.extracao_pdf.estado === 'erro'));
+  const pending = data.documentos.filter(doc => /\.pdf$/i.test(doc.nome_recebido || doc.arquivo || '') && (!doc.extracao_pdf || doc.extracao_pdf.estado === 'erro' || ocrNeeded(doc)));
   $('cadastro-preparacao').hidden = !pending.length;
   $('cadastro-preparacao-resumo').textContent = `${Leitura.quantidade(pending.length, 'PDF pendente de preparação', 'PDFs pendentes de preparação')}. Você pode tentar extrair o texto sem enviar os arquivos novamente.`;
   $('cadastro-preparar').disabled = !pdfAvailable || cadastroBusy;
+  window.FontesWeb?.mostrar(data);
 }
 function renderReceipt(result, preparation = false) {
   const list = element('ul', undefined, 'document-list');
   for (const item of result.arquivos) {
     const row = element('li', `${Leitura.nome(item)} · ${preparation ? 'original já cadastrado' : item.estado === 'duplicado' ? 'duplicata identificada' : 'cadastrado'}`);
-    if (item.extracao_pdf) row.append(element('p', extractionMessage(item.extracao_pdf), Leitura.lacunas(item).length ? 'limitation' : 'small'));
+    appendExtraction(row, item.extracao_pdf, Leitura.lacunas(item).length);
     row.append(Leitura.tecnicos(element('pre', JSON.stringify(item, null, 2), 'raw-briefing')));
     list.append(row);
   }
   $('cadastro-recibo').replaceChildren(element('h3', preparation ? `Preparação conferida: ${Leitura.quantidade(result.recebidos, 'PDF')}` : `Envio conferido: ${result.recebidos} de ${result.arquivos.length} arquivo(s)`),
     element('p', preparation ? 'Novos derivados registrados, sem alterar os originais.' : `${result.novos} novo(s) · ${result.duplicados} duplicado(s) · ${result.total_documentos} documento(s) no caso.`),
+    ...(pageSummary(result) ? [element('p', pageSummary(result), 'small')] : []),
     list, Leitura.tecnicos(`Apuração: ${result.caso_id} · Corpus: ${result.corpus_id} · Recibo: ${result.arquivo_recibo}`));
   $('cadastro-recibo').hidden = false;
 }
@@ -356,7 +424,7 @@ $('cadastro-preparar').addEventListener('click', async () => {
     const pdf = result.extracao_pdf_resumo;
     $('cadastro-status').textContent = pdf.erro || pdf.parcial || pdf.sem_texto
       ? 'Preparação concluída com limitações. Confira as páginas sem texto e os erros no recibo.'
-      : 'PDFs preparados. Aguardando sua pergunta no Codex.';
+      : 'PDFs preparados. Aguardando sua pergunta.';
   } catch (failure) {
     uploadError(failure.message);
     $('cadastro-status').textContent = 'A preparação não foi confirmada. Os originais continuam preservados.';
@@ -407,7 +475,8 @@ $('cadastro').addEventListener('submit', async event => {
   const isNew = !$('cadastro-caso').value;
   if (isNew && !draftCaseId) draftCaseId = 'apuracao_' + crypto.randomUUID().replaceAll('-', '');
   const scope = {novo:isNew, caso:isNew ? draftCaseId : $('cadastro-caso').value,
-    titulo:$('cadastro-titulo-input').value, natureza:$('cadastro-natureza').value};
+    titulo:$('cadastro-titulo-input').value, natureza:$('cadastro-natureza').value,
+    ...(isNew ? window.FontesWeb?.escopoNovo() : {})};
   cadastroBusy = true; $('cadastro-preparar').disabled = true;
   ++inventorySequence;
   for (const control of $('cadastro').elements) control.disabled = true;
@@ -431,8 +500,8 @@ $('cadastro').addEventListener('submit', async event => {
     $('arquivos-selecionados').textContent = 'Pronto para selecionar outro lote.';
     const pdf = result.extracao_pdf_resumo;
     $('cadastro-status').textContent = pdf && (pdf.erro || pdf.parcial || pdf.sem_texto)
-      ? 'Originais registrados. Confira as limitações de extração no recibo antes da pergunta no Codex.'
-      : 'Corpus registrado. Aguardando sua pergunta no Codex.';
+      ? 'Originais registrados. Confira as limitações de extração no recibo antes da pergunta.'
+      : 'Documentos registrados. Aguardando sua pergunta.';
   } catch (failure) {
     uploadError(failure.message);
     $('cadastro-status').textContent = 'Envio sem confirmação nesta tela. Consulte o inventário antes de continuar; um reenvio identifica arquivos duplicados.';
@@ -443,18 +512,61 @@ $('cadastro').addEventListener('submit', async event => {
     $('cadastro-preparar').disabled = !pdfAvailable;
   }
 });
-// Findings have independent revision/generation selectors. No implicit latest revision.
+// Findings open on the latest analysis, step and results version. The chip names what is
+// selected and reopens the selectors; an address that names a version wins over the default.
 let findingEpoch = 0, findingSequence = 0, findingCatalog = null, findingQuery = null, findingResult = null;
 let selectedFindingId = null, briefingSequence = 0, citationSequence = 0, findingCatalogSequence = 0;
+let versionCollapsed = false, versionKey = '';
+const stepNames = {r1:'Análise inicial', r2:'Revisão do suporte', r3_sintese:'Síntese'};
+const namedByRoute = id => Boolean(window.restaurandoRota?.()) && new URL(location.href).searchParams.has(id);
+function latestOption(id, allowed = () => true) {
+  return [...$(id).options].map(option => option.value).filter(value => value && allowed(value))
+    .sort((a, b) => a.localeCompare(b, undefined, {numeric:true})).at(-1) || '';
+}
+function choose(id, value) { $(id).value = value; $(id).dispatchEvent(new Event('change')); }
+function defaultAnalysis() {
+  if ($('area-achados').hidden || !$('caso').value || $('rodada').value || namedByRoute('rodada')) return false;
+  const value = latestOption('rodada');
+  if (!value) { $('achados-status').textContent = 'Esta apuração ainda não tem análises. Faça uma pergunta em Perguntar à IA.'; return false; }
+  choose('rodada', value);
+  return true;
+}
+function versionChip() {
+  const chip = $('achados-versao-chip'), ready = Boolean(findingResult && findingQuery);
+  if (!ready) versionCollapsed = false;
+  chip.hidden = !ready;
+  chip.setAttribute('aria-expanded', String(ready && !versionCollapsed));
+  $('achados-versoes').classList.toggle('versao-recolhida', versionCollapsed);
+  $('selecao-acervo').classList.toggle('versao-recolhida', versionCollapsed && !$('area-achados').hidden);
+  if (!ready) return;
+  // Analysis id and date are data; the words around them follow the interface language.
+  const day = [...$('rodada').options].find(option => option.value === findingQuery.rodada)?.dataset.dia;
+  const data = text => { const span = element('span', text); span.setAttribute('translate', 'no'); return span; };
+  const step = stepNames[findingQuery.revisao];
+  chip.replaceChildren(element('span', 'Análise'), ' ', data([findingQuery.rodada, day].filter(Boolean).join(' · ')), ' · ',
+    step ? element('span', step) : data(findingQuery.revisao.replaceAll('_', ' ')), ' · ',
+    element('span', versionCollapsed ? 'trocar' : 'fechar', 'chip-action'));
+}
+$('achados-versao-chip').addEventListener('click', () => {
+  versionCollapsed = !versionCollapsed;
+  if (!versionCollapsed) { $('acervo-escolha').open = true; $('achados-versoes').open = true; }
+  versionChip();
+});
 const humanReviewStates = {
   pendente:['Pendente','Ainda não houve conferência humana.'],
   conferida_no_original:['Conferida no original','O jornalista verificou que a fonte sustenta a afirmação.'],
   precisa_de_ajuste:['Precisa de ajuste','Há erro, exagero ou contexto faltando.'],
   sem_suporte_suficiente:['Sem suporte suficiente','Os documentos consultados não permitem sustentar a afirmação.']
 };
+// Human checks are solid marks; only a check against the original carries ✓ (text, not color).
 function humanReviewBadge(item) {
   const state = item.revisao_humana?.estado || 'pendente';
-  return element('span', humanReviewStates[state][0], `human-review-badge human-${state}`);
+  const badge = element('span', undefined, `human-review-badge human-${state}`);
+  if (state === 'conferida_no_original') {
+    const mark = element('span', '✓'); mark.setAttribute('aria-hidden', 'true'); badge.append(mark, ' ');
+  }
+  badge.append(humanReviewStates[state][0]);
+  return badge;
 }
 function findingsError(message = '') {
   $('achados-erro').textContent = message; $('achados-erro').hidden = !message;
@@ -470,54 +582,60 @@ function clearFindings() {
   $('achados-progresso-humano').hidden = true;
   clearFindingDetails();
   for (const name of ['buscar', 'exportar', 'anterior', 'proximo']) $('achados-' + name).disabled = true;
+  versionKey = ''; versionChip();
 }
 function resetFindings() {
   clearFindings(); findingCatalog = null;
-  options('achados-revisao', [], 'Selecione a revisão');
-  options('achados-geracao', [], 'Selecione a geração');
+  options('achados-revisao', [], 'Selecione a etapa');
+  options('achados-geracao', [], 'Selecione a versão');
   options('achados-documento', [], 'Todos');
   $('achados-form').reset();
   $('achados-so-pendentes').setAttribute('aria-pressed', 'false');
   $('achados-revisao-feedback').textContent = '';
   $('achados-versoes').open = true;
-  $('achados-versoes-resumo').textContent = 'Análise e versão dos resultados';
-  $('achados-status').textContent = 'Selecione caso e rodada; depois abra Achados da IA.';
+  $('achados-versoes-resumo').textContent = 'Etapa da análise e versão dos resultados';
+  $('achados-status').textContent = 'Escolha uma apuração para ver os achados da análise mais recente.';
 }
+// Each view opens with its area name as the only h1 and the investigation as context.
+const areaNames = {inicio:'Visão geral',cadastro:'Cadastrar arquivos',documentos:'Documentos',codex:'Perguntar à IA',
+  achados:'Conferir achados',apuracao:'Caderno',caderno:'Caderno',diligencias:'Diligências',quadros:'Quadros de evidência',gerenciar:'Apurações e lixeira',configuracoes:'Configurações'};
+let currentArea = 'inicio';
+function areaHeading() {
+  $('area-titulo').textContent = areaNames[currentArea];
+  const title = cases.find(c => c.id === window.contextoCaso?.())?.titulo, context = $('area-descricao');
+  // A case title is data: it keeps its own language.
+  if (title) { context.setAttribute('translate', 'no'); context.textContent = title; }
+  else { context.removeAttribute('translate'); context.textContent = 'Nenhuma apuração selecionada'; }
+}
+window.addEventListener('mesa-contexto-alterado', areaHeading);
+window.addEventListener('catalogo-carregado', areaHeading);
 function showArea(area) {
-  const descriptions = {
-    inicio:['SUA MESA DE TRABALHO','Comece uma apuração. Ou retome de onde parou.','Documentos, perguntas e fontes no mesmo contexto.'],
-    codex:['APURAR COM O ACERVO','Pergunte. Acompanhe. Confira as fontes.','Converse com os documentos desta apuração. A análise da IA acontece online.'],
-    cadastro:['PREPARAR O ACERVO','Primeiro, os documentos. Depois, a pergunta.','Cadastre cada envio, confira o recibo e abra Perguntar à IA para iniciar a conversa.'],
-    documentos:['CONSULTAR O ACERVO','Encontre a informação. Confira a fonte.','Pesquise nos documentos de uma rodada preparada no Codex.'],
-    gerenciar:['ORGANIZAR A MESA','Abra espaço para a próxima pergunta.','Gerencie apurações, conversas e rodadas. Tudo o que for excluído pode ser restaurado na lixeira.'],
-    caderno:['CONTRIBUIÇÕES HUMANAS','O que você encontrou nos documentos?','Guarde passagens, registre achados e construa cruzamentos com autoria humana identificada.'],
-    apuracao:['APURAÇÃO','Seu caderno de trabalho','Escreva notas, reúna evidências e exporte o caderno com referências.'],
-    diligencias:['ACOMPANHAR A APURAÇÃO','Cada pendência, uma ação.','Assuma diligências, registre respostas e retome as questões com suas fontes.'],
-    achados:['MESA DE APURAÇÃO','O que os documentos sustentam?','Selecione um achado para conferir a afirmação, as evidências e o que ainda falta verificar.']
-  };
-  for (const name of Object.keys(descriptions)) {
+  for (const name of Object.keys(areaNames)) {
     $('area-' + name).hidden = area !== name;
     $('ver-' + name).setAttribute('aria-pressed', String(area === name));
   }
-  $('selecao-acervo').hidden = ['inicio','cadastro','codex','gerenciar','caderno','apuracao','diligencias'].includes(area);
-  const [label,title,description] = descriptions[area];
-  $('area-etiqueta').textContent = label; $('area-titulo').textContent = title; $('area-descricao').textContent = description;
-  if (area === 'achados' && !findingCatalog) loadFindingsCatalog();
+  $('selecao-acervo').hidden = ['inicio','cadastro','codex','gerenciar','configuracoes','caderno','apuracao','diligencias','quadros'].includes(area);
+  currentArea = area; areaHeading(); versionChip();
+  if (area === 'achados' && !defaultAnalysis() && !findingCatalog) loadFindingsCatalog();
+  if (area === 'achados' && window.achadosDesatualizados && findingQuery) {
+    window.achadosDesatualizados = false;  // a human mark was saved elsewhere: reload badges and counter
+    searchFindings({...findingQuery});
+  }
   if (area === 'gerenciar') window.dispatchEvent(new Event('gerenciar-abrir'));
   if (area === 'caderno') window.dispatchEvent(new Event('caderno-abrir'));
   if (area === 'apuracao') window.dispatchEvent(new Event('apuracao-abrir'));
   if (area === 'diligencias') window.dispatchEvent(new Event('diligencias-abrir'));
+  if (area === 'quadros') window.dispatchEvent(new Event('quadros-abrir'));
   if (area === 'codex') {
     window.dispatchEvent(new Event('codex-abrir'));
     fetch('/api/integracao').then(response => {
       if (!response.ok) {
         $('codex-conta').textContent = 'O servidor aberto está desatualizado. Encerre as instâncias anteriores e inicie a Mesa novamente.';
-        $('codex-login').disabled = true;
       }
     }).catch(() => { $('codex-conta').textContent = 'Servidor desconectado. Inicie a Mesa novamente.'; });
   }
 }
-for (const area of ['inicio','cadastro','documentos','achados','codex','gerenciar','caderno','apuracao','diligencias']) $('ver-' + area).addEventListener('click', () => showArea(area));
+for (const area of ['inicio','cadastro','documentos','achados','codex','gerenciar','configuracoes','caderno','apuracao','diligencias','quadros']) $('ver-' + area).addEventListener('click', () => showArea(area));
 window.addEventListener('acervo-alterado', () => {
   $('cadastro-recibo').hidden = true; $('cadastro-perguntar').hidden=true;
   $('cadastro-inventario').hidden = true;
@@ -525,31 +643,40 @@ window.addEventListener('acervo-alterado', () => {
   loadCatalog();
 });
 for (const id of ['caso', 'rodada', 'geracao']) $(id).addEventListener('change', () => {
-  if (!$('area-achados').hidden) loadFindingsCatalog();
+  if ($('area-achados').hidden) return;
+  // A new case opens on its latest analysis, which then loads its own catalog.
+  if (id === 'caso' && defaultAnalysis()) return;
+  loadFindingsCatalog();
 });
 async function loadFindingsCatalog() {
   const scope = selection(), version = findingEpoch, request = ++findingCatalogSequence;
   if (!scope.caso || !scope.rodada) return;
-  $('achados-status').textContent = 'Consultando revisões disponíveis…';
+  $('achados-status').textContent = 'Consultando as etapas da análise…';
   try {
     const result = await api('achados-catalogo', scope);
     if (version !== findingEpoch || request !== findingCatalogSequence) return;
     findingCatalog = result;
     options('achados-revisao', result.revisoes.map(r => ({value:r, label:({r1:'Análise inicial',r2:'Revisão do suporte',r3_sintese:'Síntese'}[r] || r.replaceAll('_',' ')) + ` (${r})`})), 'Selecione a etapa');
     $('achados-status').textContent = result.estado === 'nao_produzidos'
-      ? 'Registros ainda não produzidos nesta rodada. Markdown antigo não é importado automaticamente.'
-      : `${result.revisoes.length} revisão(ões) disponível(is). Escolha a etapa da análise e a versão dos resultados.`;
+      ? 'Esta análise ainda não produziu achados. Markdown antigo não é importado automaticamente.'
+      : `${result.revisoes.length} etapa(s) disponível(is). Escolha a etapa da análise e a versão dos resultados.`;
+    const indexed = new Set((result.indices || []).map(index => index.revisao));
+    if (!$('achados-revisao').value && !namedByRoute('achados-revisao')) {
+      const revision = latestOption('achados-revisao', value => indexed.has(value));
+      if (revision) choose('achados-revisao', revision);
+    }
   } catch (failure) { if (version === findingEpoch && request === findingCatalogSequence) { findingsError(failure.message); $('achados-status').textContent = 'Erro ao consultar registros; não equivale a nenhum achado.'; } }
 }
 $('achados-revisao').addEventListener('change', () => {
   clearFindings();
   $('achados-versoes').open = true;
-  $('achados-versoes-resumo').textContent = 'Análise e versão dos resultados';
+  $('achados-versoes-resumo').textContent = 'Etapa da análise e versão dos resultados';
   const revision = $('achados-revisao').value;
   const generations = (findingCatalog?.indices || []).filter(g => g.revisao === revision);
-  options('achados-geracao', generations.map(g => ({value:g.geracao, label:`Versão ${g.geracao.replace(/^g/,'')} (${g.geracao})`})), 'Selecione a geração');
-  $('achados-status').textContent = !revision ? 'Selecione a revisão.' : generations.length
-    ? 'Escolha a versão dos resultados desta etapa.' : 'Índice derivado ausente para esta revisão. Os registros canônicos permanecem preservados; construir pelo Codex.';
+  options('achados-geracao', generations.map(g => ({value:g.geracao, label:`Versão ${g.geracao.replace(/^g/,'')} (${g.geracao})`})), 'Selecione a versão');
+  $('achados-status').textContent = !revision ? 'Selecione a etapa.' : generations.length
+    ? 'Escolha a versão dos resultados desta etapa.' : 'Esta etapa ainda não tem versão de resultados para consulta. Os registros continuam preservados.';
+  if (generations.length && !namedByRoute('achados-geracao')) choose('achados-geracao', latestOption('achados-geracao'));
 });
 const findingScope = () => ({caso:$('caso').value, rodada:$('rodada').value,
   revisao:$('achados-revisao').value, geracao_achados:$('achados-geracao').value});
@@ -560,7 +687,15 @@ function pretty(value) {
   return ({declaracao_documental:'declaração documental',alegacao_atribuida:'alegação atribuída',
     inferencia:'inferência',pendencia:'pendência',nao_revisado:'não revisado',nao_sustentado:'não sustentado',
     ilegivel:'ilegível',nao_realizada:'não realizada',contradicao:'contradição',substituido:'substituído',
-    confirmacao:'confirmação',correcao:'correção'})[value] || value.replaceAll('_', ' ');
+    incluido:'incluído',confirmacao:'confirmação',correcao:'correção'})[value] || value.replaceAll('_', ' ');
+}
+// "Label: value · data": the label and the value are interface words; record text keeps its language.
+function labelled(label, value, data, className = 'small') {
+  const line = element('p', undefined, className);
+  line.append(element('span', label), ' ');
+  if (value) line.append(element('span', value));
+  if (data) { const text = element('span', value ? ` · ${data}` : data); text.setAttribute('translate', 'no'); line.append(text); }
+  return line;
 }
 function clearFindingDetails() {
   briefingSequence++; citationSequence++;
@@ -583,16 +718,10 @@ async function openBriefing(artifact, scope, version) {
     source.hidden = false;
     const text = element('div',undefined,'briefing-text');
     const citationButtons = [];
-    // Render only text, headings and explicit finding markers. Source HTML/URLs stay inert.
-    for (const line of result.texto.split(/\r?\n/)) {
-      if (!line.trim()) continue;
-      const heading = /^#{1,6}\s+/.test(line);
-      const paragraph = element(heading ? 'h4' : 'p');
-      const content = heading ? line.replace(/^#{1,6}\s+/,'') : line;
-      let offset = 0;
-      for (const match of content.matchAll(/\[A[0-9]{3,}@v[1-9][0-9]*\]/g)) {
-        paragraph.append(document.createTextNode(content.slice(offset,match.index)));
-        const marker = match[0], id = marker.slice(1,-1).split('@')[0];
+    // Markdown subset rendered with DOM nodes only (never innerHTML): headings, lists, quotes,
+    // rules, bold/italic/code, finding markers and [fonte:sha256] tags. Source HTML/URLs stay inert.
+    const citation = marker => {
+        const id = marker.slice(1,-1).split('@')[0];
         const button = element('button',marker,'citation'); button.type = 'button';
         button.setAttribute('aria-label',`Abrir achado ${marker}`);
         button.setAttribute('aria-controls','achados-detalhe-painel');
@@ -626,9 +755,63 @@ async function openBriefing(artifact, scope, version) {
           }
         }
         });
-        paragraph.append(button); offset = match.index + marker.length;
+        return button;
+    };
+    const INLINE = /\*\*(.+?)\*\*|__(.+?)__|\[A[0-9]{3,}@v[1-9][0-9]*\]|\[fonte:([a-f0-9]{8,64})\]|`([^`]+)`|\*([^*\s](?:[^*]*?[^*\s])?)\*|(?<![\w])_([^_\s](?:[^_]*?[^_\s])?)_(?![\w])/g;
+    function inline(target, content) {
+      let offset = 0;
+      for (const match of content.matchAll(INLINE)) {
+        target.append(document.createTextNode(content.slice(offset, match.index)));
+        const [whole, bold, bold2, source, code, italic, italic2] = match;
+        if (bold !== undefined || bold2 !== undefined) {
+          const strong = element('strong'); inline(strong, bold ?? bold2); target.append(strong);
+        } else if (source) {
+          const tag = element('span', 'fonte', 'briefing-source');
+          tag.title = `Fonte preservada · SHA-256 ${source}`;
+          tag.setAttribute('translate', 'no');
+          target.append(tag);
+        } else if (code !== undefined) {
+          target.append(element('code', code));
+        } else if (italic !== undefined || italic2 !== undefined) {
+          const em = element('em'); inline(em, italic ?? italic2); target.append(em);
+        } else {
+          target.append(citation(whole));
+        }
+        offset = match.index + whole.length;
       }
-      paragraph.append(document.createTextNode(content.slice(offset))); text.append(paragraph);
+      target.append(document.createTextNode(content.slice(offset)));
+    }
+    let list = null, listKind = '', quote = null;
+    const closeBlocks = () => { list = null; listKind = ''; quote = null; };
+    for (const raw of result.texto.split(/\r?\n/)) {
+      const line = raw.trimEnd();
+      if (!line.trim()) { closeBlocks(); continue; }
+      const heading = line.match(/^(#{1,6})\s+(.*)$/);
+      const bullet = line.match(/^\s*[-*+]\s+(.*)$/);
+      const numbered = line.match(/^\s*(\d{1,3})[.)]\s+(.*)$/);
+      const quoted = line.match(/^\s*>\s?(.*)$/);
+      if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) { closeBlocks(); text.append(element('hr')); continue; }
+      if (heading) {
+        closeBlocks();
+        const node = element(heading[1].length <= 2 ? 'h4' : 'h5'); inline(node, heading[2]); text.append(node);
+      } else if (bullet || numbered) {
+        const kind = bullet ? 'ul' : 'ol';
+        if (!list || listKind !== kind) {
+          quote = null; list = element(kind, undefined, 'briefing-list'); listKind = kind;
+          if (numbered && numbered[1] !== '1') list.start = Number(numbered[1]);
+          text.append(list);
+        }
+        const item = element('li'); inline(item, bullet ? bullet[1] : numbered[2]); list.append(item);
+      } else if (quoted) {
+        list = null; listKind = '';
+        if (!quote) { quote = element('blockquote', undefined, 'briefing-quote'); text.append(quote); }
+        const node = element('p'); inline(node, quoted[1]); quote.append(node);
+      } else if (list && /^\s{2,}\S/.test(raw)) {
+        const last = list.lastElementChild; last.append(' '); inline(last, line.trim());
+      } else {
+        closeBlocks();
+        const node = element('p'); inline(node, line); text.append(node);
+      }
     }
     const raw = element('details',undefined,'technical');
     raw.append(element('summary','Detalhes técnicos'),element('p',`${scope.caso}/${scope.rodada}/${scope.revisao} · ${result.artefato.arquivo} · SHA-256: ${artifact.sha256}`,'small path'),element('pre',result.texto,'raw-briefing'));
@@ -649,8 +832,12 @@ async function openBriefing(artifact, scope, version) {
     }
   }
 }
+// The AI's own support verdict: outlined pill, always prefixed "IA".
 function supportBadge(item) {
-  return element('span',`Suporte: ${pretty(item.suporte)} · revisão da IA`,`support-badge support-${item.suporte}`);
+  const badge = element('span', undefined, `support-badge ai-support support-${item.suporte}`);
+  badge.title = 'Suporte documental avaliado pela IA';
+  badge.append(element('span', 'IA', 'badge-origin'), ' · ', element('span', pretty(item.suporte)));
+  return badge;
 }
 function selectFinding(item, scope, version, focus = false) {
   selectedFindingId = item.id;
@@ -680,29 +867,87 @@ function renderFindingChoice(item, scope, version) {
   if (choice) row.append(choice);
   return row;
 }
+// Quote, locator and the original page lead each evidence; provenance details follow.
+function renderEvidence(item, link, scope, version) {
+  const ev = item.evidencias.find(e => e.id === link.evidencia_id);
+  const block = element('section', undefined, 'evidence');
+  const loc = ev.localizador, page = Leitura.pagina(ev);
+  const position = `${loc.pagina_pdf ? `Página PDF ${loc.pagina_pdf} · ` : ''}${loc.tipo === 'linhas' ? `Linhas ${loc.linha_inicio}–${loc.linha_fim}` : loc.descricao || loc.tipo}`;
+  const quote = element('blockquote', ev.trecho || 'Sem transcrição literal; leitura visual registrada.');
+  const actions = element('div', undefined, 'actions'), feedback = element('p', '', 'small');
+  feedback.setAttribute('role','status');
+  const context = element('div', undefined, 'context'); context.hidden = true;
+  const original = element('button', Leitura.rotuloOriginal(page)); original.type = 'button';
+  original.addEventListener('click', async () => {
+    original.disabled = true;
+    try {
+      const blob = await api('achados-original', {...scope, evidencia_id:ev.id}, true);
+      if (version !== findingEpoch) return;
+      await window.abrirOriginal(blob, ev.original.split('/').pop(), page, item.redacao + '\n\n' + (ev.trecho || 'Fonte visual: confira o original.'));
+      window.registrarOriginalConferido?.(scope, ev.id);
+    } catch (failure) { if (version === findingEpoch) feedback.textContent = failure.message; }
+    finally { if (version === findingEpoch) original.disabled = false; }
+  });
+  const view = element('button', 'Ver contexto', 'secondary'); view.type = 'button';
+  view.disabled = ev.modo === 'visual';
+  view.addEventListener('click', async () => {
+    view.disabled = true;
+    try {
+      const result = await api('achados-evidencia', {...scope, evidencia_id:ev.id});
+      if (version !== findingEpoch) return;
+      context.replaceChildren(element('p', result.aviso), ...(result.contexto || []).map(l => element('p', `L${l.linha} ${l.texto}`)));
+      context.hidden = false;
+    } catch (failure) { if (version === findingEpoch) feedback.textContent = failure.message; }
+    finally { if (version === findingEpoch) view.disabled = false; }
+  });
+  const reference = `${scope.caso}/${scope.rodada}/${scope.revisao}/${item.id}@v${item.versao} · ${ev.id} · ${ev.documento_id}\n${position}\nOriginal: ${ev.original}\nSHA-256: ${ev.original_sha256}\nFonte textual: ${ev.fonte_textual || 'indisponível'} · SHA-256: ${ev.fonte_sha256 || 'não se aplica'}\nÍndice documental: ${JSON.stringify(ev.indice)}\n${ev.trecho}`;
+  const copy = element('button','Copiar referência completa','secondary'); copy.type = 'button';
+  copy.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(reference); if (version === findingEpoch) feedback.textContent = 'Referência copiada.'; }
+    catch { if (version === findingEpoch) feedback.textContent = reference; }
+  });
+  const notebook=element('button','Registrar trecho com fonte','secondary');notebook.type='button';
+  notebook.addEventListener('click',()=>window.abrirRegistroCaderno({caso:scope.caso,rodada:scope.rodada,
+    documento_id:ev.documento_id,pagina_pdf:ev.localizador.pagina_pdf,
+    localizador:ev.localizador.descricao||(ev.localizador.linha_inicio?`Linhas ${ev.localizador.linha_inicio}–${ev.localizador.linha_fim}`:''),
+    trecho:window.trechoSelecionadoCaderno(quote,ev.trecho)}));
+  actions.append(original,view,copy,notebook);
+  if(ev.trecho)actions.append(window.botaoAdicionarApuracao({...scope,tipo:'ia',achado_id:item.id,achado_versao:item.versao,evidencia_id:ev.id},quote,ev.trecho));
+  const role = element('p', undefined, 'small'), reason = element('span', ` · ${link.justificativa}`);
+  reason.setAttribute('translate', 'no'); role.append(element('span', pretty(link.papel)), reason);
+  block.append(element('h4', Leitura.fonte({...ev, ...loc})), quote, actions, context, feedback, role);
+  if (ev.modo === 'visual') block.append(element('p', 'Contexto textual indisponível; consulte o original.', 'small'));
+  if (ev.limitacoes) block.append(element('p', `Limitações da evidência: ${ev.limitacoes}`, 'small'));
+  const metadata = element('details',undefined,'evidence-details');
+  metadata.append(element('summary','Atribuição e contexto da fonte'),element('p',`Atribuição: ${ev.atribuicao} · Contexto: ${ev.contexto}`,'small'));
+  block.append(metadata, Leitura.tecnicos(`${ev.id} · ${ev.documento_id} · ${position} · Original: ${ev.original} · SHA-256: ${ev.original_sha256}`));
+  return block;
+}
 function renderFinding(item, scope, version, allowBriefing = true) {
   const card = element('article', undefined, 'finding-detail');
   card.id = item.id;
   const statuses = element('div',undefined,'claim-status');
-  statuses.append(supportBadge(item),humanReviewBadge(item),element('p',`Destino editorial: ${pretty(item.destino)}`,'meta'));
-  card.append(element('p',pretty(item.natureza),'eyebrow'),element('h3',item.redacao),
-    Leitura.tecnicos(`${scope.caso}/${scope.rodada}/${scope.revisao} · consulta ${scope.geracao_achados} · ${item.id}@v${item.versao}`),statuses,
-    element('p', `Pergunta relacionada: ${item.subquestao}`),
-    element('p', `Verificação externa: ${pretty(item.verificacao_externa.estado)} · ${item.verificacao_externa.limitacao}`, 'small'));
+  statuses.append(element('span',pretty(item.natureza),'meta claim-nature'),supportBadge(item),humanReviewBadge(item));
+  card.append(element('h3',item.redacao),statuses,
+    element('h4',item.vinculos.length ? 'Onde está o suporte e o contexto' : 'Sem evidência vinculada a esta redação'));
+  for (const link of item.vinculos) card.append(renderEvidence(item, link, scope, version));
   if (item.limitacoes) card.append(element('p', `Limitações: ${item.limitacoes}`, 'limitation'));
+  const actions = element('div', undefined, 'actions finding-actions');
   const review = element('button','Conferir','secondary'); review.type = 'button';
   review.addEventListener('click', () => window.conferirAchado(item,scope,version));
-  card.append(review);
-  card.append(window.botaoAdicionarApuracao({...scope,tipo:'ia',achado_id:item.id,achado_versao:item.versao},card.querySelector('h3'),item.redacao));
   const followup=element('button','Criar diligência','secondary');followup.type='button';
   followup.addEventListener('click',()=>window.abrirDiligencia({caso:scope.caso,redacao:item.redacao,
     origem:{tipo:'ia',rodada:scope.rodada,revisao:scope.revisao,registros_sha256:findingResult.registros_sha256,
-      achado_id:item.id,achado_versao:item.versao}}));card.append(followup);
+      achado_id:item.id,achado_versao:item.versao}}));
+  actions.append(review,window.botaoAdicionarApuracao({...scope,tipo:'ia',achado_id:item.id,achado_versao:item.versao},card.querySelector('h3'),item.redacao),followup);
+  card.append(actions);
   if (item.revisao_humana?.observacao) card.append(element('p', `Observação do jornalista: ${item.revisao_humana.observacao}`, 'human-review-note'));
   if (item.conferencia_humana === 'retorno_recebido') card.append(element('p','Há retorno humano anterior nos registros; consulte seu alcance no histórico.','small'));
   for (const h of item.historico.conferencias_humanas.filter(h => h.versao === item.versao)) {
     card.append(element('p',`Alcance do retorno humano: ${h.alcance} · Decisão: ${pretty(h.decisao)} · Retorno: ${h.retorno_literal_ou_referencia}`,'human-scope'));
   }
+  card.append(labelled('Pergunta relacionada:', '', item.subquestao), labelled('Destino editorial:', pretty(item.destino)),
+    labelled('Verificação externa:', pretty(item.verificacao_externa.estado), item.verificacao_externa.limitacao));
   if (item.briefing) {
     card.append(element('p', 'Incluído no briefing.', 'small'));
     const artifact = findingResult?.artefatos.find(a => a.arquivo === item.briefing);
@@ -711,58 +956,7 @@ function renderFinding(item, scope, version, allowBriefing = true) {
       view.addEventListener('click',() => openBriefing(artifact,scope,version)); card.append(view);
     }
   }
-  card.append(element('h4',item.vinculos.length ? 'Onde está o suporte e o contexto' : 'Sem evidência vinculada a esta redação'));
-  for (const link of item.vinculos) {
-    const ev = item.evidencias.find(e => e.id === link.evidencia_id);
-    const block = element('section', undefined, 'evidence');
-    const loc = ev.localizador;
-    const position = `${loc.pagina_pdf ? `Página PDF ${loc.pagina_pdf} · ` : ''}${loc.tipo === 'linhas' ? `Linhas ${loc.linha_inicio}–${loc.linha_fim}` : loc.descricao || loc.tipo}`;
-    block.append(element('h4', Leitura.fonte({...ev, ...loc})),
-      element('p', `${pretty(link.papel)} · ${link.justificativa}`), element('blockquote', ev.trecho || 'Sem transcrição literal; leitura visual registrada.'),
-      Leitura.tecnicos(`${ev.id} · ${ev.documento_id} · ${position} · Original: ${ev.original} · SHA-256: ${ev.original_sha256}`));
-    if (ev.limitacoes) block.append(element('p', `Limitações da evidência: ${ev.limitacoes}`, 'small'));
-    const metadata = element('details',undefined,'evidence-details');
-    metadata.append(element('summary','Atribuição e contexto da fonte'),element('p',`Atribuição: ${ev.atribuicao} · Contexto: ${ev.contexto}`,'small'));
-    block.append(metadata);
-    const actions = element('div', undefined, 'actions'), feedback = element('p', '', 'small');
-    feedback.setAttribute('role','status');
-    const context = element('div', undefined, 'context'); context.hidden = true;
-    const view = element('button', 'Ver contexto', 'secondary'); view.type = 'button';
-    if (ev.modo === 'visual') { view.disabled = true; block.append(element('p', 'Contexto textual indisponível; consulte o original.', 'small')); }
-    view.addEventListener('click', async () => {
-      view.disabled = true;
-      try {
-        const result = await api('achados-evidencia', {...scope, evidencia_id:ev.id});
-        if (version !== findingEpoch) return;
-        context.replaceChildren(element('p', result.aviso), ...(result.contexto || []).map(l => element('p', `L${l.linha} ${l.texto}`)));
-        context.hidden = false;
-      } catch (failure) { if (version === findingEpoch) feedback.textContent = failure.message; }
-      finally { if (version === findingEpoch) view.disabled = false; }
-    });
-    const original = element('button', 'Conferir original', 'secondary'); original.type = 'button';
-    original.addEventListener('click', async () => {
-      original.disabled = true;
-      try {
-        const blob = await api('achados-original', {...scope, evidencia_id:ev.id}, true);
-        if (version === findingEpoch) await window.abrirOriginal(blob, ev.original.split('/').pop(), ev.pagina_pdf || ev.localizador?.pagina_pdf, item.redacao + '\n\n' + (ev.trecho || 'Fonte visual: confira o original.'));
-      } catch (failure) { if (version === findingEpoch) feedback.textContent = failure.message; }
-      finally { if (version === findingEpoch) original.disabled = false; }
-    });
-    const reference = `${scope.caso}/${scope.rodada}/${scope.revisao}/${item.id}@v${item.versao} · ${ev.id} · ${ev.documento_id}\n${position}\nOriginal: ${ev.original}\nSHA-256: ${ev.original_sha256}\nFonte textual: ${ev.fonte_textual || 'indisponível'} · SHA-256: ${ev.fonte_sha256 || 'não se aplica'}\nÍndice documental: ${JSON.stringify(ev.indice)}\n${ev.trecho}`;
-    const copy = element('button','Copiar referência completa','secondary'); copy.type = 'button';
-    copy.addEventListener('click', async () => {
-      try { await navigator.clipboard.writeText(reference); if (version === findingEpoch) feedback.textContent = 'Referência copiada.'; }
-      catch { if (version === findingEpoch) feedback.textContent = reference; }
-    });
-    const notebook=element('button','Registrar trecho com fonte','secondary');notebook.type='button';
-    notebook.addEventListener('click',()=>window.abrirRegistroCaderno({caso:scope.caso,rodada:scope.rodada,
-      documento_id:ev.documento_id,pagina_pdf:ev.localizador.pagina_pdf,
-      localizador:ev.localizador.descricao||(ev.localizador.linha_inicio?`Linhas ${ev.localizador.linha_inicio}–${ev.localizador.linha_fim}`:''),
-      trecho:window.trechoSelecionadoCaderno(block.querySelector('blockquote'),ev.trecho)}));
-    actions.append(view,original,copy,notebook);
-    if(ev.trecho)actions.append(window.botaoAdicionarApuracao({...scope,tipo:'ia',achado_id:item.id,achado_versao:item.versao,evidencia_id:ev.id},block.querySelector('blockquote'),ev.trecho));
-    block.append(actions,context,feedback); card.append(block);
-  }
+  card.append(Leitura.tecnicos(`${scope.caso}/${scope.rodada}/${scope.revisao} · consulta ${scope.geracao_achados} · ${item.id}@v${item.versao}`));
   const history = element('details',undefined,'history'), summary = element('summary','Detalhes técnicos e histórico');
   history.append(summary);
   for (const v of item.historico.versoes) history.append(element('p', `v${v.versao} · ${v.redacao} · ${pretty(v.natureza)} · ${v.limitacoes}`));
@@ -790,6 +984,9 @@ async function searchFindings(query) {
       return searchFindings({...query, deslocamento:Math.floor((result.total_correspondencias - 1) / query.limite) * query.limite});
     }
     findingQuery = query; findingResult = result;
+    const key = [query.caso, query.rodada, query.revisao, query.geracao_achados].join('/');
+    if (key !== versionKey) { versionKey = key; versionCollapsed = true; }
+    versionChip();
     const filterLabels = {texto:'Texto',documento:'Documento',natureza:'Natureza',suporte:'Suporte (IA)',humana:'Retorno anterior',destino:'Destino',briefing:'No briefing',revisao_humana:'Conferência do jornalista'};
     const applied = Object.entries(query.filtros || {}).filter(([,value]) => value).map(([key,value]) => `${filterLabels[key]}: ${key === 'revisao_humana' ? humanReviewStates[value][0] : pretty(value)}`);
     $('achados-filtros-ativos').textContent = `Filtros aplicados: ${applied.join(' · ')}`;
@@ -825,9 +1022,10 @@ async function searchFindings(query) {
 }
 $('achados-geracao').addEventListener('change', () => {
   clearFindings();
-  $('achados-versoes-resumo').textContent = 'Análise e versão dos resultados';
+  $('achados-versoes-resumo').textContent = 'Etapa da análise e versão dos resultados';
   $('achados-versoes').open = true;
-  if ($('achados-geracao').value && !window.restaurandoMesa?.()) searchFindings({...findingScope(), filtros:findingFilters(), limite:Number($('achados-limite').value), deslocamento:0});
+  // While an address is being restored, the version it names is searched by the restore itself.
+  if ($('achados-geracao').value && !(window.restaurandoMesa?.() && namedByRoute('achados-geracao'))) searchFindings({...findingScope(), filtros:findingFilters(), limite:Number($('achados-limite').value), deslocamento:0});
 });
 $('achados-form').addEventListener('submit', event => {
   event.preventDefault();

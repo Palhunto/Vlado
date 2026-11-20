@@ -6,10 +6,23 @@ import uuid
 
 from comum import dentro, escrever_json, ler_json, pasta_preparacao, sha256
 from indice_sqlite import caminho_rodada
+import caderno
 import indice_achados
 from registros_achados import carregar, recibo, trava
 
+ORIGEM_DECLARADA = 'declaracao_do_usuario_na_interface'
+ORIGEM_CONTA = 'conta_autenticada_da_mesa'
+ORIGENS = (ORIGEM_DECLARADA, ORIGEM_CONTA)
 ESTADOS = ('pendente', 'conferida_no_original', 'precisa_de_ajuste', 'sem_suporte_suficiente')
+
+
+class OriginalNaoConferido(ValueError):
+    """'Conferida no original' asked before every cited original was opened in this session."""
+
+    def __init__(self, faltam):
+        self.faltam = sorted(faltam)
+        super().__init__('Para marcar “Conferida no original”, abra antes o original de cada trecho citado '
+                         f'(falta{"m" if len(self.faltam) > 1 else ""}: {", ".join(self.faltam)}).')
 
 
 def _pasta(run, revision):
@@ -36,7 +49,8 @@ def _historico(run, revision, origin):
                 or type(item.get('achado_versao')) is not int or item['achado_versao'] < 1
                 or not isinstance(item.get('observacao'), str) or len(item['observacao']) > 500
                 or not isinstance(item.get('em_utc'), str)
-                or item.get('origem') != 'declaracao_do_usuario_na_interface'
+                or item.get('origem') not in ORIGENS
+                or (item['origem'] == ORIGEM_CONTA and not isinstance(item.get('responsavel'), str))
                 or not re.fullmatch(r'[a-f0-9]{32}', str(item.get('evento_id', '')))):
             raise ValueError('Histórico de revisão humana inválido; marcações não foram carregadas.')
         events.append(item)
@@ -49,7 +63,8 @@ def _marca(events, identifier, version):
     last = history[-1] if history else {}
     return {'estado': last.get('estado', 'pendente'), 'observacao': last.get('observacao', ''),
             'evento_id': last.get('evento_id'), 'atualizada_em_utc': last.get('em_utc'),
-            'origem': 'declaracao_do_usuario_na_interface' if last else None,
+            'origem': last.get('origem') if last else None,
+            'responsavel': last.get('responsavel'),
             'historico': history}
 
 
@@ -154,7 +169,8 @@ def selecionar(root, caso, rodada, revisao, geracao, selecoes):
 
 
 def salvar(root, caso, rodada, revisao, *, achado_id, achado_versao, registros_sha256,
-           estado, observacao='', anterior=None):
+           estado, observacao='', anterior=None, conta=None, originais_abertos=None):
+    """`originais_abertos`: evidence ids whose original this session opened (HTTP); None skips the check."""
     if estado not in ESTADOS or not isinstance(estado, str):
         raise ValueError('Escolha um dos quatro estados de conferência.')
     if (not isinstance(observacao, str) or len(observacao) > 500
@@ -164,6 +180,7 @@ def salvar(root, caso, rodada, revisao, *, achado_id, achado_versao, registros_s
         raise ValueError('Identidade do achado inválida.')
     if anterior is not None and (not isinstance(anterior, str) or not re.fullmatch(r'[a-f0-9]{32}', anterior)):
         raise ValueError('Identidade da marcação anterior inválida.')
+    conta = caderno.conta_valida(conta)
     run = caminho_rodada(root, caso, rodada)
     with trava(run):
         data, origin = carregar(root, caso, rodada, revisao)
@@ -176,6 +193,11 @@ def salvar(root, caso, rodada, revisao, *, achado_id, achado_versao, registros_s
             raise ValueError('Este achado não tem fontes vinculadas. Registre ajuste ou suporte insuficiente, conforme sua avaliação.')
         events, previous_hash = _historico(run, revisao, origin['registros_sha256'])
         current = _marca(events, achado_id, achado_versao)
+        if estado == 'conferida_no_original' and current['estado'] != estado and originais_abertos is not None:
+            citadas = {v['evidencia_id'] for v in data['vinculos']
+                       if v['achado_id'] == achado_id and v['versao'] == achado_versao}
+            if citadas - set(originais_abertos):
+                raise OriginalNaoConferido(citadas - set(originais_abertos))
         observation = observacao.strip()
         # Retrying a lost response or saving the same values adds no duplicate event.
         if current['estado'] == estado and current['observacao'] == observation:
@@ -187,8 +209,10 @@ def salvar(root, caso, rodada, revisao, *, achado_id, achado_versao, registros_s
                 'registros_sha256': origin['registros_sha256'], 'snapshot_sha256': data['snapshot_sha256'],
                 'achado_id': achado_id, 'achado_versao': achado_versao,
                 'estado': estado, 'observacao': observation,
-                'em_utc': datetime.now(timezone.utc).isoformat(), 'responsavel': None,
-                'origem': 'declaracao_do_usuario_na_interface', 'anterior_sha256': previous_hash}
+                'em_utc': datetime.now(timezone.utc).isoformat(), 'responsavel': conta['nome'] if conta else None,
+                'origem': ORIGEM_CONTA if conta else ORIGEM_DECLARADA, 'anterior_sha256': previous_hash}
+        if conta:
+            item['conta_id'] = conta['id']
         folder = _pasta(run, revisao)
         folder.mkdir(parents=True, exist_ok=True)
         with pasta_preparacao(folder, '.preparacao_') as temp:

@@ -102,7 +102,7 @@ const [origin,output,chat]=process.argv.slice(2);
         await mobile.goto(origin);await mobile.locator('#area-inicio').waitFor({state:'visible'});
         await mobile.selectOption('#contexto-caso','alpha');await mobile.click('#ver-codex');
         await mobile.locator('#codex-conta').filter({hasText:'Conectado'}).waitFor();
-        await mobile.waitForFunction(()=>$('area-titulo').textContent==='Caso sintético alpha');
+        await mobile.waitForFunction(()=>$('area-titulo').textContent==='Perguntar à IA'&&$('area-descricao').textContent==='Caso sintético alpha');
         await mobile.evaluate(()=>document.fonts.ready);await mobile.evaluate(()=>scrollTo(0,0));
         pages.push(mobile);
       }

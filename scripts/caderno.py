@@ -13,6 +13,9 @@ import lixeira
 
 ID = r'N[a-f0-9]{32}'
 HASH = r'[a-f0-9]{64}'
+AUTORIA_DECLARADA = 'humana_declarada_na_interface'
+AUTORIA_CONTA = 'humana_autenticada_pela_conta_da_mesa'
+ORIGENS_AUTORIA = (AUTORIA_DECLARADA, AUTORIA_CONTA)
 
 
 def _canon(value):
@@ -28,6 +31,29 @@ def _texto(value, field, maximum, *, vazio=False):
             or any(ord(c) < 32 and c not in '\n\t' for c in value)):
         raise ValueError(f'{field}: informe texto válido, até {maximum} caracteres.')
     return value.strip()
+
+
+def conta_valida(conta):
+    """Valida a conta do servidor ({'id', 'nome'}); None significa modo local."""
+    if conta is None:
+        return None
+    if (not isinstance(conta, dict) or not isinstance(conta.get('id'), str) or not conta['id'].strip()
+            or len(conta['id']) > 200):
+        raise ValueError('Conta autenticada inválida.')
+    return {'id': conta['id'], 'nome': _texto(conta.get('nome'), 'Nome da conta', 120)}
+
+
+def autoria(conta, declarado, campo='Autoria humana'):
+    """Resolve o autor. Com conta, o nome enviado pelo navegador é ignorado."""
+    conta = conta_valida(conta)
+    if conta:
+        return {'autor': conta['nome'], 'origem_autoria': AUTORIA_CONTA, 'conta_id': conta['id']}
+    return {'autor': _texto(declarado, campo, 120), 'origem_autoria': AUTORIA_DECLARADA}
+
+
+def com_conta(solicitacao, conta):
+    """Amarra o digest de idempotência à conta sem alterar digests do modo local."""
+    return solicitacao if not conta else {**solicitacao, '_conta_id': conta['id']}
 
 
 def _pasta(root, case):
@@ -122,7 +148,8 @@ def _carregar(root, case, identifier, expected=None, *, cache=None, seen=None):
         return cache[key]
     entry = ler_json(path)
     if (entry.get('esquema') != 1 or entry.get('caso_id') != case or entry.get('id') != identifier
-            or entry.get('origem_autoria') != 'humana_declarada_na_interface'
+            or entry.get('origem_autoria') not in ORIGENS_AUTORIA
+            or (entry['origem_autoria'] == AUTORIA_CONTA and not isinstance(entry.get('conta_id'), str))
             or entry.get('tipo') not in ('trecho', 'achado', 'cruzamento')
             or not isinstance(entry.get('fontes'), list) or not entry['fontes']
             or not re.fullmatch(HASH, str(entry.get('solicitacao_sha256', '')))):
@@ -168,7 +195,9 @@ def listar(root, case, *, texto='', limite=20, deslocamento=0):
             entries.append({'registro': entry, 'sha256': digest})
     entries.sort(key=lambda item: (item['registro']['criado_em_utc'], item['registro']['id']), reverse=True)
     total = len(entries)
-    return {'caso': case, 'origem_autoria': 'humana_declarada_na_interface', 'total': total,
+    origens = {item['registro'].get('origem_autoria', AUTORIA_DECLARADA) for item in entries}
+    return {'caso': case, 'origem_autoria': origens.pop() if len(origens) == 1 else
+            (AUTORIA_DECLARADA if not origens else 'mista'), 'total': total,
         'resultados': entries[deslocamento:deslocamento + limite], 'deslocamento': deslocamento,
         'proximo_deslocamento': deslocamento + limite if deslocamento + limite < total else None}
 
@@ -201,12 +230,12 @@ def validar_destino(bundle, manifest):
                 raise ValueError('Uma fonte do caderno não pertence à versão desta conversa. Use Continuar com novos documentos ou escolha uma nova conversa.')
 
 
-def _publicar(root, case, request, build):
+def _publicar(root, case, request, build, conta=None):
     folder = _pasta(root, case)
     rid = request.get('requisicao_id')
     if not isinstance(rid, str) or not re.fullmatch(r'[a-f0-9]{32}', rid):
         raise ValueError('Identidade de salvamento inválida.')
-    identifier, request_hash = 'N' + rid, _hash(request)
+    identifier, request_hash = 'N' + rid, _hash(com_conta(request, conta_valida(conta)))
     with _trava(folder):
         target = dentro(folder, f'registros/{identifier}.json')
         if target.exists():
@@ -224,7 +253,8 @@ def _publicar(root, case, request, build):
             else:
                 with opath.open('xb') as stream:
                     stream.write(_canon(origin))
-        entry.update(esquema=1, id=identifier, caso_id=case, origem_autoria='humana_declarada_na_interface',
+        entry.setdefault('origem_autoria', AUTORIA_DECLARADA)
+        entry.update(esquema=1, id=identifier, caso_id=case,
             solicitacao_sha256=request_hash, criado_em_utc=datetime.now(timezone.utc).isoformat())
         target.parent.mkdir(parents=True, exist_ok=True)
         with pasta_preparacao(folder, '.preparacao_') as staging:
@@ -232,17 +262,18 @@ def _publicar(root, case, request, build):
         return {'estado': 'registrado', 'registro': entry, 'sha256': sha256(target)}
 
 
-def salvar(root, data):
+def salvar(root, data, conta=None):
     fields = {'caso', 'rodada', 'origem_id', 'documento_id', 'documento_sha256', 'pagina_pdf',
               'localizador', 'trecho', 'anotacao', 'autor', 'titulo', 'tipo', 'transcricao_manual', 'requisicao_id'}
     if not isinstance(data, dict) or set(data) - fields:
         raise ValueError('Campos não autorizados no registro humano.')
     case = data.get('caso')
+    conta = conta_valida(conta)
     def build():
         kind = data.get('tipo')
         if kind not in ('trecho', 'achado') or type(data.get('transcricao_manual', False)) is not bool:
             raise ValueError('Tipo de contribuição ou confirmação de transcrição inválido.')
-        author = _texto(data.get('autor'), 'Autoria humana', 120)
+        who = autoria(conta, data.get('autor'))
         quote = _texto(data.get('trecho'), 'Trecho', 12000)
         note = _texto(data.get('anotacao', ''), 'Anotação', 5000, vazio=kind == 'trecho')
         title = _texto(data.get('titulo'), 'Título', 200)
@@ -278,15 +309,16 @@ def salvar(root, data):
             'nome_documento': doc.get('nome_recebido', path.name), 'corpus_id': origin['corpus_id'],
             'rodada_origem': origin['rodada'], 'pagina_pdf': page, 'localizador': locator, 'trecho': quote,
             'conferencia_textual': 'literal_localizado' if matched else 'transcricao_humana'}
-        return {'tipo': kind, 'titulo': title, 'autor': author, 'anotacao': note,
+        return {'tipo': kind, 'titulo': title, **who, 'anotacao': note,
                 'fontes': [source], 'vinculos': []}, {identity: origin}
-    return _publicar(root, case, data, build)
+    return _publicar(root, case, data, build, conta)
 
 
-def cruzar(root, data):
+def cruzar(root, data, conta=None):
     if not isinstance(data, dict) or set(data) - {'caso', 'selecoes', 'titulo', 'anotacao', 'autor', 'requisicao_id'}:
         raise ValueError('Campos não autorizados no cruzamento humano.')
     case = data.get('caso')
+    conta = conta_valida(conta)
     def build():
         bundle = selecionar(root, case, data.get('selecoes'), minimo=2)
         sources, parents, seen = [], [], set()
@@ -298,10 +330,10 @@ def cruzar(root, data):
                 if key not in seen:
                     seen.add(key); sources.append(deepcopy(source))
         return {'tipo': 'cruzamento', 'titulo': _texto(data.get('titulo'), 'Título', 200),
-            'autor': _texto(data.get('autor'), 'Autoria humana', 120),
+            **autoria(conta, data.get('autor')),
             'anotacao': _texto(data.get('anotacao'), 'Anotação do cruzamento', 5000),
             'fontes': sources, 'vinculos': parents}, {}
-    return _publicar(root, case, data, build)
+    return _publicar(root, case, data, build, conta)
 
 
 def original_registro(root, data):

@@ -8,6 +8,10 @@ tmp/
 .env
 .env.*
 !.env.example
+/deploy/ambientes/*.env
+/.ferramentas/
+/android/saidas/
+/dist/
 *.log
 *.sqlite
 *.sqlite3
@@ -38,3 +42,22 @@ tmp/
 /docs/VLADO_HANDOFF.md
 /docs/VLADO_GUIA_TECNICO_DEPLOY.md
 /manifesto_distribuicao.json
+
+# Estado local de ferramentas de agente (Ruflo/claude-flow)
+/.claude-flow/
+.claude/
+/segredos/
+/ajustes/
+/acesso/
+
+# Pasta local com os artefatos de entrega (ZIP, APK, guias); fora do git
+/entrega_intercept/
+/dist/
+
+# Saídas do gerador do instalador Windows (scripts/gerar_instalador.py)
+/build/
+/entrega_intercept.*
+*.rar
+
+# Capturas de tela dos roteiros visuais (testes/qa_*.py); não são documentos da apuração
+/.qa_quadros_saida/

@@ -1,5 +1,14 @@
-# Extracao textual padrao dos PDFs no cadastro; nao executa modelos nem OCR.
+# Extracao textual padrao dos PDFs no cadastro; nao executa modelos.
 pypdf==6.10.0
+# OCR local das paginas digitalizadas (exige Tesseract e Ghostscript no sistema; ver Dockerfile).
+# PyMuPDF e o motor alternativo (renderiza a pagina e chama o Tesseract) quando o OCRmyPDF/Ghostscript faltam.
+ocrmypdf==16.10.4
+PyMuPDF==1.28.2
 # Exportações do caderno editável da aba Apuração.
 python-docx==1.2.0
 reportlab==4.4.9
+# Inferência via API (provedor em configuracao.json; chave só no ambiente do servidor).
+anthropic==2.8.0
+openai==3.50.0
+# Hash de senha das contas da Mesa hospedada (argon2id).
+argon2-cffi==25.1.0

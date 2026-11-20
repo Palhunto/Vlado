@@ -1,0 +1,61 @@
+# VLADO hospedado: app (modo piloto, login por conta) + Caddy (HTTPS).
+# Um ambiente por projeto Compose, com volumes próprios:
+#   docker compose -p vlado-homologacao --env-file deploy/ambientes/homologacao.env up -d --build
+#   docker compose -p vlado-demonstracao --env-file deploy/ambientes/demonstracao.env up -d --build
+#   docker compose -p vlado-editorial  --env-file deploy/ambientes/editorial.env up -d --build
+# O nome do projeto (-p) prefixa os volumes: ambientes nunca compartilham dados.
+# Guia: docs/GUIA_TECNICO_IMPLANTACAO.md
+services:
+  vlado:
+    build: .
+    image: vlado:${VLADO_VERSAO:-local}
+    restart: unless-stopped
+    environment:
+      VLADO_DOMINIO: ${VLADO_DOMINIO:?defina VLADO_DOMINIO no arquivo .env}
+      # Set only when the client-visible HTTPS origin includes a nonstandard port.
+      VLADO_ORIGEM: ${VLADO_ORIGEM:-}
+      VLADO_AMBIENTE: ${VLADO_AMBIENTE:?defina VLADO_AMBIENTE (homologacao, editorial ou demonstracao)}
+      # The app sits behind this Caddy only: trust the last X-Forwarded-For hop for login rate limits.
+      VLADO_CONFIAR_PROXY: "1"
+      # Optional: a key in the environment takes precedence over the key pasted in the Mesa.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - casos:/app/casos
+      - conversas:/app/conversas
+      - execucoes:/app/execucoes
+      - lixeira:/app/lixeira
+      - entrada:/app/entrada
+      - segredos:/app/segredos
+      - ajustes:/app/ajustes
+      - acesso:/app/acesso
+    expose:
+      - "8765"
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "${VLADO_PORTA_HTTP:-80}:80"
+      - "${VLADO_PORTA_HTTPS:-443}:443"
+    environment:
+      VLADO_DOMINIO: ${VLADO_DOMINIO:?defina VLADO_DOMINIO no arquivo .env}
+    volumes:
+      # deploy/Caddyfile: certificado público automático; deploy/Caddyfile.interno: CA interna (homologação local).
+      - ./${VLADO_CADDYFILE:-deploy/Caddyfile}:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - vlado
+
+volumes:
+  casos:
+  conversas:
+  execucoes:
+  lixeira:
+  entrada:
+  segredos:
+  ajustes:
+  acesso:
+  caddy_data:
+  caddy_config:

@@ -23,6 +23,8 @@ def texto(value, label):
     return value
 
 
+REVISAO_DA_ETAPA = {'geracao_inicial': 'r1_busca', 'revisao': 'r2_revisao', 'sintese': 'r3_sintese'}
+
 class Fluxo:
     """One instance per frozen question. No shell, network or user file paths."""
     def __init__(self, root, run, meta, references, continuidade=None):
@@ -50,7 +52,53 @@ class Fluxo:
         _atomico(self.state_path, _bytes({'esquema': 1, 'estado': state,
             'caso': self.meta['caso'], 'rodada': self.meta['rodada'],
             'etapa': self.stage, 'tentativa': self.attempt, 'etapas': self.accepted,
-            'ultima_falha': self.last_error, 'publicacao': self.publication}))
+            'ultima_falha': self.last_error, 'publicacao': self.publication,
+            'referencias_por_evidencia': self.evidence_refs}))
+
+    def restaurar(self):
+        """Reload accepted stages and canonical revisions from disk after a restart; True when a checkpoint existed.
+
+        Only stages whose artifacts still match their hashes are kept, in order, so a damaged
+        tail is redone instead of trusted."""
+        if not self.state_path.is_file():
+            return False
+        saved = ler_json(self.state_path)
+        if saved.get('caso') != self.meta['caso'] or saved.get('rodada') != self.meta['rodada']:
+            raise ValueError('Estado do fluxo pertence a outra rodada.')
+        accepted = {}
+        for stage in self.etapas:
+            artifact = (saved.get('etapas') or {}).get(stage)
+            if not artifact:
+                break
+            try:
+                valid = sha256(dentro(self.run, artifact['arquivo'])) == artifact['sha256']
+            except (OSError, KeyError, ValueError):
+                valid = False
+            if not valid:
+                break
+            accepted[stage] = artifact
+        # A revision published by a stage that was never recorded as accepted cannot be redone
+        # (publish refuses different content) nor trusted: refuse before any quota or tokens are spent.
+        for stage, revision in REVISAO_DA_ETAPA.items():
+            if stage in self.etapas and stage not in accepted and (self.run / 'saidas/achados/revisoes' / revision).exists():
+                raise ValueError(f'A etapa {stage} publicou a revisão {revision} sem chegar a ser registrada como aceita; '
+                                 'esta rodada não pode ser retomada com segurança. Envie a pergunta novamente.')
+        self.accepted = accepted
+        self.evidence_refs = dict(saved.get('referencias_por_evidencia') or {})
+        self.publication = saved.get('publicacao') if len(accepted) == len(self.etapas) else None
+        revision = next((REVISAO_DA_ETAPA[s] for s in ('sintese', 'revisao', 'geracao_inicial') if s in accepted), None)
+        if revision:
+            self.data, manifest = carregar(self.root, self.meta['caso'], self.meta['rodada'], revision)
+            self.receipt = {'manifesto': manifest}
+            missing = [e['id'] for e in self.data['evidencias'] if e['id'] not in self.evidence_refs]
+            if missing:
+                raise ValueError('Estado antigo do fluxo sem as referências das evidências; não é possível retomar.')
+        if 'sintese' in accepted:
+            self.briefing = dentro(self.run, accepted['sintese']['arquivo']).read_text(encoding='utf-8')
+        if 'comparacao' in accepted:
+            self.comparativo_recibo = accepted['comparacao']
+            self.comparativo = ler_json(dentro(self.run, accepted['comparacao']['arquivo']))
+        return True
 
     def begin(self, stage, attempt):
         self.stage, self.attempt = stage, attempt

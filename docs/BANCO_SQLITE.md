@@ -63,7 +63,22 @@ Antes de cada operação, a ferramenta verifica autorização congelada, pertenc
 
 - `.txt` e `.md` em UTF-8: linhas do arquivo, sem página física inventada.
 - Derivado Markdown no formato produzido por [extrair_pdf.py](../scripts/extrair_pdf.py): páginas físicas e linhas da cópia. Cabeçalhos técnicos não entram na busca. Hash de origem deve corresponder ao original; páginas/linhas devem estar em sequência. Incoerências geram erro de leitura na cobertura, sem indexar localizadores duvidosos.
-- Outros formatos (PDF, imagem, planilha, DOCX): o original é inventariado sem adaptador textual. O cadastro agora prepara e autoriza automaticamente derivados paginados de PDFs; o banco pesquisa esses derivados, não o PDF diretamente. PDFs sem camada textual e imagens continuam exigindo OCR ou leitura visual; o banco não executa OCR. Rodadas anteriores à preparação mantêm sua cobertura original.
+- Derivados de DOCX e XLSX produzidos por [extrair_office.py](../scripts/extrair_office.py) (adaptadores `markdown_docx_v1` e `markdown_xlsx_v1`): uma unidade por seção (`## D001 - documento`, `cabecalho 1`, `notas de rodape`, `aba Plan1` etc.), sem página física. Cada linha mantém o localizador da fonte no texto indexado. Na busca, o resultado traz `formato`, `localizadores` (todas as linhas do trecho), `localizador_inicio`/`localizador_fim` e, nos modos `comum` e `literal`, `localizadores_com_termo` (linhas cujo conteúdo contém algum termo, por comparação simples; conferir no original). `ler` acrescenta `localizador` a cada linha da unidade. `linha_inicio`/`linha_fim` são posições na cópia de trabalho; a citação no original é o localizador (`P0001`, `T01 L02 C03`, `Aba!B3`). Hash de origem divergente, célula de outra aba ou linha sem localizador deixam a fonte inteira em `erro_leitura`.
+
+  | Localizador | Origem | Exemplo |
+  |---|---|---|
+  | `P0001` | parágrafo do corpo do DOCX, em ordem | `[P0012] texto` |
+  | `T01 L02 C03` | célula de tabela do DOCX (tabela, linha, coluna da grade) | `[T01 L02 C03] 1.250,00` |
+  | `CAB1 P0001` / `ROD1 P0001` | parágrafo de cabeçalho ou rodapé N | `[CAB1 P0001] Ofício nº 12` |
+  | `NOTA n P0001` / `NOTAFIM n P0001` | parágrafo da nota de rodapé ou nota final `n` | `[NOTA 1 P0001] Fonte: …` |
+  | `COMENT n P0001` | parágrafo do comentário `n` | `[COMENT 3 P0001] conferir` |
+  | `Aba!A1` | célula preenchida do XLSX; aba entre aspas quando o Excel exigiria (`'Folha 1'!B3`) | `[Plan1!B3] 2345.5 \|\| exibido: 2,345.50 \|\| formula: SUM(B1:B2)` |
+  | `L0001` | linha do derivado de OCR de imagem | `[L0004] texto reconhecido` |
+
+  No XLSX, a linha traz o valor gravado, o valor exibido (só para formato numérico simples, com separadores do formato do Excel, como `2,345.50` ou `12.5%`, e datas em `AAAA-MM-DD`) e a fórmula como texto, sem avaliar. O índice não recalcula fórmulas nem confere valores; um número achado na busca é conferido na célula do original.
+- Derivado de OCR de imagem avulsa (`--ocr-imagens`, adaptador `markdown_ocr_imagem_v1`): uma unidade `## D001 - imagem` com linhas `[L0001]`; o resultado traz `origem_texto: ocr` e `aviso_ocr`.
+- Esses adaptadores só reconhecem derivados novos; `REGRAS` e `IMPLEMENTACAO` não mudaram, de modo que índices de rodadas anteriores continuam verificáveis e a reconstrução de PDF e texto dá o mesmo resultado.
+- Outros formatos (PDF, imagem, planilha CSV/TSV, DOCX/XLSX com macro, senha ou corrupção): o original é inventariado sem adaptador textual. DOCX e XLSX legíveis entram pelo derivado acima, nunca pelo original. O cadastro agora prepara e autoriza automaticamente derivados paginados de PDFs (texto nativo e, nas páginas digitalizadas, OCR local; a origem de cada página fica no manifesto e no cabeçalho do derivado); o banco pesquisa esses derivados, não o PDF diretamente. PDFs sem camada textual e imagens continuam exigindo OCR ou leitura visual; o banco não executa OCR. Rodadas anteriores à preparação mantêm sua cobertura original.
 - Páginas com falha de extração usam o marcador `[ERRO DE EXTRACAO NESTA PAGINA]`: ficam com estado `erro_leitura`, sem indexar o aviso como conteúdo documental. Páginas vazias permanecem `sem_texto`. Os detalhes da falha são preservados no recibo e no manifesto.
 - Texto vazio, página sem texto e UTF-8 inválido: condições explícitas por fonte/unidade. Um documento pode ser pesquisável por derivado mesmo que seu original não tenha adaptador.
 
