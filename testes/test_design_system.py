@@ -8,6 +8,8 @@ import tempfile
 import threading
 import unittest
 
+from auxiliar_node import localizar_node
+
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / 'scripts'))
 from interface_pesquisa import Servidor  # noqa: E402
@@ -17,8 +19,7 @@ CONTRATOS = ('estilo_tokens.cjs', 'caderno_estilo.cjs', 'veredito.cjs', 'quadros
 
 class DesignSystemTest(unittest.TestCase):
     def test_contratos_de_estilo(self):
-        node = shutil.which('node')
-        self.assertIsNotNone(node, 'Node.js é necessário para os contratos de estilo da interface.')
+        node = localizar_node(self)
         result = subprocess.run([node, '--test', *(str(RAIZ / 'testes' / nome) for nome in CONTRATOS)],
                                 cwd=RAIZ, capture_output=True, text=True, encoding='utf-8', timeout=60)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

@@ -4,11 +4,12 @@ import shutil
 import subprocess
 import unittest
 
+from auxiliar_node import localizar_node
+
 
 class EditorNotasSegurancaTest(unittest.TestCase):
     def test_limpeza_do_editor_e_csp(self):
-        node = shutil.which('node')
-        self.assertIsNotNone(node, 'Node.js é necessário para o teste de limpeza do editor de notas.')
+        node = localizar_node(self)
         root = Path(__file__).resolve().parents[1]
         result = subprocess.run([node, '--test', str(root / 'testes/editor_notas_seguranca.cjs')],
                                 cwd=root, capture_output=True, text=True, encoding='utf-8', timeout=90)
