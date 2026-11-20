@@ -51,7 +51,7 @@ O modelo processa online e o uso é cobrado pelo provedor, por uso. Não há ass
 
 ## Verificações
 
-Nesta migração, as verificações são os testes automatizados com provedores roteirizados e clientes SDK simulados. **Nenhuma chamada real à API foi executada.** Os resultados de 06/11/2026 registrados para a integração anterior, com `codex app-server`, não se aplicam ao código atual e não são repetidos aqui.
+Nesta migração, as verificações são os testes automatizados com provedores roteirizados e clientes SDK simulados. Os ensaios com chamada real, todos com o provedor OpenAI, estão em [VERIFICACAO.md](VERIFICACAO.md); para o provedor Anthropic não há execução registrada com chave real. Os resultados de 06/11/2026 registrados para a integração anterior, com `codex app-server`, não se aplicam ao código atual e não são repetidos aqui.
 
 O teste real é opcional e consome créditos do provedor configurado:
 

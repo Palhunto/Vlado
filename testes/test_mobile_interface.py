@@ -6,13 +6,14 @@ import shutil
 import subprocess
 import unittest
 
+from auxiliar_node import localizar_node
+
 RAIZ = Path(__file__).resolve().parents[1]
 
 
 class MesaMovelTest(unittest.TestCase):
     def test_voltar_conexao_e_faixa_de_ambiente(self):
-        node = shutil.which('node')
-        self.assertIsNotNone(node, 'Node.js é necessário para as regressões da interface.')
+        node = localizar_node(self)
         result = subprocess.run([node, '--test', str(RAIZ / 'testes/mobile_navegacao.cjs')],
                                 cwd=RAIZ, capture_output=True, text=True, encoding='utf-8', timeout=90)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

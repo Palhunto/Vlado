@@ -20,7 +20,7 @@ def main():
     parser.add_argument('--somente-texto', action='store_true', help='Não instalar a biblioteca visual opcional.')
     args = parser.parse_args()
     if sys.version_info < (3, 12):
-        raise ValueError('É necessário Python 3.12 ou superior. Consulte INSTALAR_NO_NOTEBOOK.md.')
+        raise ValueError('É necessário Python 3.12 ou superior. Consulte a seção Instalação do README.md.')
     if args.verificar:
         result = diagnostico()
         result['leitura_visual_pdf'] = importlib.util.find_spec('fitz') is not None
@@ -39,7 +39,7 @@ def main():
         venv.EnvBuilder(with_pip=True).create(target)
     python = target / ('Scripts/python.exe' if sys.platform == 'win32' else 'bin/python')
     if not python.is_file():
-        raise ValueError('Ambiente .venv incompleto. Consulte INSTALAR_NO_NOTEBOOK.md antes de tentar novamente.')
+        raise ValueError('Ambiente .venv incompleto. Consulte a seção Instalação do README.md antes de tentar novamente.')
     listas = ['requirements.txt'] if args.somente_texto else ['requirements.txt', 'requirements-opcional.txt']
     comando = [str(python), '-m', 'pip', 'install', '--disable-pip-version-check']
     for lista in listas:

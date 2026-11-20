@@ -32,6 +32,12 @@ PROIBIDOS = [
     r'^referencia_original/', r'^transferencia/', r'^distribuicao/', r'^\.claude-flow/', r'(^|/)backups?/',
     r'^manifesto_distribuicao\.json$', r'^docs/VLADO_HANDOFF\.md$', r'^docs/VLADO_GUIA_TECNICO_DEPLOY\.md$',
     r'\.jsonl$', r'^dist/',
+    # Agent working folders, at any level and in any letter case.
+    r'(?i)(^|/)\.(claude|maestri|codex|agents|cursor)/',
+    # The evidence contracts stay: code and docs of the delivery cite them. The exception is the
+    # .gitignore rule `!/.maestro/equipe/CONTRATO_*.md` (root only, any name without "/"), so a
+    # contract git versions never makes the whole delivery refuse; other spellings are barred.
+    r'^(?!\.maestro/equipe/CONTRATO_[^/]*\.md$)(?i:(.*/)?\.maestro/)',
 ]
 # Windows launchers belong to the local single-user install, not to this delivery.
 FORA_DA_ENTREGA = [r'^Abrir mesa\.vbs$', r'^Iniciar pesquisa\.cmd$', r'^Preparar notebook\.cmd$']
