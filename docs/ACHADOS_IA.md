@@ -1,4 +1,4 @@
-# Achados da IA — versão 1.4.0
+# Achados da IA — entrega da versão 1.4.0 (registro histórico)
 
 Esta entrega registra os achados produzidos durante busca, revisão e síntese, seja pelo agente de chat, seja pela Mesa, cuja inferência usa a API do provedor configurado. O registro é explícito: os scripts de registro, consulta e índice não fazem inferência, não capturam o chat e não extraem achados de briefings antigos. Os documentos e o FTS documental permanecem separados das conclusões da IA. Conferir hashes/localizadores não comprova a veracidade nem o suporte semântico de uma afirmação.
 
