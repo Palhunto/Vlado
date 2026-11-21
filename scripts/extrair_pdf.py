@@ -32,18 +32,23 @@ def _tentar_ocr(source: Path, candidatas: list, result: dict) -> dict:
         return {numero: {'erro': erro} for numero in candidatas}
     result['ocr_tentado'] = True
     result['ocr_motor'] = {'motor': reconhecido['motor'], 'versoes': reconhecido['versoes'],
-                           'idiomas': reconhecido['idiomas'], 'avisos': reconhecido.get('avisos', [])}
+                           'idiomas': reconhecido['idiomas'], 'avisos': reconhecido.get('avisos', []),
+                           'paginas_giradas_antes': reconhecido.get('paginas_giradas_antes', []),
+                           'paginas_tesseract_direto': reconhecido.get('paginas_tesseract_direto', [])}
     return reconhecido['paginas']
 
 
 def _orientacao_resumo(registro: dict) -> str:
     giro = registro.get('giro_aplicado', 0)
     lida = f'girada {giro} graus' if giro else 'como esta'
+    texto_de = f'; texto de {registro["texto_de"]}' if registro.get('texto_de') else ''
     if registro.get('decisao') == 'leitura_dupla':
+        original, girada = registro['original']['medida'], registro['girada']['medida']
+        medidas = ('sem medida (Tesseract nao gerou o .tsv)' if original is None or girada is None
+                   else f'confianca media das palavras {original} como esta e {girada} girada')
         return (f'{lida} (OSD sugeriu {registro["osd_giro"]} com confianca {registro["osd_confianca"]}; '
-                f'leitura dupla, confianca media das palavras {registro["original"]["medida"]} como esta '
-                f'e {registro["girada"]["medida"]} girada)')
-    return f'{lida} (OSD, confianca {registro["osd_confianca"]})'
+                f'leitura dupla, {medidas}{texto_de})')
+    return f'{lida} (OSD, confianca {registro["osd_confianca"]}{texto_de})'
 
 
 def _metodo(pypdf_version: str, result: dict) -> str:
@@ -51,7 +56,19 @@ def _metodo(pypdf_version: str, result: dict) -> str:
     motor = result.get('ocr_motor')
     if result['paginas_ocr'] and motor:
         versoes = ', '.join(f'{k} {v}' for k, v in motor['versoes'].items() if v)
-        return (f'{base}; OCR local ({motor["motor"]}; {versoes}; idiomas {motor["idiomas"]}) somente nas '
+        nome = motor['motor']
+        if nome == 'ocrmypdf':
+            # Pages the double reading turned: PyMuPDF turned them in a temporary copy for OCRmyPDF or,
+            # if that copy failed, Tesseract read the PyMuPDF render directly instead of OCRmyPDF.
+            giradas = [n for n in motor.get('paginas_giradas_antes', []) if n in result['paginas_ocr']]
+            diretas = [n for n in motor.get('paginas_tesseract_direto', []) if n in result['paginas_ocr']]
+            if giradas:
+                nome += ('; paginas ' + ', '.join(map(str, giradas)) + ' giradas pelo PyMuPDF numa copia '
+                         'temporaria antes do OCRmyPDF (leitura dupla)')
+            if diretas:
+                nome += ('; paginas ' + ', '.join(map(str, diretas)) + ' lidas pelo Tesseract direto sobre a '
+                         'renderizacao do PyMuPDF, sem o OCRmyPDF')
+        return (f'{base}; OCR local ({nome}; {versoes}; idiomas {motor["idiomas"]}) somente nas '
                 'paginas sem texto nativo; reconhecimento automatico sujeito a erros; sem correcao editorial.')
     if result['ocr_tentado']:
         return f'{base}; OCR local tentado nas paginas sem texto nativo, sem texto reconhecido; sem correcao editorial.'
@@ -115,6 +132,9 @@ def extrair_pdf(source: Path, identifier: str, target: Path, *, ocr_ativo: bool 
             lines, origin = native[number].splitlines(), 'texto_nativo'
         else:
             lines, origin = [], None
+        if outcome.get('aviso_orientacao'):
+            # The orientation check failed (e.g. timeout): the page kept the OCRmyPDF reading unchecked.
+            result.setdefault('ocr_avisos_orientacao', {})[str(number)] = outcome['aviso_orientacao']
         if origin:
             result['paginas_com_texto'] += 1
             result['paginas_texto_nativo' if origin == 'texto_nativo' else 'paginas_ocr'].append(number)
@@ -148,6 +168,9 @@ def extrair_pdf(source: Path, identifier: str, target: Path, *, ocr_ativo: bool 
     if result.get('ocr_orientacao'):
         header.append('Orientacao do OCR por pagina: ' + '; '.join(
             f'{n}={_orientacao_resumo(o)}' for n, o in result['ocr_orientacao'].items()))
+    if result.get('ocr_avisos_orientacao'):
+        header.append('Aviso do OCR por pagina: ' + '; '.join(
+            f'{n}={aviso}' for n, aviso in result['ocr_avisos_orientacao'].items()))
     header.append('')
     target.parent.mkdir(parents=True, exist_ok=True)
     with target.open('x', encoding='utf-8', newline='\n') as stream:
