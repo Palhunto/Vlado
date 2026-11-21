@@ -11,7 +11,9 @@
 # VLADO_CPUS, VLADO_TMP_TAMANHO (ver deploy/ambientes/*.env.example).
 services:
   vlado:
-    build: .
+    build:
+      context: .
+      target: vlado
     image: vlado:${VLADO_VERSAO:-local}
     restart: unless-stopped
     # tini como PID 1: repassa SIGTERM ao Python e colhe processos filhos (OCR, Ghostscript) sem deixar zumbis.
@@ -92,6 +94,108 @@ services:
       vlado:
         condition: service_healthy
 
+  # Backup agendado (SEG-03). Por que um serviço do Compose e não um timer do host: viaja com o repositório, usa a
+  # mesma versão e os mesmos volumes do ambiente (-p), não depende de cron/systemd configurado à mão no servidor e
+  # fica visível no `docker compose ps` (unhealthy se o backup não estiver configurado ou passar de 30 h sem
+  # sucesso). Lê os dados em volumes SOMENTE LEITURA: não pode corrompê-los nem deixar trava presa. Só a chave
+  # PÚBLICA de cifra fica aqui; a privada fica com o dono, fora do servidor. Sem segredos/ (chaves de API) montado.
+  backup:
+    build:
+      context: .
+      target: backup
+    image: vlado-backup:${VLADO_VERSAO:-local}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: ${VLADO_BACKUP_MEM_LIMITE:-512m}
+    memswap_limit: ${VLADO_BACKUP_MEM_LIMITE:-512m}
+    cpus: 1
+    pids_limit: 256
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    logging: *rotacao_de_logs
+    environment:
+      VLADO_AMBIENTE: ${VLADO_AMBIENTE:?defina VLADO_AMBIENTE (homologacao, editorial ou demonstracao)}
+      # Destino fora do servidor, no formato do rclone: `remoto:bucket/prefixo` (credenciais do remoto no
+      # arquivo de credenciais abaixo) ou um caminho absoluto (teste local).
+      VLADO_BACKUP_DESTINO: ${VLADO_BACKUP_DESTINO:-}
+      # Chave(s) PÚBLICA(S) age1... do dono (não é segredo). Nunca a chave privada.
+      VLADO_BACKUP_DESTINATARIOS: ${VLADO_BACKUP_DESTINATARIOS:-}
+      VLADO_BACKUP_HORARIO_UTC: ${VLADO_BACKUP_HORARIO_UTC:-06:30}
+      VLADO_BACKUP_RETENCAO: ${VLADO_BACKUP_RETENCAO:-diarios=7,semanais=4,mensais=6}
+      VLADO_BACKUP_PING_URL: ${VLADO_BACKUP_PING_URL:-}
+      VLADO_BACKUP_AO_INICIAR: ${VLADO_BACKUP_AO_INICIAR:-0}
+      # Chaves de API (segredos/) ficam fora por decisão declarada; para incluí-las é preciso montar o volume aqui.
+      VLADO_BACKUP_INCLUIR_SEGREDOS: ${VLADO_BACKUP_INCLUIR_SEGREDOS:-0}
+      # Quanto esperar (s) uma operação em andamento (cadastro, congelamento) terminar antes de desistir da tentativa.
+      VLADO_BACKUP_ESPERA_S: ${VLADO_BACKUP_ESPERA_S:-900}
+      # Idade máxima (h) do último backup bem-sucedido antes de o serviço ficar unhealthy.
+      VLADO_BACKUP_IDADE_MAX_H: ${VLADO_BACKUP_IDADE_MAX_H:-30}
+      RCLONE_CONFIG: /tmp/rclone.conf
+    env_file:
+      # Credenciais do destino (variáveis RCLONE_CONFIG_<REMOTO>_*). Fora do git (deploy/ambientes/*.env).
+      - path: deploy/ambientes/${VLADO_AMBIENTE}-backup.env
+        required: false
+    volumes:
+      - casos:/app/casos:ro
+      - conversas:/app/conversas:ro
+      - execucoes:/app/execucoes:ro
+      - lixeira:/app/lixeira:ro
+      - entrada:/app/entrada:ro
+      - acesso:/app/acesso:ro
+      - ajustes:/app/ajustes:ro
+      - backup_trabalho:/trabalho
+    depends_on:
+      # Só a ordem da primeira subida: o app cria e popula os volumes de dados antes do backup montá-los.
+      vlado:
+        condition: service_started
+
+  # Restauração (não sobe sozinha: profile `restauracao`). Roda como o mesmo uid do app para que os arquivos
+  # restaurados fiquem legíveis por ele. A chave PRIVADA vem do ambiente do comando, nunca de um arquivo do
+  # servidor. Pare o app antes (`stop vlado backup`). Passo a passo: docs/GUIA_TECNICO_IMPLANTACAO.md.
+  restauracao:
+    profiles: ["restauracao"]
+    build:
+      context: .
+      target: backup
+    image: vlado-backup:${VLADO_VERSAO:-local}
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    memswap_limit: 1g
+    cpus: 1
+    pids_limit: 256
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    logging: *rotacao_de_logs
+    environment:
+      VLADO_AMBIENTE: ${VLADO_AMBIENTE:?defina VLADO_AMBIENTE (homologacao, editorial ou demonstracao)}
+      VLADO_BACKUP_DESTINO: ${VLADO_BACKUP_DESTINO:-}
+      VLADO_BACKUP_CHAVE_PRIVADA: ${VLADO_BACKUP_CHAVE_PRIVADA:-}
+      RCLONE_CONFIG: /tmp/rclone.conf
+    env_file:
+      - path: deploy/ambientes/${VLADO_AMBIENTE}-backup.env
+        required: false
+    command: ["python", "scripts/backup.py", "restaurar", "--do-destino", "ultimo", "--identidade-env", "VLADO_BACKUP_CHAVE_PRIVADA", "--substituir"]
+    volumes:
+      - casos:/app/casos
+      - conversas:/app/conversas
+      - execucoes:/app/execucoes
+      - lixeira:/app/lixeira
+      - entrada:/app/entrada
+      - acesso:/app/acesso
+      - ajustes:/app/ajustes
+      - segredos:/app/segredos
+      - backup_trabalho:/trabalho
+
 volumes:
   casos:
   conversas:
@@ -103,3 +207,4 @@ volumes:
   acesso:
   caddy_data:
   caddy_config:
+  backup_trabalho:
