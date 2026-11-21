@@ -118,7 +118,7 @@ Variável CSS não funciona dentro de `@media`, então as três larguras não vi
 |---|---|---|
 | até 719 px | celular | uma coluna; barra lateral vira gaveta; campo de 16 px; alvo de 44 px |
 | 720 a 1023 px | tablet | barra lateral ainda em gaveta (UX-11: "Gaveta até 1024 px") |
-| 1024 a 1279 px | desktop compacto | barra lateral fixa |
+| 1024 a 1279 px | desktop compacto | barra lateral fixa no plano; as pranchas da fase 3 propõem gaveta também aqui (`componentes.md`, pergunta 9) |
 | 1280 px ou mais | desktop | como as telas finais de 1440 px |
 
 O canvas só desenha 390 e 1440 px. O comportamento nas faixas do meio está na lista do que o Design ainda desenha.
@@ -191,6 +191,7 @@ Os ícones brancos sobre as cores do mapa passam no claro. No escuro, branco sob
 | folha do documento | `0 1px 2px rgba(23,63,41,.08)` | — | `--sombra-folha` |
 | achado selecionado, evento selecionado | `0 4px 18px rgba(23,63,41,.08)` | `--sombra-flutuante` (alfa 0,063) | alfa 0,08: primitivo `--vlado-sombra-verde-media:#173f2914` |
 | nó selecionado no mapa | `0 4px 18px rgba(23,63,41,.10)` | — | `--sombra-no-selecionado`, primitivo `#173f291a` |
+| diálogo e gaveta (pranchas derivadas da fase 3, sem desenho no canvas) | `0 12px 40px rgba(23,63,41,.18)`; escuro `#00000099` | — | `--sombra-dialogo` |
 
 No escuro as sombras continuam as da noite (`--vlado-sombra-noite*`); o canvas não desenha sombra no escuro.
 
@@ -325,6 +326,9 @@ Razão de contraste WCAG 2.x (luminância relativa), calculada por `referencia/f
 | E52 | borda de campo atual / verde suave (item ativo) | `#64786a` / `#2c3c2e` | 2.47:1 | 3:1 | **não passa** |
 | E53 | borda de campo nova / verde suave (item ativo) | `#8a9c8f` / `#2c3c2e` | 4.03:1 | 3:1 | passa |
 | E54 | ícone escuro / órgão público no escuro, opção (a) | `#172315` / `#a8b3a9` | 7.52:1 | 3:1 | passa |
+| E55 | borda do botão destrutivo no escuro / superfície (fase 3) | `#a76e66` / `#202823` | 3.65:1 | 3:1 | passa |
+| E56 | barra de progresso no escuro / trilha (fase 3) | `#a8c79d` / `#3c4940` | 5.10:1 | 3:1 | passa |
+| E57 | contador no item ativo da barra, escuro (fase 3) | `#a8c79d` / `#172315` | 8.79:1 | 4.5:1 | passa |
 | E41 | borda de aviso / fundo de aviso | `#aa8754` / `#372e21` | 4.00:1 | 3:1 | passa |
 | E42 | pessoa / superfície | `#3fa877` / `#202823` | 5.10:1 | 3:1 | passa |
 | E43 | empresa / superfície | `#8487e6` / `#202823` | 4.74:1 | 3:1 | passa |

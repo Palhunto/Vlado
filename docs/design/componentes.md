@@ -63,7 +63,7 @@ Todo elemento interativo: `outline: 3px solid var(--theme-focus); outline-offset
 
 ### Quebras
 
-720, 1024 e 1280 px (`mudancas-de-token.md`, item 6). O canvas desenha 390 e 1440 px; o que muda entre elas, além do que está escrito em cada componente, ainda será desenhado.
+720, 1024 e 1280 px (`mudancas-de-token.md`, item 6). O canvas desenha 390 e 1440 px; as pranchas derivadas da fase 3 desenham 1024 e 390 px de duas telas ([Telas derivadas](#telas-derivadas)). A faixa de 720 a 1023 px ainda será desenhada.
 
 ### Movimento
 
@@ -188,7 +188,7 @@ Onde: Conferir achado, Visão geral. `<nav aria-label="Áreas">`.
 | Foco | anel de foco | canvas (regra geral) |
 | Ocupado, erro, desabilitado | não se aplicam | — |
 | Vazio | contador some quando é zero | derivado |
-| Abaixo de 1024 px | vira gaveta com `inert` quando fechada, aberta pelo botão de menu do cabeçalho | plano (UX-11, UX-17); desenho do tablet pendente |
+| Abaixo de 1280 px | vira gaveta: o conteúdo fica `inert` com ela aberta, e ela abre pelo botão de menu do cabeçalho ([tablet](#tablet)) | plano (UX-11, UX-17) e derivado; o limite de 1280 px é a pergunta 9 |
 
 O canvas não desenha ícones nos itens da barra (pergunta 6).
 
@@ -469,7 +469,51 @@ Erro usa as cores de erro e aviso usa as de aviso, nunca trocadas (W11, regra 6)
 
 ### Diálogo de confirmação
 
-Sem desenho no canvas. W11, regra 8: "Confirmação de ação destrutiva usa o diálogo da Mesa, nunca o do navegador, e oferece desfazer quando possível." UX-16 pede reusar o diálogo da lixeira. Está na lista do que o Design desenha antes de ser construído (regra 1 do contrato).
+> **Derivado, aguarda aprovação do dono.** O canvas não desenha diálogo; W11 (regra 8) e UX-16 pedem um. Pranchas em [`novas/telas/`](novas/telas/): `dialogo-simples-*`, `dialogo-destrutivo-*` e `dialogo-campo-*`, em claro e escuro, 1440 e 390 px. A tela atrás do véu é só contexto.
+
+Substitui os oito `confirm()` nativos (UX-16) e segue os dois diálogos que a Mesa já tem para a lixeira (`interface/index.html:275-290`): rubrica, título, texto, "Cancelar" com `autofocus` e a ação.
+
+| Parte | Medida e token |
+|---|---|
+| Elemento | `<dialog>` aberto com `showModal()`; `role="alertdialog"`, `aria-modal="true"`, `aria-labelledby` no título e `aria-describedby` no texto |
+| Véu | tela inteira em `--theme-backdrop`; a página atrás fica `inert` |
+| Caixa | largura 480 (no celular, a largura da tela menos 16 px de cada lado: 358 em 390); centrada nos dois eixos; fundo `--theme-surface`; raio 12; preenchimento 24; coluna com intervalo de 16; sombra `--sombra-dialogo` *(nova: `0 12px 40px` alfa 0,18 no claro; `#00000099` no escuro)* |
+| Rubrica (opcional) | 14/600, maiúsculas, `--theme-muted` ("MOVER PARA A LIXEIRA", como hoje) |
+| Título | serifa 22/600, entrelinha 1,25; nomeia a ação, e o item quando há um |
+| Texto | 16; a nota de consequência em 14 `--theme-muted` |
+| Ações | à direita, intervalo de 8, com quebra de linha, 8 px de folga acima; "Cancelar" (secundário) antes da ação |
+
+| Variante | Ação | Foco inicial e botão padrão (Enter) | Exemplo na prancha |
+|---|---|---|---|
+| Simples | principal | a ação | "Gerar novo link de ativação?" (`piloto.js:143`) |
+| Destrutiva, com o nome do item | variante destrutiva do canvas (contorno e texto de erro) | "Cancelar" | "Mover “Vila Serena — contrato de pavimentação” para a lixeira?" (`index.html:275-277`) |
+| Com campo | destrutiva, desabilitada até o nome digitado conferir | o campo; Enter só confirma com a ação habilitada | "Apagar definitivamente", com a tabela do que sai e "Digite «nome» para confirmar" (`index.html:278-290`, `gerenciar.js:154-156`) |
+
+Comportamento: o foco fica preso no diálogo (Tab e Shift+Tab circulam entre os controles); Esc fecha como "Cancelar"; ao fechar, o foco volta ao controle que abriu o diálogo; clique no véu não fecha (pergunta 13).
+
+| Estado | Aparência | Origem |
+|---|---|---|
+| Padrão | acima | derivado |
+| Foco | anel de foco do canvas no controle focado; nas pranchas, na ação (simples), em "Cancelar" (destrutiva) e no campo (com campo) | canvas (anel) e derivado |
+| Ocupado | a ação troca o rótulo pelo gerúndio ("Apagando…", como `gerenciar.js:140`), `aria-busy` no diálogo, "Cancelar" desabilitado até a resposta | derivado |
+| Erro | mensagem em 14 `--theme-danger` acima das ações, com `role="alert"` (o `#apagar-erro` de hoje), no formato de W11 | wireframe W11 (regra 4) |
+| Desabilitado | a ação destrutiva da variante com campo, até o nome conferir (variante "Indisponível" do botão) | canvas (botão) |
+| Vazio | não se aplica | — |
+
+Os oito `confirm()` de hoje e a variante de cada um (os rótulos de ação são proposta; pergunta 14):
+
+| Onde | Texto de hoje | Variante | Ação proposta |
+|---|---|---|---|
+| `apuracao.js:57` | "Há alterações não salvas no Caderno. Sair sem salvar?" | destrutiva | "Sair sem salvar" |
+| `apuracao.js:413` | "Há alterações não salvas. Descartar essas alterações?" | destrutiva | "Descartar alterações" |
+| `apuracao.js:542` | "Excluir esta nota do caderno? As fontes serão preservadas." | destrutiva, com o nome da nota | "Excluir nota" |
+| `apuracao.js:589` | "Recarregar descarta o texto deste editor. Continuar?" | destrutiva | "Recarregar e descartar" |
+| `codex.js:582` | "Encerrar o serviço local? As execuções ativas serão interrompidas. …" | destrutiva | "Encerrar o serviço" |
+| `experiencia.js:298` | "Há texto ou alterações não salvas. Descartar e fechar?" | destrutiva | "Descartar e fechar" |
+| `piloto.js:135` | "Desativar esta conta? A pessoa sai na próxima ação." | destrutiva, com o nome da pessoa | "Desativar conta" |
+| `piloto.js:143` | "Gerar novo link de ativação? A senha atual deixa de valer e as sessões abertas são encerradas." | simples | "Gerar novo link" |
+
+"Desfazer quando possível" (W11, regra 8): excluir nota hoje não oferece desfazer (UX-16). O desenho do aviso com "Desfazer" fica para depois da resposta à pergunta 15.
 
 <a id="icones"></a>
 
@@ -552,6 +596,68 @@ Tipos de relação pedidos e o ícone de cada um: sócio → `relacao-socio`; co
 **Derivados, aprovados pelo dono em 21/11/2026 (P11.10):** `data` (calendário: corpo de 16 × 15, linha de cabeçalho e duas argolas); `lacuna` (círculo de raio 9 com o ponto de interrogação em traço, versão vetorial do sinal "?" do canvas); `sinal-sem-suporte` (✕ em dois traços de 10 × 10), `sinal-corrigido` (lápis) e `sinal-parcial` (círculo de raio 8 com metade hachurada), que substituem os caracteres ✕, ✎ e ◐: nenhum dos três existe nas fontes da Mesa (`mudancas-de-token.md`, item 12), e na referência eles saíram de uma fonte do sistema. Os sinais ✓ e ○ existem no Source Sans 3 e continuam como texto. Os três derivados de sinal vão ao lado do texto, então levam `aria-hidden="true"`; o rótulo da tabela vale só quando aparecem sozinhos. `documento` não é derivado: é o ícone `documentos` da Mesa atual, sem mudança.
 
 **Tema escuro.** Os ícones herdam a cor do texto (`currentColor`) e passam com ela (texto sobre superfície: 12,40:1). Nas formas coloridas do mapa, o ícone usa `--theme-on-primary` (`#172315`): branco sobre a esmeralda do escuro daria 2,97:1 (`mudancas-de-token.md`, E44). A forma do órgão público no escuro aparece na prancha com `#a8b3a9`, a opção (a) da pergunta 4, ainda sem resposta do dono; o ícone escuro sobre ela dá 7,52:1 (E54) e, na opção (b), 4,92:1 sobre a ameixa (E50).
+
+---
+
+<a id="telas-derivadas"></a>
+
+## Telas derivadas (fase 3)
+
+> **Derivado, aguarda aprovação do dono.** O canvas não desenha estas telas; pela regra 1 do contrato, nada aqui é construído antes da aprovação. Pranchas em [`novas/`](novas/README.md), renderizadas pelo mesmo processo da referência, com uma faixa "Derivado · aguarda aprovação do dono" abaixo de cada uma. Os componentes são os da especificação acima; esta seção diz só o que muda em cada largura e tema.
+
+<a id="escuro-desktop"></a>
+
+### Tema escuro no desktop
+
+Pranchas: `conferir-achado-escuro-1440`, `visao-geral-escuro-1440`, `design-system-revisado-escuro-1440`.
+
+Método: a mesma prancha do canvas, com cada cor do claro trocada pelo valor escuro do mesmo token semântico (a tabela está em `novas/ferramentas/gerar_novas.cjs`, `CLARO_ESCURO`, e segue `design-system.md` e `mudancas-de-token.md`). Estrutura, texto e medida não mudam. Ficam como estão:
+
+- a folha do documento no painel do original: papel branco com o texto do documento, nos dois temas (como `--pdf-pagina`);
+- as amostras de cor do design system: mostram a paleta, então mantêm as cores que nomeiam.
+
+O que o escuro decide e o canvas não mostra:
+
+| Elemento | Escuro | Contraste | Observação |
+|---|---|---|---|
+| Item ativo da barra lateral | fundo `--theme-accent` (`#a8c79d`), texto `--theme-on-primary` (`#172315`) | 8,79:1 | Segue o botão principal do celular escuro do canvas. O CSS de hoje usa fundo `--theme-active`, texto verde e uma barra interna de 3 px (`style.css:174`); pergunta 10. |
+| Contador no item ativo | pílula `#172315` com texto `#a8c79d` | 8,79:1 | Token `--nav-contador-ativo-fundo` no escuro. |
+| "1 vence" na barra lateral | `--theme-warning` (`#e6bc7a`) sobre `#121714` | 10,22:1 | |
+| Botão destrutivo | borda `#a76e66` sobre `#202823` | 3,65:1 | Mínimo de 3:1 para borda de controle. |
+| Barra de progresso | `#a8c79d` sobre a trilha `#3c4940` | 5,10:1 | |
+| Sombras | `#00000033` e `#00000066` (sombras da noite) | — | |
+
+Os pares das pranchas estão na tabela de contraste de `mudancas-de-token.md`; os medidos para elas são E55 a E57, que passam. Dos pares do escuro que não passam naquela tabela, só a divisória (E51, decorativa) aparece nestas pranchas: a borda de campo antiga (E36, E52) e o ícone branco sobre a esmeralda (E44) não são usados.
+
+<a id="tablet"></a>
+
+### Tablet, 1024 px
+
+Pranchas: `conferir-achado-{claro,escuro}-1024`, `conferir-achado-gaveta-aberta-{claro,escuro}-1024`, `visao-geral-{claro,escuro}-1024`.
+
+**Gaveta (UX-11).** A barra lateral sai da tela e vira gaveta. Fechada por padrão. O cabeçalho ganha, no início, o botão "Abrir menu" (só ícone, 44 × 44, ícone de menu do canvas). Aberta, a gaveta é a barra lateral inteira (232 px, mesmos itens, cota e perfil), sobre o conteúdo, com o véu `--theme-backdrop` e sombra `--sombra-dialogo`; o conteúdo atrás fica `inert`; o foco vai para o primeiro item; Esc ou um item escolhido fecham a gaveta e devolvem o foco ao botão. A prancha mostra a estrutura; o movimento de abrir não está desenhado.
+
+Por que gaveta em 1024 px: com a barra fixa de 232 px, a tela de conferir ficaria com 272 px para a lista de achados ao lado do painel do original. Isso muda a faixa de 1024 a 1279 px da tabela de quebras (`mudancas-de-token.md`, item 6), que dizia "barra lateral fixa"; pergunta 9.
+
+**Conferir achado, 1024.** Cabeçalho de 64 px: "Abrir menu", "Apuração" sobre o nome, "Salvo às 14h32" e "Exportar apuração" (o cabeçalho da apuração do canvas, mais o botão de menu). Lista com o preenchimento do desktop (28 32). Painel do original com 440 px (no lugar de 520) e folha com preenchimento 32 36. As ações do achado aberto quebram linha quando não cabem.
+
+**Visão geral, 1024.** Cabeçalho de 64 px: "Abrir menu", marca "Vlado." (serifa 28/600, entrelinha 1) e, à direita, "Cota do mês" com o valor (a cota sai da barra lateral, que agora está na gaveta). Conteúdo com preenchimento de 32 px; a mesma estrutura do desktop: título de 36 px com os dois botões à direita, cartão do próximo passo, quatro contagens em linha, perguntas e linha do tempo em duas colunas.
+
+<a id="celular-telas"></a>
+
+### Celular, 390 px
+
+Pranchas: `conferir-achado-{claro,escuro}-390`, `conferir-achado-original-{claro,escuro}-390`, `visao-geral-{claro,escuro}-390`.
+
+Cabeçalho: o do celular do canvas (60 px: "Abrir menu", "Apuração" sobre o nome cortado com reticências, cota à direita). Margens de 16 px. A barra lateral é a mesma gaveta do tablet, com a largura de 232 px.
+
+**Conferir achado, 390.** Coluna única: título de 28 px com o progresso, caixa "Sua pergunta", lista de achados. No achado aberto, as ações ficam empilhadas em botões de 48 px de largura cheia, nesta ordem: "Ver o trecho no original" (secundário), "Confere com o original" (principal), "Precisa de ajuste" (secundário), "Sem suporte" (recusa).
+
+**Original no celular.** "Ver o trecho no original" abre o original numa camada de tela cheia (`conferir-achado-original-*-390`): cabeçalho com "Achados" (volta à lista, devolvendo o foco ao achado) e o selo "Lida por OCR"; nome do documento e página; a folha; zoom e "Abrir o original em nova aba"; no pé, o achado em conferência com as três ações, para conferir sem voltar. Pergunta 11.
+
+**Visão geral, 390.** Coluna única com intervalo de 16: rubrica de data; título da apuração em serifa 28/600, entrelinha 1,2 (36 px quebraria em três linhas; pergunta 12); "Trocar de apuração" e "Nova apuração" lado a lado, metade da largura cada; cartão do próximo passo em coluna, com preenchimento 20 e a chamada "Conferir agora" de 48 px; contagens em grade de 2 × 2, intervalo de 12; "Últimas perguntas" e "Linha do tempo documentada" uma abaixo da outra.
+
+**Diálogos no celular:** ver [diálogo de confirmação](#dialogo); a caixa ocupa a largura menos 16 px de cada lado.
 
 ---
 
@@ -673,7 +779,7 @@ Nota do wireframe: "Muda o que existe hoje: o manifesto guarda um único domíni
 
 ## O que ainda falta desenhar
 
-Pela regra 1 do contrato, nada disto é construído antes de o Design desenhar e o dono aprovar: pedidos e prazos de LAI; fontes e capturas de site dentro da apuração; lixeira; configuração da organização; página pública; diálogo de confirmação; versões de celular das telas de desktop (e, no sentido inverso, o Entrar em desktop); faixas de 720 a 1279 px; tema escuro das telas de desktop. O conjunto de ícones (parte E) está na seção [Conjunto de ícones do Vlado](#conjunto-de-icones), com cinco ícones derivados, aprovados pelo dono em 21/11/2026.
+Pela regra 1 do contrato, nada disto é construído antes de o Design desenhar e o dono aprovar: pedidos e prazos de LAI; fontes e capturas de site dentro da apuração; lixeira; configuração da organização; página pública; versões de celular das demais telas de desktop (e, no sentido inverso, o Entrar em desktop); faixa de 720 a 1023 px; tema escuro das telas do canvas fora as três de desktop; aviso com "Desfazer" (pergunta 15). Desenhados na fase 3 e à espera de aprovação: diálogo de confirmação, escuro de conferir achado, visão geral e design system, tablet de 1024 px e celular de 390 px de conferir achado e visão geral ([Telas derivadas](#telas-derivadas)). O conjunto de ícones (parte E) está na seção [Conjunto de ícones do Vlado](#conjunto-de-icones), com cinco ícones derivados, aprovados pelo dono em 21/11/2026.
 
 ## Perguntas para o dono
 
@@ -687,3 +793,10 @@ Nenhuma muda o canvas sem o seu aval. Até a resposta, a especificação segue o
 6. **Ícones na barra lateral.** O canvas mostra a barra lateral só com texto; a Mesa de hoje tem ícone em cada área (`interface/desktop.js:198-214`). Seguir o canvas (sem ícones) ou manter os ícones?
 7. **Quadros sem barra lateral.** As telas do mapa e da linha do tempo não têm a barra lateral de áreas. É tela cheia de propósito, ou a barra foi omitida no desenho?
 8. **Medidas fora da grade de 4 px.** O canvas usa preenchimentos de 6, 10, 14, 18 e 22 px. A especificação reproduz as medidas exatas. Prefere assim ou arredondar para a grade de 4 px na implementação (diferença de até 2 px)?
+9. **Gaveta também em 1024 px.** UX-11 pede gaveta "até 1024 px", e a tabela de quebras dizia barra fixa de 1024 a 1279 px. Com a barra fixa, a 1024 px a lista de achados ficaria com 272 px ao lado do original. Proposta das pranchas: gaveta em toda largura abaixo de 1280 px. Concorda?
+10. **Item ativo da barra lateral no escuro.** As pranchas usam verde cheio com texto escuro, como o botão principal do celular escuro; a Mesa de hoje usa fundo verde suave, texto verde e uma barra interna (`style.css:174`). Qual vale?
+11. **Original no celular.** No celular o original abre numa camada de tela cheia, com as três ações de conferência no pé. Concorda, ou prefere o original abaixo do achado, na mesma página?
+12. **Título da apuração no celular.** Em 36 px ele quebra em três linhas em 358 px; as pranchas usam 28 px (o degrau "título de área"). Concorda?
+13. **Clique fora do diálogo.** As pranchas definem que clicar no véu não fecha o diálogo (só "Cancelar" e Esc). Concorda?
+14. **Rótulos das ações dos oito `confirm()`.** A tabela da seção do diálogo propõe um rótulo para cada ação ("Sair sem salvar", "Excluir nota"…). Aprova?
+15. **Desfazer.** W11 pede desfazer quando possível. Desenho um aviso com "Desfazer" para excluir nota e mover para a lixeira?
