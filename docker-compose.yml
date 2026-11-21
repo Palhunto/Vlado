@@ -18,7 +18,9 @@ services:
     restart: unless-stopped
     # tini como PID 1: repassa SIGTERM ao Python e colhe processos filhos (OCR, Ghostscript) sem deixar zumbis.
     init: true
-    # Encerramento ordenado (a Plataforma fecha cadastros em curso no SIGTERM) antes do SIGKILL.
+    # Prazo entre o SIGTERM e o SIGKILL. Hoje o app não trata SIGTERM e termina na hora, então o prazo não é usado;
+    # ele já fica pronto para o encerramento ordenado que a Plataforma entrega na CONF-01 (fechar cadastros e
+    # execuções em curso). Se esse encerramento passar de 30 s, aumente aqui.
     stop_grace_period: 30s
     read_only: true
     cap_drop:
