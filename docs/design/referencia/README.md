@@ -70,7 +70,7 @@ Os wireframes são em tons de cinza e medem 1200 × 760 px. Valem pela estrutura
 
 ## O que o canvas não tem, e por isso esta pasta não tem
 
-- **Nenhuma tela existe nas duas larguras.** As telas de desktop estão só em 1440 px; as de celular, só em 390 px (não 375). O plano pede 375 e 1440 "quando a tela tiver as duas versões"; nenhuma tem. As versões que faltam (celular das telas de desktop, desktop do "Entrar") estão na lista do que o Design ainda desenha.
+- **Nenhuma tela existe nas duas larguras.** As telas de desktop estão só em 1440 px; as de celular, só em 390 px (não 375). O plano pede "uma imagem por tela, em 375 e 1440 px" (regra 4 do contrato visual), e a instrução desta fase pediu as duas larguras quando a tela tivesse as duas versões; nenhuma tem. As versões que faltam (celular das telas de desktop, desktop do "Entrar") estão na lista do que o Design ainda desenha.
 - **Tema escuro em desktop.** Só a pergunta no celular está no escuro; as demais telas finais estão no claro. O escuro das outras telas segue os tokens (`mudancas-de-token.md`), sem imagem de referência.
 - **Telas sem desenho:** pedidos e prazos de LAI, fontes e capturas de site dentro da apuração, lixeira, configuração da organização, página pública, diálogo de confirmação (W11, regra 8) e as versões de celular. São a fase seguinte do Design.
 

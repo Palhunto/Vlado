@@ -45,7 +45,8 @@ Cada componente tem uma âncora própria, para os critérios de aceite apontarem
 | Apoio, fonte citada, rótulos | sem serifa | 14 / 400 ou 600 | `--text-md` |
 | Rubrica ("SEU PRÓXIMO PASSO", "LIGAÇÃO SELECIONADA", "MOSTRAR", "COMO LER") | sem serifa | 14 / 600, maiúsculas, espaçamento 0,6 px | `--text-md` |
 | Frase de destaque ("Seu próximo passo") | serifa | 24 / 400 / 1,3 | `--text-destaque` *(novo)* |
-| Número de contagem; marca na barra lateral | serifa | 32 / 600 / 1,1 (marca: espaçamento −0,5 px) | `--text-numero` *(novo)* |
+| Número de contagem | serifa | 32 / 600 / 1,1 | `--text-numero` *(novo)* |
+| Marca na barra lateral | serifa | 32 / 600 / 1,5 (herdada do corpo), espaçamento −0,5 px | `--text-numero` *(novo)* |
 | Marca no Entrar | serifa | 40 / 600 / 1 | `--text-marca` *(novo)* |
 
 Serifa = `--fonte-titulo` *(novo)*, Source Serif 4. Sem serifa = `--fonte-interface` *(novo)*, Source Sans 3. Nenhum texto de interface abaixo de 14 px; nenhum campo abaixo de 16 px. Texto de leitura com até 70 caracteres por linha (UX-10).
@@ -172,7 +173,7 @@ Onde: Conferir achado, Visão geral. `<nav aria-label="Áreas">`.
 | Parte | Medida e token |
 |---|---|
 | Contêiner | largura 232 (`--mesa-sidebar`); fundo `--theme-sidebar`; borda direita 1 px `--theme-line`; preenchimento 24 16; coluna com intervalo de 24 |
-| Marca | "Vlado" e um ponto em `--theme-accent`; serifa 32/600, espaçamento −0,5 px; preenchimento 0 8 |
+| Marca | "Vlado" e um ponto em `--theme-accent`; serifa 32/600, entrelinha 1,5 (herdada do corpo), espaçamento −0,5 px; preenchimento 0 8 |
 | Lista de áreas | coluna, intervalo de 4. Ordem: Visão geral, Documentos, Perguntar, Conferir, Quadros, Caderno, Pedidos e prazos |
 | Item | `<a>`, altura 44, preenchimento 0 12, raio 8, texto 16 `--theme-text`, sem sublinhado |
 | Contador | à direita (`margin-left:auto`), 14 px; quatro formas em `mudancas-de-token.md`, item 8 |
@@ -340,7 +341,7 @@ Regras que vêm dos wireframes: nunca cobre o conteúdo (W03, regra 2; UX-19: re
 |---|---|---|
 | Padrão | acima | canvas |
 | Foco | anel de foco na área de texto (escuro: ocre `#e6bc7a`) | canvas |
-| Ocupado | botão "Enviar" vira "Parar" enquanto a resposta chega | wireframe W03 |
+| Ocupado | o compositor não muda: continua com "Enviar" e com "rascunho salvo" na linha de custo; o "Parar" fica no bloco de progresso da resposta, junto do gasto até agora (ver [resposta no celular](#resposta-celular)) | wireframe W03 |
 | Erro | mensagem de campo abaixo ("Escreva a pergunta antes de enviar.") | derivado de W11 (regra 5) |
 | Desabilitado | cota acabou: campo e botão desabilitados, com o bloco "Limite atingido" acima | wireframe W11 |
 | Vazio | botão "Enviar" desabilitado até haver texto | derivado |

@@ -202,6 +202,19 @@ No escuro as sombras continuam as da noite (`--vlado-sombra-noite*`); o canvas n
 --fonte-interface:"Source Sans 3",system-ui,sans-serif;  /* todo o resto */
 ```
 
+Sinais dos selos e marcas de estado. A tabela `cmap` das fontes da Mesa (lida direto dos arquivos) mostra:
+
+| Sinal | Onde no canvas | Source Sans 3 | Source Serif 4 |
+|---|---|---|---|
+| ✓ U+2713 | selo "Conferido", W02, W04 | tem | tem |
+| ○ U+25CB | selo "A conferir", W02, W04, W06 | tem | não tem |
+| ✕ U+2715 | selo "Sem suporte", erros de W11 | **não tem** | **não tem** |
+| ✎ U+270E | célula corrigida (W06) | **não tem** | **não tem** |
+| ◐ U+25D0 | leitura por OCR (W02), etapa em andamento (W03), convite pendente (W09) | **não tem** | **não tem** |
+| − U+2212, … U+2026, ▾ U+25BE | comparador, reticências, seletores | tem | ▾ não tem |
+
+Consequências: (a) na referência exportada, ✕, ✎ e ◐ foram desenhados por uma fonte do sistema (o Chromium no Windows), então o desenho desses três depende do aparelho; (b) o subconjunto latino em WOFF2 (UX-04) precisa incluir U+2212, U+2026, U+25BE, U+25CB e U+2713, ou esses sinais também passam a depender do sistema. Proposta: incluir esses cinco no subconjunto e trocar ✕, ✎ e ◐ por ícones SVG do conjunto do Vlado (parte E), com o mesmo tamanho do texto. Até lá, a conferência de tela aceita diferença de desenho nesses três sinais, nunca a falta deles.
+
 Pesos usados no canvas: 400 e 600 nas duas famílias; 700 no sinal "?" da lacuna e nos `<strong>`/`<b>` (valores destacados na resposta, nome do nó no mapa). As fontes continuam servidas pela Mesa, em WOFF2 com subconjunto latino (UX-04), como o próprio canvas anota.
 
 ## Contraste medido
