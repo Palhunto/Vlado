@@ -511,6 +511,56 @@ class AgendamentoESaudeTest(Base):
         self.assertEqual(visitados, ['https://ping.exemplo/abc/', 'https://ping.exemplo/abc/fail'])
 
 
+class RestauracaoComMesaNoArTest(Base):
+    """J1: a restauração troca o conteúdo das pastas de dados e não pode rodar com o app gravando."""
+
+    def principal(self, *argumentos, resposta=None, erro=None):
+        arquivo = backup.criar(self.root, self.base / 'copias')
+        destino = self.base / 'destino'
+        ambiente = {'VLADO_AMBIENTE': 'homologacao', 'VLADO_BACKUP_TRABALHO': str(self.base / 'trabalho')}
+
+        def saude(url):
+            if erro:
+                raise erro
+            return resposta
+        with patch.object(backup, 'ROOT', destino), patch.object(sys, 'argv', ['backup.py', 'restaurar', str(arquivo), *argumentos]), \
+                patch.dict(os.environ, ambiente), patch.object(backup, '_ler_saude', saude):
+            return backup._principal(), destino
+
+    def test_recusa_quando_a_mesa_responde_e_nao_toca_nos_dados(self):
+        with self.assertRaisesRegex(ValueError, 'A Mesa está no ar'):
+            self.principal(resposta=(200, b'{"ok": true}'))
+        self.assertFalse((self.base / 'destino' / 'casos').exists())
+
+    def test_qualquer_resposta_http_conta_como_no_ar(self):
+        with self.assertRaisesRegex(ValueError, 'A Mesa está no ar'):
+            self.principal(resposta=(503, b''))
+
+    def test_com_a_confirmacao_explicita_restaura(self):
+        codigo, destino = self.principal('--mesmo-com-a-mesa-no-ar', resposta=(200, b'{"ok": true}'))
+        self.assertEqual(codigo, 0)
+        self.assertTrue((destino / 'casos' / 'catalogo.json').is_file())
+
+    def test_sem_resposta_do_app_restaura_sem_pedir_confirmacao(self):
+        codigo, destino = self.principal(erro=OSError('Name or service not known'))
+        self.assertEqual(codigo, 0)
+        self.assertTrue((destino / 'acesso' / 'acesso.json').is_file())
+
+    def test_verificar_nao_e_barrado_porque_nao_escreve_dados(self):
+        arquivo = backup.criar(self.root, self.base / 'copias')
+        ambiente = {'VLADO_AMBIENTE': 'homologacao', 'VLADO_BACKUP_TRABALHO': str(self.base / 'trabalho')}
+        with patch.object(sys, 'argv', ['backup.py', 'verificar', str(arquivo)]), patch.dict(os.environ, ambiente), \
+                patch.object(backup, '_ler_saude', lambda url: (200, b'{"ok": true}')):
+            self.assertEqual(backup._principal(), 0)
+
+    def test_mesa_no_ar_olha_o_endereco_configurado(self):
+        visitados = []
+        cfg = backup._configuracao({'VLADO_VIGIA_URL': 'http://outro:9000/saude'})
+        with patch.object(backup, '_ler_saude', lambda url: visitados.append(url) or (200, b'')):
+            self.assertTrue(backup.mesa_no_ar(cfg))
+        self.assertEqual(visitados, ['http://outro:9000/saude'])
+
+
 class TravaDeCadastroTest(Base):
     """A trava nova da CONF-01: `casos/.cadastro.trava`, arquivo que nunca é apagado, preso com flock."""
 

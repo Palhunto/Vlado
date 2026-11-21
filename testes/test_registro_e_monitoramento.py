@@ -212,6 +212,28 @@ class DocumentosDeOperacaoTest(unittest.TestCase):
         self.assertIn('Não apague', invasao)
         self.assertRegex(invasao, r'(?i)preserv')
 
+    def test_chave_privada_nunca_vai_para_o_disco_do_servidor_nos_roteiros(self):
+        """B1: os roteiros dizem onde a chave privada pode estar e onde nunca, e não mandam ler de arquivo no servidor."""
+        backup_md = self.texto('BACKUP.md')
+        self.assertIn('Onde a chave privada pode estar e onde nunca', backup_md)
+        self.assertIn('OUTRA máquina', backup_md)
+        self.assertIn('read -rs', backup_md)
+        self.assertIn('credencial só de leitura', backup_md)
+        for nome in ('BACKUP.md', 'INCIDENTE.md', 'MONITORAMENTO.md'):
+            texto = self.texto(nome)
+            # nenhum comando manda ler a chave de um arquivo comum da máquina; só o pen drive montado é citado
+            for linha in texto.splitlines():
+                if '$(cat' in linha:
+                    self.assertIn('/mnt/pendrive', linha, f'{nome}: {linha.strip()}')
+        incidente = self.texto('INCIDENTE.md')
+        self.assertIn('nunca gravada em arquivo no servidor', incidente)
+        self.assertIn('read -rs', incidente)
+
+    def test_roteiros_dizem_que_a_restauracao_recusa_rodar_com_a_mesa_no_ar(self):
+        self.assertIn('recusa rodar com a Mesa no ar', self.texto('BACKUP.md'))
+        self.assertIn('--mesmo-com-a-mesa-no-ar', self.texto('BACKUP.md'))
+        self.assertIn('se recusa', self.texto('INCIDENTE.md'))
+
     def test_roteiro_nao_traz_chave_nem_senha_de_exemplo_reais(self):
         for nome in ('INCIDENTE.md', 'MONITORAMENTO.md', 'BACKUP.md'):
             texto = self.texto(nome)

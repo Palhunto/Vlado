@@ -118,36 +118,81 @@ Para testar na hora (sem esperar o horário), `VLADO_BACKUP_AO_INICIAR=1` no `.e
 Opcional: `VLADO_BACKUP_PING_URL` com o endereço de um serviço de "batimento" (healthchecks.io ou similar): recebe um
 aviso a cada sucesso e `/fail` a cada falha, e o serviço pode alertar quando o aviso **deixar de chegar**.
 
-## Ensaio de restauração (faça antes de depender do backup e repita a cada trimestre)
+## Onde a chave privada pode estar e onde nunca
 
-Use um projeto separado e vazio, **nunca** os volumes do ambiente em uso. A chave privada vem do ambiente do comando
-(`VLADO_BACKUP_CHAVE_PRIVADA`), não de arquivo no servidor.
+| Pode | Nunca |
+|---|---|
+| No cofre do dono: gerenciador de senhas e cópia impressa ou em pen drive guardados | No **disco do servidor** de produção ou de homologação (arquivo, `.env`, histórico do shell, pasta de trabalho) |
+| Na **memória** da sessão de quem restaura, durante o comando (variável de ambiente digitada ou colada, depois descartada) | No mesmo lugar que as credenciais do destino dos backups: quem pega as duas abre todos os backups |
+| Num pen drive montado só durante a restauração e retirado em seguida | No repositório, em e-mail, em chat, em captura de tela, em volume Docker, na imagem ou em log |
+
+O servidor de produção **só tem a chave pública**. A chave privada entra numa máquina apenas no momento de restaurar, e
+a regra é: **não deixar rastro em disco**.
+
+### Como informar a chave sem gravá-la
+
+Em vez de `cat arquivo` (que exige a chave em um arquivo na máquina), cole-a no terminal sem eco e sem histórico:
 
 ```bash
+IFS= read -rs -d '' VLADO_BACKUP_CHAVE_PRIVADA      # cole a chave, Enter, e Ctrl+D; nada aparece na tela
+export VLADO_BACKUP_CHAVE_PRIVADA
+# ... comandos de verificar e restaurar abaixo ...
+unset VLADO_BACKUP_CHAVE_PRIVADA                    # ao terminar; feche o terminal
+```
+
+Se a chave estiver num pen drive, monte-o, leia dele (`VLADO_BACKUP_CHAVE_PRIVADA="$(cat /mnt/pendrive/chave-vlado.txt)"`),
+desmonte e retire. Durante o comando a chave existe no ambiente do contêiner de restauração (visível a quem tem acesso
+ao Docker daquela máquina, e só enquanto ele roda; o `--rm` o apaga). Por isso: restaure numa máquina em que só quem
+restaura tem acesso.
+
+## Ensaio de restauração (faça antes de depender do backup e repita a cada trimestre)
+
+**Faça o ensaio em OUTRA máquina** (o computador do dono ou um servidor temporário com Docker), **não no servidor que
+produz os backups**. Motivos: prova que o backup restaura sem depender do servidor original, e a chave privada nunca
+chega ao disco que guarda as credenciais do destino. Nessa máquina:
+
+- clone este repositório na mesma versão e crie um `deploy/ambientes/<ambiente>.env` **mínimo**, só com
+  `VLADO_AMBIENTE`, `VLADO_DOMINIO` (pode ser `localhost`), `VLADO_VERSAO` e `VLADO_BACKUP_DESTINO`;
+- as credenciais do destino ficam em `deploy/ambientes/<ambiente>-backup.env`. **Use uma credencial só de leitura** (crie
+  outra no fornecedor, sem permissão de gravar ou apagar), assim a máquina de ensaio não consegue alterar os backups;
+- use um projeto separado e vazio (`-p vlado-restauracao`), **nunca** os volumes do ambiente em uso.
+
+```bash
+# informe a chave como mostrado acima (read -rs), depois:
+
 # 1) conferir sem restaurar: decifra, confere todos os hashes, não escreve dado nenhum
-VLADO_BACKUP_CHAVE_PRIVADA="$(cat /caminho/da/chave-vlado.txt)" \
 docker compose -p vlado-restauracao --env-file deploy/ambientes/<ambiente>.env --profile restauracao run --rm -T restauracao \
   python scripts/backup.py verificar --do-destino ultimo --identidade-env VLADO_BACKUP_CHAVE_PRIVADA
 
 # 2) restaurar o último backup em volumes novos
-VLADO_BACKUP_CHAVE_PRIVADA="$(cat /caminho/da/chave-vlado.txt)" \
 docker compose -p vlado-restauracao --env-file deploy/ambientes/<ambiente>.env --profile restauracao run --rm -T restauracao
 
 # 3) subir a Mesa sobre os dados restaurados e conferir
 docker compose -p vlado-restauracao --env-file deploy/ambientes/<ambiente>.env up -d vlado caddy
+
+unset VLADO_BACKUP_CHAVE_PRIVADA
 ```
 
 Conferir: `/saude` responde; as contas entram (todos precisam fazer login de novo: a restauração apaga as sessões); os
-casos e as rodadas abrem; documentos têm o mesmo hash. Ao terminar, `down -v` do projeto de ensaio.
+casos e as rodadas abrem; documentos têm o mesmo hash. Ao terminar, `down -v` do projeto de ensaio (é um projeto de
+teste: nele pode) e apague a pasta clonada se a máquina não for sua.
 Para restaurar um backup específico: `--do-destino NOME-DO-ARQUIVO` (veja os nomes com `listar`).
+
+**A restauração recusa rodar com a Mesa no ar.** Ela troca o conteúdo das pastas de dados; se o app estivesse gravando,
+poderia misturar dois estados. O comando procura o app em `VLADO_VIGIA_URL` (padrão `http://vlado:8765/saude`); se ele
+responder, a restauração para com uma mensagem. Pare antes: `stop vlado backup`. Só use `--mesmo-com-a-mesa-no-ar` se
+tiver certeza de que ninguém está usando e o endereço aponta para outro lugar.
 
 ## Em desastre (servidor perdido)
 
 1. Servidor novo com Docker e este repositório na versão (`VLADO_VERSAO`) em uso; `.env` do ambiente e credenciais do
-   destino de volta (guarde uma cópia **fora** do servidor, junto da senha do gerenciador do dono).
-2. **[Dono]** a chave privada (passo 1), no computador de quem restaura.
+   destino de volta (guarde uma cópia **fora** do servidor, no cofre do dono, **separada da chave privada**).
+2. **[Dono]** a chave privada (passo 1) é colada **no terminal** de quem restaura, com `read -rs` (acima), ou lida de
+   um pen drive que é retirado em seguida. **Não a grave no disco do servidor novo**: ele passará a guardar as
+   credenciais do destino. Se o servidor novo é a única máquina disponível, restaure, `unset` a variável, e só então
+   configure o `backup` agendado (que só tem a chave pública).
 3. `restauracao` como no ensaio, mas com o `-p` do ambiente real, e depois `up -d`. Se o serviço estiver rodando,
-   `stop vlado backup` antes: ninguém deve gravar durante a restauração.
+   `stop vlado backup` antes (a restauração se recusa a rodar com o app no ar).
 4. Reaponte o DNS (**[Dono]**) quando a Mesa responder no servidor novo.
 
 Perda máxima esperada: o que foi gravado desde o último backup (até 24 h). Para reduzir, rode `rodada` à mão antes de

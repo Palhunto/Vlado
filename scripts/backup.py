@@ -18,6 +18,7 @@ server volume. Everything else a user created is in: cases, rounds, conversation
   python scripts/backup.py criar --destino -  > vlado-dados.tar.gz      (stream, e.g. from a container)
   python scripts/backup.py restaurar ARQUIVO [--identidade CHAVE_PRIVADA] [--substituir]
   python scripts/backup.py restaurar --do-destino ultimo|NOME --identidade CHAVE_PRIVADA --substituir
+      (refuses to run while the Mesa answers at VLADO_VIGIA_URL, unless --mesmo-com-a-mesa-no-ar)
   python scripts/backup.py verificar ARQUIVO|--do-destino ultimo --identidade CHAVE_PRIVADA
   python scripts/backup.py rodada | agendado | listar | saude        (service commands, configured by VLADO_BACKUP_*)
 
@@ -1050,6 +1051,25 @@ def _resolver_origem(cfg: dict, valor: str | None, do_destino: str | None, pasta
     return local
 
 
+def mesa_no_ar(cfg: dict) -> bool:
+    """Does something answer at the Mesa's health address (VLADO_VIGIA_URL)? Any HTTP answer counts. Connection
+    refused or an unknown host (the app container is stopped or does not exist here) means it is not running."""
+    try:
+        _ler_saude(cfg['vigia_url'])
+    except Exception:  # noqa: BLE001 - no answer: nobody is serving
+        return False
+    return True
+
+
+def _exigir_mesa_parada(cfg: dict, confirmado: bool) -> None:
+    """A restore swaps the content of the data folders: with the app writing, two states could be mixed."""
+    if not confirmado and mesa_no_ar(cfg):
+        raise ValueError('A Mesa está no ar (respondeu em ' + cfg['vigia_url'] + '). A restauração troca o conteúdo '
+                         'das pastas de dados e não deve rodar com o app gravando. Nada foi restaurado. Pare o app e o '
+                         'backup (`docker compose ... stop vlado backup`) e repita; só use --mesmo-com-a-mesa-no-ar se '
+                         'tiver certeza de que ninguém está usando.')
+
+
 def _identidade(args) -> tuple[Path | None, Path | None]:
     """(identity file, temp file to delete). Path from --identidade or VLADO_BACKUP_IDENTIDADE_ARQUIVO; or the key
     text from the environment variable named by --identidade-env (written to a private temp file)."""
@@ -1100,6 +1120,8 @@ def _principal() -> int:
     restaura.add_argument('arquivo', nargs='?', help='Arquivo .tar.gz ou .tar.gz.age, ou - para ler da entrada padrão')
     restaura.add_argument('--do-destino', help='Baixa do destino configurado: ultimo ou o nome do arquivo')
     restaura.add_argument('--substituir', action='store_true', help='Troca os dados atuais pelos do backup')
+    restaura.add_argument('--mesmo-com-a-mesa-no-ar', action='store_true',
+                          help='Restaura mesmo que a Mesa responda em VLADO_VIGIA_URL (confirmação explícita)')
     restaura.add_argument('--outro-ambiente', action='store_true',
                           help='Aceita backup de outro VLADO_AMBIENTE (ex.: ensaio de restauração)')
     verifica = sub.add_parser('verificar', help='Decifra e confere os hashes sem restaurar')
@@ -1134,6 +1156,8 @@ def _principal() -> int:
         for nome, data, tamanho in _listar_remoto(cfg['destino'], cfg['ambiente']):
             print(f'{nome}\t{tamanho}')
         return 0
+    if args.comando == 'restaurar':
+        _exigir_mesa_parada(cfg, args.mesmo_com_a_mesa_no_ar)
     identidade, apagar = _identidade(args)
     origem = None
     try:

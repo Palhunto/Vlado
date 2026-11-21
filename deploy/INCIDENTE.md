@@ -195,10 +195,10 @@ Não divulgue detalhes técnicos em público antes de conter e de falar com a as
 Quando usar: dado corrompido ou apagado, servidor perdido, retorno a um estado anterior à intrusão. Passo a passo
 completo e ensaio: `deploy/BACKUP.md`. Resumo:
 
-1. Pare quem grava: `$DC stop vlado backup` (se o ambiente ainda existe). Num servidor novo, suba só o necessário.
-2. A chave privada age vem do dono **[Dono]**, pelo ambiente do comando, nunca de arquivo no servidor.
+1. Pare quem grava: `$DC stop vlado backup` (se o ambiente ainda existe; a restauração **se recusa** a rodar com a Mesa no ar). Num servidor novo, suba só o necessário.
+2. A chave privada age vem do dono **[Dono]** e é colada no terminal de quem restaura (`IFS= read -rs -d '' VLADO_BACKUP_CHAVE_PRIVADA; export VLADO_BACKUP_CHAVE_PRIVADA`), **nunca gravada em arquivo no servidor** (onde ficam as credenciais do destino); detalhes e o que vale para pen drive em `deploy/BACKUP.md`. Ao terminar, `unset VLADO_BACKUP_CHAVE_PRIVADA`.
 3. Conferir sem restaurar: `... run --rm -T restauracao python scripts/backup.py verificar --do-destino ultimo --identidade-env VLADO_BACKUP_CHAVE_PRIVADA`.
-4. Restaurar: `VLADO_BACKUP_CHAVE_PRIVADA="$(cat chave-vlado.txt)" $DC --profile restauracao run --rm -T restauracao`
+4. Restaurar (com a variável já informada como no passo 2): `$DC --profile restauracao run --rm -T restauracao`
    (o último), ou `... restaurar --do-destino NOME --identidade-env VLADO_BACKUP_CHAVE_PRIVADA --substituir`.
    **Antes de substituir dados em uso, preserve uma cópia do estado atual** (5.2): a restauração troca o conteúdo.
 5. `$DC up -d`; confira `/saude`, as contas (todas entram de novo: as sessões são apagadas) e abra um caso.
