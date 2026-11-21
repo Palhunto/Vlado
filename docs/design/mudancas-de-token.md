@@ -226,6 +226,24 @@ Consequências: (a) na referência exportada, ✕, ✎ e ◐ foram desenhados po
 
 Pesos usados no canvas: 400 e 600 nas duas famílias; 700 no sinal "?" da lacuna e nos `<strong>`/`<b>` (valores destacados na resposta, nome do nó no mapa). As fontes continuam servidas pela Mesa, em WOFF2 com subconjunto latino (UX-04), como o próprio canvas anota.
 
+## Tokens da parte A (aprovados pelo Design em 21/11/2026)
+
+Pedido do Lume (Frontend) para a Onda 3, parte A: só adições em `interface/tokens.css`, na camada dos nomes curtos (a mesma de `--text-*` e `--raio-*`), com os valores de hoje, para trocar literais sem mudar nenhum pixel (conferido pelo comparar da Sonda). Quem grava é o Lume, na branch dele, no mesmo commit da troca; o Design aprova os nomes e a escala. Nomes aprovados:
+
+| Grupo | Token | Valor de hoje |
+|---|---|---|
+| Fontes | `--fonte-titulo` | `"Source Serif 4", Georgia, serif` |
+| | `--fonte-interface` | `"Source Sans 3", "Segoe UI", Arial, sans-serif` |
+| | `--fonte-mono` | `monospace` |
+| Foco | `--foco-largura` | `3px` |
+| | `--foco-afastamento` | `4px` (o efetivo de hoje; os 2 px do canvas entram na fase 2, item 2) |
+| Movimento | `--duracao-rapida`, `--duracao-media`, `--duracao-lenta` | `.15s`, `.2s`, `.25s` |
+| | `--curva-padrao`, `--curva-saida` | `ease`, `ease-out` |
+| Camadas | `--camada-base`, `--camada-acima`, `--camada-fixo`, `--camada-barra`, `--camada-barra-alta`, `--camada-gaveta`, `--camada-sobreposicao`, `--camada-sobreposicao-alta`, `--camada-modal` | 0, 1, 10, 20, 25, 30, 50, 55, 60 |
+| | `--camada-caderno-1`, `--camada-caderno-2` | 6, 7 (provisórios; a escala de camadas fecha na fase 2) |
+
+Ficam para a fase 2, com os valores do canvas: `--text-3xl`, `--text-destaque`, `--text-numero`, `--text-marca`, `--raio-folha`, as sombras novas (`--sombra-folha`, `--sombra-dialogo`, `--sombra-no-selecionado`) e `--nav-*` / `--aba-*`.
+
 ## Contraste medido
 
 Razão de contraste WCAG 2.x (luminância relativa), calculada por `referencia/ferramentas/contraste.py` com as cores exatas do canvas. Mínimos: 4,5:1 para texto (WCAG 1.4.3) e 3:1 para borda de controle, anel de foco e marca gráfica que carrega informação (WCAG 1.4.11). "Passa" quer dizer acima do mínimo do par; os que não passam estão explicados logo depois da tabela, e nenhum deles é dado como aprovado.
