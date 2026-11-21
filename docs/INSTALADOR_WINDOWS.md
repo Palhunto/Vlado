@@ -13,11 +13,11 @@ Desde o 2.0.2, a primeira pergunta e os complementos usam a mesma pasta temporá
 | Item | Valor |
 | --- | --- |
 | Arquivo | `Vlado-Setup.exe` (gerado; fora do git) |
-| Versão | 2.1.0 |
-| Tamanho | 127,8 MiB (133.974.955 bytes) |
-| SHA-256 | `574da2e02d45c2744200373f01871e6fd30f6517d015c5fccf907e30d4cab5fe` |
+| Versão | 2.1.0 (release publicada; o código já está em 2.2.0, sem instalador gerado) |
+| Tamanho | 127,5 MiB (133.662.188 bytes) |
+| SHA-256 | `a7e04ea9142fdd020db03ea5f172fe19f79435e07da2ab0b0b83dac5f07a5753` |
 
-Confira o hash antes de instalar, no PowerShell:
+Este valor foi conferido em 20/11/2026 contra o arquivo da release v2.1.0 (resumo informado pelo GitHub e `Vlado-Setup.exe.sha256`). Confira o hash antes de instalar, no PowerShell:
 
 ```powershell
 Get-FileHash .\Vlado-Setup.exe -Algorithm SHA256

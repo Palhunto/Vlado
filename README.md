@@ -1,6 +1,6 @@
 # VLADO
 
-**Versão 1.4.0** (aplicação) · **Instalador 2.1.0** · Licença pendente de decisão do grupo ([AVISOS_DE_LICENCA.md](docs/AVISOS_DE_LICENCA.md))
+**Versão:** a do campo `versao` de `configuracao.json` (última release publicada: 2.1.0) · Licença pendente de decisão do grupo ([AVISOS_DE_LICENCA.md](docs/AVISOS_DE_LICENCA.md))
 
 O Vlado é um assistente de apuração documental. Ele organiza documentos de uma pauta jornalística, responde perguntas com citação de fonte e registra cada afirmação ao documento, à página ou à célula que a sustenta. A revisão final é sempre humana: o sistema organiza e aponta, e não aprova nada por conta própria.
 
@@ -113,7 +113,7 @@ A versão distribuída abre com catálogo vazio.
 | `docs/` | Guias de uso, verificação, integração, migração e changelog ([CHANGELOG.md](docs/CHANGELOG.md)) |
 | `proveniencia/` | Origem do repositório de referência, sem uso como entrada de apuração |
 
-Pastas de trabalho de agentes (`.claude/` e `.maestro/`) estão fora do versionamento, com exceção de `.maestro/equipe/CONTRATO_EVIDENCIA.md`.
+Pastas de trabalho de agentes (`.claude/`, `.maestro/` e `.maestri/`) estão fora do versionamento, com exceção de `.maestro/equipe/CONTRATO_EVIDENCIA.md`.
 
 ## Privacidade e limites
 
@@ -122,7 +122,7 @@ Pastas de trabalho de agentes (`.claude/` e `.maestro/`) estão fora do versiona
 - O OCR é local, mas seu texto é reconhecimento automático e não substitui a conferência no original.
 - A ausência de um resultado de busca não prova ausência no acervo.
 - Instruções de projeto (`AGENTS.md`) orientam o agente de chat, mas não constituem bloqueio técnico de rede ou de acesso a pastas.
-- A migração para a API ainda não tem chamada real registrada no projeto; o estado está em [docs/INTEGRACAO_API.md](docs/INTEGRACAO_API.md).
+- A integração por API teve três ensaios concluídos e uma tentativa interrompida, também cobrada, com o provedor OpenAI, registrados em [docs/VERIFICACAO.md](docs/VERIFICACAO.md) com tokens e custo estimado (tempo em dois deles). Para o provedor Anthropic, que é o padrão, não há execução registrada com chave real. O estado está em [docs/INTEGRACAO_API.md](docs/INTEGRACAO_API.md).
 - Para a Mesa hospedada (ambientes separados, contas com login, Docker, HTTPS, limites de gasto, backup e recuperação), ver [docs/GUIA_TECNICO_IMPLANTACAO.md](docs/GUIA_TECNICO_IMPLANTACAO.md).
 
 ## Verificações técnicas
@@ -154,13 +154,12 @@ Essas verificações confirmam integridade de arquivos e scripts. Não avaliam a
 
 **Pendências**
 - **Formulários da redação:** vincular evidência a uma afirmação e enviar nova versão do texto já existem nas rotas (`redacao-vincular`, `redacao-nova-versao`), mas ainda não têm formulário na Mesa. Estão previstos para a fase 10.
-- **Mensagens do preparador do notebook:** `Preparar notebook.cmd` e `scripts/preparar_notebook.py` indicam o arquivo `INSTALAR_NO_NOTEBOOK.md`, que não existe mais no repositório. A mensagem precisa ser corrigida.
-- **Testes sem executor:** dez arquivos `.cjs` em `testes/` (`compositor`, `conferencia_original`, `erros_en`, `i18n_codex_en`, `lixeira_apagar`, `primeiro_uso`, `qa_comportamentos`, `redacao_entrevistas`, `retomar_conversa` e `versao_achados`) testam funcionalidades, mas nenhum script os executa. Precisam de um `qa_*.py` que os chame ou devem ser removidos.
+- **Testes de navegador manuais:** os `qa_*.cjs` e `qa_*.py` dirigem o navegador e seguem sem execução automática.
 - **Instalação limpa:** o instalador 2.1.0 precisa de teste de instalação e primeiro uso antes de distribuição.
 - **Licença:** o repositório ainda não declara licença para o código; a decisão cabe ao grupo.
 
 **Versões**
-- `2.1.0` é a versão do instalador e da release (`instalador/vlado.iss` e `instalador/dependencias.json`).
-- `1.4.0` é a versão da aplicação, no campo `versao` de `configuracao.json`.
+- Há uma versão por release, igual em `configuracao.json` (`versao`), em `VLADO_VERSAO` (`.env.example` e `deploy/ambientes/*.env.example`) e no instalador (`instalador/vlado.iss` e `instalador/dependencias.json`). O código está à frente da última release publicada (2.1.0, a única com instalador gerado). `testes/test_versoes_alinhadas.py` exige a igualdade nos arquivos do repositório. No Windows ela só vale para instalação nova: `configuracao.json` é estado do usuário e o lançador só o copia quando falta, então quem instalou a 2.1.0 segue com `versao` 1.4.0 nesse arquivo.
+- `VLADO_VERSAO` é a etiqueta da imagem Docker da Mesa hospedada, usada para reverter: use a versão da release e não reconstrua a imagem com uma etiqueta já usada; entre releases, use sufixo (por exemplo, `2.2.0-1`).
 - Os prompts têm versão própria (`1.4.1`, em `scripts/comum.py`).
 - O detalhamento das mudanças por versão está em [docs/CHANGELOG.md](docs/CHANGELOG.md).

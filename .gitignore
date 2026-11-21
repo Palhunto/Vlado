@@ -46,6 +46,16 @@ tmp/
 # Estado local de ferramentas de agente (Ruflo/claude-flow)
 /.claude-flow/
 .claude/
+
+# Coordenação da equipe de agentes (Maestri). Planos e diagnósticos ficam fora
+# do git; só os contratos (CONTRATO_*.md) são versionados.
+/.maestri/
+/.maestro/*
+!/.maestro/equipe/
+/.maestro/equipe/*
+!/.maestro/equipe/CONTRATO_*.md
+
+# Dados sensíveis do servidor: chaves, ajustes e contas. Nunca versionar.
 /segredos/
 /ajustes/
 /acesso/
