@@ -511,6 +511,154 @@ class AgendamentoESaudeTest(Base):
         self.assertEqual(visitados, ['https://ping.exemplo/abc/', 'https://ping.exemplo/abc/fail'])
 
 
+class TravaDeCadastroTest(Base):
+    """A trava nova da CONF-01: `casos/.cadastro.trava`, arquivo que nunca é apagado, preso com flock."""
+
+    def trava(self) -> Path:
+        return self.root / 'casos' / '.cadastro.trava'
+
+    def escrever_registro(self, estado='livre'):
+        self.trava().write_text(json.dumps({'estado': estado, 'versao': 1}).ljust(2047) + '\n', encoding='utf-8')
+
+    def test_arquivo_de_trava_e_arquivos_lock_nao_entram_no_backup(self):
+        # Restos de uma queda ('ocupada' sem dono vivo) não podem voltar numa restauração como "trava abandonada".
+        # No Windows de desenvolvimento não há flock e o registro 'ocupada' valeria como em uso: lá fica 'livre'.
+        self.escrever_registro('ocupada' if os.name != 'nt' else 'livre')
+        (self.root / 'acesso' / 'acesso.json.lock').write_bytes(b'')
+        arquivo = backup.criar(self.root, self.base / 'copias')
+        with tarfile.open(arquivo) as pacote:
+            nomes = pacote.getnames()
+        self.assertNotIn('casos/.cadastro.trava', nomes)
+        self.assertNotIn('acesso/acesso.json.lock', nomes)
+
+    def test_arquivo_ausente_ou_livre_nao_e_trava_em_uso(self):
+        self.assertFalse(backup._trava_cadastro_em_uso(self.root))
+        self.escrever_registro('livre')
+        self.assertFalse(backup._trava_cadastro_em_uso(self.root))
+
+    @unittest.skipUnless(os.name == 'posix', 'flock só existe no Linux (onde o servidor roda)')
+    def test_flock_preso_por_outro_descritor_faz_o_backup_esperar_e_depois_passar(self):
+        import fcntl
+        self.escrever_registro('ocupada')
+        dono = os.open(self.trava(), os.O_RDWR)
+        fcntl.flock(dono, fcntl.LOCK_EX)
+        try:
+            self.assertTrue(backup._trava_cadastro_em_uso(self.root))
+            with self.assertRaisesRegex(backup.BackupOcupado, 'cadastro em curso'):
+                backup.criar(self.root, self.base / 'copias')
+        finally:
+            fcntl.flock(dono, fcntl.LOCK_UN)
+            os.close(dono)
+        self.assertFalse(backup._trava_cadastro_em_uso(self.root), 'registro "ocupada" sem dono vivo não trava o backup')
+        self.assertTrue(backup.criar(self.root, self.base / 'copias').is_file())
+
+    @unittest.skipUnless(os.name == 'posix', 'flock só existe no Linux (onde o servidor roda)')
+    def test_a_sonda_nao_fica_segurando_a_trava(self):
+        import fcntl
+        self.escrever_registro('livre')
+        backup._trava_cadastro_em_uso(self.root)
+        outro = os.open(self.trava(), os.O_RDWR)
+        try:
+            fcntl.flock(outro, fcntl.LOCK_EX | fcntl.LOCK_NB)  # um cadastro de usuário consegue logo em seguida
+            fcntl.flock(outro, fcntl.LOCK_UN)
+        finally:
+            os.close(outro)
+
+    @unittest.skipUnless(os.name == 'posix', 'flock só existe no Linux (onde o servidor roda)')
+    def test_o_backup_nunca_segura_a_trava_enquanto_copia(self):
+        import fcntl
+        self.escrever_registro('livre')
+        original = backup._escrever_pacote
+        durante = []
+
+        def espiar(root, pacote, incluir_segredos, trabalho=None):
+            outro = os.open(self.trava(), os.O_RDWR)
+            try:
+                fcntl.flock(outro, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                durante.append('cadastro conseguiu a trava no meio da cópia')
+                fcntl.flock(outro, fcntl.LOCK_UN)
+            except OSError:
+                durante.append('trava presa pelo backup')
+            finally:
+                os.close(outro)
+            return original(root, pacote, incluir_segredos, trabalho)
+        with patch.object(backup, '_escrever_pacote', espiar), patch.object(backup, '_assinatura_casos', lambda r: None):
+            backup.criar(self.root, self.base / 'copias')
+        self.assertEqual(durante, ['cadastro conseguiu a trava no meio da cópia'])
+
+    def test_operacao_que_termina_durante_a_copia_muda_a_assinatura_e_refaz_o_backup(self):
+        """Mesmos bytes 'livre' antes e depois, mas mtime/ctime do inode mudam: a cópia é descartada e refeita."""
+        self.escrever_registro('livre')
+        original = backup._escrever_pacote
+        chamadas = []
+
+        def com_cadastro_no_meio(root, pacote, incluir_segredos, trabalho=None):
+            resultado = original(root, pacote, incluir_segredos, trabalho)
+            if not chamadas:
+                self.escrever_registro('livre')  # um cadastro inteiro: pega, grava, solta
+                os.utime(self.trava(), ns=(5, 5))
+            chamadas.append(1)
+            return resultado
+        with patch.object(backup, '_escrever_pacote', com_cadastro_no_meio):
+            arquivo = backup.criar(self.root, self.base / 'copias')
+        self.assertEqual(len(chamadas), 2)
+        self.assertEqual(len(list((self.base / 'copias').glob('*'))), 1, 'só a cópia coerente sobra')
+        self.assertTrue(arquivo.is_file())
+
+    def test_trava_que_aparece_durante_a_copia_tambem_refaz(self):
+        original = backup._escrever_pacote
+        chamadas = []
+
+        def cria_a_trava(root, pacote, incluir_segredos, trabalho=None):
+            resultado = original(root, pacote, incluir_segredos, trabalho)
+            if not chamadas:
+                self.escrever_registro('livre')
+            chamadas.append(1)
+            return resultado
+        with patch.object(backup, '_escrever_pacote', cria_a_trava):
+            backup.criar(self.root, self.base / 'copias')
+        self.assertEqual(len(chamadas), 2)
+
+    def test_assinatura_igual_nao_refaz(self):
+        self.escrever_registro('livre')
+        chamadas = []
+        original = backup._escrever_pacote
+
+        def conta(*args, **kwargs):
+            chamadas.append(1)
+            return original(*args, **kwargs)
+        with patch.object(backup, '_escrever_pacote', conta):
+            backup.criar(self.root, self.base / 'copias')
+        self.assertEqual(len(chamadas), 1)
+
+    def test_pasta_de_preparo_velha_de_uma_queda_nao_trava_o_backup_e_vai_para_os_avisos(self):
+        velha = self.root / 'casos' / ('.lote_' + 'a' * 32)
+        velha.mkdir()
+        (velha / 'parcial.bin').write_bytes(b'meio do cadastro')
+        recente = self.root / 'execucoes' / ('.r_' + 'b' * 32)
+        os.utime(velha, (1, 1))
+        with self.assertRaises(backup.BackupOcupado):  # uma recente ainda faz esperar
+            recente.mkdir()
+            try:
+                backup.criar(self.root, self.base / 'copias')
+            finally:
+                shutil.rmtree(recente)
+        arquivo = backup.criar(self.root, self.base / 'copias')
+        with tarfile.open(arquivo) as pacote:
+            nomes = pacote.getnames()
+            manifesto = json.loads(pacote.extractfile('manifesto_backup.json').read())
+        self.assertFalse(any('.lote_' in n for n in nomes), 'a pasta de preparo nunca entra')
+        self.assertTrue(any('abandonada' in a and '.lote_' in a for a in manifesto['avisos']))
+
+    def test_idade_maxima_do_marcador_e_configuravel(self):
+        recente = self.root / 'casos' / ('.lote_' + 'c' * 32)
+        recente.mkdir()
+        with patch.dict(os.environ, {'VLADO_BACKUP_MARCADOR_IDADE_MAX_S': '0'}):
+            time_passou = backup.time.time() + 5
+            with patch.object(backup.time, 'time', lambda: time_passou):
+                self.assertEqual(backup._marcadores(self.root, backup.PASTAS), [])
+
+
 class ComposeDoBackupTest(unittest.TestCase):
     def setUp(self):
         self.compose = (RAIZ / 'docker-compose.yml').read_text(encoding='utf-8')

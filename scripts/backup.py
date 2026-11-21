@@ -47,9 +47,15 @@ MANIFESTO = 'manifesto_backup.json'
 PROIBIDOS = (chr(92), ':', chr(0))  # backslash (Windows separator), drive letter, NUL
 # Work in progress that the application publishes by renaming: never part of a backup, and while one
 # exists a multi-file operation (registration, freezing, notebook save, index build) is under way.
-# `casos/.cadastro.lock` and `.trava` are the lock sentinels; the rest are staging folders.
+# `casos/.cadastro.lock` (a folder) is the old registration lock and `.trava` the notebook's; the rest are
+# staging folders. The current registration lock is NOT a marker: `casos/.cadastro.trava` is a file that always
+# exists and is held with an operating-system lock; see `_trava_cadastro_em_uso`.
 MARCADORES = ('.cadastro.lock', '.trava', '.lote_', '.web_', '.preparacao_', '.indice_', '.r_', '.publicacao_',
               '.restaurando-', '.antiga-')
+TRAVA_CADASTRO = '.cadastro.trava'
+# A staging folder older than this is leftover of a crash (the application only clears it on its next start):
+# it is left out of the backup and reported, but it no longer makes the backup wait.
+MARCADOR_IDADE_MAX_S = 7200.0
 RETENCAO_PADRAO = 'diarios=7,semanais=4,mensais=6'
 PREFIXO = 'vlado'
 SUFIXO_CIFRADO = '.tar.gz.age'
@@ -71,9 +77,58 @@ def _marcador(nome: str) -> bool:
     return nome.startswith(MARCADORES)
 
 
-def _marcadores(root: Path, pastas: tuple[str, ...]) -> list[str]:
-    """Sentinels of work in progress under the data folders (read-only look; the backup takes no lock)."""
-    achados = []
+def _trava_cadastro_em_uso(root: Path) -> bool:
+    """Is someone holding the registration lock right now? A probe that never keeps the lock.
+
+    The lock is `casos/.cadastro.trava` (an `flock` on Linux). The file is opened read-only (the backup mounts the
+    data read-only), a non-blocking SHARED lock is tried and released at once: it fails only while the holder has
+    the exclusive lock, and it is gone before a user's registration can notice it. The lock is never held while
+    copying, otherwise registrations would be refused for as long as a backup runs. The file existing, or its text
+    saying 'ocupada' after a crash, means nothing: only the operating-system lock does. (Windows, development
+    only, has no flock: there the recorded owner decides.)"""
+    caminho = root / 'casos' / TRAVA_CADASTRO
+    try:
+        descritor = os.open(caminho, os.O_RDONLY | getattr(os, 'O_BINARY', 0))
+    except OSError:
+        return False  # never created: no registration has ever run here
+    try:
+        if os.name == 'nt':
+            try:
+                registro = json.loads(os.read(descritor, 2048).replace(bytes(1), b'').strip() or b'{}')
+            except ValueError:
+                return False
+            return isinstance(registro, dict) and registro.get('estado') == 'ocupada'
+        import fcntl
+        try:
+            fcntl.flock(descritor, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except OSError:
+            return True
+        fcntl.flock(descritor, fcntl.LOCK_UN)
+        return False
+    finally:
+        os.close(descritor)
+
+
+def _assinatura_casos(root: Path):
+    """Proof that no registration, freezing, web-capture publication or deletion finished while a backup copied:
+    the state of `casos/.cadastro.trava`. Whoever takes the lock writes 'ocupada' and, on release, 'livre' (the same
+    bytes as before), but the inode times change on every operation. None while the file does not exist."""
+    try:
+        estado = os.stat(root / 'casos' / TRAVA_CADASTRO)
+    except OSError:
+        return None
+    return (estado.st_ino, estado.st_mtime_ns, estado.st_ctime_ns)
+
+
+def _inspecionar_marcadores(root: Path, pastas: tuple[str, ...]) -> tuple[list[str], list[str]]:
+    """(live, abandoned) signs of work in progress under the data folders. Read-only look; no lock is held.
+    The operating-system probe is the reliable sign for the registration lock; a staging folder counts only while
+    it is recent (see MARCADOR_IDADE_MAX_S), because a crash leaves them behind."""
+    limite = float(os.environ.get('VLADO_BACKUP_MARCADOR_IDADE_MAX_S') or MARCADOR_IDADE_MAX_S)
+    vivos, abandonados = [], []
+    if 'casos' in pastas and _trava_cadastro_em_uso(root):
+        vivos.append(f'casos/{TRAVA_CADASTRO} (cadastro em curso)')
+    agora = time.time()
     for pasta in pastas:
         base = root / pasta
         if not base.is_dir():
@@ -81,9 +136,18 @@ def _marcadores(root: Path, pastas: tuple[str, ...]) -> list[str]:
         for atual, dirs, arquivos in os.walk(base):
             for nome in dirs + arquivos:
                 if _marcador(nome):
-                    achados.append(Path(atual, nome).relative_to(root).as_posix())
+                    caminho = Path(atual, nome)
+                    try:
+                        idade = agora - caminho.stat().st_mtime
+                    except OSError:
+                        continue  # gone already
+                    (vivos if idade <= limite else abandonados).append(caminho.relative_to(root).as_posix())
             dirs[:] = [d for d in dirs if not _marcador(d)]
-    return sorted(achados)
+    return sorted(vivos), sorted(abandonados)
+
+
+def _marcadores(root: Path, pastas: tuple[str, ...]) -> list[str]:
+    return _inspecionar_marcadores(root, pastas)[0]
 
 
 def _aguardar_ociosidade(root: Path, pastas: tuple[str, ...], espera: float, passo: float = 5.0) -> None:
@@ -117,6 +181,8 @@ def _entradas(root: Path, pastas: tuple[str, ...]):
                 relativo = Path(item.path).relative_to(root).as_posix()
                 if _marcador(item.name):
                     continue
+                if item.is_file(follow_symlinks=False) and (item.name == TRAVA_CADASTRO or item.name.endswith('.lock')):
+                    continue  # lock files are not data: a restored lock record would look like an abandoned lock
                 if item.is_symlink() or not (item.is_dir(follow_symlinks=False) or item.is_file(follow_symlinks=False)):
                     ignorados.append(relativo)
                     continue
@@ -203,6 +269,7 @@ def _escrever_pacote(root: Path, pacote: tarfile.TarFile, incluir_segredos: bool
     trabalho = Path(tempfile.mkdtemp(prefix='vlado-backup-')) if dono_tmp else Path(trabalho)
     trabalho.mkdir(parents=True, exist_ok=True)
     arquivos, avisos, chaves, ignorados = {}, [], {}, []
+    avisos += [f'pasta de preparo abandonada, fora do backup: {a}' for a in _inspecionar_marcadores(root, pastas)[1]]
     try:
         for relativo, caminho, eh_dir in _entradas(root, pastas):
             if relativo is None:
@@ -336,6 +403,7 @@ def _gravar_arquivo(root: Path, destino: Path, nome: str, incluir_segredos: bool
     ultimo = []
     for _ in range(tentativas):
         _aguardar_ociosidade(root, pastas, espera)
+        antes = _assinatura_casos(root)
         descritor = _novo_arquivo(destino, nome)
         arquivo = destino / nome
         try:
@@ -359,6 +427,8 @@ def _gravar_arquivo(root: Path, destino: Path, nome: str, incluir_segredos: bool
             arquivo.unlink(missing_ok=True)
             raise
         ultimo = _marcadores(root, pastas)
+        if not ultimo and 'casos' in pastas and _assinatura_casos(root) != antes:
+            ultimo = [f'casos/{TRAVA_CADASTRO} (uma operação terminou durante a cópia)']
         if not ultimo:
             _restrito(arquivo)
             return arquivo, manifesto

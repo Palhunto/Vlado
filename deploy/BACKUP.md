@@ -11,10 +11,19 @@ Passo a passo para o dono e para quem opera o servidor. O que é decisão ou ato
   tamanho no destino, apaga as cópias vencidas pela retenção e apaga o arquivo local.
 - **O servidor só consegue escrever backups, nunca lê-los.** A chave que decifra (privada) fica com o dono, fora do
   servidor, da imagem, do git e dos logs. Quem invadir o servidor não consegue abrir os backups já enviados.
-- Se uma operação de vários arquivos estiver em andamento (cadastro, congelamento, salvamento do caderno, índice),
-  o backup espera ela terminar (até 15 min) e recomeça do zero se uma aparecer durante a cópia. Cada arquivo é
-  lido de forma estável (tamanho e data não mudam durante a leitura; JSON e SQLite são validados). Ao restaurar,
-  cada arquivo é conferido pelo hash gravado no manifesto antes de qualquer dado ser trocado.
+- **Cadastro em curso.** A trava de cadastro da Mesa é o arquivo `casos/.cadastro.trava` (preso com `flock`; nunca é
+  apagado). O backup **sonda** a trava sem segurá-la (trava compartilhada, não bloqueante, solta na hora): se estiver
+  presa, espera até 15 min; nunca a mantém durante a cópia, para não recusar cadastros de usuários. Como um cadastro
+  curto pode começar e terminar dentro dos minutos da cópia, o backup compara o estado (inode, mtime e ctime) do
+  arquivo antes e depois: mudou, descarta a cópia e recomeça. Vale para cadastro, preparação de PDFs, congelamento de
+  rodada, publicação da captura web, gestão e apagamento. O `flock` funciona entre contêineres que montam o **mesmo
+  volume nomeado**; não funciona com bind mount de pasta do Windows nem em SMB/NFS antigo (use volume nomeado).
+  Pastas de preparo (`.lote_*`, `.r_*`, `.web_*`, `.preparacao_*`, `.indice_*`, `.publicacao_*`) nunca entram no
+  backup; uma com menos de 2 h conta como trabalho em andamento, uma mais velha é resto de queda e só vira aviso
+  no manifesto (`VLADO_BACKUP_MARCADOR_IDADE_MAX_S`). Cada arquivo é lido de forma estável (tamanho e data não mudam
+  durante a leitura; JSON e SQLite são validados). Notas e caderno têm travas próprias e escrita atômica por
+  arquivo: ficam cobertos pela leitura estável. Ao restaurar, cada arquivo é conferido pelo hash do manifesto antes
+  de qualquer dado ser trocado.
 - O estado fica em `/trabalho/estado.json` do volume `backup_trabalho`. O serviço aparece como **unhealthy** em
   `docker compose ps` se não estiver configurado ou se o último sucesso tiver mais de 30 h.
 
@@ -25,7 +34,7 @@ Passo a passo para o dono e para quem opera o servidor. O que é decisão ou ato
 | casos (originais, derivados, cadastros), rodadas e índices, conversas, lixeira, entrada, **contas (`acesso/`, com hashes de senha)**, ajustes | `segredos/` (chaves de API coladas na Mesa) | Uma chave de API se cola de novo (ou fica na variável de ambiente do servidor); um backup é mais fácil de vazar que um volume. O volume `segredos` nem é montado no serviço de backup. |
 | | dados do Caddy (`caddy_data`: certificado e conta ACME) | O Caddy emite de novo sozinho. |
 | | `configuracao.json` e o código | Fazem parte da imagem (`VLADO_VERSAO`). |
-| | pastas de preparo (`.lote_*`, `.trava`, `.cadastro.lock`...) | Trabalho em andamento, publicado por renomeação. |
+| | pastas de preparo (`.lote_*`, `.r_*`...), `casos/.cadastro.trava` e os `*.lock` | Trabalho em andamento e arquivos de trava, não dados: a Mesa recria a trava no primeiro uso. |
 
 Quem quiser incluir as chaves de API precisa montar `segredos` no serviço e definir `VLADO_BACKUP_INCLUIR_SEGREDOS=1`
 (decisão consciente; o manifesto registra `segredos_incluidos`).
