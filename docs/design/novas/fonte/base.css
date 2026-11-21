@@ -12,7 +12,7 @@
  --theme-backdrop:#132d27aa;--sombra-cartao:0 1px 2px rgba(23,63,41,.06);--sombra-flutuante:0 4px 18px rgba(23,63,41,.08);
  --sombra-dialogo:0 12px 40px rgba(23,63,41,.18);
  --pdf-pagina:#ffffff;--doc-texto:#202c29;--doc-linha:#a8b3a9;--pdf-trecho:#ffe9a8;--pdf-trecho-borda:#c47800;
- --nav-contador-ativo-fundo:#ffffff;--theme-entidade-orgao:#b0508a;
+ --nav-contador-ativo-fundo:#ffffff;--theme-entidade-orgao:#b0508a;--theme-entidade-pessoa:#1d8058;--theme-entidade-organizacao:#5b5fb8;
  --serifa:'Source Serif 4',Georgia,serif;--sans:'Source Sans 3',system-ui,sans-serif;
 }
 :root[data-theme=dark]{
@@ -23,7 +23,7 @@
  --theme-warning:#e6bc7a;--theme-warning-bg:#372e21;--theme-warning-line:#aa8754;
  --theme-danger:#e7a097;--theme-danger-bg:#382725;--theme-danger-line:#a76e66;
  --theme-backdrop:#080d0bd9;--sombra-cartao:0 1px 2px #00000033;--sombra-flutuante:0 4px 18px #00000066;--sombra-dialogo:0 12px 40px #00000099;
- --nav-contador-ativo-fundo:#172315;--theme-entidade-orgao:#d46a9c;
+ --nav-contador-ativo-fundo:#172315;--theme-entidade-orgao:#d46a9c;--theme-entidade-pessoa:#3fa877;--theme-entidade-organizacao:#8487e6;
 }
 .pr,.pr *{box-sizing:border-box}
 body{margin:0}

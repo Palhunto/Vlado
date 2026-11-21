@@ -79,6 +79,7 @@ C = [
     ('C62', '#7f9685', '#e8eee6', 3, 'borda do selo "Conferido" / verde suave'),
     ('C63', '#b0508a', '#fffefa', 3, 'proposta "ameixa" para órgão público / superfície'),
     ('C64', '#ffffff', '#b0508a', 3, 'ícone branco / proposta "ameixa"'),
+    ('C65', '#8e4b28', '#ffffff', 4.5, 'prazo vencendo no item ativo da barra (pílula clara)'),
     # escuro: texto
     ('E01', '#eae9df', '#171d1a', 4.5, 'texto / fundo'),
     ('E02', '#eae9df', '#202823', 4.5, 'texto / superfície (rodapé do celular)'),
@@ -118,6 +119,7 @@ C = [
     ('E55', '#a76e66', '#202823', 3, 'borda do botão destrutivo no escuro / superfície (fase 3)'),
     ('E56', '#a8c79d', '#3c4940', 3, 'barra de progresso no escuro / trilha (fase 3)'),
     ('E57', '#a8c79d', '#172315', 4.5, 'contador no item ativo da barra, escuro (fase 3)'),
+    ('E58', '#e6bc7a', '#172315', 4.5, 'prazo vencendo no item ativo da barra, escuro (pílula)'),
     ('E41', '#aa8754', '#372e21', 3, 'borda de aviso / fundo de aviso'),
     ('E42', '#3fa877', '#202823', 3, 'pessoa / superfície'),
     ('E43', '#8487e6', '#202823', 3, 'empresa / superfície'),

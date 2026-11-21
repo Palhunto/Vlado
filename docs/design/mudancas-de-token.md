@@ -145,6 +145,7 @@ O que o canvas acrescenta é o contador à direita do rótulo, em 14 px, com tr�
 | item com pendência, fora da página atual | pílula verde cheia, texto branco 600 ("4") | Conferir em `Inicio` |
 | item com pendência, na página atual | pílula branca, texto verde 600 ("4") | Conferir em `Main` |
 | prazo vencendo | texto de aviso 600, sem fundo ("1 vence") | Pedidos e prazos |
+| prazo vencendo, na página atual | pílula clara com texto de aviso 600 (claro 6,59:1, C65; escuro `#e6bc7a` sobre `#172315`, 9,19:1, E58) | Pedidos e prazos ativo (prancha dos quadros) |
 
 ```css
 /* proposta de tokens de componente */
@@ -313,6 +314,7 @@ Razão de contraste WCAG 2.x (luminância relativa), calculada por `referencia/f
 | C62 | borda do selo "Conferido" / verde suave | `#7f9685` / `#e8eee6` | 2.70:1 | 3:1 | **não passa** |
 | C63 | proposta "ameixa" para órgão público / superfície | `#b0508a` / `#fffefa` | 4.77:1 | 3:1 | passa |
 | C64 | ícone branco / proposta "ameixa" | `#ffffff` / `#b0508a` | 4.82:1 | 3:1 | passa |
+| C65 | prazo vencendo no item ativo da barra (pílula clara) | `#8e4b28` / `#ffffff` | 6.59:1 | 4.5:1 | passa |
 
 ### Tema escuro
 
@@ -355,6 +357,7 @@ Razão de contraste WCAG 2.x (luminância relativa), calculada por `referencia/f
 | E55 | borda do botão destrutivo no escuro / superfície (fase 3) | `#a76e66` / `#202823` | 3.65:1 | 3:1 | passa |
 | E56 | barra de progresso no escuro / trilha (fase 3) | `#a8c79d` / `#3c4940` | 5.10:1 | 3:1 | passa |
 | E57 | contador no item ativo da barra, escuro (fase 3) | `#a8c79d` / `#172315` | 8.79:1 | 4.5:1 | passa |
+| E58 | prazo vencendo no item ativo da barra, escuro (pílula) | `#e6bc7a` / `#172315` | 9.19:1 | 4.5:1 | passa |
 | E41 | borda de aviso / fundo de aviso | `#aa8754` / `#372e21` | 4.00:1 | 3:1 | passa |
 | E42 | pessoa / superfície | `#3fa877` / `#202823` | 5.10:1 | 3:1 | passa |
 | E43 | empresa / superfície | `#8487e6` / `#202823` | 4.74:1 | 3:1 | passa |

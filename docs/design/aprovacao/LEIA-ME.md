@@ -10,12 +10,12 @@ Pedido do dono em 21/11/2026: ver no desenho novo as áreas da Mesa que não tê
 | Conferir achados (`achados`) | sim | escuro, 1024 e 390 (`../novas/`) | — | — |
 | Perguntar à IA (`codex`) | só celular, escuro | — | W03 | `perguntar/` (só atual) |
 | Caderno (`apuracao`) | não | **proposta aprovada pelo dono em 21/11/2026** | W04 | `caderno/` |
-| Quadros (`quadros`): mapa de relações e linha do tempo | sim | escuro e 390 a fazer | — | `quadros/` |
-| Quadros: hipóteses | não | proposta a fazer | W05 | `quadros/` |
-| Quadros: tabelas | não | proposta a fazer | W06 | `quadros/` |
-| Quadros: comparador | não | proposta a fazer | W07 | `quadros/` |
+| Quadros (`quadros`): mapa de relações e linha do tempo | sim | escuro e 390 derivados, aguardam aprovação | — | `quadros/` |
+| Quadros: hipóteses | não | proposta, aguarda aprovação | W05 | `quadros/` |
+| Quadros: tabelas | não | proposta, aguarda aprovação | W06 | `quadros/` |
+| Quadros: comparador | não | proposta, aguarda aprovação | W07 | `quadros/` |
 | Quadros: conferência do texto | não | vai para o caderno (W04) | W04 | `caderno/` |
-| Quadros: entrevistas e pedidos | não | proposta a fazer | nenhum (pedidos e prazos de LAI estão na lista do que falta desenhar) | `quadros/` |
+| Quadros: entrevistas e pedidos (vira "Pedidos e prazos") | não | proposta, aguarda aprovação | nenhum (pedidos e prazos de LAI estão na lista do que falta desenhar) | `quadros/` |
 | Documentos (`documentos`) e Cadastrar arquivos (`cadastro`) | não | proposta a fazer | W02 (uma tela só) | `documentos/`, `cadastro/` (só atual por enquanto) |
 | Diligências (`diligencias`) | não | — | nenhum | `diligencias/` (só atual) |
 | Apurações e lixeira (`gerenciar`) | não | — | nenhum (lixeira na lista do que falta desenhar) | `apuracoes-e-lixeira/` (só atual) |
