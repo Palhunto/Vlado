@@ -13,7 +13,7 @@ DIGEST = re.compile(r'@sha256:[0-9a-f]{64}$')
 COPY_PERMITIDO = {
     'deploy/requirements.lock', 'scripts/', 'interface/', 'prompts/', 'modelos/',
     'configuracao.json', 'AGENTS.md', 'README.md', 'casos/README.md', 'casos/catalogo.json',
-    'entrada/README.md',
+    'entrada/README.md', 'scripts/backup.py',  # esta última só no estágio `backup` (age + rclone), sem o app
 }
 PROIBIDO_NA_IMAGEM = ('.maestro', '.maestri', '.claude', '.git', 'segredos', 'acesso', 'ajustes', 'testes',
                       'docs', 'instalador', 'android', 'conversas', 'execucoes', 'lixeira')
@@ -58,12 +58,22 @@ class ImagemPorDigestTest(unittest.TestCase):
         for imagem in froms:
             self.assertRegex(imagem, DIGEST, f'FROM sem digest: {imagem}')
         self.assertIn('python:3.12-slim-bookworm', texto.split('FROM ', 1)[0], 'comentário com a etiqueta de origem')
+        self.assertEqual(len(set(froms)), 1, 'os estágios partem do mesmo digest')
+
+    def test_estagio_de_backup_so_leva_o_script_de_backup(self):
+        linhas = _dockerfile()
+        inicio = next(i for i, l in enumerate(linhas) if l.upper().startswith('FROM ') and l.endswith(' AS backup'))
+        fim = next(i for i, l in enumerate(linhas) if i > inicio and l.upper().startswith('FROM '))
+        copias = [l.split()[1:] for l in linhas[inicio:fim] if l.upper().startswith('COPY ')]
+        self.assertEqual(copias, [['scripts/backup.py', './scripts/backup.py']])
+        self.assertTrue(linhas[-3].startswith('HEALTHCHECK') or any(l.startswith('CMD') for l in linhas[fim:]))
+        self.assertTrue(linhas[fim].endswith(' AS vlado'), 'o estágio do app é o último (padrão do build)')
 
     def test_caddy_por_digest_com_etiqueta_de_origem_comentada(self):
         texto = (RAIZ / 'docker-compose.yml').read_text(encoding='utf-8')
         for nome, bloco in _servicos().items():
             for imagem in re.findall(r'^\s+image:\s*(\S+)', bloco, flags=re.MULTILINE):
-                if nome == 'vlado':  # imagem construída aqui
+                if nome in ('vlado', 'backup', 'restauracao'):  # imagens construídas aqui (base por digest no Dockerfile)
                     continue
                 self.assertRegex(imagem, DIGEST, f'{nome}: imagem sem digest ({imagem})')
         self.assertIn('Etiqueta de origem: caddy:2.8', texto)
@@ -151,7 +161,7 @@ class ComposeEndurecidoTest(unittest.TestCase):
         self.servicos = _servicos()
 
     def test_servicos_esperados(self):
-        self.assertEqual(set(self.servicos), {'vlado', 'caddy'})
+        self.assertEqual(set(self.servicos), {'vlado', 'caddy', 'backup', 'restauracao'})
 
     def test_cada_servico_com_init_somente_leitura_e_sem_privilegios(self):
         for nome, bloco in self.servicos.items():
