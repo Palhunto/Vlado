@@ -39,7 +39,7 @@ Em `configuracao.json`:
 | `"provedor"` | `"anthropic"` (padrão do arquivo) ou `"openai"` |
 | `"modelo_preferido"` | `null`, para o padrão do provedor (Anthropic: `claude-sonnet-5-5`; OpenAI: `gpt-6.1-sol`), ou o nome explícito de um modelo |
 | `"max_tokens_saida"` | `16000` (inteiro positivo) |
-| `"versao"` | `"1.4.0"` |
+| `"versao"` | `"2.2.0"` (versão única da release; igual à do instalador e à da imagem Docker) |
 
 Valores inválidos falham com erro claro antes de qualquer chamada ao modelo.
 

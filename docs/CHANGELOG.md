@@ -1,5 +1,9 @@
 # Mudanças
 
+## 2.2.0 — Onda 0 (código; instalador ainda não gerado)
+
+Uma versão por release: `configuracao.json`, `VLADO_VERSAO` e o instalador passam a ter o mesmo número, e `testes/test_versoes_alinhadas.py` exige a igualdade. O campo `versao` de `configuracao.json` não é lido por nenhum código e não é a versão dos prompts (`1.4.1`, em `scripts/comum.py`). Só a string de versão do instalador mudou; o `Vlado-Setup.exe` publicado continua o da release 2.1.0.
+
 ## 2.1.0 — 2026-11-20 — Instalador Windows com as fases 01 a 09
 
 Primeiro instalador com a lapidação completa: contrato de evidência e quadros, tabelas de apuração, leitura de DOCX e XLSX com localizador, fontes web por apuração (modo opcional de domínio único), conferência da redação, entrevistas e pedidos, salvamento automático de rascunhos e as correções de segurança da fase 09. O detalhamento de cada fase está na seção abaixo.

@@ -1,6 +1,6 @@
 # VLADO
 
-**Versão 1.4.0** (aplicação) · **Instalador 2.1.0** · Licença pendente de decisão do grupo ([AVISOS_DE_LICENCA.md](docs/AVISOS_DE_LICENCA.md))
+**Versão 2.2.0** (código; última release publicada: 2.1.0) · Licença pendente de decisão do grupo ([AVISOS_DE_LICENCA.md](docs/AVISOS_DE_LICENCA.md))
 
 O Vlado é um assistente de apuração documental. Ele organiza documentos de uma pauta jornalística, responde perguntas com citação de fonte e registra cada afirmação ao documento, à página ou à célula que a sustenta. A revisão final é sempre humana: o sistema organiza e aponta, e não aprova nada por conta própria.
 
@@ -159,9 +159,7 @@ Essas verificações confirmam integridade de arquivos e scripts. Não avaliam a
 - **Licença:** o repositório ainda não declara licença para o código; a decisão cabe ao grupo.
 
 **Versões**
-- `2.1.0` é a versão do instalador e da release (`instalador/vlado.iss` e `instalador/dependencias.json`).
-- `1.4.0` é a versão da aplicação, no campo `versao` de `configuracao.json`.
-- `VLADO_VERSAO` (hoje `2.0.0` em `.env.example` e em `deploy/ambientes/*.env.example`) é a etiqueta da imagem Docker da Mesa hospedada, usada para reverter. Não é a versão da aplicação nem a do instalador, e o valor dos exemplos é apenas um ponto de partida: quem implanta escolhe a etiqueta.
-- Hoje as três numerações (aplicação, instalador e imagem Docker) não estão alinhadas; o `2.0.0` dos exemplos vem da entrega de 15/11 e não foi atualizado. Use uma etiqueta nova a cada build. O alinhamento é decisão em aberto.
+- Há uma versão por release, igual em `configuracao.json` (`versao`), em `VLADO_VERSAO` (`.env.example` e `deploy/ambientes/*.env.example`) e no instalador (`instalador/vlado.iss` e `instalador/dependencias.json`). O código está em `2.2.0` (integração da Onda 0); a última release publicada, com instalador gerado, é a `2.1.0`. `testes/test_versoes_alinhadas.py` exige a igualdade.
+- `VLADO_VERSAO` é a etiqueta da imagem Docker da Mesa hospedada, usada para reverter: construa cada imagem com a versão da release e guarde a anterior.
 - Os prompts têm versão própria (`1.4.1`, em `scripts/comum.py`).
 - O detalhamento das mudanças por versão está em [docs/CHANGELOG.md](docs/CHANGELOG.md).
