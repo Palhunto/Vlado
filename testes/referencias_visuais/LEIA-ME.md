@@ -22,7 +22,7 @@ Depois, com o Python desse ambiente (o servidor e o semeador sobem sozinhos no P
 `--python-servidor`, ou `VLADO_PYTHON_SERVIDOR`):
 
 ```
-python testes/regressao_visual.py comparar                  # 96 capturas, cerca de 4 min; relatório em tmp/regressao_visual/relatorio.html
+python testes/regressao_visual.py comparar                  # 114 capturas, cerca de 5 min; relatório em tmp/regressao_visual/relatorio.html
 python testes/regressao_visual.py gerar                     # refaz a linha de base inteira
 python testes/regressao_visual.py comparar --telas codex --larguras 375,1440 --temas escuro   # recorte
 ```
@@ -38,9 +38,24 @@ Telas: `inicio`, `documentos`, `cadastro`, `codex`, `achados`, `apuracao`, `dili
 `local-contas`). Larguras 375, 768, 1024 e 1440 px; temas claro e escuro. Captura de página inteira, então a altura
 varia por tela. Nome: `<tela>__<largura>__<tema>.png`.
 
+**Foco de teclado** (`foco_*`): o capturador aperta Tab até o alvo ficar focado com `:focus-visible` e captura com o
+anel visível; se o foco não chegar ao alvo, a rodada falha. Alvos: campo de login e botão Entrar na tela de entrar
+(375 e 1440 px); botão "Enviar e cadastrar agora", campo "Natureza dos documentos" e, só em 1440 px, o item
+"Cadastrar arquivos" da barra lateral, na Mesa (área `cadastro`). Nos dois temas: 18 imagens. Mudar a cor, a
+espessura ou o `outline-offset` do foco reprova (verificado: cor do foco no tema claro, 9 de 9 reprovadas; offset
+efetivo de 4 px para 2 px, 5 de 5). Nas demais capturas o foco é retirado de propósito, para não aparecer anel.
+
 Hoje o conteúdo é o do estado inicial dos dois casos semeados: sem rodada, sem conversa. As áreas que dependem de
 rodada (`achados`, `codex`, `quadros`, `diligencias`) aparecem com o estado vazio; quando houver rodada sintética
 semeável, acrescentá-la à semeadura (`regressao_visual_semear.py`) e refazer a linha de base.
+
+## O que fica de fora
+
+Hover, botão pressionado (`:active`), gaveta ou menu aberto (em 375 px a barra lateral fica fechada), diálogos e
+`confirm()`, tooltips, listas abertas de `<select>`, estados de validação e de erro de formulário, envio em
+andamento, rolagem interna de contêineres, foco em outros elementos além dos cinco alvos acima, `forced-colors`
+(alto contraste), impressão, idioma inglês, teclado virtual e orientação do aparelho. Navegadores além do Chromium e
+aparelhos reais são Manual Follow-Up (Onda 5). Estados que pedem dados de uma rodada ficam por conta da semeadura.
 
 ## Determinismo
 
@@ -50,6 +65,10 @@ Playwright, cursor de texto oculto, barras de rolagem ocultas, fontes só as da 
 (o texto nativo "Choose Files" não depende do idioma do sistema), nenhum pedido a endereço que não seja o do servidor
 local (abortado, e a rodada reprova). A CSP da Mesa (`style-src 'self'`) impede injetar CSS; por isso nada é
 injetado.
+
+O ambiente do semeador e dos servidores é fixado pelo harness: sem `ANTHROPIC_API_KEY` e `OPENAI_API_KEY` (a Mesa
+mostra "chave ausente" e nunca há como chamar um provedor) e com `VLADO_OCR=0` (a linha de base não depende de haver
+Tesseract na máquina: a medição digitalizada fica "sem texto extraível" em qualquer ambiente).
 
 A Mesa grava com a hora real do servidor. Os textos de data e hora (`21/11/2026`, `21/11/2026, 17:02:11`,
 `Salvo às 17:02`, ISO 8601) são trocados por `‹data›` na DOM antes da captura (lista `MASCARAS` em
@@ -86,7 +105,7 @@ linha de base é do Windows, e as duas não batem pixel a pixel. O que roda no C
 
 ## Tamanho
 
-96 imagens PNG sem perda, 11,0 MB no total (média de 115 KB; as mais pesadas são as telas de 1440 px). Cada
+114 imagens PNG sem perda, 12,2 MB no total (as mais pesadas são as telas de 1440 px). Cada
 `gerar` completo acrescenta esse tanto ao histórico do git: refazer a linha de base só no portão de cada tela ou fase,
 não a cada commit, e usar recorte (`--telas`, `--larguras`, `--temas`) para trocar só o que mudou.
 

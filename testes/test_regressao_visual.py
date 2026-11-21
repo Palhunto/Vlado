@@ -145,7 +145,7 @@ class LinhaDeBaseTest(unittest.TestCase):
         self.assertTrue(self.pastas(), 'testes/referencias_visuais/ está vazia: rode `regressao_visual.py gerar`.')
 
     def test_manifesto_confere_com_as_imagens(self):
-        esperados = set(rv.nomes_esperados(rv.TELAS + (rv.TELA_ENTRAR,), rv.VIEWPORTS, rv.TEMAS))
+        esperados = set(rv.nomes_esperados(rv.TODAS, rv.VIEWPORTS, rv.TEMAS))
         for pasta in self.pastas():
             with self.subTest(pasta=pasta.name):
                 manifesto = json.loads((pasta / 'manifesto.json').read_text(encoding='utf-8'))
@@ -186,7 +186,7 @@ class LinhaDeBaseTest(unittest.TestCase):
 class SelecaoTest(unittest.TestCase):
     def test_nomes(self):
         self.assertEqual(rv.nome_captura('inicio', 375, 'claro'), 'inicio__375__claro')
-        self.assertEqual(len(rv.nomes_esperados(rv.TELAS + (rv.TELA_ENTRAR,), rv.VIEWPORTS, rv.TEMAS)), 96)
+        self.assertEqual(len(rv.nomes_esperados(rv.TODAS, rv.VIEWPORTS, rv.TEMAS)), 114)
 
     def test_larguras_e_temas_do_plano(self):
         self.assertEqual(sorted(rv.VIEWPORTS), [375, 768, 1024, 1440])

@@ -11,6 +11,7 @@
     "1440": 900
   },
   "argumentos_chromium": [
+    "--lang=en-US",
     "--force-color-profile=srgb",
     "--font-render-hinting=none",
     "--disable-lcd-text",
@@ -47,14 +48,38 @@
     ],
     "apuracao__1440__escuro": [
       "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+    ],
+    "foco_entrar_campo__375__claro": [
+      "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    ],
+    "foco_entrar_botao__375__claro": [
+      "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    ],
+    "foco_entrar_campo__375__escuro": [
+      "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    ],
+    "foco_entrar_botao__375__escuro": [
+      "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    ],
+    "foco_entrar_campo__1440__claro": [
+      "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    ],
+    "foco_entrar_botao__1440__claro": [
+      "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    ],
+    "foco_entrar_campo__1440__escuro": [
+      "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    ],
+    "foco_entrar_botao__1440__escuro": [
+      "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
     ]
   },
-  "gerado_em_utc": "2026-11-21T20:27:05Z",
+  "gerado_em_utc": "2026-11-21T21:37:28Z",
   "tolerancia": {
     "canal": 4,
     "pixels": 8
   },
-  "total_bytes": 10998689,
+  "total_bytes": 12211425,
   "capturas": {
     "achados__1024__claro": {
       "largura": 1024,
@@ -487,6 +512,114 @@
       "altura": 1027,
       "bytes": 26943,
       "sha256": "d7788a5566a1d4ffe4a0729e2c899e44f7dca561b0ad1f9d1f18b99afb9be49b"
+    },
+    "foco_entrar_botao__1440__claro": {
+      "largura": 1440,
+      "altura": 900,
+      "bytes": 30503,
+      "sha256": "e26ce2061be14f9d0e9dbf1f57293ce02fb78a0eea6a5093c0dac365a1a46bf5"
+    },
+    "foco_entrar_botao__1440__escuro": {
+      "largura": 1440,
+      "altura": 900,
+      "bytes": 30260,
+      "sha256": "7de5785be1e3689b634459ce70bdb43a5d228adeefaef718af29c40181f35852"
+    },
+    "foco_entrar_botao__375__claro": {
+      "largura": 375,
+      "altura": 814,
+      "bytes": 25290,
+      "sha256": "21928253e0f776b0756b44043ffad985360180f6023351a2ea2854209032d7c6"
+    },
+    "foco_entrar_botao__375__escuro": {
+      "largura": 375,
+      "altura": 814,
+      "bytes": 24951,
+      "sha256": "20b5b2a3eecd1d6be1b552c8735489d7ce320b836eefc92b8e292d75b38f4b0f"
+    },
+    "foco_entrar_campo__1440__claro": {
+      "largura": 1440,
+      "altura": 900,
+      "bytes": 30605,
+      "sha256": "386d35692c4c7283692de65f6dcfb11c5db6b7e4073b691f3482e82bde7e73b9"
+    },
+    "foco_entrar_campo__1440__escuro": {
+      "largura": 1440,
+      "altura": 900,
+      "bytes": 30240,
+      "sha256": "702172188eac3af78d95f399cea18234bc3c7b7590358af6f164e84e98c35d4a"
+    },
+    "foco_entrar_campo__375__claro": {
+      "largura": 375,
+      "altura": 814,
+      "bytes": 25277,
+      "sha256": "f0f3188328eaa4877f4568d8af1f15ffc3dfabbadb77b7cd5090f91ade314575"
+    },
+    "foco_entrar_campo__375__escuro": {
+      "largura": 375,
+      "altura": 814,
+      "bytes": 24893,
+      "sha256": "7c6d82bacc8ee977d8a263c3f33669e15741a557f306b51fc93c5771aaf17d65"
+    },
+    "foco_mesa_barra__1440__claro": {
+      "largura": 1440,
+      "altura": 900,
+      "bytes": 119585,
+      "sha256": "0b67c3b69d2fc6178f916e81d16532546ea96c116dad9c98c9b4ad801d8e3228"
+    },
+    "foco_mesa_barra__1440__escuro": {
+      "largura": 1440,
+      "altura": 903,
+      "bytes": 117445,
+      "sha256": "f7841bccd6da94922d6da644a6275753ea401e2530b0e50b99350db619ce29b1"
+    },
+    "foco_mesa_botao__1440__claro": {
+      "largura": 1440,
+      "altura": 900,
+      "bytes": 119558,
+      "sha256": "d7a42271957021bef63924eaae38477c5dc02d5897de04dc1eb2d8a4f6cdc278"
+    },
+    "foco_mesa_botao__1440__escuro": {
+      "largura": 1440,
+      "altura": 903,
+      "bytes": 118394,
+      "sha256": "51d2f0b464f06573c009ba0b352d3b9b94fd1a69acb72ecf6bbdc48c4b56adf8"
+    },
+    "foco_mesa_botao__375__claro": {
+      "largura": 375,
+      "altura": 1092,
+      "bytes": 65980,
+      "sha256": "3857cacc8fead6dbd119283d286d5e1c226c26939d4e6b8ace50db5e315e0644"
+    },
+    "foco_mesa_botao__375__escuro": {
+      "largura": 375,
+      "altura": 1098,
+      "bytes": 69162,
+      "sha256": "539f7daf7e5c3fcd63bc92ff45a6bd22c08b72a38604ce1fe94d8d49270b74c8"
+    },
+    "foco_mesa_campo__1440__claro": {
+      "largura": 1440,
+      "altura": 900,
+      "bytes": 119530,
+      "sha256": "435129f8f330fed0e94c9439a033338f876852ff0046eb9fd8084a8d217c1f0c"
+    },
+    "foco_mesa_campo__1440__escuro": {
+      "largura": 1440,
+      "altura": 903,
+      "bytes": 118423,
+      "sha256": "ec656db138b107e94c35e2440d1a8d1d4c87a347649ad9ed90397412183a4fe5"
+    },
+    "foco_mesa_campo__375__claro": {
+      "largura": 375,
+      "altura": 1092,
+      "bytes": 70602,
+      "sha256": "55b6fb171d4259dbfa6e4a1b26bc57a60a7e7e523061b22ad343f6e35de93608"
+    },
+    "foco_mesa_campo__375__escuro": {
+      "largura": 375,
+      "altura": 1098,
+      "bytes": 72038,
+      "sha256": "a8c344dd21fbfb0444ba6bbb5e8ee7325f4fd2eb7d252fd937b617490a8bbf38"
     },
     "gerenciar__1024__claro": {
       "largura": 1024,

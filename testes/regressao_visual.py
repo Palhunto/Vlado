@@ -47,6 +47,14 @@ REFERENCIAS = AQUI / 'referencias_visuais'
 TELAS = ('inicio', 'documentos', 'cadastro', 'codex', 'achados', 'apuracao', 'diligencias', 'quadros',
          'gerenciar', 'caderno', 'configuracoes')
 TELA_ENTRAR = 'entrar'
+# Foco de teclado: pressiona Tab até o alvo ficar focado e captura com o anel de foco visível.
+# nome -> (tela de base, seletor do alvo, larguras em que o alvo é alcançável por Tab).
+FOCOS = {'foco_entrar_campo': ('entrar', '#entrar-login', (375, 1440)),
+         'foco_entrar_botao': ('entrar', '#entrar-enviar', (375, 1440)),
+         'foco_mesa_botao': ('cadastro', '#enviar-documentos', (375, 1440)),
+         'foco_mesa_campo': ('cadastro', '#cadastro-natureza', (375, 1440)),
+         'foco_mesa_barra': ('cadastro', '#ver-cadastro', (1440,))}   # a barra lateral só existe em tela larga
+TODAS = TELAS + (TELA_ENTRAR,) + tuple(FOCOS)
 CASO = 'vila_serena_sintetico'
 VIEWPORTS = {375: 812, 768: 1024, 1024: 768, 1440: 900}   # largura -> altura
 TEMAS = {'claro': 'light', 'escuro': 'dark'}
@@ -66,8 +74,12 @@ def nome_captura(tela: str, largura: int, tema: str) -> str:
     return f'{tela}__{largura}__{tema}'
 
 
+def larguras_da_tela(tela, larguras):
+    return [w for w in larguras if tela not in FOCOS or w in FOCOS[tela][2]]
+
+
 def nomes_esperados(telas, larguras, temas) -> list:
-    return [nome_captura(t, w, k) for t in telas for w in larguras for k in temas]
+    return [nome_captura(t, w, k) for t in telas for w in larguras_da_tela(t, larguras) for k in temas]
 
 
 def plataforma() -> str:
@@ -107,6 +119,14 @@ def encerrar(processo: subprocess.Popen) -> None:
         processo.wait(timeout=15)
 
 
+def ambiente_do_projeto() -> dict:
+    """Ambiente do semeador e dos servidores: sem chave de API (a Mesa mostra "chave ausente" e nunca chama um
+    provedor) e sem OCR (VLADO_OCR=0), para a linha de base não depender do que há instalado na máquina."""
+    env = {k: v for k, v in os.environ.items() if k not in ('ANTHROPIC_API_KEY', 'OPENAI_API_KEY')}
+    env.update(PYTHONUTF8='1', PYTHONIOENCODING='utf-8', VLADO_OCR='0')
+    return env
+
+
 class Servidores:
     """Pasta de dados sintética + um servidor `local` (Mesa) e um `local-contas` (tela de entrar)."""
 
@@ -132,13 +152,13 @@ class Servidores:
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _semear(self) -> None:
-        r = subprocess.run([self.python, str(AQUI / 'regressao_visual_semear.py'), str(self.dados)],
+        r = subprocess.run([self.python, str(AQUI / 'regressao_visual_semear.py'), str(self.dados)], env=ambiente_do_projeto(),
                            capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=600)
         if r.returncode:
             raise SystemExit('Falha ao semear os dados sintéticos:\n' + (r.stdout + r.stderr)[-2000:])
 
     def _subir(self) -> None:
-        env = {**os.environ, 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8'}
+        env = ambiente_do_projeto()
         for modo, atributo in (('local', 'origem_mesa'), ('local-contas', 'origem_entrar')):
             porta = porta_livre()
             log = open(self.tmp / f'servidor-{modo}.log', 'wb')
@@ -212,27 +232,35 @@ def capturar(servidores: Servidores, saida: Path, telas, larguras, temas, aviso=
                         rota.abort()
                 contexto.route('**/*', filtrar)
                 for tela in telas:
+                    if largura not in larguras_da_tela(tela, [largura]):
+                        continue
                     nome = nome_captura(tela, largura, tema)
                     pagina = contexto.new_page()
                     erros = []
                     pagina.on('pageerror', lambda e, erros=erros: erros.append('pageerror: ' + str(e)))
                     pagina.on('console', lambda m, erros=erros: erros.append('console.error: ' + m.text) if m.type == 'error' else None)
                     try:
-                        url, seletor = destino(servidores, tela)
+                        url, seletor = destino(servidores, FOCOS[tela][0] if tela in FOCOS else tela)
                         pagina.goto(url, wait_until='load')
                         pagina.wait_for_selector(seletor, state='visible', timeout=30000)
                         with contextlib.suppress(Exception):
                             pagina.wait_for_load_state('networkidle', timeout=3000)   # a área codex mantém um pedido aberto
                         pagina.evaluate('document.fonts.ready.then(() => 0)')
                         # A tela esperada precisa ser a que aparece (nunca uma página de erro que sai igual para sempre).
-                        if tela != TELA_ENTRAR:
+                        base = FOCOS[tela][0] if tela in FOCOS else tela
+                        if base != TELA_ENTRAR:
                             ativa = pagina.evaluate("new URL(location.href).searchParams.get('area') || 'inicio'")
-                            if ativa != tela:
-                                problemas.append(f'{nome}: a Mesa abriu a área {ativa!r}, não {tela!r}')
+                            if ativa != base:
+                                problemas.append(f'{nome}: a Mesa abriu a área {ativa!r}, não {base!r}')
                         mascaradas[nome] = pagina.evaluate(JS_MASCARAR, list(MASCARAS))
                         pagina.evaluate('window.scrollTo(0, 0)')
                         pagina.mouse.move(0, 0)
-                        pagina.evaluate("document.activeElement && document.activeElement.blur && document.activeElement.blur()")
+                        if tela in FOCOS:
+                            alvo = FOCOS[tela][1]
+                            if not focar_com_tab(pagina, alvo):
+                                problemas.append(f'{nome}: o foco de teclado (Tab) não chegou a {alvo}')
+                        else:
+                            pagina.evaluate("document.activeElement && document.activeElement.blur && document.activeElement.blur()")
                         png = estavel(pagina)
                         if png is None:
                             problemas.append(f'{nome}: não estabilizou em {ESPERA_ESTAVEL_MAX} leituras (captura não determinística)')
@@ -275,6 +303,16 @@ def destino(servidores: Servidores, tela: str):
     return f'{servidores.origem_mesa}/?area={tela}&caso={CASO}', seletor
 
 
+def focar_com_tab(pagina, seletor: str, maximo: int = 80) -> bool:
+    """Tab a partir do início da página até o alvo ficar focado COM `:focus-visible` (anel de teclado)."""
+    pagina.evaluate("document.activeElement && document.activeElement.blur && document.activeElement.blur()")
+    for _ in range(maximo):
+        pagina.keyboard.press('Tab')
+        if pagina.evaluate("([s]) => document.activeElement.matches(s) && document.activeElement.matches(':focus-visible')", [seletor]):
+            return True
+    return False
+
+
 def estavel(pagina):
     """Duas leituras seguidas iguais; devolve os bytes, ou None se não estabilizar."""
     anterior = None
@@ -310,10 +348,10 @@ def escrever_manifesto(pasta: Path, meta: dict, nomes) -> None:
 
 
 def selecao(args):
-    telas = [t.strip() for t in args.telas.split(',')] if args.telas else list(TELAS) + [TELA_ENTRAR]
+    telas = [t.strip() for t in args.telas.split(',')] if args.telas else list(TODAS)
     larguras = [int(w) for w in args.larguras.split(',')] if args.larguras else list(VIEWPORTS)
     temas = [t.strip() for t in args.temas.split(',')] if args.temas else list(TEMAS)
-    invalidas = [t for t in telas if t not in TELAS + (TELA_ENTRAR,)] + [w for w in larguras if w not in VIEWPORTS] \
+    invalidas = [t for t in telas if t not in TODAS] + [w for w in larguras if w not in VIEWPORTS] \
         + [t for t in temas if t not in TEMAS]
     if invalidas:
         raise SystemExit(f'Seleção inválida: {invalidas}')
