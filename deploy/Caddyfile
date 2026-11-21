@@ -5,6 +5,30 @@
 	request_body {
 		max_size 80MB
 	}
+	# Registro de acesso (uma linha JSON por requisição) em /var/log/caddy/acesso.log, volume caddy_logs.
+	# Conteúdo mínimo e sem segredo: o Caddy nunca registra o corpo da requisição; aqui também saem a URI
+	# inteira (a query pode levar nome de caso ou de documento), TODOS os cabeçalhos da requisição (Cookie,
+	# Authorization, X-Forwarded-*, User-Agent) e TODOS os da resposta (Set-Cookie). Fica o caminho no campo
+	# "rota", com o token de /ativar/<token> e /convite/<token> mascarado, e qualquer segmento de 24 ou mais
+	# caracteres [A-Za-z0-9_-] também (token, identificador longo, hash). Fica o IP de origem, para investigar
+	# incidente. Rotação: 20 MiB por arquivo, 20 arquivos, no máximo 30 dias. Guia: deploy/INCIDENTE.md.
+	log_append rota {http.request.uri.path}
+	log {
+		output file /var/log/caddy/acesso.log {
+			roll_size 20MiB
+			roll_keep 20
+			roll_keep_for 720h
+		}
+		format filter {
+			wrap json
+			fields {
+				request>uri delete
+				request>headers delete
+				resp_headers delete
+				rota regexp "(?P<p>/(?:ativar|convite)/)[^/?#]+|(?P<q>/)[A-Za-z0-9_-]{24,}" "${p}${q}***"
+			}
+		}
+	}
 	# The original Host header is forwarded; the app checks it against https://{$VLADO_DOMINIO}.
 	reverse_proxy vlado:8765
 }

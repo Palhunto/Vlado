@@ -103,6 +103,8 @@ services:
       - ./${VLADO_CADDYFILE:-deploy/Caddyfile}:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+      # Registro de acesso do Caddy (JSON, sem segredo, com rotação própria; ver deploy/Caddyfile).
+      - caddy_logs:/var/log/caddy
     depends_on:
       vlado:
         condition: service_healthy
@@ -148,6 +150,13 @@ services:
       VLADO_BACKUP_ESPERA_S: ${VLADO_BACKUP_ESPERA_S:-900}
       # Idade máxima (h) do último backup bem-sucedido antes de o serviço ficar unhealthy.
       VLADO_BACKUP_IDADE_MAX_H: ${VLADO_BACKUP_IDADE_MAX_H:-30}
+      # Batimento de disponibilidade (deploy/MONITORAMENTO.md): a cada minuto confere /saude do app e o disco livre e
+      # avisa um endereço externo (dead-man's switch); falha vai para <endereço>/fail na hora, e se o servidor cair os
+      # avisos deixam de chegar. Só palavras de estado trafegam. Sem VLADO_VIGIA_PING_URL, a vigia não roda.
+      VLADO_VIGIA_PING_URL: ${VLADO_VIGIA_PING_URL:-}
+      VLADO_VIGIA_URL: ${VLADO_VIGIA_URL:-http://vlado:8765/saude}
+      VLADO_VIGIA_INTERVALO_S: ${VLADO_VIGIA_INTERVALO_S:-60}
+      VLADO_VIGIA_DISCO_MIN_GB: ${VLADO_VIGIA_DISCO_MIN_GB:-5}
       RCLONE_CONFIG: /tmp/rclone.conf
     env_file:
       # Credenciais do destino (variáveis RCLONE_CONFIG_<REMOTO>_*). Fora do git (deploy/ambientes/*.env).
@@ -220,5 +229,6 @@ volumes:
   acesso:
   caddy_data:
   caddy_config:
+  caddy_logs:
   backup_trabalho:
   tmp_vlado:
