@@ -74,12 +74,12 @@
       "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
     ]
   },
-  "gerado_em_utc": "2026-11-21T21:37:28Z",
+  "gerado_em_utc": "2026-11-21T22:03:47Z",
   "tolerancia": {
     "canal": 4,
     "pixels": 8
   },
-  "total_bytes": 12211425,
+  "total_bytes": 12212389,
   "capturas": {
     "achados__1024__claro": {
       "largura": 1024,
@@ -565,13 +565,13 @@
       "largura": 1440,
       "altura": 900,
       "bytes": 119585,
-      "sha256": "0b67c3b69d2fc6178f916e81d16532546ea96c116dad9c98c9b4ad801d8e3228"
+      "sha256": "3562290c66007dbde8d37ea8b32a29927708a1f611f4c933bfdd254f0277893d"
     },
     "foco_mesa_barra__1440__escuro": {
       "largura": 1440,
       "altura": 903,
-      "bytes": 117445,
-      "sha256": "f7841bccd6da94922d6da644a6275753ea401e2530b0e50b99350db619ce29b1"
+      "bytes": 118409,
+      "sha256": "737253b161b6a466793b176ab715c67fac2a1a2f3c5ec379c313fd66f4f19421"
     },
     "foco_mesa_botao__1440__claro": {
       "largura": 1440,

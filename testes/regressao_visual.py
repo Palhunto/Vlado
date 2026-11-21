@@ -262,6 +262,13 @@ def capturar(servidores: Servidores, saida: Path, telas, larguras, temas, aviso=
                         else:
                             pagina.evaluate("document.activeElement && document.activeElement.blur && document.activeElement.blur()")
                         png = estavel(pagina)
+                        if png is not None and tela in FOCOS and not foco_pintado(pagina, FOCOS[tela][1]):
+                            # O foco se perdeu durante a captura (a página mexeu depois do Tab): refaz o foco e a captura.
+                            png = None
+                            if focar_com_tab(pagina, FOCOS[tela][1]):
+                                png = estavel(pagina)
+                                if png is not None and not foco_pintado(pagina, FOCOS[tela][1]):
+                                    png = None
                         if png is None:
                             problemas.append(f'{nome}: não estabilizou em {ESPERA_ESTAVEL_MAX} leituras (captura não determinística)')
                         else:
@@ -303,13 +310,38 @@ def destino(servidores: Servidores, tela: str):
     return f'{servidores.origem_mesa}/?area={tela}&caso={CASO}', seletor
 
 
+JS_FOCO_PINTADO = """([s]) => {
+  const e = document.activeElement;
+  if (!e || !e.matches(s) || !e.matches(':focus-visible')) return null;
+  const c = getComputedStyle(e);
+  if (c.outlineStyle === 'none' || !(parseFloat(c.outlineWidth) > 0) || c.outlineColor === 'rgba(0, 0, 0, 0)') return null;
+  const r = e.getBoundingClientRect();
+  return [r.x, r.y, r.width, r.height].map(v => Math.round(v * 100) / 100).join(',');
+}"""
+JS_DOIS_QUADROS = "new Promise(ok => requestAnimationFrame(() => requestAnimationFrame(ok)))"
+
+
+def foco_pintado(pagina, seletor: str):
+    """Retângulo do alvo se ele tem o foco, `:focus-visible` e um contorno realmente pintado; senão None."""
+    return pagina.evaluate(JS_FOCO_PINTADO, [seletor])
+
+
 def focar_com_tab(pagina, seletor: str, maximo: int = 80) -> bool:
-    """Tab a partir do início da página até o alvo ficar focado COM `:focus-visible` (anel de teclado)."""
-    pagina.evaluate("document.activeElement && document.activeElement.blur && document.activeElement.blur()")
-    for _ in range(maximo):
-        pagina.keyboard.press('Tab')
-        if pagina.evaluate("([s]) => document.activeElement.matches(s) && document.activeElement.matches(':focus-visible')", [seletor]):
-            return True
+    """Tab a partir do início da página até o alvo ficar focado com o anel de teclado pintado e ASSENTADO:
+    depois de dois quadros e uma pausa o alvo continua focado, com contorno e no mesmo lugar (a barra lateral
+    e outros blocos terminam de se desenhar depois do carregamento e podem tirar o foco ou mexer o alvo)."""
+    for _ in range(5):
+        pagina.evaluate("document.activeElement && document.activeElement.blur && document.activeElement.blur()")
+        for _ in range(maximo):
+            pagina.keyboard.press('Tab')
+            antes = foco_pintado(pagina, seletor)
+            if antes:
+                pagina.evaluate(JS_DOIS_QUADROS)
+                pagina.wait_for_timeout(500)
+                pagina.evaluate(JS_DOIS_QUADROS)
+                if foco_pintado(pagina, seletor) == antes:
+                    return True
+                break
     return False
 
 
