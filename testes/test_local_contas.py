@@ -7,6 +7,7 @@ import http.client
 import json
 import os
 from pathlib import Path
+import socket
 import sys
 import tempfile
 import threading
@@ -189,6 +190,57 @@ class PrimeiraAberturaTest(LocalContasHttp):
             fio.join(30)
         self.assertEqual(sorted(estados), [200, 410, 410, 410])
         self.assertEqual(len(acesso.listar(self.root)), 1)
+
+
+class CorpoDeRecusaTest(LocalContasHttp):
+    """A refused POST drops a small body before answering; on Windows, closing with unread bytes
+    sends a TCP reset and the client loses the answer (WinError 10053). A large body is never read."""
+
+    def cru(self, host, comprimento, origem=None):
+        """Raw POST, headers only: returns the open socket (http.client sends headers and body together)."""
+        cabecalho = (f'POST /api/primeiro-admin HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\n'
+                     f'Origin: {origem or self.origem}\r\nContent-Length: {comprimento}\r\n\r\n')
+        conexao = socket.create_connection(('127.0.0.1', self.server.server_port), timeout=15)
+        self.addCleanup(conexao.close)
+        conexao.sendall(cabecalho.encode('ascii'))
+        return conexao
+
+    @staticmethod
+    def resposta(conexao):
+        dados = b''
+        while parte := conexao.recv(65536):
+            dados += parte
+        return dados.split(b'\r\n', 1)[0]
+
+    def nada_antes_do_corpo(self, conexao):
+        conexao.settimeout(0.3)
+        with self.assertRaises(TimeoutError, msg='respondeu sem ler o corpo pequeno'):
+            conexao.recv(1)
+        conexao.settimeout(15)
+
+    def test_host_recusado_le_corpo_pequeno_antes_de_responder(self):
+        corpo = json.dumps({'nome': 'E', 'login': 'editora', 'senha': SENHA, 'confirmacao': SENHA}).encode()
+        for host in (f'localhost:{self.server.server_port}', 'evil.test'):
+            with self.subTest(host=host):
+                conexao = self.cru(host, len(corpo))
+                self.nada_antes_do_corpo(conexao)
+                conexao.sendall(corpo)
+                self.assertEqual(self.resposta(conexao), b'HTTP/1.0 403 Forbidden')
+        self.assertTrue(acesso.primeiro_acesso_disponivel(self.root))
+
+    def test_operacao_publica_com_corpo_acima_de_4096_descarta_ate_32_kb(self):
+        conexao = self.cru(self.host, 5000)
+        self.nada_antes_do_corpo(conexao)
+        conexao.sendall(b' ' * 5000)
+        self.assertEqual(self.resposta(conexao), b'HTTP/1.0 400 Bad Request')
+
+    def test_corpo_grande_nunca_e_lido(self):
+        # Answered from the headers alone: the server does not wait for (or read) 10 MB.
+        for host, status in ((self.host, b'400 Bad Request'), ('evil.test', b'403 Forbidden'),
+                             (f'localhost:{self.server.server_port}', b'403 Forbidden')):
+            with self.subTest(host=host):
+                conexao = self.cru(host, 10 * 1024 * 1024)
+                self.assertEqual(self.resposta(conexao), b'HTTP/1.0 ' + status)
 
 
 class SessaoLocalTest(LocalContasHttp):

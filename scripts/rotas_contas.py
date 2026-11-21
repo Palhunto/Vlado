@@ -210,6 +210,7 @@ class RotasContas:
             length = -1
         if not 0 < length <= 4096:
             self.close_connection = True
+            self._descartar_corpo_pequeno()  # up to 32 KB, as for any anonymous request; larger is never read
             self._json(400, {'erro': 'Requisição vazia ou muito grande.'})
             return
         body = self.rfile.read(length)
