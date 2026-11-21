@@ -114,6 +114,7 @@ C = [
     ('E40', '#8a9c8f', '#28322c', 3, 'borda de campo nova / leitura'),
     ('E52', '#64786a', '#2c3c2e', 3, 'borda de campo atual / verde suave (item ativo)'),
     ('E53', '#8a9c8f', '#2c3c2e', 3, 'borda de campo nova / verde suave (item ativo)'),
+    ('E54', '#172315', '#a8b3a9', 3, 'ícone escuro / órgão público no escuro, opção (a)'),
     ('E41', '#aa8754', '#372e21', 3, 'borda de aviso / fundo de aviso'),
     ('E42', '#3fa877', '#202823', 3, 'pessoa / superfície'),
     ('E43', '#8487e6', '#202823', 3, 'empresa / superfície'),
