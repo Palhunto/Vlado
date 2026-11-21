@@ -248,10 +248,13 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         sessao = hashlib.sha256(principal['csrf'].encode('ascii')).hexdigest()[:24]
         return (sessao, *(v if isinstance(v, str) else None for v in (data.get('caso'), data.get('rodada'), data.get('revisao'))))
 
-    def _allowed(self):
+    def _allowed(self, descartar=False):
         if urlsplit(self.path).path == '/saude':
             return True  # container healthcheck reaches the server by its internal address
         if self.headers.get('Host') != self.server.host_permitido:
+            if descartar:  # POST refused before its body was read: drop a small one, answer and close
+                self.close_connection = True
+                self._descartar_corpo_pequeno()
             self._json(403, {'erro': 'Endereço não autorizado.'})
             return False
         return True
@@ -329,8 +332,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         self.__dict__.pop('_principal_requisicao', None)
         if self.server.com_contas:
             # Never read (up to 72 MB of) a body for anonymous or foreign-host requests.
-            if not self._allowed():
-                self.close_connection = True
+            if not self._allowed(descartar=True):
                 return
             if urlsplit(self.path).path.removeprefix('/api/') in OPERACOES_PUBLICAS:
                 self._publico(urlsplit(self.path).path.removeprefix('/api/'))
