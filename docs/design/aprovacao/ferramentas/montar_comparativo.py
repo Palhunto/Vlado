@@ -4,6 +4,7 @@ Uso (com o Python do .venv):
   python docs/design/aprovacao/ferramentas/montar_comparativo.py <pasta da área> <prefixo da proposta>
   ex.: ... docs/design/aprovacao/caderno proposta
        ... docs/design/aprovacao/quadros proposta-hipoteses
+       ... docs/design/aprovacao/cadastro proposta docs/design/aprovacao/documentos  (proposta de outra pasta)
 Gera <pasta>/comparativo-<tema>-<largura>.png a partir de atual-<tema>-<largura>.png e <prefixo>-<tema>-<largura>.png.
 """
 import sys
@@ -16,12 +17,12 @@ FONTE = RAIZ / 'interface' / 'fonts' / 'SourceSans3-Upright.otf'
 CORES = {'claro': ('#f6f5f0', '#202c29'), 'escuro': ('#171d1a', '#eae9df')}
 
 
-def montar(pasta: Path, prefixo: str) -> None:
+def montar(pasta: Path, prefixo: str, origem_proposta: Path | None = None) -> None:
     fonte = ImageFont.truetype(str(FONTE), 22)
     for tema in ('claro', 'escuro'):
         for largura in ('1440', '390'):
             atual = pasta / f'atual-{tema}-{largura}.png'
-            proposta = pasta / f'{prefixo}-{tema}-{largura}.png'
+            proposta = (origem_proposta or pasta) / f'{prefixo}-{tema}-{largura}.png'
             if not (atual.is_file() and proposta.is_file()):
                 continue
             a, b = Image.open(atual).convert('RGB'), Image.open(proposta).convert('RGB')
@@ -41,4 +42,4 @@ def montar(pasta: Path, prefixo: str) -> None:
 
 
 if __name__ == '__main__':
-    montar(Path(sys.argv[1]), sys.argv[2])
+    montar(Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3]) if len(sys.argv) > 3 else None)

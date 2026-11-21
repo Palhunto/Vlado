@@ -16,7 +16,7 @@ Pedido do dono em 21/11/2026: ver no desenho novo as áreas da Mesa que não tê
 | Quadros: comparador | não | proposta, aguarda aprovação | W07 | `quadros/` |
 | Quadros: conferência do texto | não | vai para o caderno (W04) | W04 | `caderno/` |
 | Quadros: entrevistas e pedidos (vira "Pedidos e prazos") | não | proposta, aguarda aprovação | nenhum (pedidos e prazos de LAI estão na lista do que falta desenhar) | `quadros/` |
-| Documentos (`documentos`) e Cadastrar arquivos (`cadastro`) | não | proposta a fazer | W02 (uma tela só) | `documentos/`, `cadastro/` (só atual por enquanto) |
+| Documentos (`documentos`) e Cadastrar arquivos (`cadastro`) | não | proposta, aguarda aprovação (uma tela só) | W02 | `documentos/`, `cadastro/` |
 | Diligências (`diligencias`) | não | — | nenhum | `diligencias/` (só atual) |
 | Apurações e lixeira (`gerenciar`) | não | — | nenhum (lixeira na lista do que falta desenhar) | `apuracoes-e-lixeira/` (só atual) |
 | Configurações (`configuracoes`) | não | — | W08 e W09 em parte (conta e equipe) | `configuracoes/` (só atual) |
