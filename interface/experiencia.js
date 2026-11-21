@@ -142,19 +142,22 @@
     renderedHref = location.href;
     window.dispatchEvent(new Event('mesa-rota-alterada'));
   }
-  const originalArea = showArea;
-  showArea = name => {
-    if (!$('area-' + name)) name = 'inicio';
-    if (guest) name = 'codex';
-    area = name;
-    originalArea(name);
-    $('caderno-abas').hidden = !['apuracao','caderno'].includes(name);
-    $('caderno-aba-notas').setAttribute('aria-pressed',String(name === 'apuracao'));
-    $('caderno-aba-trechos').setAttribute('aria-pressed',String(name === 'caderno'));
-    if (name === 'caderno') $('ver-apuracao').setAttribute('aria-pressed','true');
-    $('area-titulo').tabIndex = -1; $('area-titulo').focus({preventScroll:true});
-    writeRoute();
-  };
+  registrarGanchoArea({
+    antes: name => {
+      if (!$('area-' + name)) name = 'inicio';
+      if (guest) name = 'codex';
+      area = name;
+      return name;
+    },
+    depois: name => {
+      $('caderno-abas').hidden = !['apuracao','caderno'].includes(name);
+      $('caderno-aba-notas').setAttribute('aria-pressed',String(name === 'apuracao'));
+      $('caderno-aba-trechos').setAttribute('aria-pressed',String(name === 'caderno'));
+      if (name === 'caderno') $('ver-apuracao').setAttribute('aria-pressed','true');
+      $('area-titulo').tabIndex = -1; $('area-titulo').focus({preventScroll:true});
+      writeRoute();
+    }
+  });
   $('caderno-aba-notas').addEventListener('click',()=>showArea('apuracao'));
   $('caderno-aba-trechos').addEventListener('click',()=>showArea('caderno'));
   $('achados-texto').closest('label').after($('achados-documento').closest('label'));
