@@ -12,7 +12,7 @@
  --theme-backdrop:#132d27aa;--sombra-cartao:0 1px 2px rgba(23,63,41,.06);--sombra-flutuante:0 4px 18px rgba(23,63,41,.08);
  --sombra-dialogo:0 12px 40px rgba(23,63,41,.18);
  --pdf-pagina:#ffffff;--doc-texto:#202c29;--doc-linha:#a8b3a9;--pdf-trecho:#ffe9a8;--pdf-trecho-borda:#c47800;
- --nav-contador-ativo-fundo:#ffffff;
+ --nav-contador-ativo-fundo:#ffffff;--theme-entidade-orgao:#b0508a;
  --serifa:'Source Serif 4',Georgia,serif;--sans:'Source Sans 3',system-ui,sans-serif;
 }
 :root[data-theme=dark]{
@@ -23,7 +23,7 @@
  --theme-warning:#e6bc7a;--theme-warning-bg:#372e21;--theme-warning-line:#aa8754;
  --theme-danger:#e7a097;--theme-danger-bg:#382725;--theme-danger-line:#a76e66;
  --theme-backdrop:#080d0bd9;--sombra-cartao:0 1px 2px #00000033;--sombra-flutuante:0 4px 18px #00000066;--sombra-dialogo:0 12px 40px #00000099;
- --nav-contador-ativo-fundo:#172315;
+ --nav-contador-ativo-fundo:#172315;--theme-entidade-orgao:#d46a9c;
 }
 .pr,.pr *{box-sizing:border-box}
 body{margin:0}
@@ -58,13 +58,13 @@ body{margin:0}
 .cont{margin-left:auto;font-size:14px}
 .cont-pilula{font-weight:600;border-radius:999px;padding:0 8px;background:var(--theme-accent);color:var(--theme-on-primary)}
 [aria-current] .cont-pilula{background:var(--nav-contador-ativo-fundo);color:var(--theme-accent)}
-.cota{background:var(--theme-surface);border:1px solid var(--theme-line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.cota{background:var(--theme-surface);border:1px solid var(--theme-line);border-radius:12px;padding:12px 16px;display:flex;flex-direction:column;gap:8px}
 .medidor{height:6px;border-radius:999px;background:var(--theme-line)}.medidor>div{height:6px;border-radius:999px;background:var(--theme-accent)}
-.perfil{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 8px;color:var(--theme-text);text-decoration:none}
+.perfil{display:flex;align-items:center;gap:12px;min-height:44px;padding:0 8px;color:var(--theme-text);text-decoration:none}
 .avatar{width:32px;height:32px;flex:none;border-radius:999px;background:var(--theme-accent);color:var(--theme-on-primary);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600}
 /* cartões */
 .cartao{background:var(--theme-surface);border:1px solid var(--theme-line);border-radius:12px}
-.achado{text-align:left;background:var(--theme-surface);border:1px solid var(--theme-line);border-radius:12px;padding:16px 18px;display:flex;gap:14px;align-items:flex-start;color:var(--theme-text);font-size:16px;line-height:1.5;width:100%}
+.achado{text-align:left;background:var(--theme-surface);border:1px solid var(--theme-line);border-radius:12px;padding:16px 20px;display:flex;gap:16px;align-items:flex-start;color:var(--theme-text);font-size:16px;line-height:1.5;width:100%}
 .achado.aberto{flex-direction:column;border:2px solid var(--theme-accent);box-shadow:var(--sombra-flutuante)}
 .achado.aberto>div{align-self:stretch}
 .achado.lacuna{background:var(--theme-warning-bg);border-color:var(--theme-warning-line)}
@@ -74,10 +74,10 @@ body{margin:0}
 .sinal.lac{background:var(--theme-warning);color:var(--theme-on-primary);font-weight:700}
 .selo{font-size:14px;font-weight:600;border-radius:999px;padding:4px 12px;border:1px solid;white-space:nowrap}
 .selo-ocr{color:var(--theme-warning);background:var(--theme-warning-bg);border-color:var(--theme-warning-line)}
-.caixa-pergunta{background:var(--theme-reading);border-radius:12px;padding:14px 18px;display:flex;flex-direction:column;gap:4px}
+.caixa-pergunta{background:var(--theme-reading);border-radius:12px;padding:16px 20px;display:flex;flex-direction:column;gap:4px}
 /* folha do documento: branca nos dois temas, como o leitor de PDF */
 .folha{background:var(--pdf-pagina);color:var(--doc-texto);border:1px solid var(--theme-line);border-radius:4px;box-shadow:0 1px 2px rgba(23,63,41,.08);font:15px/1.7 var(--serifa);display:flex;flex-direction:column;gap:16px}
-.folha table{width:100%;border-collapse:collapse;font-size:14px}.folha td{border:1px solid var(--doc-linha);padding:6px 10px}.folha td+td{text-align:right}
+.folha table{width:100%;border-collapse:collapse;font-size:14px}.folha td{border:1px solid var(--doc-linha);padding:8px 12px}.folha td+td{text-align:right}
 .folha .realce td{background:var(--pdf-trecho);font-weight:600}.folha .realce td+td{outline:2px solid var(--pdf-trecho-borda)}
 /* diálogo */
 .veu{position:absolute;inset:0;background:var(--theme-backdrop);display:flex;align-items:center;justify-content:center;padding:16px}
@@ -85,9 +85,9 @@ body{margin:0}
 .dialogo h2{margin:0;font:600 22px/1.25 var(--serifa)}
 .dialogo p{margin:0}
 .acoes{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;padding-top:8px}
-.campo{display:flex;flex-direction:column;gap:6px;font-weight:600}
+.campo{display:flex;flex-direction:column;gap:8px;font-weight:600}
 .campo input{height:44px;padding:0 12px;border-radius:8px;border:1px solid var(--theme-input-line);background:var(--theme-surface);font:inherit;font-weight:400;color:var(--theme-text)}
-.tabela-alcance{width:100%;border-collapse:collapse;font-size:14px}.tabela-alcance th,.tabela-alcance td{text-align:left;padding:6px 0;border-bottom:1px solid var(--theme-line)}
+.tabela-alcance{width:100%;border-collapse:collapse;font-size:14px}.tabela-alcance th,.tabela-alcance td{text-align:left;padding:8px 0;border-bottom:1px solid var(--theme-line)}
 .tabela-alcance td{text-align:right}.tabela-alcance thead th{color:var(--theme-muted);font-weight:600}.tabela-alcance tfoot th,.tabela-alcance tfoot td{font-weight:600;border-bottom:0}
-.aviso{background:var(--theme-warning-bg);border:1px solid var(--theme-warning-line);border-radius:12px;padding:12px 14px;font-size:14px}
-.faixa-derivado{position:relative;z-index:20;display:block;background:#5b2a6e;color:#ffffff;font:600 14px/1 'Source Sans 3',system-ui,sans-serif;padding:13px 16px;letter-spacing:.2px}
+.aviso{background:var(--theme-warning-bg);border:1px solid var(--theme-warning-line);border-radius:12px;padding:12px 16px;font-size:14px}
+.faixa-derivado{position:relative;z-index:20;display:block;background:#5b2a6e;color:#ffffff;font:600 14px/1 'Source Sans 3',system-ui,sans-serif;padding:12px 16px;line-height:16px;letter-spacing:.2px}

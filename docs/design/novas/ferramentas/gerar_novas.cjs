@@ -5,6 +5,7 @@ const {chromium} = require('playwright');
 const fs = require('node:fs');
 const path = require('node:path');
 const url = require('node:url');
+const {aplicarDecisoes} = require(path.join(__dirname, 'decisoes.cjs'));
 
 const novas = path.resolve(__dirname, '..');
 const design = path.resolve(novas, '..');
@@ -19,7 +20,7 @@ const icones = Object.fromEntries(JSON.parse(fs.readFileSync(path.join(design, '
 const FD = path.relative(fonteDir, fontes).split(path.sep).join('/');  // relativo: as pranchas não guardam caminho da máquina
 const fontFace = `@font-face{font-family:"Source Serif 4";src:url('${FD}/SourceSerif4-Roman.ttf') format('truetype');font-weight:200 900}
 @font-face{font-family:"Source Sans 3";src:url('${FD}/SourceSans3-Upright.otf') format('opentype');font-weight:200 900}`;
-const FAIXA = '<div class="faixa-derivado">Derivado · aguarda aprovação do dono</div>';
+const FAIXA = '<div class="faixa-derivado" style="background:#1e4d3e">Derivado · aprovado pelo dono em 21/11/2026</div>';
 const moldura = conteudo => `<div id="prancha" style="display:inline-block;vertical-align:top">${conteudo}${FAIXA}</div>`;
 const svg = (d, tam, traco = 2) => `<svg aria-hidden="true" width="${tam}" height="${tam}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${traco}" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
 const MENU = 'M4 7h16M4 12h16M4 17h16';            // canvas, Celular.dc.html
@@ -165,7 +166,7 @@ for (const [nome, arq] of [['Main', 'conferir-achado'], ['Inicio', 'visao-geral'
 (async () => {
   const browser = await chromium.launch({headless: true, executablePath: chromium.executablePath()});
   for (const {arquivo, tema, corpo} of lista) {
-    const html = pagina(tema, corpo);
+    const html = aplicarDecisoes(pagina(tema, corpo), {escuro: tema === 'dark'});
     const fonteArq = path.join(fonteDir, `${arquivo}.html`);
     fs.writeFileSync(fonteArq, html);
     const largura = +arquivo.match(/(\d+)$/)[1];

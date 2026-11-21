@@ -1,0 +1,27 @@
+// Decisões do dono de 21/11/2026 aplicadas a qualquer prancha HTML (canvas ou derivada), antes de renderizar.
+// P11.8: preenchimento, intervalo e margem fora da grade de 4 px arredondam para cima (6→8, 10→12, 14→16, 18→20, 22→24).
+// P11.3: raio de 12 px em todo cartão; 4 px só na folha do documento e no topo das barras (os demais raios não mudam).
+// P11.4: órgão público em ameixa (#b0508a no claro, #d46a9c no escuro) no lugar de #3d4a45.
+// P11.5: altura mínima no lugar de altura fixa onde o texto não cabia (nó do mapa).
+const PROPS = /^(padding|padding-top|padding-right|padding-bottom|padding-left|margin|margin-top|margin-right|margin-bottom|margin-left|gap|row-gap|column-gap)$/;
+const arredonda = v => v.replace(/(-?\d+(?:\.\d+)?)px/g, (m, n) => {
+  const x = Math.abs(parseFloat(n));
+  if (x === 0 || x % 4 === 0) return m;
+  return `${Math.sign(parseFloat(n)) * Math.ceil(x / 4) * 4}px`;
+});
+function declaracoes(css) {
+  return css.replace(/([a-z-]+)\s*:\s*([^;"}]+)/g, (m, prop, valor) => {
+    if (PROPS.test(prop)) return `${prop}:${arredonda(valor)}`;
+    if (prop === 'border-radius' && /^\s*10px\s*$/.test(valor)) return `${prop}:12px`;
+    return m;
+  });
+}
+function aplicarDecisoes(html, {escuro = false} = {}) {
+  const ameixa = escuro ? '#d46a9c' : '#b0508a';
+  return html
+    .replace(/style="([^"]*)"/g, (m, s) => `style="${declaracoes(s)}"`)
+    .replace(/<style>([\s\S]*?)<\/style>/g, (m, s) => `<style>${declaracoes(s)}</style>`)
+    .replace(/#3d4a45/gi, ameixa)
+    .replace(/width: 200px; height: 72px/g, 'width: 200px; min-height: 72px');
+}
+module.exports = {aplicarDecisoes, arredonda};

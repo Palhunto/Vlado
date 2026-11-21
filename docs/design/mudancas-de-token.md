@@ -14,6 +14,8 @@ Onde o canvas e os tokens divergem, vale o canvas (`PLANO_LANCAMENTO.md`, "Refer
 
 ## Resumo
 
+Decisões do dono de 21/11/2026 (P11 e P12) já incorporadas; a lista completa está em `componentes.md`, "Decisões do dono". Arredondamento para a grade de 4 px (P11.8): preenchimento, intervalo e margem fora da grade sobem para o múltiplo de 4 seguinte.
+
 | # | O quê | Hoje (`tokens.css` / CSS) | Canvas | Origem no canvas |
 |---|---|---|---|---|
 | 1 | Cor do foco, tema claro | `--theme-focus` → `verde-500` `#53886c` | `#8a5a12` (ocre escuro) | "Foco · novo", `Tokens.dc.html`; `:focus-visible` de todas as telas claras |
@@ -82,7 +84,7 @@ Hoje: `--text-xs` 12 (97 ocorrências de `var(--text-xs)` em `style.css` e 4 em 
 --text-xs:var(--text-md); --text-sm:var(--text-md);   /* só durante a migração; depois saem */
 ```
 
-O canvas usa também tamanhos fora dos seis degraus. A especificação registra cada um como está desenhado e pede decisão ao dono (pergunta 2):
+O canvas usa também tamanhos fora dos seis degraus. Decisão do dono (P11.2): tokens de exceção só para 24, 32 e 40 px:
 
 | Tamanho | Onde | Proposta de nome |
 |---|---|---|
@@ -106,7 +108,7 @@ O teste `testes/estilo_tokens.cjs:136-142` exige de 6 a 7 degraus e piso de 12 p
 /* --raio-painel (10 px) sai; --quadro-raio passa a apontar para --raio-cartao */
 ```
 
-Divergência dentro do próprio canvas: a tela "Conferir achado" (`Main.dc.html`) desenha os cartões de achado, a caixa "Sua pergunta" e o cartão da cota com 10 px, e "Visão geral" desenha o cartão da cota com 10 px, enquanto o design system revisado e as demais telas usam 12 px. A especificação segue os 12 px declarados ("Três raios no lugar de doze") e leva a diferença ao dono (pergunta 3). Outro raio que o canvas usa: 4 px na folha do documento e no topo das barras do gráfico (pergunta 3).
+Decisão do dono (P11.3): 12 px em todos os cartões e 4 px só na folha e no topo das barras (`--raio-folha:4px`, novo). Registro da divergência que levou à pergunta: a tela "Conferir achado" (`Main.dc.html`) desenha os cartões de achado, a caixa "Sua pergunta" e o cartão da cota com 10 px, e "Visão geral" desenha o cartão da cota com 10 px, enquanto o design system revisado e as demais telas usam 12 px. A especificação segue os 12 px declarados ("Três raios no lugar de doze") e leva a diferença ao dono (pergunta 3). Outro raio que o canvas usa: 4 px na folha do documento e no topo das barras do gráfico (pergunta 3).
 
 ## 6. Larguras de quebra: 720, 1024 e 1280 px
 
@@ -118,16 +120,20 @@ Variável CSS não funciona dentro de `@media`, então as três larguras não vi
 |---|---|---|
 | até 719 px | celular | uma coluna; barra lateral vira gaveta; campo de 16 px; alvo de 44 px |
 | 720 a 1023 px | tablet | barra lateral ainda em gaveta (UX-11: "Gaveta até 1024 px") |
-| 1024 a 1279 px | desktop compacto | barra lateral fixa no plano; as pranchas da fase 3 propõem gaveta também aqui (`componentes.md`, pergunta 9) |
+| 1024 a 1279 px | desktop compacto | barra lateral em gaveta (decisão do dono, P12.1: gaveta abaixo de 1280 px) |
 | 1280 px ou mais | desktop | como as telas finais de 1440 px |
 
 O canvas só desenha 390 e 1440 px. O comportamento nas faixas do meio está na lista do que o Design ainda desenha.
 
 ## 7. Barra lateral com 232 px
 
+**Decisões do dono:** sem ícones nos itens (P11.6); gaveta abaixo de 1280 px (P12.1).
+
 `--mesa-sidebar` passa de 224 px para 232 px (largura do `nav` em `Main` e `Inicio`). As duas variações por largura de tela (245 px a partir de 1550 px e 205 px até 1190 px, `style.css:139-140`) saem: o canvas desenha uma largura só, e abaixo de 1024 px a barra vira gaveta (item 6).
 
 ## 8. Contador no item da barra lateral
+
+**Decisão do dono (P12.2):** no escuro, o item ativo também é verde cheio (`#a8c79d`) com texto `#172315`; o padrão de hoje (`style.css:174`) sai.
 
 A cor do item ativo não muda no claro: `.areas>a[aria-current=page]` já tem fundo `--green` e peso 600 (`style.css:118`); o texto usa `--white` (`#fffefa`, 9,52:1), e o canvas usa branco puro (`#ffffff`, 9,61:1), diferença que não se vê. No escuro, hoje o item ativo tem fundo `--theme-active`, texto verde e uma barra interna de 3 px à esquerda (`style.css:174`); o canvas não desenha a barra lateral no escuro, então isso fica como está.
 
@@ -162,6 +168,8 @@ O canvas pinta a célula citada com fundo `#ffe9a8` e contorno de 2 px `#c47800`
 ```
 
 ## 10. Órgão público: terceira cor do mapa
+
+**Decisão do dono (P11.4): opção (b), a ameixa validada** — `--vlado-ameixa-600:#b0508a` (claro) e `--vlado-ameixa-400:#d46a9c` (escuro), com `--theme-entidade-orgao` e `--mapa-orgao` apontando para elas. O texto abaixo é o registro da análise.
 
 O mapa do canvas tem três tipos de entidade: pessoa (círculo esmeralda `#1d8058`), empresa (quadrado de canto arredondado anil `#5b5fb8`) e órgão público (quadrado de canto vivo `#3d4a45`). A terceira cor não existe nos tokens e não tem par no escuro.
 
@@ -363,4 +371,4 @@ Razão de contraste WCAG 2.x (luminância relativa), calculada por `referencia/f
 2. Design aplica 1, 2, 3, 7 e 9 em `tokens.css` (cor e medida, sem renomear nada).
 3. QA ajusta `testes/estilo_tokens.cjs` (piso de 14 px, raios, quebras) e o Design aplica 4, 5, 11 e 12.
 4. Frontend migra as regras por componente (parte A), usando `componentes.md`.
-5. Item 10 só depois da resposta do dono.
+5. Item 10 já decidido (P11.4, ameixa).

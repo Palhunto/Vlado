@@ -5,6 +5,7 @@ const {chromium} = require('playwright');
 const fs = require('node:fs');
 const path = require('node:path');
 const url = require('node:url');
+const {aplicarDecisoes} = require(path.join(__dirname, '..', '..', 'novas', 'ferramentas', 'decisoes.cjs'));
 
 const aprovacao = path.resolve(__dirname, '..');
 const design = path.resolve(aprovacao, '..');
@@ -97,7 +98,7 @@ for (const [tema, nome] of [['light', 'claro'], ['dark', 'escuro']]) {
   const browser = await chromium.launch({headless: true, executablePath: chromium.executablePath()});
   for (const {pasta, arquivo, tema, corpo} of lista) {
     const html = path.join(fonteDir, `${pasta}-${arquivo}.html`);
-    fs.writeFileSync(html, pagina(tema, corpo));
+    fs.writeFileSync(html, aplicarDecisoes(pagina(tema, corpo), {escuro: tema === 'dark'}));
     const page = await browser.newPage({viewport: {width: +arquivo.match(/(\d+)$/)[1], height: 900}, deviceScaleFactor: 1});
     await page.route('**/*', r => r.request().url().startsWith('file:') ? r.continue() : r.abort());
     await page.goto(url.pathToFileURL(html).href);

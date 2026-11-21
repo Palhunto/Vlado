@@ -20,9 +20,9 @@ const porNome = Object.fromEntries(dados.icones.map(i => [i.nome, i]));
 const FD = fontes.split(path.sep).join('/');
 const temas = {
   claro: {fundo: '#fffefa', texto: '#202c29', sec: '#5f6a63', linha: '#dddfd6', verde: '#1e4d3e', sobre: '#ffffff', suave: '#e8eee6', borda: '#74837a',
-    pessoa: '#1d8058', empresa: '#5b5fb8', orgao: '#3d4a45', aviso: '#8e4b28', avisoFundo: '#f7ecdf'},
+    pessoa: '#1d8058', empresa: '#5b5fb8', orgao: '#b0508a', aviso: '#8e4b28', avisoFundo: '#f7ecdf'},
   escuro: {fundo: '#202823', texto: '#eae9df', sec: '#a8b3a9', linha: '#3c4940', verde: '#a8c79d', sobre: '#172315', suave: '#2c3c2e', borda: '#8a9c8f',
-    pessoa: '#3fa877', empresa: '#8487e6', orgao: '#a8b3a9', aviso: '#e6bc7a', avisoFundo: '#372e21'},
+    pessoa: '#3fa877', empresa: '#8487e6', orgao: '#d46a9c', aviso: '#e6bc7a', avisoFundo: '#372e21'},
 };
 
 function painel(nome, t) {

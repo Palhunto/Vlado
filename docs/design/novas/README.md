@@ -1,6 +1,6 @@
 ---
 type: reference
-title: Pranchas derivadas da Onda 3 (aguardam aprovação do dono)
+title: Pranchas derivadas da Onda 3 (aprovadas pelo dono em 21/11/2026)
 created: 2026-11-21
 tags: [design, derivado, onda-3]
 related: ['[[componentes]]', '[[referencia/README]]', '[[mudancas-de-token]]']
@@ -8,12 +8,13 @@ related: ['[[componentes]]', '[[referencia/README]]', '[[mudancas-de-token]]']
 
 # Pranchas derivadas da Onda 3
 
-**Derivado, aguarda aprovação do dono.** Nada nesta pasta é contrato visual ainda. Pela regra 1 do contrato, uma tela sem desenho no canvas é desenhada pelo Design e aprovada pelo dono antes de ser construída. Cada imagem traz, abaixo, a faixa "Derivado · aguarda aprovação do dono". Quando o dono aprovar, a prancha aprovada passa para `referencia/` e a faixa sai.
+**Derivado, aprovado pelo dono em 21/11/2026.** As 27 pranchas foram aprovadas e regeneradas com as decisões P11 e P12 (`../componentes.md`, "Decisões do dono"): grade de 4 px, 12 px nos cartões, ameixa no órgão público, altura mínima, gaveta abaixo de 1280 px, verde cheio no item ativo do escuro. Cada imagem traz, abaixo, a faixa "Derivado · aprovado pelo dono em 21/11/2026". Elas passam a valer como referência ao lado de `../referencia/`.
 
 A especificação está em [`../componentes.md`](../componentes.md), seções [Diálogo de confirmação](../componentes.md#dialogo) e [Telas derivadas](../componentes.md#telas-derivadas).
 
 ## Como foram feitas
 
+- `ferramentas/decisoes.cjs`: aplica as decisões do dono (grade de 4 px, raio de 12 px, ameixa, altura mínima) a toda prancha antes de renderizar, inclusive às que partem do HTML do canvas.
 - `fonte/base.css`: os tokens semânticos de `interface/tokens.css`, com os valores do canvas e as propostas de `mudancas-de-token.md`. Nenhuma cor fora deles, exceto a faixa de marcação.
 - `ferramentas/gerar_novas.cjs`: monta as pranchas HTML em `fonte/` e as renderiza em `telas/` pelo mesmo processo da referência (Chromium do Playwright do projeto, fontes da Mesa, escala 1×, rede bloqueada).
 - O escuro das telas de desktop parte do HTML do próprio canvas (`referencia/canvas/`), trocando cada cor do claro pelo valor escuro do mesmo token.
