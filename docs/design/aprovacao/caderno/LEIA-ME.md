@@ -1,6 +1,6 @@
-# Caderno: o que o dono decide
+# Caderno: o que o dono decidiu
 
-**Proposta: derivado, aguarda aprovação do dono.** Segue o wireframe W04 ("Caderno e conferência do texto") na linguagem do canvas. Não há tela final do caderno no canvas.
+**Proposta: derivado, aprovado pelo dono em 21/11/2026** (commit `adce9fc`). Aprovadas como desenhadas: a tela em três colunas do W04 com a barra lateral do canvas (P14.1) e, no celular, o seletor de nota no topo e o painel no pé (P14.5). Segue o wireframe W04 ("Caderno e conferência do texto") na linguagem do canvas. Não há tela final do caderno no canvas.
 
 | Arquivo | O que é |
 |---|---|
@@ -16,6 +16,8 @@
 - No celular: a nota se escolhe num seletor no topo, e a afirmação selecionada abre num painel no pé da tela, com as três ações.
 
 ## Decisões
+
+Respondidas: 1 e 5, como desenhadas. Em aberto, com desenho novo a caminho: 2, 3 e 4.
 
 1. **Aprova a tela em três colunas do W04**, com a barra lateral do canvas?
 2. **"Trechos com fonte e contribuições"** não aparece no W04. Os trechos passam a entrar só por "Ligar outra evidência", ou a aba continua em outro lugar?

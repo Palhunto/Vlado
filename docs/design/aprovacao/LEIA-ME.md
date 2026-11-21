@@ -9,7 +9,7 @@ Pedido do dono em 21/11/2026: ver no desenho novo as áreas da Mesa que não tê
 | Visão geral (`inicio`) | sim | escuro, 1024 e 390 (`../novas/`) | — | — |
 | Conferir achados (`achados`) | sim | escuro, 1024 e 390 (`../novas/`) | — | — |
 | Perguntar à IA (`codex`) | só celular, escuro | — | W03 | `perguntar/` (só atual) |
-| Caderno (`apuracao`) | não | **proposta** | W04 | `caderno/` |
+| Caderno (`apuracao`) | não | **proposta aprovada pelo dono em 21/11/2026** | W04 | `caderno/` |
 | Quadros (`quadros`): mapa de relações e linha do tempo | sim | escuro e 390 a fazer | — | `quadros/` |
 | Quadros: hipóteses | não | proposta a fazer | W05 | `quadros/` |
 | Quadros: tabelas | não | proposta a fazer | W06 | `quadros/` |

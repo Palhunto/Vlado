@@ -1,4 +1,4 @@
-// Propostas derivadas para aprovação do dono (docs/design/aprovacao): caderno (W04) e quadros, aba Hipóteses (W05),
+// Proposta derivada do caderno (W04), aprovada pelo dono em 21/11/2026 (docs/design/aprovacao/caderno),
 // na linguagem do canvas, com os tokens de docs/design/novas/fonte/base.css. Gera o HTML em fonte/ e o PNG em cada pasta.
 // Uso: NODE_PATH=.ferramentas/node/node_modules node docs/design/aprovacao/ferramentas/gerar_propostas.cjs
 const {chromium} = require('playwright');
@@ -16,7 +16,7 @@ const BASE = rel(path.join(design, 'novas', 'fonte', 'base.css'));
 const icones = Object.fromEntries(JSON.parse(fs.readFileSync(path.join(design, 'icones', 'ferramentas', 'icones.json'), 'utf8')).icones.map(i => [i.nome, i.d]));
 const svg = (d, tam, traco = 2) => `<svg aria-hidden="true" width="${tam}" height="${tam}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${traco}" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="${d}"/></svg>`;
 const CHECK = 'M5 12l5 5L20 7';
-const FAIXA = '<div class="faixa-derivado">Derivado · aguarda aprovação do dono</div>';
+const FAIXA = '<div class="faixa-derivado" style="background:#1e4d3e">Derivado · aprovado pelo dono em 21/11/2026</div>';
 const pagina = (tema, corpo) => `<!doctype html><html lang="pt-BR" data-theme="${tema}"><head><meta charset="utf-8"><style>@font-face{font-family:"Source Serif 4";src:url('${FD}/SourceSerif4-Roman.ttf') format('truetype');font-weight:200 900}
 @font-face{font-family:"Source Sans 3";src:url('${FD}/SourceSans3-Upright.otf') format('opentype');font-weight:200 900}
 .af{text-decoration:none;color:inherit;padding:1px 0;text-underline-offset:6px;text-decoration-thickness:2px;text-decoration-line:underline}
@@ -87,42 +87,10 @@ const caderno390 = () => `<div class="pr" style="width:390px;height:844px;overfl
 <button type="button" class="bt bt-p bt-g bt-cheio">Marcar como revisada por mim</button>
 <div style="display:flex;gap:8px"><button type="button" class="bt bt-s bt-g" style="flex:1">Ligar evidência</button><button type="button" class="bt bt-s bt-g" style="flex:1">Reescrever</button></div></section></div>`;
 
-// ---------- Quadros, aba Hipóteses (W05), no cabeçalho de quadros do canvas ----------
-const ev = (txt, fonte) => `<a href="#" class="ev"><span>${txt}</span><span class="p14 sec">${fonte} · abrir o original</span></a>`;
-const fechada = (t, c) => `<button type="button" class="cartao" style="width:100%;text-align:left;padding:16px 24px;display:flex;align-items:center;gap:16px;color:var(--theme-text)"><span class="serifa" style="font-size:18px">${t}</span><span class="p14 sec" style="margin-left:auto;white-space:nowrap">${c}</span></button>`;
-const hipoteses = () => `<div class="pr" style="width:1440px;height:900px;display:flex;flex-direction:column">
-<header style="height:72px;flex:none;padding:0 32px;display:flex;align-items:center;gap:24px;background:var(--theme-surface);border-bottom:1px solid var(--theme-line)">
-<h1 class="serifa" style="margin:0;font-size:28px;font-weight:600">Quadros</h1>
-<div style="display:flex;gap:4px">${['Hipóteses', 'Linha do tempo', 'Mapa de relações', 'Tabelas'].map((n, i) => `<a href="#"${i === 0 ? ' aria-current="page"' : ''} style="height:44px;padding:0 14px;border-radius:8px;display:flex;align-items:center;text-decoration:none;${i === 0 ? 'background:var(--theme-soft);color:var(--theme-accent);font-weight:600' : 'color:var(--theme-text)'}">${n}</a>`).join('')}</div>
-<button type="button" class="bt bt-p" style="margin-left:auto">Nova hipótese</button></header>
-<div style="flex:1;min-height:0;display:flex">
-<main style="flex:1;min-width:0;padding:28px 40px;display:flex;flex-direction:column;gap:16px">
-<div style="display:flex;align-items:baseline;gap:12px"><h2 class="serifa" style="margin:0;font-size:22px;font-weight:600">Hipóteses</h2><span class="p14 sec">3 hipóteses</span></div>
-<section class="cartao" style="border:2px solid var(--theme-accent);box-shadow:var(--sombra-flutuante);padding:20px 24px;display:flex;flex-direction:column;gap:16px">
-<div style="display:flex;align-items:baseline;gap:16px"><h3 class="serifa" style="margin:0;font-size:18px;font-weight:600">O aditivo ultrapassa o limite legal de acréscimo</h3><span class="p14 sec" style="margin-left:auto;white-space:nowrap">2 sustentam · 1 contraria · 1 falta</span><a href="#" class="b">Editar</a></div>
-<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start">
-<div class="col" style="border-top:3px solid var(--theme-accent)"><span class="b" style="color:var(--theme-accent);display:flex;align-items:center;gap:6px">${svg(CHECK, 16, 2.5)}Sustenta</span>${ev('Aditivo acresce 22,4%', 'Aditivo 1, p. 2')}${ev('Valor original de R$ 8,75 mi', 'Contrato, p. 1')}<a href="#" class="b">+ Ligar evidência</a></div>
-<div class="col" style="border-top:3px solid var(--theme-danger)"><span class="b" style="color:var(--theme-danger);display:flex;align-items:center;gap:6px">${svg(icones['sinal-sem-suporte'], 16, 2.2)}Contraria</span>${ev('Parecer cita limite de 25%', 'Parecer jurídico, p. 3')}<a href="#" class="b">+ Ligar evidência</a></div>
-<div class="col" style="border-top:3px dashed var(--theme-warning)"><span class="b" style="color:var(--theme-warning);display:flex;align-items:center;gap:6px">${svg(icones.lacuna, 16, 2)}Falta</span>
-<div class="ev" style="border:1px dashed var(--theme-warning);background:var(--theme-warning-bg)"><span>Qual lei rege este contrato</span><span class="p14 b" style="color:var(--theme-warning)">sem documento</span></div>
-<button type="button" class="bt" style="border:1px solid var(--theme-warning);background:var(--theme-surface);color:var(--theme-warning);padding:0 14px">Virar pergunta ou pedido</button></div></div></section>
-${fechada('A medição nº 3 foi paga antes da conclusão do trecho', '0 sustentam · 0 contrariam · 2 faltam')}
-${fechada('Sócios da construtora têm vínculo com a secretaria', '1 sustenta · 0 contrariam · 1 falta')}
-<form class="cartao" style="margin-top:auto;padding:20px 24px;display:flex;flex-direction:column;gap:12px"><span class="b">Nova hipótese</span>
-<label class="campo"><span>Escreva como afirmação que os documentos possam sustentar ou contrariar</span><input type="text"></label>
-<div class="acoes" style="padding-top:0"><button type="button" class="bt bt-s">Cancelar</button><button type="button" class="bt bt-p">Criar</button></div></form></main>
-<aside aria-label="Como ler" style="width:360px;flex:none;background:var(--theme-surface);border-left:1px solid var(--theme-line);padding:28px 24px;display:flex;flex-direction:column;gap:14px">
-<span class="rubrica sec">Como ler</span>
-<span style="display:flex;align-items:center;gap:10px;color:var(--theme-accent)">${svg(CHECK, 18, 2.5)}<span style="color:var(--theme-text)">Sustenta: evidência conferida a favor</span></span>
-<span style="display:flex;align-items:center;gap:10px;color:var(--theme-danger)">${svg(icones['sinal-sem-suporte'], 18, 2.2)}<span style="color:var(--theme-text)">Contraria: evidência conferida contra</span></span>
-<span style="display:flex;align-items:center;gap:10px;color:var(--theme-warning)">${svg(icones.lacuna, 18, 2)}<span style="color:var(--theme-text)">Falta: o que nenhum documento responde ainda</span></span>
-<span class="p14 sec" style="margin-top:auto">A contagem não é placar: o quadro organiza as evidências, não decide se a hipótese é verdadeira.</span></aside></div></div>`;
-
 const lista = [];
 for (const [tema, nome] of [['light', 'claro'], ['dark', 'escuro']]) {
   lista.push({pasta: 'caderno', arquivo: `proposta-${nome}-1440`, tema, corpo: caderno()});
   lista.push({pasta: 'caderno', arquivo: `proposta-${nome}-390`, tema, corpo: caderno390()});
-  lista.push({pasta: 'quadros', arquivo: `proposta-hipoteses-${nome}-1440`, tema, corpo: hipoteses()});
 }
 
 (async () => {
