@@ -1,6 +1,6 @@
 # Interface de pesquisa documental
 
-Interface da versão 1.4.0, com cadastro anterior à pergunta, extração textual de PDFs, conversa com os documentos e consulta aos achados estruturados. A Mesa de apuração separa cadastro, busca documental e conferência de achados, com leitura do briefing junto às fontes. Usa Python e navegador, com `pypdf` para extração; a análise online é feita pela API do provedor configurado, conforme a integração descrita em [INTEGRACAO_API.md](INTEGRACAO_API.md).
+Interface da Mesa de apuração, com cadastro anterior à pergunta, extração textual de PDFs, conversa com os documentos e consulta aos achados estruturados. A Mesa de apuração separa cadastro, busca documental e conferência de achados, com leitura do briefing junto às fontes. Usa Python e navegador, com `pypdf` para extração; a análise online é feita pela API do provedor configurado, conforme a integração descrita em [INTEGRACAO_API.md](INTEGRACAO_API.md).
 
 ## Abrir
 

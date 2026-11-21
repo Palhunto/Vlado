@@ -1,6 +1,6 @@
 # VLADO
 
-**Versão 2.2.0** (código; última release publicada: 2.1.0) · Licença pendente de decisão do grupo ([AVISOS_DE_LICENCA.md](docs/AVISOS_DE_LICENCA.md))
+**Versão:** a do campo `versao` de `configuracao.json` (última release publicada: 2.1.0) · Licença pendente de decisão do grupo ([AVISOS_DE_LICENCA.md](docs/AVISOS_DE_LICENCA.md))
 
 O Vlado é um assistente de apuração documental. Ele organiza documentos de uma pauta jornalística, responde perguntas com citação de fonte e registra cada afirmação ao documento, à página ou à célula que a sustenta. A revisão final é sempre humana: o sistema organiza e aponta, e não aprova nada por conta própria.
 
@@ -159,7 +159,7 @@ Essas verificações confirmam integridade de arquivos e scripts. Não avaliam a
 - **Licença:** o repositório ainda não declara licença para o código; a decisão cabe ao grupo.
 
 **Versões**
-- Há uma versão por release, igual em `configuracao.json` (`versao`), em `VLADO_VERSAO` (`.env.example` e `deploy/ambientes/*.env.example`) e no instalador (`instalador/vlado.iss` e `instalador/dependencias.json`). O código está em `2.2.0` (integração da Onda 0); a última release publicada, com instalador gerado, é a `2.1.0`. `testes/test_versoes_alinhadas.py` exige a igualdade.
-- `VLADO_VERSAO` é a etiqueta da imagem Docker da Mesa hospedada, usada para reverter: construa cada imagem com a versão da release e guarde a anterior.
+- Há uma versão por release, igual em `configuracao.json` (`versao`), em `VLADO_VERSAO` (`.env.example` e `deploy/ambientes/*.env.example`) e no instalador (`instalador/vlado.iss` e `instalador/dependencias.json`). O código está à frente da última release publicada (2.1.0, a única com instalador gerado). `testes/test_versoes_alinhadas.py` exige a igualdade nos arquivos do repositório. No Windows ela só vale para instalação nova: `configuracao.json` é estado do usuário e o lançador só o copia quando falta, então quem instalou a 2.1.0 segue com `versao` 1.4.0 nesse arquivo.
+- `VLADO_VERSAO` é a etiqueta da imagem Docker da Mesa hospedada, usada para reverter: use a versão da release e não reconstrua a imagem com uma etiqueta já usada; entre releases, use sufixo (por exemplo, `2.2.0-1`).
 - Os prompts têm versão própria (`1.4.1`, em `scripts/comum.py`).
 - O detalhamento das mudanças por versão está em [docs/CHANGELOG.md](docs/CHANGELOG.md).

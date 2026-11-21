@@ -18,8 +18,10 @@ def versoes():
     iss = (RAIZ / 'instalador' / 'vlado.iss').read_text(encoding='utf-8')
     encontradas['instalador/vlado.iss'] = re.search(r'#define Versao "([^"]+)"', iss).group(1)
     for arquivo in [RAIZ / '.env.example', *sorted((RAIZ / 'deploy' / 'ambientes').glob('*.env.example'))]:
-        texto = arquivo.read_text(encoding='utf-8')
-        encontradas[arquivo.relative_to(RAIZ).as_posix()] = re.search(r'^VLADO_VERSAO=(\S+)$', texto, re.M).group(1)
+        linhas = re.findall(r'^VLADO_VERSAO=(.*)$', arquivo.read_text(encoding='utf-8'), re.M)
+        if len(linhas) != 1:
+            raise AssertionError(f'{arquivo.name}: esperada exatamente uma linha VLADO_VERSAO=, achei {len(linhas)}')
+        encontradas[arquivo.relative_to(RAIZ).as_posix()] = linhas[0].strip()
     return encontradas
 
 
@@ -30,7 +32,7 @@ class VersoesAlinhadasTest(unittest.TestCase):
 
     def test_formato_numerico(self):
         for arquivo, versao in versoes().items():
-            self.assertRegex(versao, SEMVER, arquivo)
+            self.assertIsNotNone(SEMVER.fullmatch(versao), f'{arquivo}: {versao!r} não é X.Y.Z')
 
 
 if __name__ == '__main__':
