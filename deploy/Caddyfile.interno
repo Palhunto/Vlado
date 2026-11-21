@@ -1,6 +1,12 @@
 # Homologação local: HTTPS com a CA interna do Caddy (o navegador e o emulador precisam
 # confiar no certificado raiz em caddy_data/caddy/pki/authorities/local/root.crt).
 # Nunca use no ambiente editorial nem na demonstração pública.
+{
+	# Contêiner somente leitura e sem privilégios: o Caddy não instala a CA no repositório de
+	# certificados do contêiner (falharia com "failed to execute tee"). Confie nela no navegador.
+	skip_install_trust
+}
+
 {$VLADO_DOMINIO} {
 	tls internal
 	encode gzip
