@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Aceitar convite</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+body{margin:0}
+a{color:#333}a:hover{color:#000}
+</style>
+</helmet>
+<div style="width: 1200px; height: 760px; box-sizing: border-box; display: flex; background: #ffffff; color: #2b2b2b; font-family: 'Source Sans 3', system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+<div style="flex: 1; min-width: 0; box-sizing: border-box; padding: 28px 32px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 14px; color: #6b6b6b">Passo 1 de 3</span>
+<b style="font-size: 18px">Você foi convidada para a Redação Serena</b>
+<span>Rui Castro convidou <b>ana@redacaoserena.org</b> como Repórter.</span>
+<label style="display: flex; flex-direction: column; gap: 4px">Seu nome<input type="text" style="height: 44px; box-sizing: border-box; border: 1.5px solid #6b6b6b; border-radius: 6px; padding: 0 10px; font: inherit"></label>
+<label style="display: flex; flex-direction: column; gap: 4px">Crie uma senha<input type="password" style="height: 44px; box-sizing: border-box; border: 1.5px solid #6b6b6b; border-radius: 6px; padding: 0 10px; font: inherit"><span style="font-size: 14px; color: #6b6b6b">Mínimo de 12 caracteres. Pode colar ou usar gerenciador.</span></label>
+<label style="display: flex; gap: 8px; align-items: flex-start"><input type="checkbox" style="width: 20px; height: 20px; margin: 2px 0 0"><span>Li e aceito os <u>termos de uso</u> e a <u>política de privacidade</u> do teste.</span></label>
+<button type="button" style="margin-top: auto; height: 44px; border: 0; border-radius: 6px; background: #2b2b2b; color: #fff; font: inherit; font-weight: 600">Continuar</button>
+</div>
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 14px; color: #6b6b6b">Passo 2 de 3</span>
+<b style="font-size: 18px">Proteja a conta com um segundo passo</b>
+<div style="align-self: center; width: 140px; height: 140px; border: 1.5px solid #6b6b6b; display: flex; align-items: center; justify-content: center; color: #6b6b6b">código QR</div>
+<span>Leia com o aplicativo autenticador ou <u>copie a chave</u>.</span>
+<label style="display: flex; flex-direction: column; gap: 4px">Código de 6 dígitos<input type="text" inputmode="numeric" autocomplete="one-time-code" style="height: 44px; box-sizing: border-box; border: 1.5px solid #6b6b6b; border-radius: 6px; padding: 0 10px; font: inherit"></label>
+<u>Prefiro cadastrar uma chave de acesso</u>
+<button type="button" style="margin-top: auto; height: 44px; border: 0; border-radius: 6px; background: #2b2b2b; color: #fff; font: inherit; font-weight: 600">Confirmar</button>
+</div>
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 14px; color: #6b6b6b">Passo 3 de 3</span>
+<b style="font-size: 18px">Guarde os códigos de reserva</b>
+<div style="border: 1.5px dashed #6b6b6b; border-radius: 6px; padding: 10px; font-family: monospace; line-height: 1.8">xxxx-xxxx &nbsp; xxxx-xxxx<br>xxxx-xxxx &nbsp; xxxx-xxxx<br>xxxx-xxxx &nbsp; xxxx-xxxx</div>
+<div style="display: flex; gap: 8px"><button type="button" style="flex: 1; height: 40px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Copiar</button><button type="button" style="flex: 1; height: 40px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Baixar</button></div>
+<div style="border: 1.5px solid #9a9a9a; border-radius: 6px; padding: 10px"><b>Antes de começar</b><br>O Vlado está em teste. Use só documentos públicos: trechos são enviados ao provedor de IA.</div>
+<button type="button" style="margin-top: auto; height: 44px; border: 0; border-radius: 6px; background: #2b2b2b; color: #fff; font: inherit; font-weight: 600">Abrir a apuração de exemplo</button>
+</div>
+</div>
+<div style="width: 320px; flex: none; box-sizing: border-box; background: #f4f4f2; border-left: 1.5px solid #cfcfcf; padding: 28px 22px; display: flex; flex-direction: column; gap: 10px; font-size: 14px">
+<div style="font-weight: 600; font-size: 15px">Regras deste fluxo</div>
+<div>1. Entrada só por convite. Não existe cadastro aberto nem lista de espera no teste.</div>
+<div>2. O link vale por prazo definido e uma única vez; vencido, a tela diz a quem pedir outro.</div>
+<div>3. O e-mail vem do convite e não pode ser trocado aqui.</div>
+<div>4. Aceite de termos registrado com data e versão.</div>
+<div>5. Segundo passo obrigatório para dono e editor, recomendado para os demais. Chave de acesso é alternativa ao código.</div>
+<div>6. Códigos de reserva aparecem uma vez.</div>
+<div>7. O primeiro acesso termina numa apuração de exemplo com dados fictícios e um tour que pode ser pulado.</div>
+<div>8. No celular, os três passos viram telas em sequência.</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

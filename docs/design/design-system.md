@@ -8,6 +8,8 @@ related: ['[[CONTRATO_EVIDENCIA]]']
 
 # Design system do Vlado
 
+Onda 3: a referência visual do canvas "Vlado — Mesa ideal" está em [`referencia/`](referencia/README.md), a especificação por componente em [`componentes.md`](componentes.md) e as mudanças de token que o canvas traz, com o contraste medido, em [`mudancas-de-token.md`](mudancas-de-token.md). Até elas serem aplicadas, os valores desta página continuam valendo para o código.
+
 A paleta atual da Mesa é a base. Esta fase não redesenha a interface: ela organiza os valores que já estavam em `interface/style.css` num arquivo só, `interface/tokens.css`, separado em três camadas. Só mudou o que falhava no contraste WCAG AA. O tema escuro já existia e continua com os mesmos nomes. Nenhum tema novo foi criado.
 
 ## Como as camadas se encaixam
