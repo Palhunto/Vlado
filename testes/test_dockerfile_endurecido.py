@@ -199,12 +199,19 @@ class ComposeEndurecidoTest(unittest.TestCase):
 
     def test_limites_de_memoria_cpu_processos_e_logs(self):
         for nome, bloco in self.servicos.items():
-            for chave in ('mem_limit', 'memswap_limit', 'cpus', 'pids_limit'):
+            for chave in ('mem_limit', 'memswap_limit', 'cpu_shares', 'pids_limit'):
                 self.assertRegex(bloco, rf'(?m)^    {chave}: ', f'{nome} sem {chave}')
         self.assertRegex(self.servicos['vlado'], r'stop_grace_period: ')
         texto = (RAIZ / 'docker-compose.yml').read_text(encoding='utf-8')
         self.assertIn('max-size', texto)
         self.assertIn('max-file', texto)
+
+    def test_cpu_so_por_peso_relativo_para_subir_em_qualquer_servidor(self):
+        """`cpus` acima do número de núcleos impede o contêiner de subir (I2): o teto rígido é opcional."""
+        compose = (RAIZ / 'docker-compose.yml').read_text(encoding='utf-8')
+        self.assertNotRegex(compose, r'(?m)^\s+cpus:')
+        opcional = (RAIZ / 'deploy' / 'compose.limite-cpu.yml').read_text(encoding='utf-8')
+        self.assertRegex(opcional, r'(?m)^    cpus: \$\{VLADO_CPUS:\?')
 
     def test_volumes_de_dados_nao_viram_bind_mount_do_hospedeiro(self):
         bloco = self.servicos['vlado']
