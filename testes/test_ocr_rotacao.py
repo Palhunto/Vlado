@@ -105,6 +105,19 @@ class DecisaoDeOrientacaoTest(unittest.TestCase):
         with patch('ocr._executar', return_value=saida):
             self.assertEqual(ocr._giro_osd(Path('p.png'), config), 180)
 
+    def test_tesseract_direto_roda_com_uma_thread_openmp(self):
+        # Two OCR jobs at once with OpenMP threads: 100-250 s per page and timeouts; one thread: 3-4 s.
+        saida = type('P', (), {'returncode': 0, 'stdout': b'Rotate: 0\nOrientation confidence: 20\n', 'stderr': b''})()
+        config = {**ocr.configuracao(), 'tesseract': 'tesseract', 'tessdata': None}
+        for definido, esperado in ((None, '1'), ('3', '3')):
+            ambiente = {k: v for k, v in os.environ.items() if k != 'OMP_THREAD_LIMIT'}
+            if definido:
+                ambiente['OMP_THREAD_LIMIT'] = definido
+            with self.subTest(definido=definido), patch.dict(os.environ, ambiente, clear=True), \
+                    patch('ocr._executar', return_value=saida) as executar:
+                ocr._osd(Path('p.png'), config)
+                self.assertEqual(executar.call_args.kwargs['env']['OMP_THREAD_LIMIT'], esperado)
+
     def test_medida_pondera_a_confianca_pelos_caracteres(self):
         cabecalho = 'level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext'
         linhas = [cabecalho, '5\t1\t1\t1\t1\t1\t0\t0\t1\t1\t90\tlicitação', '5\t1\t1\t1\t1\t2\t0\t0\t1\t1\t30\tde',

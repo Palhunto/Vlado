@@ -107,6 +107,20 @@ def _ambiente(config) -> dict:
     return env
 
 
+def _ambiente_tesseract(config) -> dict:
+    """Environment for direct Tesseract runs: one OpenMP thread unless OMP_THREAD_LIMIT is set.
+
+    Tesseract's OpenMP threads busy-wait for each other; with two OCR jobs at once on 4 cores a
+    page went from 3 s to 100-250 s and calls hit the timeout, while one thread read it in 3-4 s
+    with byte-identical txt, tsv and OSD output (Tesseract 5.3 and 5.5). OCRmyPDF sets its own
+    limit (up to 3 threads per page on short PDFs) and is left as it is.
+    """
+    env = _ambiente(config)
+    if not env.get('OMP_THREAD_LIMIT', '').strip().isdigit():
+        env['OMP_THREAD_LIMIT'] = '1'
+    return env
+
+
 def _texto(processo) -> str:
     return (processo.stdout or b'').decode('utf-8', errors='replace')
 
@@ -365,7 +379,7 @@ def _osd(imagem: Path, config) -> tuple:
     """(degrees clockwise the OSD asks for, its confidence); (0, None) when OSD is unavailable."""
     args = [config['tesseract'], str(imagem), 'stdout', '--psm', '0'] + _opcoes_tessdata(config)
     try:
-        processo = _executar(args, timeout=config['timeout_pagina'], env=_ambiente(config))
+        processo = _executar(args, timeout=config['timeout_pagina'], env=_ambiente_tesseract(config))
     except (OSError, subprocess.SubprocessError):
         return 0, None
     saida = _texto(processo) + (processo.stderr or b'').decode('utf-8', errors='replace')
@@ -384,7 +398,7 @@ def _giro_osd(imagem: Path, config) -> int:
 def _reconhecer_imagem(imagem: Path, config) -> str:
     args = [config['tesseract'], str(imagem), 'stdout', '-l', config['idiomas'], '--psm', '3'] + _opcoes_tessdata(config)
     try:
-        processo = _executar(args, timeout=config['timeout_pagina'], env=_ambiente(config))
+        processo = _executar(args, timeout=config['timeout_pagina'], env=_ambiente_tesseract(config))
     except subprocess.TimeoutExpired as exc:
         raise OcrFalha(f'Tesseract excedeu {config["timeout_pagina"]}s.') from exc
     except OSError as exc:
@@ -418,7 +432,7 @@ def _ler_com_medida(imagem: Path, config) -> tuple:
     args = ([config['tesseract'], str(imagem), str(base), '-l', config['idiomas'], '--psm', '3']
             + _opcoes_tessdata(config) + ['txt', 'tsv'])
     try:
-        processo = _executar(args, timeout=config['timeout_pagina'], env=_ambiente(config))
+        processo = _executar(args, timeout=config['timeout_pagina'], env=_ambiente_tesseract(config))
     except subprocess.TimeoutExpired as exc:
         raise OcrFalha(f'Tesseract excedeu {config["timeout_pagina"]}s.') from exc
     except OSError as exc:
