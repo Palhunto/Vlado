@@ -206,6 +206,18 @@ class ComposeEndurecidoTest(unittest.TestCase):
         self.assertIn('max-size', texto)
         self.assertIn('max-file', texto)
 
+    def test_temporarios_do_ocr_em_disco_e_nao_em_memoria(self):
+        """Um tmpfs grande conta na memória e 85 páginas coloridas esgotam 1 GB (I1): TMPDIR vai para volume."""
+        bloco = self.servicos['vlado']
+        self.assertIn('TMPDIR: /var/tmp/vlado', bloco)
+        self.assertIn('tmp_vlado:/var/tmp/vlado', bloco)
+        tamanho = re.search(r'/tmp:rw,noexec,nosuid,nodev,size=\$\{VLADO_TMP_TAMANHO:-(\d+)m\}', bloco)
+        self.assertIsNotNone(tamanho, 'o /tmp em memória tem tamanho padrão pequeno, em MB')
+        self.assertLessEqual(int(tamanho[1]), 128)
+        dockerfile = (RAIZ / 'Dockerfile').read_text(encoding='utf-8')
+        self.assertIn('/var/tmp/vlado', dockerfile.split('AS vlado', 1)[1])
+        self.assertIn('find /var/tmp/vlado -mindepth 1 -delete', dockerfile, 'esvazia os restos na partida')
+
     def test_cpu_so_por_peso_relativo_para_subir_em_qualquer_servidor(self):
         """`cpus` acima do número de núcleos impede o contêiner de subir (I2): o teto rígido é opcional."""
         compose = (RAIZ / 'docker-compose.yml').read_text(encoding='utf-8')

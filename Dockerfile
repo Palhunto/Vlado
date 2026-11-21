@@ -69,12 +69,13 @@ COPY entrada/README.md ./entrada/
 
 # Data folders are Docker volumes (see docker-compose.yml). Only they are writable by the
 # app user; the code stays read-only for it (and the whole root filesystem is read-only in Compose).
-RUN mkdir -p conversas execucoes lixeira segredos ajustes acesso \
-    && chown -R vlado:vlado casos conversas execucoes lixeira entrada segredos ajustes acesso
+RUN mkdir -p conversas execucoes lixeira segredos ajustes acesso /var/tmp/vlado \
+    && chown -R vlado:vlado casos conversas execucoes lixeira entrada segredos ajustes acesso /var/tmp/vlado
 USER vlado
 
 EXPOSE 8765
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD python -c "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8765/saude', timeout=4).status == 200 else 1)"
 
-CMD ["sh", "-c", "exec python scripts/interface_pesquisa.py --modo piloto --host 0.0.0.0 --porta 8765 --sem-abrir --origem \"${VLADO_ORIGEM:-https://${VLADO_DOMINIO:?defina VLADO_DOMINIO}}\""]
+# TMPDIR é um volume em disco (compose): esvazia o que um encerramento brusco deixou antes de partir.
+CMD ["sh", "-c", "find /var/tmp/vlado -mindepth 1 -delete 2>/dev/null; exec python scripts/interface_pesquisa.py --modo piloto --host 0.0.0.0 --porta 8765 --sem-abrir --origem \"${VLADO_ORIGEM:-https://${VLADO_DOMINIO:?defina VLADO_DOMINIO}}\""]

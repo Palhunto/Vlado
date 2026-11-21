@@ -6,7 +6,8 @@
 # O nome do projeto (-p) prefixa os volumes: ambientes nunca compartilham dados.
 # Guia: docs/GUIA_TECNICO_IMPLANTACAO.md
 # Endurecimento (SEG-04): init como PID 1, sistema de arquivos somente leitura (só os volumes de dados e
-# um tmpfs em /tmp são graváveis), cap_drop ALL (o Caddy recupera só NET_BIND_SERVICE), no-new-privileges,
+# um /tmp pequeno em memória e o volume tmp_vlado, em disco, para os temporários do OCR são graváveis), cap_drop
+# ALL (o Caddy recupera só NET_BIND_SERVICE), no-new-privileges,
 # limites de memória/processos, pesos de CPU e rotação de logs. Ajustes por ambiente no .env: VLADO_MEM_LIMITE,
 # VLADO_TMP_TAMANHO (ver deploy/ambientes/*.env.example); teto de CPU opcional em deploy/compose.limite-cpu.yml.
 services:
@@ -27,7 +28,7 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    # O OCR de PDF grande é o pico de memória. O tmpfs de /tmp também conta neste limite.
+    # O OCR de PDF grande é o pico de memória; os temporários dele (e dos envios) vão para disco, ver TMPDIR abaixo.
     mem_limit: ${VLADO_MEM_LIMITE:-5g}
     memswap_limit: ${VLADO_MEM_LIMITE:-5g}
     # Peso relativo de CPU, não teto: nunca impede o contêiner de subir em servidor com poucos núcleos. O Caddy
@@ -35,14 +36,20 @@ services:
     # `-f docker-compose.yml -f deploy/compose.limite-cpu.yml` com VLADO_CPUS no .env.
     cpu_shares: 1024
     pids_limit: 1024
+    # Temporários em DISCO (I1): um tmpfs conta na memória do contêiner e ~85 páginas coloridas digitalizadas
+    # (11,5 MB por página, medido) esgotam 1 GB, derrubando o OCRmyPDF para o motor direto, pior em tabelas.
+    # O volume tmp_vlado não é limitado por memória; precisa de espaço livre em disco (ver docs). Esvaziado a
+    # cada partida (Dockerfile). O /tmp em memória fica pequeno, só para o que não é volumoso.
     tmpfs:
-      - /tmp:rw,noexec,nosuid,nodev,size=${VLADO_TMP_TAMANHO:-1g}
+      - /tmp:rw,noexec,nosuid,nodev,size=${VLADO_TMP_TAMANHO:-64m}
     logging: &rotacao_de_logs
       driver: json-file
       options:
         max-size: "10m"
         max-file: "5"
     environment:
+      # Temporários do OCR e dos envios, em disco (volume tmp_vlado), não em memória (I1).
+      TMPDIR: /var/tmp/vlado
       VLADO_DOMINIO: ${VLADO_DOMINIO:?defina VLADO_DOMINIO no arquivo .env}
       # Set only when the client-visible HTTPS origin includes a nonstandard port.
       VLADO_ORIGEM: ${VLADO_ORIGEM:-}
@@ -61,6 +68,7 @@ services:
       - segredos:/app/segredos
       - ajustes:/app/ajustes
       - acesso:/app/acesso
+      - tmp_vlado:/var/tmp/vlado
     expose:
       - "8765"
 
@@ -213,3 +221,4 @@ volumes:
   caddy_data:
   caddy_config:
   backup_trabalho:
+  tmp_vlado:
