@@ -20,6 +20,10 @@ server volume. Everything else a user created is in: cases, rounds, conversation
   python scripts/backup.py restaurar --do-destino ultimo|NOME --identidade CHAVE_PRIVADA --substituir
   python scripts/backup.py verificar ARQUIVO|--do-destino ultimo --identidade CHAVE_PRIVADA
   python scripts/backup.py rodada | agendado | listar | saude        (service commands, configured by VLADO_BACKUP_*)
+
+The `agendado` service also runs a heartbeat (VLADO_VIGIA_*): every minute it checks the Mesa's /saude and the free
+disk and pings an external dead-man's-switch URL (a failure goes to `<url>/fail` at once; if the server or this
+container dies the pings stop and the monitor alerts). Only status words travel, never user or case data.
 """
 from __future__ import annotations
 
@@ -37,7 +41,9 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
 import time
+import urllib.error
 import urllib.request
 
 ROOT = Path(os.environ.get('VLADO_BACKUP_RAIZ') or Path(__file__).resolve().parents[1])
@@ -724,6 +730,10 @@ def _configuracao(env=None) -> dict:
         'ao_iniciar': env.get('VLADO_BACKUP_AO_INICIAR', '0').strip() == '1',
         'idade_maxima_h': numero('VLADO_BACKUP_IDADE_MAX_H', 30.0),
         'repetir_min': numero('VLADO_BACKUP_REPETIR_MIN', 60.0),
+        'vigia_ping': env.get('VLADO_VIGIA_PING_URL', '').strip(),
+        'vigia_url': env.get('VLADO_VIGIA_URL', '').strip() or 'http://vlado:8765/saude',
+        'vigia_intervalo': max(1.0, numero('VLADO_VIGIA_INTERVALO_S', 60.0)),
+        'vigia_disco_min_gb': numero('VLADO_VIGIA_DISCO_MIN_GB', 5.0),
     }
 
 
@@ -810,12 +820,19 @@ def _aplicar_retencao(cfg: dict, enviado: str) -> list[str]:
     return descartes
 
 
+def _visitar(url: str, corpo: str | None = None) -> bytes:
+    """GET (or POST with a short status text) to a monitoring URL."""
+    dados = corpo.encode('utf-8')[:2000] if corpo else None
+    pedido = urllib.request.Request(url, data=dados, method='POST' if dados else 'GET')
+    return urllib.request.urlopen(pedido, timeout=10).read(64)
+
+
 def _avisar(cfg: dict, sucesso: bool) -> None:
     if not cfg['ping']:
         return
     url = cfg['ping'] if sucesso else cfg['ping'].rstrip('/') + '/fail'
     try:
-        urllib.request.urlopen(urllib.request.Request(url, method='GET'), timeout=10).read(64)
+        _visitar(url)
     except Exception as exc:  # noqa: BLE001 - a missing alert must not fail the backup
         _log(f'aviso de monitoramento não enviado ({type(exc).__name__}).')
 
@@ -850,7 +867,8 @@ def rodada(cfg: dict, root: Path | None = None) -> dict:
                  'segredos_incluidos': manifesto['segredos_incluidos'], 'descartados': descartados,
                  'avisos': manifesto['avisos'] + ([aviso_retencao] if aviso_retencao else []),
                  'mudancas_apos_a_leitura': manifesto['mudancas_apos_a_leitura'],
-                 'duracao_s': round(time.monotonic() - inicio, 1)}
+                 'duracao_s': round(time.monotonic() - inicio, 1),
+                 'disco_livre_gb': round(shutil.disk_usage(root / 'casos' if (root / 'casos').is_dir() else root).free / 1024 ** 3, 1)}
     return resultado
 
 
@@ -870,6 +888,84 @@ def _executar_rodada(cfg: dict) -> bool:
     return True
 
 
+def _vigia_caminho(cfg: dict) -> Path:
+    return cfg['trabalho'] / 'vigia.json'
+
+
+def _gravar_vigia(cfg: dict, **campos) -> None:
+    caminho = _vigia_caminho(cfg)
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    temporario = caminho.with_suffix('.tmp')
+    temporario.write_text(json.dumps(campos, ensure_ascii=False) + '\n', encoding='utf-8')
+    os.replace(temporario, caminho)
+
+
+def _ler_saude(url: str) -> tuple[int, bytes]:
+    """(HTTP status, start of the body) of the Mesa's health URL; raises when it does not answer."""
+    try:
+        with urllib.request.urlopen(url, timeout=5) as resposta:
+            return resposta.status, resposta.read(200)
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read(200)
+
+
+def verificar_disponibilidade(cfg: dict) -> tuple[bool, str]:
+    """Is the Mesa answering `ok` and is there disk left? The text goes to the alert: status words only."""
+    try:
+        status, corpo = _ler_saude(cfg['vigia_url'])
+    except Exception as exc:  # noqa: BLE001 - any failure to answer is an outage
+        return False, f'Mesa sem resposta em /saude ({type(exc).__name__}).'
+    if status != 200:
+        return False, f'Mesa respondeu HTTP {status} em /saude.'
+    try:
+        ok = json.loads(corpo).get('ok') is True
+    except (ValueError, AttributeError):
+        ok = False
+    if not ok:
+        return False, 'Mesa respondeu algo diferente de ok em /saude.'
+    base = ROOT / 'casos' if (ROOT / 'casos').is_dir() else ROOT
+    livre = shutil.disk_usage(base).free / 1024 ** 3
+    if livre < cfg['vigia_disco_min_gb']:
+        return False, f'Pouco disco livre: {livre:.1f} GB (mínimo {cfg["vigia_disco_min_gb"]:g} GB).'
+    return True, 'ok'
+
+
+def batimento(cfg: dict) -> None:
+    """One heartbeat: success ping when the Mesa answers ok and the disk has room, `/fail` with the reason if not."""
+    if not cfg['vigia_ping']:
+        return
+    ok, texto = verificar_disponibilidade(cfg)
+    url = cfg['vigia_ping'] if ok else cfg['vigia_ping'].rstrip('/') + '/fail'
+    try:
+        _visitar(url, None if ok else texto)
+        enviado = True
+    except Exception as exc:  # noqa: BLE001 - no monitor reachable: the missing pings are the alert
+        enviado = False
+        _log(f'batimento não enviado ({type(exc).__name__}).')
+    if not ok:
+        _log(f'ALERTA: {texto}')
+    try:
+        _gravar_vigia(cfg, ultimo_batimento_utc=_agora().isoformat(timespec='seconds'), ok=ok, texto=texto, enviado=enviado)
+    except OSError:
+        pass
+
+
+def iniciar_vigia(cfg: dict, parar: list):
+    """Heartbeat in its own thread, so a long backup never stops it. None when no ping URL is configured."""
+    if not cfg['vigia_ping']:
+        return None
+
+    def laco():
+        while not parar:
+            batimento(cfg)
+            limite = time.monotonic() + cfg['vigia_intervalo']
+            while not parar and time.monotonic() < limite:
+                time.sleep(0.5)
+    fio = threading.Thread(target=laco, name='vigia', daemon=True)
+    fio.start()
+    return fio
+
+
 def _proxima(agora: datetime, horario: str) -> datetime:
     hora, minuto = (int(x) for x in horario.split(':'))
     alvo = agora.replace(hour=hora, minute=minuto, second=0, microsecond=0)
@@ -880,6 +976,7 @@ def agendado(cfg: dict) -> int:
     parar = []
     for sinal in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sinal, lambda *_: parar.append(True))
+    iniciar_vigia(cfg, parar)
     _gravar_estado(cfg, iniciado_em_utc=_agora().isoformat(timespec='seconds'), horario_utc=cfg['horario'],
                    retencao=cfg['retencao'], destino_configurado=bool(cfg['destino']))
     problemas = _problemas(cfg)
@@ -916,6 +1013,16 @@ def saude(cfg: dict) -> int:
     if idade > limite:
         print(f'último backup bem-sucedido há mais de {cfg["idade_maxima_h"]:g} h ({referencia})')
         return 1
+    if cfg['vigia_ping']:
+        try:
+            vigia = json.loads(_vigia_caminho(cfg).read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            vigia = {}
+        ultimo = vigia.get('ultimo_batimento_utc') or estado.get('iniciado_em_utc')
+        limite_vigia = timedelta(seconds=max(300.0, 5 * cfg['vigia_intervalo']))
+        if not ultimo or _agora() - datetime.fromisoformat(ultimo) > limite_vigia:
+            print('o batimento de disponibilidade parou')
+            return 1
     print('ok' + (f' (último sucesso {referencia})' if estado.get('ultimo_sucesso_utc') else ' (aguardando o primeiro)'))
     return 0
 
