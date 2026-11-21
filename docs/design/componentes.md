@@ -177,7 +177,7 @@ Onde: Conferir achado, Visão geral. `<nav aria-label="Áreas">`.
 | Lista de áreas | coluna, intervalo de 4. Ordem: Visão geral, Documentos, Perguntar, Conferir, Quadros, Caderno, Pedidos e prazos |
 | Item | `<a>`, altura 44, preenchimento 0 12, raio 8, texto 16 `--theme-text`, sem sublinhado |
 | Contador | à direita (`margin-left:auto`), 14 px; quatro formas em `mudancas-de-token.md`, item 8 |
-| Cartão da cota | no rodapé (`margin-top:auto`); fundo `--theme-surface`, borda 1 px `--theme-line`, raio 10, preenchimento 12 14, intervalo de 6; linha "Cota do mês" (14 `--theme-muted`) e valor ("R$ 18,40 de R$ 50", 14/600); [medidor](#medidor) |
+| Cartão da cota | no rodapé (`margin-top:auto`); fundo `--theme-surface`, borda 1 px `--theme-line`, raio 12 (P11.3; o canvas desenha 10), preenchimento 12 14, intervalo de 6; linha "Cota do mês" (14 `--theme-muted`) e valor ("R$ 18,40 de R$ 50", 14/600); [medidor](#medidor) |
 | Perfil | `<a>` altura 44, preenchimento 0 8, intervalo de 10; avatar de 32 px, círculo `--theme-accent`, iniciais 14/600 `--theme-on-primary`, `aria-hidden`; nome 16/600; papel e redação 14 `--theme-muted`, entrelinha 1,25. Abre "Minha conta" (W08, regra 1) |
 
 | Estado | Aparência | Origem |
@@ -248,7 +248,7 @@ Ações do cartão aberto: linha com recuo de 42 px, intervalo de 8, quebra de l
 
 ### Caixa da pergunta
 
-Onde: Conferir achado. Fundo `--theme-reading`, raio 10, preenchimento 14 18, intervalo de 4. Rótulo "Sua pergunta" (14 `--theme-muted`) sobre a pergunta (serifa 18). Só leitura: um estado (canvas).
+Onde: Conferir achado. Fundo `--theme-reading`, raio 12 (P11.3; o canvas desenha 10), preenchimento 14 18, intervalo de 4. Rótulo "Sua pergunta" (14 `--theme-muted`) sobre a pergunta (serifa 18). Só leitura: um estado (canvas).
 
 <a id="painel-original"></a>
 
