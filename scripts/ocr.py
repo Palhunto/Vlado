@@ -269,6 +269,22 @@ def _paginas_do_sidecar(texto: str, total: int) -> dict:
 
 
 def _motor_ocrmypdf(pdf: Path, paginas: list, total: int, config: dict) -> dict:
+    # Pages our OSD finds turned are read by _orientar_pagina first and left out of OCRmyPDF,
+    # whose reading of them would be thrown away; the rest keep the OCRmyPDF reading.
+    resultado, avisos_orientacao = _orientar_antes(pdf, paginas, config)
+    restantes = [n for n in paginas if n not in resultado]
+    if restantes:
+        reconhecido = _sidecar_ocrmypdf(pdf, restantes, max(total, max(paginas)), config)
+        for n in restantes:
+            resultado[n] = ({'texto': _limpar(reconhecido[n])} if n in reconhecido
+                            else {'erro': 'OCRmyPDF nao processou esta pagina.'})
+            if n in avisos_orientacao and 'texto' in resultado[n]:
+                resultado[n]['aviso_orientacao'] = avisos_orientacao[n]
+    return {'motor': 'ocrmypdf', 'versoes': _versoes(config, 'ocrmypdf'), 'idiomas': config['idiomas'],
+            'paginas': {n: resultado[n] for n in paginas}, 'avisos': []}
+
+
+def _sidecar_ocrmypdf(pdf: Path, paginas: list, total: int, config: dict) -> dict:
     with tempfile.TemporaryDirectory(prefix='vlado_ocr_') as pasta:
         lado = Path(pasta) / 'texto.txt'
         # --force-ocr nas paginas ja classificadas sem texto util: ignora camadas de texto residuais.
@@ -289,48 +305,46 @@ def _motor_ocrmypdf(pdf: Path, paginas: list, total: int, config: dict) -> dict:
             raise OcrFalha(f'OCRmyPDF falhou: {_erro_curto(processo)}')
         if not lado.is_file():
             raise OcrFalha('OCRmyPDF nao gerou o texto lateral (sidecar).')
-        reconhecido = _paginas_do_sidecar(lado.read_text(encoding='utf-8', errors='replace'), max(total, max(paginas)))
-    resultado = {n: ({'texto': _limpar(reconhecido[n])} if n in reconhecido
-                     else {'erro': 'OCRmyPDF nao processou esta pagina.'}) for n in paginas}
-    _reorientar(pdf, resultado, config)
-    return {'motor': 'ocrmypdf', 'versoes': _versoes(config, 'ocrmypdf'), 'idiomas': config['idiomas'],
-            'paginas': resultado, 'avisos': []}
+        return _paginas_do_sidecar(lado.read_text(encoding='utf-8', errors='replace'), total)
 
 
-def _reorientar(pdf: Path, resultado: dict, config: dict):
-    """After OCRmyPDF: pages our OSD finds turned are read again by _orientar_pagina.
+def _orientar_antes(pdf: Path, paginas: list, config: dict) -> tuple:
+    """Before OCRmyPDF: pages our OSD finds turned are read by _orientar_pagina.
 
     OCRmyPDF turns a page only at or above the threshold and keeps no record of it; here every
-    page the OSD flags gets the same decision as in the direct Tesseract engine, and that reading
-    (with its record) replaces the sidecar text. Without PyMuPDF the OCRmyPDF reading stays.
+    page the OSD flags gets the same decision as in the direct Tesseract engine, with its record.
+    Returns ({page: result} for those pages, {page: warning} for pages whose check failed); the
+    pages left out go to OCRmyPDF. Without PyMuPDF, or if it cannot open the PDF, all of them do.
     """
+    resultado, avisos = {}, {}
     if not _pymupdf_disponivel():
-        return
+        return resultado, avisos
     import pymupdf
     try:
         documento = pymupdf.open(str(pdf))
         if documento.needs_pass and not documento.authenticate(''):
             documento.close()
-            return
-    except Exception:  # noqa: BLE001 - OCRmyPDF already read it; keep that reading
-        return
+            return resultado, avisos
+    except Exception:  # noqa: BLE001 - OCRmyPDF reads it on its own
+        return resultado, avisos
     try:
         with tempfile.TemporaryDirectory(prefix='vlado_ocr_') as pasta:
-            for numero, item in resultado.items():
-                if 'texto' not in item or not 1 <= numero <= len(documento):
+            for numero in paginas:
+                if not 1 <= numero <= len(documento):
                     continue
                 imagem = Path(pasta) / f'p{numero}.png'
                 try:
                     pagina = documento[numero - 1]
                     _renderizar(pagina, imagem)
                     texto, registro = _orientar_pagina(pagina, imagem, config, sempre_ler=False)
-                except Exception as exc:  # noqa: BLE001 - keep the OCRmyPDF reading, say why
-                    item['aviso_orientacao'] = f'Orientacao nao conferida: {type(exc).__name__}: {str(exc)[:200]}'
+                except Exception as exc:  # noqa: BLE001 - OCRmyPDF reads the page, say why
+                    avisos[numero] = f'Orientacao nao conferida: {type(exc).__name__}: {str(exc)[:200]}'
                     continue
                 if registro:
-                    item.update(texto=texto, orientacao={**registro, 'texto_de': 'tesseract'})
+                    resultado[numero] = {'texto': texto, 'orientacao': {**registro, 'texto_de': 'tesseract'}}
     finally:
         documento.close()
+    return resultado, avisos
 
 
 def _renderizar(pagina, destino: Path):
