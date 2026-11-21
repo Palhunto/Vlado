@@ -213,7 +213,7 @@ Sinais dos selos e marcas de estado. A tabela `cmap` das fontes da Mesa (lida di
 | ◐ U+25D0 | leitura por OCR (W02), etapa em andamento (W03), convite pendente (W09) | **não tem** | **não tem** |
 | − U+2212, … U+2026, ▾ U+25BE | comparador, reticências, seletores | tem | ▾ não tem |
 
-Consequências: (a) na referência exportada, ✕, ✎ e ◐ foram desenhados por uma fonte do sistema (o Chromium no Windows), então o desenho desses três depende do aparelho; (b) o subconjunto latino em WOFF2 (UX-04) precisa incluir U+2212, U+2026, U+25BE, U+25CB e U+2713, ou esses sinais também passam a depender do sistema. Proposta: incluir esses cinco no subconjunto e trocar ✕, ✎ e ◐ por ícones SVG do conjunto do Vlado (parte E), com o mesmo tamanho do texto. Até lá, a conferência de tela aceita diferença de desenho nesses três sinais, nunca a falta deles.
+Consequências: (a) na referência exportada, ✕, ✎ e ◐ foram desenhados por uma fonte do sistema (o Chromium no Windows), então o desenho desses três depende do aparelho; (b) o subconjunto latino em WOFF2 (UX-04) precisa incluir U+2212, U+2026, U+25BE, U+25CB e U+2713, ou esses sinais também passam a depender do sistema. Proposta: incluir esses cinco no subconjunto e trocar ✕, ✎ e ◐ por ícones SVG do conjunto do Vlado (parte E), com o mesmo tamanho do texto: `icones/sinal-sem-suporte.svg`, `icones/sinal-corrigido.svg` e `icones/sinal-parcial.svg`, derivados aprovados pelo dono em 21/11/2026 (`componentes.md`, "Conjunto de ícones do Vlado"). Até lá, a conferência de tela aceita diferença de desenho nesses três sinais, nunca a falta deles.
 
 Pesos usados no canvas: 400 e 600 nas duas famílias; 700 no sinal "?" da lacuna e nos `<strong>`/`<b>` (valores destacados na resposta, nome do nó no mapa). As fontes continuam servidas pela Mesa, em WOFF2 com subconjunto latino (UX-04), como o próprio canvas anota.
 
@@ -324,6 +324,7 @@ Razão de contraste WCAG 2.x (luminância relativa), calculada por `referencia/f
 | E40 | borda de campo nova / leitura | `#8a9c8f` / `#28322c` | 4.57:1 | 3:1 | passa |
 | E52 | borda de campo atual / verde suave (item ativo) | `#64786a` / `#2c3c2e` | 2.47:1 | 3:1 | **não passa** |
 | E53 | borda de campo nova / verde suave (item ativo) | `#8a9c8f` / `#2c3c2e` | 4.03:1 | 3:1 | passa |
+| E54 | ícone escuro / órgão público no escuro, opção (a) | `#172315` / `#a8b3a9` | 7.52:1 | 3:1 | passa |
 | E41 | borda de aviso / fundo de aviso | `#aa8754` / `#372e21` | 4.00:1 | 3:1 | passa |
 | E42 | pessoa / superfície | `#3fa877` / `#202823` | 5.10:1 | 3:1 | passa |
 | E43 | empresa / superfície | `#8487e6` / `#202823` | 4.74:1 | 3:1 | passa |

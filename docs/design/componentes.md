@@ -486,7 +486,72 @@ Os ícones do canvas são SVG em linha, `viewBox="0 0 24 24"`, sem preenchimento
 | Elo (sócio), maleta (cargo), ramificação (vinculada), duas pessoas (parentesco), documento (contrato) | 2,2 | 14 | rótulos do mapa |
 | Pessoa, prédio (empresa), fachada com colunas (órgão público) | 2, em `viewBox` 36 | 36 | nós do mapa |
 
-Os ícones atuais da Mesa (`interface/desktop.js:198-214`) usam traço 1,6 em 18 px, e 15 px em alguns lugares (`.mesa-icon` em `style.css`). O conjunto próprio do Vlado (parte E) é o próximo trabalho do Design e vai harmonizar os traços; até lá, valem os do canvas nas telas do canvas.
+Os ícones atuais da Mesa (`interface/desktop.js:198-214`) usam traço 1,6 em 18 px, e 15 px em alguns lugares (`.mesa-icon` em `style.css`). Os outros ícones do canvas (✓, menu, seta de enviar) ficam como estão desenhados; o conjunto do Vlado, abaixo, cobre as entidades, os documentos, os tipos de relação e de acontecimento e os três sinais de estado que não existem nas fontes da Mesa.
+
+<a id="conjunto-de-icones"></a>
+
+### Conjunto de ícones do Vlado
+
+Arquivos em [`icones/`](icones/), um SVG por ícone; prancha de conferência em [`icones/prancha-icones.png`](icones/prancha-icones.png) (claro e escuro, 16, 24 e 32 px, mais os ícones nos contextos do canvas). Não integrados em `interface/`: quem integra é o Frontend.
+
+**Desenho**, igual ao dos ícones atuais da Mesa:
+
+- grade de 24 × 24 (`viewBox="0 0 24 24"` fixo), desenho dentro da área de 3 a 21;
+- um único `<path>` por ícone, sem `<circle>` nem `<rect>`: o `d` entra direto no mapa `icons` de `desktop.js`, que cria um só `path` por ícone;
+- traço único, `stroke="currentColor"`, `fill="none"`, pontas e junções arredondadas;
+- traço de 1,6 no arquivo, o mesmo de `.mesa-icon`; o traço fica no `<svg>`, então o CSS do contexto pode trocá-lo;
+- sem texto embutido, sem `<title>`, sem metadados, sem cor fixa.
+
+**Espessura por contexto** (decisão do dono em 21/11/2026, P11.9: traço variável por contexto). O arquivo traz 1,6 (o peso dos ícones atuais). Onde o canvas desenha o ícone, vale o traço do canvas, aplicado pelo CSS daquele contexto:
+
+| Contexto | Tamanho | Traço | Peso na tela | Origem |
+|---|---|---|---|---|
+| Ícone de interface (lista, botão, cabeçalho) | 16 ou 18 | 1,6 | 1,1 a 1,2 px | Mesa atual |
+| Rótulo de ligação no mapa | 14 | 2,2 | 1,3 px | canvas |
+| Marco da linha do tempo (dentro do círculo de 36 px) | 18 | 2 | 1,5 px | canvas |
+| Ícone de entidade dentro do nó do mapa (forma de 36 px) | 24 | 2 | 2 px | canvas |
+
+**Os ícones**
+
+| Ícone | Arquivo | Uso | Tamanhos | Rótulo acessível quando está sozinho | Origem |
+|---|---|---|---|---|---|
+| Pessoa | `pessoa.svg` | nó de pessoa no mapa; legenda; listas de entidades | 24 no nó; 16 a 24 fora dele | "Pessoa" | canvas (`Mapa.dc.html`, grade de 36 transladada em −6, −6) |
+| Empresa | `empresa.svg` | nó de empresa; legenda | 24 no nó; 16 a 24 | "Empresa" | canvas (transladada em −6, −6) |
+| Órgão público | `orgao-publico.svg` | nó de órgão público; legenda | 24 no nó; 16 a 24 | "Órgão público" | canvas (transladada em −6, −6) |
+| Documento | `documento.svg` | área Documentos; listas de documentos | 16 a 18 | "Documento" | Mesa atual (`desktop.js:201`, `documentos`) |
+| Contrato | `contrato.svg` | ligação de contrato e de subcontrato no mapa; acontecimento de assinatura | 14 no mapa; 18 no marco; 16 a 24 | "Contrato" | canvas (`Mapa.dc.html`, `Tempo.dc.html`) |
+| Pagamento | `pagamento.svg` | acontecimento de pagamento; ligação de pagamento no mapa | 18 no marco; 14 no mapa | "Pagamento" | canvas (`Tempo.dc.html`; o círculo virou arco, ver abaixo) |
+| Data | `data.svg` | campo de data; acontecimento sem tipo; filtro por período | 16 a 18 | "Data" | **derivado, aprovado pelo dono em 21/11/2026** |
+| Lacuna | `lacuna.svg` | lacuna onde o canvas não desenha o sinal (listas, legenda, quadros) | 16 a 24 | "Lacuna" | **derivado, aprovado pelo dono em 21/11/2026** (do sinal "?" do canvas) |
+| Sem suporte | `sinal-sem-suporte.svg` | no lugar do caractere ✕: selo "Sem suporte", título de erro (W11), arquivo não lido (W02) | do tamanho do texto (14 a 16) | "Sem suporte" ou "Erro", conforme o lugar | **derivado, aprovado pelo dono em 21/11/2026** (do ✕ do canvas) |
+| Corrigido | `sinal-corrigido.svg` | no lugar do caractere ✎: célula corrigida (W06) | do tamanho do texto | "Corrigido por você" | **derivado, aprovado pelo dono em 21/11/2026** (do ✎ do canvas) |
+| Parcial | `sinal-parcial.svg` | no lugar do caractere ◐: leitura por OCR (W02), etapa em andamento (W03), convite pendente (W09) | do tamanho do texto | "Lida por OCR", "Em andamento" ou "Pendente", conforme o lugar | **derivado, aprovado pelo dono em 21/11/2026** (do ◐ do canvas) |
+| Sócio | `relacao-socio.svg` | ligação societária no mapa | 14 | "Sócio" ou "Sócia" | canvas |
+| Parentesco | `relacao-parentesco.svg` | ligação de parentesco no mapa | 14 | "Parentesco" | canvas |
+| Cargo | `relacao-cargo.svg` | ligação de cargo ou emprego ("Servidora até 2023") | 14 | "Cargo" | canvas |
+| Vínculo | `relacao-vinculo.svg` | ligação institucional ("Vinculada") | 14 | "Vínculo institucional" | canvas |
+| Aditivo | `evento-aditivo.svg` | acontecimento de termo aditivo | 18 no marco | "Aditivo" | canvas |
+| Pedido de informação | `evento-pedido.svg` | acontecimento de pedido de LAI ou protocolo | 18 no marco | "Pedido de informação" | canvas |
+
+Tipos de relação pedidos e o ícone de cada um: sócio → `relacao-socio`; contrato → `contrato`; pagamento → `pagamento`; parentesco → `relacao-parentesco`. O canvas usa ainda cargo e vínculo, que também estão no conjunto. Tipos de acontecimento do canvas: assinatura → `contrato`; pagamento → `pagamento`; aditivo → `evento-aditivo`; pedido de informação → `evento-pedido`.
+
+**Rótulo acessível.** Ao lado de texto que já diz o tipo (rótulo da ligação, nome do nó com "Pessoa · 3 documentos", legenda), o ícone leva `aria-hidden="true"`. Sozinho, sem texto visível, leva `role="img"` e o `aria-label` da tabela, e o elemento que o contém tem nome acessível. O ícone nunca é o único sinal de um tipo: no mapa somam-se a forma, a cor e o rótulo (parte E do plano).
+
+**Composições do canvas**, conferidas na prancha:
+
+- **Nó de entidade:** forma de 36 px (pessoa: círculo; empresa: quadrado com raio 9; órgão público: quadrado com raio 3) na cor do tipo, com o ícone de 24 px centrado (6 px de margem nos quatro lados, `transform: translate(6px, 6px)` num `<g>` ou um `<svg>` de 24 px posicionado em 6, 6), traço 2, em `--theme-on-primary`. Assim o desenho fica exatamente onde o canvas o põe: os três ícones foram transladados em −6, −6 a partir da grade de 36 do canvas.
+- **Rótulo de ligação:** ícone de 14 px, traço 2,2, na cor do texto do rótulo.
+- **Marco da linha do tempo:** ícone de 18 px, traço 2: em `--theme-on-primary` no marco cheio; em `--theme-accent` no marco vazado.
+- **Lacuna no achado e no celular:** fica o sinal do canvas (círculo cheio com "?" em texto 700). `lacuna.svg` é para os lugares sem desenho.
+
+**Fidelidade ao canvas**, medida por `icones/ferramentas/gerar_icones.cjs` (resultado em `icones/ferramentas/comparacao-canvas.json`): cada ícone que o canvas desenha foi rasterizado em 96 px, com traço 2, no original do canvas (com a translação registrada) e no arquivo novo.
+
+- **Contrato, sócio, parentesco, cargo, vínculo, aditivo, pedido, pessoa, empresa e órgão público:** 0 pixel diferente.
+- **Pagamento:** 344 pixels diferem só na suavização da borda; nenhum passa de 83/255 de diferença de alfa, e nenhum tem traço num lado e não no outro (`pixelsForaDaForma: 0`). A causa é o `<circle>` do canvas ter virado arco dentro do único `path`. Três escritas diferentes do arco dão o mesmo resultado entre si, e só o primitivo `<circle>` é rasterizado de outro jeito.
+
+**Derivados, aprovados pelo dono em 21/11/2026 (P11.10):** `data` (calendário: corpo de 16 × 15, linha de cabeçalho e duas argolas); `lacuna` (círculo de raio 9 com o ponto de interrogação em traço, versão vetorial do sinal "?" do canvas); `sinal-sem-suporte` (✕ em dois traços de 10 × 10), `sinal-corrigido` (lápis) e `sinal-parcial` (círculo de raio 8 com metade hachurada), que substituem os caracteres ✕, ✎ e ◐: nenhum dos três existe nas fontes da Mesa (`mudancas-de-token.md`, item 12), e na referência eles saíram de uma fonte do sistema. Os sinais ✓ e ○ existem no Source Sans 3 e continuam como texto. Os três derivados de sinal vão ao lado do texto, então levam `aria-hidden="true"`; o rótulo da tabela vale só quando aparecem sozinhos. `documento` não é derivado: é o ícone `documentos` da Mesa atual, sem mudança.
+
+**Tema escuro.** Os ícones herdam a cor do texto (`currentColor`) e passam com ela (texto sobre superfície: 12,40:1). Nas formas coloridas do mapa, o ícone usa `--theme-on-primary` (`#172315`): branco sobre a esmeralda do escuro daria 2,97:1 (`mudancas-de-token.md`, E44). A forma do órgão público no escuro aparece na prancha com `#a8b3a9`, a opção (a) da pergunta 4, ainda sem resposta do dono; o ícone escuro sobre ela dá 7,52:1 (E54) e, na opção (b), 4,92:1 sobre a ameixa (E50).
 
 ---
 
@@ -608,7 +673,7 @@ Nota do wireframe: "Muda o que existe hoje: o manifesto guarda um único domíni
 
 ## O que ainda falta desenhar
 
-Pela regra 1 do contrato, nada disto é construído antes de o Design desenhar e o dono aprovar: pedidos e prazos de LAI; fontes e capturas de site dentro da apuração; lixeira; configuração da organização; página pública; diálogo de confirmação; versões de celular das telas de desktop (e, no sentido inverso, o Entrar em desktop); faixas de 720 a 1279 px; tema escuro das telas de desktop; conjunto de ícones do Vlado; mapa de relações e linha do tempo com os ícones definitivos (parte E).
+Pela regra 1 do contrato, nada disto é construído antes de o Design desenhar e o dono aprovar: pedidos e prazos de LAI; fontes e capturas de site dentro da apuração; lixeira; configuração da organização; página pública; diálogo de confirmação; versões de celular das telas de desktop (e, no sentido inverso, o Entrar em desktop); faixas de 720 a 1279 px; tema escuro das telas de desktop. O conjunto de ícones (parte E) está na seção [Conjunto de ícones do Vlado](#conjunto-de-icones), com cinco ícones derivados, aprovados pelo dono em 21/11/2026.
 
 ## Perguntas para o dono
 
