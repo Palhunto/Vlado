@@ -36,6 +36,16 @@ def _tentar_ocr(source: Path, candidatas: list, result: dict) -> dict:
     return reconhecido['paginas']
 
 
+def _orientacao_resumo(registro: dict) -> str:
+    giro = registro.get('giro_aplicado', 0)
+    lida = f'girada {giro} graus' if giro else 'como esta'
+    if registro.get('decisao') == 'leitura_dupla':
+        return (f'{lida} (OSD sugeriu {registro["osd_giro"]} com confianca {registro["osd_confianca"]}; '
+                f'leitura dupla, confianca media das palavras {registro["original"]["medida"]} como esta '
+                f'e {registro["girada"]["medida"]} girada)')
+    return f'{lida} (OSD, confianca {registro["osd_confianca"]})'
+
+
 def _metodo(pypdf_version: str, result: dict) -> str:
     base = f'pypdf {pypdf_version}; extract_text por pagina'
     motor = result.get('ocr_motor')
@@ -98,6 +108,9 @@ def extrair_pdf(source: Path, identifier: str, target: Path, *, ocr_ativo: bool 
         use_ocr = _alfanumericos(ocr_text) > _alfanumericos(native[number])
         if use_ocr:
             lines, origin = ocr_text.splitlines(), 'ocr'
+            if outcome.get('orientacao'):
+                # Which way the page was read and the measure that decided it (ocr._orientar_pagina).
+                result.setdefault('ocr_orientacao', {})[str(number)] = outcome['orientacao']
         elif native[number].strip():
             lines, origin = native[number].splitlines(), 'texto_nativo'
         else:
@@ -132,6 +145,9 @@ def extrair_pdf(source: Path, identifier: str, target: Path, *, ocr_ativo: bool 
               'Pagina = posicao fisica no PDF. Linhas = copia de trabalho, nao o original.']
     if result['paginas_ocr']:
         header.append('Paginas com origem ocr foram reconhecidas automaticamente e podem conter erros; conferir o original.')
+    if result.get('ocr_orientacao'):
+        header.append('Orientacao do OCR por pagina: ' + '; '.join(
+            f'{n}={_orientacao_resumo(o)}' for n, o in result['ocr_orientacao'].items()))
     header.append('')
     target.parent.mkdir(parents=True, exist_ok=True)
     with target.open('x', encoding='utf-8', newline='\n') as stream:

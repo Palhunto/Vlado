@@ -4,6 +4,9 @@ Nenhum arquivo sai desta maquina.
 Motores, em ordem de preferencia (VLADO_OCR_MOTOR=auto):
 1. OCRmyPDF (+ Tesseract + Ghostscript), restrito as paginas pedidas, com rotacao automatica;
 2. alternativa: PyMuPDF renderiza a pagina e a CLI do Tesseract reconhece o texto (OSD corrige giro).
+Orientacao, igual nos dois: com confianca do OSD >= CONFIANCA_OSD_MINIMA a pagina gira como ele diz;
+abaixo disso, se ele sugere giro, a pagina e lida nas duas orientacoes e fica a leitura de maior
+confianca media das palavras (_orientar_pagina); a decisao e a medida vao para o recibo.
 
 Configuracao por variaveis de ambiente: VLADO_OCR=0 desliga; VLADO_OCR_IDIOMAS (padrao por+eng);
 VLADO_TESSERACT (executavel); VLADO_TESSDATA (pasta de idiomas); VLADO_OCR_MOTOR
@@ -31,7 +34,22 @@ TIMEOUT_PAGINA_PADRAO = 180
 TIMEOUT_VERSAO = 20
 DPI_RENDERIZACAO = 300
 LADO_MAXIMO_PX = 7000
-CONFIANCA_OSD_MINIMA = 2.0
+# Minimum OSD orientation confidence to rotate a page, the same for both engines: OCRmyPDF's own
+# default (14). A low value turns UPRIGHT pages upside down: measured on Tesseract 5.3, OSD asks
+# for 180 deg on upright pages in capitals (20 lines 8.71, 3 lines 5.29, 1 line 2.96) and on a
+# blurred table of numbers (2.21); with 2.0 those pages lost all their text, and the direct
+# Tesseract engine turned 29 of 200 upright pages the wrong way, none with 8 to 14. Short pages
+# scanned sideways also measure below 14 (1 to 3 lines: 4 to 12); for them, see _orientar_pagina.
+CONFIANCA_OSD_MINIMA = 14.0
+# Below the threshold the page is read as it is and as the OSD suggests; the suggested turn wins
+# only when its mean word confidence (0 to 100) beats the original reading by MARGEM_LEITURA_DUPLA
+# points and reaches MEDIDA_MINIMA_GIRADA. Calibrated on 600 synthetic pages (24 kinds x 6
+# degradations x 4 turns, Tesseract 5.3 and 5.5): 0 of 36 upright pages turned, 0 of 63 wrong suggestions
+# followed, every 180-degree page with text straightened. Upright symmetric digits read 94 as they
+# are and 86 turned (the margin); an upright grid with no readable text read 0 and 25.6 turned
+# (the minimum); real text turned the right way read 62 to 99.
+MARGEM_LEITURA_DUPLA = 10.0
+MEDIDA_MINIMA_GIRADA = 50.0
 _DESLIGADO = {'0', 'false', 'nao', 'não', 'no', 'off'}
 _SALTO = re.compile(r'^\[OCR skipped on page\(s\) (\d+)(?:-(\d+))?\]$')
 
@@ -257,6 +275,7 @@ def _motor_ocrmypdf(pdf: Path, paginas: list, total: int, config: dict) -> dict:
         # A saida PDF e descartada (--output-type none); o original nunca e reescrito.
         # Saida '-': no Windows os.devnull ('nul') e aberto pelo OCRmyPDF como PDF danificado e o motor falha.
         args = [sys.executable, '-m', 'ocrmypdf', '--quiet', '--force-ocr', '--rotate-pages',
+                '--rotate-pages-threshold', str(CONFIANCA_OSD_MINIMA),
                 '-l', config['idiomas'], '--pages', ','.join(str(p) for p in paginas),
                 '--output-type', 'none', '--sidecar', str(lado), str(pdf), '-']
         timeout = config['timeout_pagina'] * len(paginas) + 60
@@ -273,8 +292,45 @@ def _motor_ocrmypdf(pdf: Path, paginas: list, total: int, config: dict) -> dict:
         reconhecido = _paginas_do_sidecar(lado.read_text(encoding='utf-8', errors='replace'), max(total, max(paginas)))
     resultado = {n: ({'texto': _limpar(reconhecido[n])} if n in reconhecido
                      else {'erro': 'OCRmyPDF nao processou esta pagina.'}) for n in paginas}
+    _reorientar(pdf, resultado, config)
     return {'motor': 'ocrmypdf', 'versoes': _versoes(config, 'ocrmypdf'), 'idiomas': config['idiomas'],
             'paginas': resultado, 'avisos': []}
+
+
+def _reorientar(pdf: Path, resultado: dict, config: dict):
+    """After OCRmyPDF: pages our OSD finds turned are read again by _orientar_pagina.
+
+    OCRmyPDF turns a page only at or above the threshold and keeps no record of it; here every
+    page the OSD flags gets the same decision as in the direct Tesseract engine, and that reading
+    (with its record) replaces the sidecar text. Without PyMuPDF the OCRmyPDF reading stays.
+    """
+    if not _pymupdf_disponivel():
+        return
+    import pymupdf
+    try:
+        documento = pymupdf.open(str(pdf))
+        if documento.needs_pass and not documento.authenticate(''):
+            documento.close()
+            return
+    except Exception:  # noqa: BLE001 - OCRmyPDF already read it; keep that reading
+        return
+    try:
+        with tempfile.TemporaryDirectory(prefix='vlado_ocr_') as pasta:
+            for numero, item in resultado.items():
+                if 'texto' not in item or not 1 <= numero <= len(documento):
+                    continue
+                imagem = Path(pasta) / f'p{numero}.png'
+                try:
+                    pagina = documento[numero - 1]
+                    _renderizar(pagina, imagem)
+                    texto, registro = _orientar_pagina(pagina, imagem, config, sempre_ler=False)
+                except Exception as exc:  # noqa: BLE001 - keep the OCRmyPDF reading, say why
+                    item['aviso_orientacao'] = f'Orientacao nao conferida: {type(exc).__name__}: {str(exc)[:200]}'
+                    continue
+                if registro:
+                    item.update(texto=texto, orientacao={**registro, 'texto_de': 'tesseract'})
+    finally:
+        documento.close()
 
 
 def _renderizar(pagina, destino: Path):
@@ -291,18 +347,24 @@ def _opcoes_tessdata(config):
     return ['--tessdata-dir', config['tessdata']] if config.get('tessdata') else []
 
 
-def _giro_osd(imagem: Path, config) -> int:
-    """Degrees clockwise needed to make the page upright; 0 when OSD is unavailable or unsure."""
+def _osd(imagem: Path, config) -> tuple:
+    """(degrees clockwise the OSD asks for, its confidence); (0, None) when OSD is unavailable."""
     args = [config['tesseract'], str(imagem), 'stdout', '--psm', '0'] + _opcoes_tessdata(config)
     try:
         processo = _executar(args, timeout=config['timeout_pagina'], env=_ambiente(config))
     except (OSError, subprocess.SubprocessError):
-        return 0
+        return 0, None
     saida = _texto(processo) + (processo.stderr or b'').decode('utf-8', errors='replace')
     giro, confianca = re.search(r'Rotate:\s*(\d+)', saida), re.search(r'Orientation confidence:\s*([0-9.]+)', saida)
-    if processo.returncode != 0 or not giro or not confianca:
-        return 0
-    return int(giro[1]) % 360 if float(confianca[1]) >= CONFIANCA_OSD_MINIMA and int(giro[1]) % 90 == 0 else 0
+    if processo.returncode != 0 or not giro or not confianca or int(giro[1]) % 90:
+        return 0, None
+    return int(giro[1]) % 360, float(confianca[1])
+
+
+def _giro_osd(imagem: Path, config) -> int:
+    """Degrees clockwise needed to make the page upright; 0 when OSD is unavailable or unsure."""
+    giro, confianca = _osd(imagem, config)
+    return giro if confianca is not None and confianca >= CONFIANCA_OSD_MINIMA else 0
 
 
 def _reconhecer_imagem(imagem: Path, config) -> str:
@@ -318,18 +380,86 @@ def _reconhecer_imagem(imagem: Path, config) -> str:
     return _limpar(_texto(processo))
 
 
-def _pagina_tesseract(documento, numero: int, pasta: Path, config) -> str:
+def _medida_tsv(tsv: str) -> tuple:
+    """(mean word confidence weighted by alphanumeric characters, 0-100; words counted)."""
+    soma = peso = palavras = 0
+    for linha in tsv.splitlines()[1:]:
+        campos = linha.split('\t')
+        if len(campos) < 12 or campos[0] != '5':
+            continue
+        try:
+            confianca = float(campos[10])
+        except ValueError:
+            continue
+        caracteres = sum(1 for c in campos[11] if c.isalnum())
+        if confianca < 0 or not caracteres:
+            continue
+        soma, peso, palavras = soma + confianca * caracteres, peso + caracteres, palavras + 1
+    return (round(soma / peso, 1) if peso else 0.0), palavras
+
+
+def _ler_com_medida(imagem: Path, config) -> tuple:
+    """Text plus its quality measure from a single Tesseract run (txt and tsv outputs)."""
+    base = imagem.with_name(imagem.stem + '_leitura')
+    args = ([config['tesseract'], str(imagem), str(base), '-l', config['idiomas'], '--psm', '3']
+            + _opcoes_tessdata(config) + ['txt', 'tsv'])
+    try:
+        processo = _executar(args, timeout=config['timeout_pagina'], env=_ambiente(config))
+    except subprocess.TimeoutExpired as exc:
+        raise OcrFalha(f'Tesseract excedeu {config["timeout_pagina"]}s.') from exc
+    except OSError as exc:
+        raise OcrFalha(f'Tesseract nao executou: {exc}') from exc
+    if processo.returncode != 0:
+        raise OcrFalha(f'Tesseract falhou: {_erro_curto(processo)}')
+    texto = Path(f'{base}.txt').read_text(encoding='utf-8', errors='replace')
+    medida, palavras = _medida_tsv(Path(f'{base}.tsv').read_text(encoding='utf-8', errors='replace'))
+    return _limpar(texto), medida, palavras
+
+
+def _orientar_pagina(pagina, imagem: Path, config, *, sempre_ler=True):
+    """Recognize one rendered page choosing its orientation. Returns (text or None, record or None).
+
+    OSD at or above CONFIANCA_OSD_MINIMA: rotate as it says. Below it the OSD is often wrong (it
+    asks to turn upright pages in capitals or blurred tables upside down), so the page is read in
+    both orientations and the reading with the higher word confidence wins; the suggested turn
+    must beat the original by MARGEM_LEITURA_DUPLA and reach MEDIDA_MINIMA_GIRADA, otherwise the
+    page stays as it is. Without a suggested turn the text is None when `sempre_ler` is False (the
+    caller keeps its own reading).
+    The rotation only happens in memory: the PDF is never saved or changed.
+    """
+    giro, confianca = _osd(imagem, config)
+    if not giro:
+        return (_reconhecer_imagem(imagem, config) if sempre_ler else None), None
+    registro = {'osd_giro': giro, 'osd_confianca': confianca, 'limiar': CONFIANCA_OSD_MINIMA}
+    original = pagina.rotation
+    girada = imagem.with_name(imagem.stem + f'_g{giro}.png')
+    pagina.set_rotation((original + giro) % 360)
+    try:
+        _renderizar(pagina, girada)
+    finally:
+        pagina.set_rotation(original)
+    if confianca >= CONFIANCA_OSD_MINIMA:
+        texto, _, _ = _ler_com_medida(girada, config)
+        return texto, {**registro, 'decisao': 'osd', 'giro_aplicado': giro}
+    texto_original, medida_original, palavras_original = _ler_com_medida(imagem, config)
+    texto_girado, medida_girada, palavras_girada = _ler_com_medida(girada, config)
+    vence_girada = (medida_girada >= medida_original + MARGEM_LEITURA_DUPLA
+                    and medida_girada >= MEDIDA_MINIMA_GIRADA)
+    return (texto_girado if vence_girada else texto_original), {
+        **registro, 'decisao': 'leitura_dupla', 'giro_aplicado': giro if vence_girada else 0,
+        'medida': 'confianca_media_das_palavras', 'margem': MARGEM_LEITURA_DUPLA,
+        'minimo_girada': MEDIDA_MINIMA_GIRADA,
+        'original': {'medida': medida_original, 'palavras': palavras_original},
+        'girada': {'medida': medida_girada, 'palavras': palavras_girada}}
+
+
+def _pagina_tesseract(documento, numero: int, pasta: Path, config) -> tuple:
     if numero < 1 or numero > len(documento):
         raise OcrFalha('Pagina inexistente no PDF.')
     pagina = documento[numero - 1]
     imagem = pasta / f'p{numero}.png'
     _renderizar(pagina, imagem)
-    giro = _giro_osd(imagem, config)
-    if giro:
-        # Rotacao so em memoria: o PDF original nao e salvo nem alterado.
-        pagina.set_rotation((pagina.rotation + giro) % 360)
-        _renderizar(pagina, imagem)
-    return _reconhecer_imagem(imagem, config)
+    return _orientar_pagina(pagina, imagem, config)
 
 
 def _motor_tesseract(pdf: Path, paginas: list, config: dict) -> dict:
@@ -347,7 +477,8 @@ def _motor_tesseract(pdf: Path, paginas: list, config: dict) -> dict:
         with tempfile.TemporaryDirectory(prefix='vlado_ocr_') as pasta:
             for numero in paginas:
                 try:
-                    resultado[numero] = {'texto': _pagina_tesseract(documento, numero, Path(pasta), config)}
+                    texto, orientacao = _pagina_tesseract(documento, numero, Path(pasta), config)
+                    resultado[numero] = {'texto': texto, **({'orientacao': orientacao} if orientacao else {})}
                 except Exception as exc:
                     resultado[numero] = {'erro': f'{type(exc).__name__}: {str(exc)[:500]}'}
     finally:
