@@ -117,6 +117,22 @@ class TravaDeDependenciasTest(unittest.TestCase):
             sys.path.remove(str(RAIZ / 'deploy'))
 
 
+    def test_gerador_monta_so_os_requisitos_somente_leitura(self):
+        """O contêiner do gerador tem rede: não pode ver segredos/, acesso/, casos/ nem o repositório (I3)."""
+        sys.path.insert(0, str(RAIZ / 'deploy'))
+        try:
+            import gerar_trava
+            comando = gerar_trava.comando_docker()
+        finally:
+            sys.path.remove(str(RAIZ / 'deploy'))
+        montagens = [comando[i + 1] for i, a in enumerate(comando) if a == '-v']
+        self.assertEqual(len(montagens), 2, montagens)
+        for montagem in montagens:
+            self.assertTrue(montagem.endswith(':ro'), montagem)
+            self.assertRegex(montagem, r':/w/requirements(-opcional)?\.txt:ro$')
+        self.assertNotIn(str(RAIZ) + ':', ' '.join(comando))
+
+
 class ListaDeInclusaoTest(unittest.TestCase):
     def test_sem_copy_do_contexto_inteiro(self):
         for partes in _copias():
