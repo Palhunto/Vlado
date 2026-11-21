@@ -24,3 +24,34 @@ Respondidas: 1 e 5, como desenhadas. Em aberto, com desenho novo a caminho: 2, 3
 3. **Modo "Escrever"** (o editor com formatação de hoje) não está desenhado. Desenho em seguida, no mesmo padrão?
 4. **Quarto sinal, "revisada".** O W04 o lista, mas o exemplo não o mostra. Proposta: "✓ revisada por você" em verde, ao lado do sinal da fonte. Desenho?
 5. **Celular:** seletor de nota no topo e afirmação selecionada num painel no pé. Concorda?
+
+## Pontos abertos, para nova aprovação (P14.2 a P14.4)
+
+**Derivado, aguarda aprovação do dono** (faixa roxa). Pranchas: `proposta-trechos-{claro,escuro}-{1440,390}.png` e `proposta-escrever-{claro,escuro}-{1440,390}.png`, já com as decisões de 21/11/2026.
+
+### Onde ficam "Trechos com fonte e contribuições" (P14.2)
+
+Proposta: **no próprio caderno, como segunda lista da coluna da esquerda**, num seletor "Notas | Trechos (n)". Cada trecho mostra o tipo (trecho, achado do jornalista, anotação), a citação, a fonte e a autoria, com caixa de seleção (até 20). As ações ficam no pé da coluna: "Inserir no texto", "Cruzar", "Perguntar" e "Registrar trecho com fonte", que abre o formulário que já existe (documento, página, trecho e autoria).
+
+Por que aqui:
+
+1. **É material do jornalista, como as notas.** A Mesa de hoje descreve a aba como "trechos, achados e cruzamentos de autoria humana, separados dos resultados da IA". O caderno é o lugar do que é humano; a conferência dos achados é o lugar do que vem da IA.
+2. **Alimenta a conferência do W04.** "Ligar outra evidência", no painel da afirmação selecionada, escolhe entre os achados conferidos e estes trechos. Com a lista na mesma tela, ligar e inserir não pedem troca de área.
+3. **Não cria área nova** na barra lateral do canvas nem aba nova nos quadros.
+4. **No celular** o mesmo seletor fica no topo da página, como o seletor de nota já aprovado (P14.5).
+
+Alternativas descartadas: uma aba própria nos quadros (mistura material bruto com quadros que organizam evidência conferida) e uma área na barra lateral (o canvas tem sete áreas fechadas e a P11.6 manteve a barra como desenhada).
+
+### Modo "Escrever" (P14.3)
+
+O centro vira o editor de hoje, no padrão do canvas: barra de formatação (texto normal, negrito, itálico, lista, tarefas, "+ Trecho com fonte", "Mais"), título serifa 22 e texto serifa 18 com as fontes em pílula ("Fonte 1"); "As notas são salvas enquanto você escreve". À direita, "Fontes da nota" com cada trecho citado e "abrir o original", e "Inserir trecho com fonte" no pé. No celular, o seletor de nota e o par "Conferir | Escrever" no topo, e o editor em largura cheia.
+
+### Quarto sinal, "revisada" (P14.4)
+
+Sublinhado **duplo** verde e o texto "✓ com fonte · revisada por você" ao lado da frase. No painel da afirmação selecionada: "Ana Lima marcou como revisada hoje, às 14h40", lembrando que só pessoa logada marca (W04). A legenda dos quatro sinais fica abaixo do texto. A contagem do topo passa a incluir as revisadas.
+
+### Decisões
+
+6. **Trechos no caderno**, como segunda lista da coluna da esquerda?
+7. **Modo "Escrever"** como desenhado?
+8. **Sinal "revisada"** com sublinhado duplo verde e o texto "revisada por você"?
