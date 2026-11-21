@@ -2,8 +2,11 @@
 
 Separado de ``interface_pesquisa`` sem mudar comportamento. ``receber_documentos`` grava o
 lote numa pasta temporária e entrega os caminhos a ``cadastrar_documentos.cadastrar``; o
-cliente nunca envia caminhos. ``catalogo`` lê só metadados e nomes de pastas, sem abrir
-documentos de casos inativos. O servidor chama as duas dentro da trava de cadastro.
+cliente nunca envia caminhos; o servidor sempre a chama dentro da trava de cadastro
+(``cadastrar`` e ``codex-documentos-cadastrar``). ``catalogo`` lê só metadados e nomes de
+pastas, sem abrir documentos de casos inativos. Ela corre dentro da trava em ``analises`` e
+``gerenciar-listar``, e fora dela em ``GET /api/catalogo`` e na gestão de contas
+(``contas-criar`` e ``contas-atualizar`` conferem os casos escolhidos).
 """
 from __future__ import annotations
 

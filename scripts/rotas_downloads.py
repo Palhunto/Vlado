@@ -2,8 +2,12 @@
 
 Separado de ``interface_pesquisa`` sem mudar comportamento. Nenhum caminho vem do cliente:
 cada original é resolvido pelo módulo dono do registro (caderno, diligências, apuração) ou
-pela passagem/evidência já validada por ``executar``. Os arquivos são lidos dentro da trava
-de cadastro, para não cruzar com exclusão ou nova versão do corpus.
+pela passagem/evidência já validada por ``executar``. Trava de cadastro: os originais do
+caderno, das diligências e da apuração são resolvidos e lidos dentro dela; nas exportações,
+o envio corre fora dela (o caderno só lê o estado dentro dela e converte fora; a tabela
+monta o CSV dentro dela).
+Em ``original`` e ``achados-original`` a validação corre dentro da trava, em ``executar``,
+mas ``_enviar_original`` resolve e lê o arquivo depois que ela já foi solta.
 """
 from __future__ import annotations
 

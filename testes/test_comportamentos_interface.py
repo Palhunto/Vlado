@@ -5,6 +5,8 @@ import shutil
 import subprocess
 import unittest
 
+from auxiliar_node import localizar_node
+
 
 class ComportamentosInterfaceTest(unittest.TestCase):
     def test_fixture_continuidade_nao_substitui_digitos_de_referencia(self):
@@ -19,8 +21,7 @@ class ComportamentosInterfaceTest(unittest.TestCase):
         self.assertIn('valor 246', synthesis['texto'])
 
     def test_regressoes_dos_cinco_comportamentos(self):
-        node = shutil.which('node')
-        self.assertIsNotNone(node, 'Node.js é necessário para as regressões da interface.')
+        node = localizar_node(self)
         root = Path(__file__).resolve().parents[1]
         result = subprocess.run([node, '--test', str(root / 'testes/regressao_comportamentos.cjs')],
                                 cwd=root, capture_output=True, text=True, encoding='utf-8', timeout=45)

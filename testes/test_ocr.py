@@ -21,6 +21,7 @@ from extrair_pdf import extrair_pdf
 from indice_sqlite import cobertura, ler_passagem, pesquisar
 from nova_rodada import criar_rodada
 from selecionar_caso import selecionar
+from auxiliar_node import pular_sem_ocr
 import test_registros as fixtures
 from test_extracao_cadastro_pdf import pdf_sintetico
 
@@ -29,7 +30,7 @@ HAS_PYPDF = importlib.util.find_spec('pypdf') is not None
 HAS_TESSERACT = HAS_FITZ and ocr.diagnostico()['tesseract']['disponivel']
 FRASE = 'Relatório da fiscalização sobre a licitação número 42.'
 FRASE_2 = 'Contrato firmado em São Paulo pela prefeitura.'
-PRECISA_OCR = unittest.skipUnless(HAS_TESSERACT and HAS_PYPDF, 'Requer Tesseract, PyMuPDF e pypdf')
+PRECISA_OCR = pular_sem_ocr(HAS_TESSERACT and HAS_PYPDF, 'Requer Tesseract, PyMuPDF e pypdf')
 
 
 def _imagem_da_pagina(texto, rotacao=0):

@@ -22,7 +22,7 @@ if exist "%PILOTO_PYTHON%" (
     goto resultado
 )
 echo Instale Python 3.12 ou superior e abra este preparador novamente.
-echo Consulte INSTALAR_NO_NOTEBOOK.md.
+echo Consulte a secao Instalacao do README.md.
 goto fim
 :resultado
 set "PILOTO_RESULTADO=%ERRORLEVEL%"
