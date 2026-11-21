@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Caderno e conferência do texto</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+body{margin:0}
+a{color:#333}a:hover{color:#000}
+</style>
+</helmet>
+<div style="width: 1200px; height: 760px; box-sizing: border-box; display: flex; background: #ffffff; color: #2b2b2b; font-family: 'Source Sans 3', system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+<div style="width: 200px; flex: none; box-sizing: border-box; border-right: 1.5px solid #cfcfcf; padding: 28px 16px; display: flex; flex-direction: column; gap: 8px">
+<button type="button" style="height: 44px; border: 1.5px solid #2b2b2b; border-radius: 6px; background: #fff; font: inherit; font-weight: 600">Nova nota</button>
+<div style="border: 1.5px solid #2b2b2b; border-radius: 6px; padding: 8px 10px; background: #f1f1ef"><b>Texto da reportagem</b><br><span style="font-size: 14px; color: #6b6b6b">versão 3 · 2 a resolver</span></div>
+<div style="padding: 8px 10px">Pauta Vila Serena</div>
+<div style="padding: 8px 10px">Perguntas para a prefeitura</div>
+</div>
+<div style="flex: 1; min-width: 0; box-sizing: border-box; padding: 28px 32px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 10px"><span style="font-size: 22px; font-weight: 600">Texto da reportagem</span><span style="margin-left: auto; color: #6b6b6b">✓ Salvo às 14h32</span><button type="button" style="height: 40px; padding: 0 12px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Nova versão</button><button type="button" style="height: 40px; padding: 0 12px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Exportar</button></div>
+<div style="display: flex; gap: 8px; font-size: 14px"><span style="border: 1.5px solid #2b2b2b; border-radius: 999px; padding: 2px 12px; font-weight: 600">Conferir afirmações</span><span style="border: 1.5px solid #9a9a9a; border-radius: 999px; padding: 2px 12px">Escrever</span><span style="margin-left: auto; color: #6b6b6b">5 afirmações: 3 com fonte · 1 exagero · 1 sem fonte</span></div>
+<div style="max-width: 600px; font-size: 17px; line-height: 1.7; display: flex; flex-direction: column; gap: 10px">
+<div><span style="border-bottom: 2px solid #2b2b2b">A prefeitura contratou a Construtora Alfa por R$ 8,75 milhões.</span> <span style="font-size: 14px">✓</span></div>
+<div><span style="border-bottom: 2px solid #2b2b2b">Até agosto, R$ 3,9 milhões haviam sido pagos.</span> <span style="font-size: 14px">✓</span></div>
+<div><span style="background: #e4e4e0; border-bottom: 2px dashed #2b2b2b; outline: 2px solid #2b2b2b">O aditivo fez o custo da obra disparar.</span> <span style="font-size: 14px">! exagero</span></div>
+<div><span style="border-bottom: 2px dotted #6b6b6b">Os sócios da construtora são próximos do secretário.</span> <span style="font-size: 14px">○ sem fonte</span></div>
+</div>
+</div>
+<div style="width: 300px; flex: none; box-sizing: border-box; border-left: 1.5px solid #cfcfcf; padding: 28px 20px; display: flex; flex-direction: column; gap: 10px">
+<b>Afirmação selecionada</b>
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 10px 12px"><b>! Mais forte que a fonte</b><br>A fonte diz "acresce 22,4%". "Disparar" é avaliação sua.</div>
+<div style="font-size: 14px; color: #6b6b6b">Evidência ligada</div>
+<div style="border: 1.5px solid #9a9a9a; border-radius: 8px; padding: 8px 12px">Aditivo 1, p. 2 · <u>abrir</u></div>
+<button type="button" style="height: 44px; border: 1.5px solid #2b2b2b; border-radius: 6px; background: #fff; font: inherit; font-weight: 600">Ligar outra evidência</button>
+<button type="button" style="height: 44px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Reescrever a frase</button>
+<button type="button" style="height: 44px; border: 0; border-radius: 6px; background: #2b2b2b; color: #fff; font: inherit; font-weight: 600">Marcar como revisada por mim</button>
+<div style="margin-top: auto; font-size: 14px; background: #f4f4f2; border-radius: 8px; padding: 10px 12px"><b>Regras:</b> ligar evidência e criar nova versão têm formulário (fase 10). Só pessoa logada marca "revisada". Quatro sinais, sempre com traço e texto: com fonte, exagero, sem fonte, revisada. O editor vê e comenta sem alterar o texto.</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
