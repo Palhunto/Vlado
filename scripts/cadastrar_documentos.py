@@ -7,7 +7,6 @@ and method in the manifest. Standalone images get OCR only with the explicit
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timezone
 import json
@@ -27,25 +26,20 @@ from extrair_office import EXTENSOES as EXTENSOES_OFFICE, EXTENSOES_MACRO, extra
 from extrair_pdf import extrair_pdf
 from lixeira import conferir_disponivel
 import fontes_web as fontes_web_mod
+import trava_cadastro
 
 # Macro-enabled Office files are kept as originals with a readable pending extraction.
 ACEITOS = EXTENSOES | EXTENSOES_MACRO
 OFFICE = set(EXTENSOES_OFFICE) | EXTENSOES_MACRO
 
 
-@contextmanager
-def _trava(root):
-    cases = dentro(root, 'casos')
-    cases.mkdir(exist_ok=True)
-    lock = dentro(cases, '.cadastro.lock')
-    try:
-        lock.mkdir()
-    except FileExistsError as exc:
-        raise ValueError('Há um cadastro ou congelamento em andamento; tente novamente após sua conclusão.') from exc
-    try:
-        yield
-    finally:
-        lock.rmdir()
+def _trava(root, **opcoes):
+    """Project cadastro lock, shared by every process (server and CLI): see ``trava_cadastro``.
+
+    Waits up to ``trava_cadastro.ESPERA`` seconds when busy; a holder that died is recognized
+    and its half-done staging removed. Options: ``espera``, ``operacao``, ``cancelar``.
+    """
+    return trava_cadastro.trava(root, **opcoes)
 
 
 def _atomico(path, content):
@@ -108,7 +102,7 @@ def cadastrar(root, caso, sources, *, titulo=None, natureza='nao_informada', nov
     if not novo and (modo_fontes or dominio_permitido):
         raise ValueError('O modo de fontes (somente documentos ou documentos + web) só é escolhido na criação do caso.')
     fontes_web = fontes_web_mod.definir_modo(modo_fontes, dominio_permitido) if novo else None
-    with _trava(root):
+    with _trava(root, operacao='cadastro'):
         return _cadastrar(root, caso, sources, titulo, natureza, novo, ocr_imagens=bool(ocr_imagens),
                           fontes_web=fontes_web)
 
@@ -117,7 +111,7 @@ def preparar_pdfs(root, caso):
     """Enrich this case's preserved PDFs; never inspect inactive cases or old rounds."""
     if not isinstance(caso, str) or not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}', caso):
         raise ValueError('Identificador de caso inválido.')
-    with _trava(root):
+    with _trava(root, operacao='preparacao_pdfs'):
         conferir_disponivel(root, caso)
         manifest = ler_json(dentro(root, f'casos/{caso}/manifesto.json'))
         sources = [dentro(root, d['arquivo']) for d in manifest['documentos']
@@ -368,7 +362,8 @@ def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_do
             else:
                 entry['documentos'] = len(manifest['documentos'])
             _atomico(catalog_path, _bytes(catalog))
-        except Exception:
+        except BaseException:
+            # Also on Ctrl+C or SystemExit in the middle of publishing: all of the batch or none.
             if manifest_before is not None:
                 _atomico(manifest_path, manifest_before)
             else:
