@@ -67,7 +67,7 @@ Todo elemento interativo: `outline: 3px solid var(--theme-focus); outline-offset
 
 ### Movimento
 
-O canvas é estático. Derivado de W11 e UX-08: transição de cor e fundo em 150 ms; nenhuma animação com `prefers-reduced-motion: reduce`, onde o esqueleto e a barra ficam parados e o texto de etapa continua mudando.
+O canvas é estático. Derivado de W11 e UX-08: transição de cor e fundo em 150 ms; o esqueleto não pulsa, em nenhum modo (derivado, 22/11/2026); com `prefers-reduced-motion: reduce`, nenhuma animação: a barra fica parada e o texto de etapa continua mudando.
 
 ---
 
@@ -430,6 +430,10 @@ Cada linha é `role="img"` com `aria-label` em frase ("Marta Reis é sócia da C
 
 Ações do cabeçalho: "Ver como lista" (secundário) e "Adicionar ligação" (principal). O formulário de "Adicionar ligação" é da Onda 4 (PROD-01).
 
+**Enquanto os dados não distinguem empresa de órgão público** *(derivado, 22/11/2026)*. A Mesa só sabe se a entidade é pessoa ou organização. Toda organização usa a forma e a cor de empresa (quadrado de raio 9, `--mapa-organizacao`), mas o texto diz "Organização" (no nó, "Organização · 3 documentos"; na legenda, "Organização"): chamar de empresa um órgão público seria afirmar o que os documentos não dizem. Nada é deduzido do nome. A forma ameixa do órgão público fica pronta e entra, com "Empresa" e "Órgão público" na legenda, quando Produto acrescentar a natureza da organização.
+
+**Ícone da ligação pelo tipo livre** *(derivado, 22/11/2026)*: sócio → `relacao-socio`; irmão, pai, mãe, filho, cônjuge → `relacao-parentesco`; cargo, servidor, diretor → `relacao-cargo`; contrato → `contrato`; pagamento → `pagamento`; o resto → `relacao-vinculo`. O texto do tipo fica sempre ao lado e o ícone é `aria-hidden`.
+
 <a id="linha-do-tempo"></a>
 
 ### Linha do tempo
@@ -449,6 +453,13 @@ Onde: Linha do tempo. Conteúdo com preenchimento 28 40; painel de filtros de 36
 
 Ícones de tipo de acontecimento no canvas: documento (assinatura), moeda (pagamento), documento com "+" (aditivo), envelope (pedido de informação).
 
+**Enquanto os dados da Mesa não trazem o que o canvas supõe** *(derivado, 22/11/2026)*:
+
+- Filtro: em vez de Tudo, Pagamentos, Contratos e Pedidos, grupos que não existem nos dados, "Tudo" e uma pílula por tipo de data presente no quadro (fato, emissão, assinatura, publicação, registro, início e fim de vigência, pagamento, recebimento, declarada por fonte), com a mesma medida e `aria-pressed`.
+- Ícone do marco pelo tipo de data: assinatura → `contrato`; emissão, publicação, registro e declarada por fonte → `documento`; pagamento → `pagamento`; recebimento, fato e vigência → `data`. O envelope fica só para pedido de informação, para não querer dizer duas coisas.
+- O intervalo sem documento não aparece: a lista tem só acontecimentos com data, e um vão entre eles não prova um vão de documentos. Volta quando Produto entregar os documentos do acervo por data; até lá, a linha "Intervalo sem documento" de "COMO LER" também sai.
+- O gráfico "Pago ao longo do tempo" não aparece: os acontecimentos não têm valor em reais estruturado, só texto. Volta com esse dado.
+
 | Estado do evento | Aparência | Origem |
 |---|---|---|
 | Padrão | acima | canvas |
@@ -457,7 +468,7 @@ Onde: Linha do tempo. Conteúdo com preenchimento 28 40; painel de filtros de 36
 | Ocupado | esqueleto de três cartões | derivado de W11 (regra 2) |
 | Erro | não se aplica ao evento; falha ao carregar a lista usa o bloco de erro do serviço | derivado |
 | Desabilitado | não se aplica | — |
-| Vazio | "Nenhum acontecimento com data ainda" e "Adicionar acontecimento" | derivado de W11 (regra 1) |
+| Vazio | "Nenhum acontecimento com data ainda" e "Adicionar acontecimento" (até a Onda 4, "Fazer uma pergunta"); com filtro ligado, "Nenhum acontecimento com esses tipos de data" e "Mostrar tudo" ([textos](#estados-vazios)) | derivado de W11 (regra 1) |
 
 **Painel de filtros e resumo** (`<aside aria-label="Filtros e resumo">`): largura 360, fundo `--theme-surface`, borda esquerda 1 px `--theme-line`, preenchimento 28 24, intervalo de 20.
 
@@ -474,12 +485,29 @@ Onde: toda a Mesa (W11). O wireframe fixa a estrutura e o texto; a aparência ab
 
 | Estado | Estrutura (W11) | Cores |
 |---|---|---|
-| Vazio | o que é a coisa e uma ação ("Nenhuma hipótese ainda", "Uma hipótese é uma afirmação que os documentos podem sustentar ou contrariar.", "Criar a primeira") | bloco base; ação principal |
+| Vazio | o que é a coisa e uma ação ("Nenhuma hipótese ainda", "Uma hipótese é uma afirmação que os documentos podem sustentar ou contrariar.", "Criar a primeira"); enquanto o formulário de criar não existe (Onda 4), a ação leva a um destino que existe e diz aonde vai ([textos](#estados-vazios)) | bloco base; ação principal |
 | Ocupado, curto (até 10 s) | esqueleto no lugar do conteúdo, que não aparece se a resposta chega em menos de 0,3 s; `aria-busy` | barras de 14 px de altura, raio 4, fundo `--theme-line`, larguras 70 %, 90 % e 50 % |
 | Ocupado, longo (OCR, IA) | etapa por extenso ("Lendo a página 2 de 5"), barra, aviso de que pode sair da tela, "Cancelar"; `aria-busy` | barra como o [medidor](#medidor) de 8 px; "Cancelar" secundário |
 | Erro que a pessoa resolve | "✕" e o que houve; o que fazer e o que foi preservado; duas ações | fundo `--theme-danger-bg`, borda 1 px `--theme-danger-line`, título `--theme-danger`; ações principal e secundária |
-| Erro do serviço | "✕" e o que houve; o que foi guardado e o que não foi cobrado; "Retomar de onde parou" e "Detalhes" (o código interno fica lá) | como o anterior; "Detalhes" é link |
+| Erro do serviço | "✕" e o que houve; o que foi guardado e o que não foi cobrado; "Retomar de onde parou" e "Detalhes" (o código interno fica lá) | como o anterior; "Detalhes" abre o código num `<details>`, e o `summary` tem cara de [link](#link): 14/600 `--theme-accent`, sublinhado, altura mínima 44 |
 | Limite atingido | "!" e o limite; o que continua funcionando; "Pedir mais ao dono da redação" | fundo `--theme-warning-bg`, borda 1 px `--theme-warning-line`, título `--theme-warning`; ação secundária |
+
+<a id="estados-vazios"></a>
+
+**Textos dos vazios dos quadros** *(derivado, 22/11/2026)*. Título no bloco base, texto abaixo, uma ação principal.
+
+| Onde | Título | Texto | Ação até a Onda 4 | Ação depois |
+|---|---|---|---|---|
+| Hipóteses | Nenhuma hipótese ainda | Uma hipótese é uma afirmação que os documentos podem sustentar ou contrariar. | Fazer uma pergunta | Criar a primeira |
+| Tabelas | Nenhuma tabela ainda | Uma tabela conferível reúne números tirados dos documentos, cada um com a sua fonte. | Fazer uma pergunta | Adicionar linha |
+| Mapa | Nenhuma ligação ainda | O mapa mostra as pessoas e organizações que os documentos citam e como elas se ligam. | Fazer uma pergunta | Adicionar ligação |
+| Linha do tempo | Nenhum acontecimento com data ainda | A linha do tempo reúne os acontecimentos datados que os documentos registram. | Fazer uma pergunta | Adicionar acontecimento |
+| Linha do tempo, com filtro | Nenhum acontecimento com esses tipos de data | Nenhum acontecimento tem os tipos de data escolhidos. | Mostrar tudo | a mesma |
+| Comparador | Nada para comparar ainda | Esta apuração ainda não tem análise com documentos preservados para comparar. | Fazer uma pergunta | a mesma |
+| Conferência do texto | Nenhum texto em conferência | Nenhum texto desta apuração foi enviado para conferência. | Abrir o caderno | a mesma |
+| Qualquer quadro, sem apuração | Nenhuma apuração escolhida | Escolha uma apuração no topo da Mesa para ver este quadro. | Escolher apuração | a mesma |
+
+Erro de campo segue o [campo](#campo): 14/400 `--theme-danger`, no formato "o que houve. o que fazer". Pergunta em branco: "Falta a pergunta. Escreva o que quer saber dos documentos."
 
 Erro usa as cores de erro e aviso usa as de aviso, nunca trocadas (W11, regra 6). Mudança de estado é anunciada a leitor de tela (`role="status"` para ocupado e concluído, `role="alert"` para erro; W11, regra 9).
 
