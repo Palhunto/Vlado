@@ -14,6 +14,8 @@ Onde o canvas e os tokens divergem, vale o canvas (`PLANO_LANCAMENTO.md`, "Refer
 
 ## Resumo
 
+Decisões do dono de 21/11/2026 (P11 e P12) já incorporadas; a lista completa está em `componentes.md`, "Decisões do dono". Arredondamento para a grade de 4 px (P11.8): preenchimento, intervalo e margem fora da grade sobem para o múltiplo de 4 seguinte.
+
 | # | O quê | Hoje (`tokens.css` / CSS) | Canvas | Origem no canvas |
 |---|---|---|---|---|
 | 1 | Cor do foco, tema claro | `--theme-focus` → `verde-500` `#53886c` | `#8a5a12` (ocre escuro) | "Foco · novo", `Tokens.dc.html`; `:focus-visible` de todas as telas claras |
@@ -22,7 +24,7 @@ Onde o canvas e os tokens divergem, vale o canvas (`PLANO_LANCAMENTO.md`, "Refer
 | 4 | Piso e degraus do texto | 7 degraus, 12 a 28 px (`--text-xs` 12, `--text-sm` 13) | 6 degraus: 14, 16, 18, 22, 28, 36 | "Tipografia · seis degraus, piso de 14 px" |
 | 5 | Raios | controle 6, cartão 8, painel 10, pílula 999 | controle 8, cartão 12, pílula | "Espaço e raio" |
 | 6 | Larguras de quebra | 19 larguras distintas nas regras | 720, 1024 e 1280 px | nota em "Espaço e raio" |
-| 7 | Largura da barra lateral | `--mesa-sidebar:224px`, 245 px a partir de 1550 px e 205 px até 1190 px (`style.css:139-140`) | 232 px | `nav` de `Main` e `Inicio` |
+| 7 | Largura da barra lateral | `--mesa-sidebar:224px`, 245 px a partir de 1550 px e 205 px até 1190 px (`style.css:139-140`) | 256 px (o canvas desenha 232; P15.7) | `nav` de `Main` e `Inicio` |
 | 8 | Contador no item da barra lateral | não existe | pílula com o número (ou "1 vence") à direita do rótulo | `Main` e `Inicio` |
 | 9 | Contorno do trecho citado no PDF | `--pdf-trecho-borda` `#c478008c` (55 % de opacidade) | `#c47800` opaco, 2 px | célula "Acumulado pago", `Main` |
 | 10 | Cor do órgão público no mapa | não existe | `#3d4a45` | ícone do órgão, `Mapa.dc.html` |
@@ -82,7 +84,7 @@ Hoje: `--text-xs` 12 (97 ocorrências de `var(--text-xs)` em `style.css` e 4 em 
 --text-xs:var(--text-md); --text-sm:var(--text-md);   /* só durante a migração; depois saem */
 ```
 
-O canvas usa também tamanhos fora dos seis degraus. A especificação registra cada um como está desenhado e pede decisão ao dono (pergunta 2):
+O canvas usa também tamanhos fora dos seis degraus. Decisão do dono (P11.2): tokens de exceção só para 24, 32 e 40 px:
 
 | Tamanho | Onde | Proposta de nome |
 |---|---|---|
@@ -106,7 +108,7 @@ O teste `testes/estilo_tokens.cjs:136-142` exige de 6 a 7 degraus e piso de 12 p
 /* --raio-painel (10 px) sai; --quadro-raio passa a apontar para --raio-cartao */
 ```
 
-Divergência dentro do próprio canvas: a tela "Conferir achado" (`Main.dc.html`) desenha os cartões de achado, a caixa "Sua pergunta" e o cartão da cota com 10 px, e "Visão geral" desenha o cartão da cota com 10 px, enquanto o design system revisado e as demais telas usam 12 px. A especificação segue os 12 px declarados ("Três raios no lugar de doze") e leva a diferença ao dono (pergunta 3). Outro raio que o canvas usa: 4 px na folha do documento e no topo das barras do gráfico (pergunta 3).
+Decisão do dono (P11.3): 12 px em todos os cartões e 4 px só na folha e no topo das barras (`--raio-folha:4px`, novo). Registro da divergência que levou à pergunta: a tela "Conferir achado" (`Main.dc.html`) desenha os cartões de achado, a caixa "Sua pergunta" e o cartão da cota com 10 px, e "Visão geral" desenha o cartão da cota com 10 px, enquanto o design system revisado e as demais telas usam 12 px. A especificação segue os 12 px declarados ("Três raios no lugar de doze") e leva a diferença ao dono (pergunta 3). Outro raio que o canvas usa: 4 px na folha do documento e no topo das barras do gráfico (pergunta 3).
 
 ## 6. Larguras de quebra: 720, 1024 e 1280 px
 
@@ -118,27 +120,41 @@ Variável CSS não funciona dentro de `@media`, então as três larguras não vi
 |---|---|---|
 | até 719 px | celular | uma coluna; barra lateral vira gaveta; campo de 16 px; alvo de 44 px |
 | 720 a 1023 px | tablet | barra lateral ainda em gaveta (UX-11: "Gaveta até 1024 px") |
-| 1024 a 1279 px | desktop compacto | barra lateral fixa |
+| 1024 a 1279 px | desktop compacto | barra lateral em gaveta (decisão do dono, P12.1: gaveta abaixo de 1280 px) |
 | 1280 px ou mais | desktop | como as telas finais de 1440 px |
 
 O canvas só desenha 390 e 1440 px. O comportamento nas faixas do meio está na lista do que o Design ainda desenha.
 
-## 7. Barra lateral com 232 px
+## 7. Barra lateral com 256 px
 
-`--mesa-sidebar` passa de 224 px para 232 px (largura do `nav` em `Main` e `Inicio`). As duas variações por largura de tela (245 px a partir de 1550 px e 205 px até 1190 px, `style.css:139-140`) saem: o canvas desenha uma largura só, e abaixo de 1024 px a barra vira gaveta (item 6).
+**Decisões do dono:** sem ícones nos itens (P11.6); gaveta abaixo de 1280 px (P12.1); **256 px no lugar dos 232 do canvas (P15.7, 21/11/2026)**, mudança no canvas aprovado autorizada pelo dono (regra 6 do contrato).
+
+`--mesa-sidebar` passa de 224 px para 256 px. O canvas desenha o `nav` de `Main` e `Inicio` com 232 px. As duas variações por largura de tela (245 px a partir de 1550 px e 205 px até 1190 px, `style.css:139-140`) saem: há uma largura só, e abaixo de 1280 px a barra vira gaveta com a mesma largura (item 6, P12.1).
+
+**Por que 256 e não 232.** Medido com as fontes da Mesa (Source Sans 3) nas pranchas: com 232 px, o item tem 175 px úteis (232 − 2 × 16 da barra − 1 da borda − 2 × 12 do item). O item ativo "Pedidos e prazos" com a pílula "1 vence" precisa de 188 px: rótulo em 600 com 115, intervalo de 12 e pílula com 61 (45 de texto e 2 × 8 de preenchimento). O rótulo e a pílula quebravam em duas linhas, e o dono pôs como condição da P15.7 que não quebrem. Nenhum ajuste de espaçamento dentro da grade de 4 px fechava os 13 px que faltavam. Com 256 px sobram 199: o item cabe com 11 px de folga e, pelo mesmo motivo, "Cota do mês R$ 18,40 de R$ 50" (precisa de 218 px na caixa, com 199 disponíveis em 232) e "Repórter · Redação Serena" no perfil (213 px) deixam de quebrar linha. A P11.5 (altura mínima) continua valendo para nomes mais longos. O conteúdo perde 24 px: em 1280 px, a área ao lado da barra fica com 1024 px.
+
+Regra que acompanha: rótulo e contador do item não quebram linha (`white-space: nowrap`, contador `flex: none`). Ao gravar no `tokens.css`, o Frontend confere que nenhum item da barra transborda com os rótulos reais.
+
+**Quando entra no código:** fase 2 dos tokens, com os demais valores do canvas (ordem de aplicação, passo 2). Na fase 1, a do Lume (só adições com os valores de hoje), a largura não muda.
 
 ## 8. Contador no item da barra lateral
 
-A cor do item ativo não muda no claro: `.areas>a[aria-current=page]` já tem fundo `--green` e peso 600 (`style.css:118`); o texto usa `--white` (`#fffefa`, 9,52:1), e o canvas usa branco puro (`#ffffff`, 9,61:1), diferença que não se vê. No escuro, hoje o item ativo tem fundo `--theme-active`, texto verde e uma barra interna de 3 px à esquerda (`style.css:174`); o canvas não desenha a barra lateral no escuro, então isso fica como está.
+**Decisão do dono (P12.2):** no escuro, o item ativo também é verde cheio (`#a8c79d`) com texto `#172315`; o padrão de hoje (`style.css:174`) sai.
 
-O que o canvas acrescenta é o contador à direita do rótulo, em 14 px, com três formas:
+A cor do item ativo não muda no claro: `.areas>a[aria-current=page]` já tem fundo `--green` e peso 600 (`style.css:118`); o texto usa `--white` (`#fffefa`, 9,52:1), e o canvas usa branco puro (`#ffffff`, 9,61:1), diferença que não se vê. No escuro, hoje o item ativo tem fundo `--theme-active`, texto verde e uma barra interna de 3 px à esquerda (`style.css:174`). O canvas não desenha a barra lateral no escuro; pela P12.2 o item ativo passa a verde cheio, fundo `--theme-accent` (`#a8c79d`) com texto `--theme-on-primary` (`#172315`, 8,79:1), e a barra interna sai.
+
+O que o canvas acrescenta é o contador à direita do rótulo, em 14 px, nestas formas:
 
 | Situação | Aparência | Onde |
 |---|---|---|
 | item comum com quantidade | texto secundário, sem fundo ("12") | Documentos |
+| item comum com quantidade, na página atual | pílula branca, texto verde 600 ("12"), como a de Conferir (P16.4) | Documentos ativo (prancha de documentos) |
 | item com pendência, fora da página atual | pílula verde cheia, texto branco 600 ("4") | Conferir em `Inicio` |
 | item com pendência, na página atual | pílula branca, texto verde 600 ("4") | Conferir em `Main` |
 | prazo vencendo | texto de aviso 600, sem fundo ("1 vence") | Pedidos e prazos |
+| prazo vencendo, na página atual | pílula clara com texto de aviso 600 (claro 6,59:1, C65; escuro `#e6bc7a` sobre `#172315`, 9,19:1, E58), inteira e na mesma linha do rótulo (P15.7) | Pedidos e prazos ativo (prancha dos quadros) |
+
+Rótulo e contador não quebram linha (`white-space: nowrap`; contador com `flex: none`). O item mais longo, "Pedidos e prazos" ativo com "1 vence", ocupa 188 px e cabe nos 199 úteis da barra de 256 px (item 7).
 
 ```css
 /* proposta de tokens de componente */
@@ -147,7 +163,7 @@ O que o canvas acrescenta é o contador à direita do rótulo, em 14 px, com tr�
 --aba-ativa-fundo:var(--theme-soft); --aba-ativa-texto:var(--theme-accent);
 ```
 
-As abas dos quadros (Hipóteses, Linha do tempo, Mapa de relações, Tabelas) usam o verde suave com texto verde (8,14:1), não o verde cheio.
+As abas dos quadros (Hipóteses, Linha do tempo, Mapa de relações, Tabelas e Comparador, P15.1) usam o verde suave com texto verde (8,14:1), não o verde cheio.
 
 ## 9. Trecho citado no PDF: contorno opaco
 
@@ -162,6 +178,8 @@ O canvas pinta a célula citada com fundo `#ffe9a8` e contorno de 2 px `#c47800`
 ```
 
 ## 10. Órgão público: terceira cor do mapa
+
+**Decisão do dono (P11.4): opção (b), a ameixa validada** — `--vlado-ameixa-600:#b0508a` (claro) e `--vlado-ameixa-400:#d46a9c` (escuro), com `--theme-entidade-orgao` e `--mapa-orgao` apontando para elas. O texto abaixo é o registro da análise.
 
 O mapa do canvas tem três tipos de entidade: pessoa (círculo esmeralda `#1d8058`), empresa (quadrado de canto arredondado anil `#5b5fb8`) e órgão público (quadrado de canto vivo `#3d4a45`). A terceira cor não existe nos tokens e não tem par no escuro.
 
@@ -191,6 +209,7 @@ Os ícones brancos sobre as cores do mapa passam no claro. No escuro, branco sob
 | folha do documento | `0 1px 2px rgba(23,63,41,.08)` | — | `--sombra-folha` |
 | achado selecionado, evento selecionado | `0 4px 18px rgba(23,63,41,.08)` | `--sombra-flutuante` (alfa 0,063) | alfa 0,08: primitivo `--vlado-sombra-verde-media:#173f2914` |
 | nó selecionado no mapa | `0 4px 18px rgba(23,63,41,.10)` | — | `--sombra-no-selecionado`, primitivo `#173f291a` |
+| diálogo e gaveta (pranchas derivadas da fase 3, sem desenho no canvas) | `0 12px 40px rgba(23,63,41,.18)`; escuro `#00000099` | — | `--sombra-dialogo` |
 
 No escuro as sombras continuam as da noite (`--vlado-sombra-noite*`); o canvas não desenha sombra no escuro.
 
@@ -216,6 +235,24 @@ Sinais dos selos e marcas de estado. A tabela `cmap` das fontes da Mesa (lida di
 Consequências: (a) na referência exportada, ✕, ✎ e ◐ foram desenhados por uma fonte do sistema (o Chromium no Windows), então o desenho desses três depende do aparelho; (b) o subconjunto latino em WOFF2 (UX-04) precisa incluir U+2212, U+2026, U+25BE, U+25CB e U+2713, ou esses sinais também passam a depender do sistema. Proposta: incluir esses cinco no subconjunto e trocar ✕, ✎ e ◐ por ícones SVG do conjunto do Vlado (parte E), com o mesmo tamanho do texto: `icones/sinal-sem-suporte.svg`, `icones/sinal-corrigido.svg` e `icones/sinal-parcial.svg`, derivados aprovados pelo dono em 21/11/2026 (`componentes.md`, "Conjunto de ícones do Vlado"). Até lá, a conferência de tela aceita diferença de desenho nesses três sinais, nunca a falta deles.
 
 Pesos usados no canvas: 400 e 600 nas duas famílias; 700 no sinal "?" da lacuna e nos `<strong>`/`<b>` (valores destacados na resposta, nome do nó no mapa). As fontes continuam servidas pela Mesa, em WOFF2 com subconjunto latino (UX-04), como o próprio canvas anota.
+
+## Tokens da parte A (aprovados pelo Design em 21/11/2026)
+
+Pedido do Lume (Frontend) para a Onda 3, parte A: só adições em `interface/tokens.css`, na camada dos nomes curtos (a mesma de `--text-*` e `--raio-*`), com os valores de hoje, para trocar literais sem mudar nenhum pixel (conferido pelo comparar da Sonda). Quem grava é o Lume, na branch dele, no mesmo commit da troca; o Design aprova os nomes e a escala. Nomes aprovados:
+
+| Grupo | Token | Valor de hoje |
+|---|---|---|
+| Fontes | `--fonte-titulo` | `"Source Serif 4", Georgia, serif` |
+| | `--fonte-interface` | `"Source Sans 3", "Segoe UI", Arial, sans-serif` |
+| | `--fonte-mono` | `monospace` |
+| Foco | `--foco-largura` | `3px` |
+| | `--foco-afastamento` | `4px` (o efetivo de hoje; os 2 px do canvas entram na fase 2, item 2) |
+| Movimento | `--duracao-rapida`, `--duracao-media`, `--duracao-lenta` | `.15s`, `.2s`, `.25s` |
+| | `--curva-padrao`, `--curva-saida` | `ease`, `ease-out` |
+| Camadas | `--camada-base`, `--camada-acima`, `--camada-fixo`, `--camada-barra`, `--camada-barra-alta`, `--camada-gaveta`, `--camada-sobreposicao`, `--camada-sobreposicao-alta`, `--camada-modal` | 0, 1, 10, 20, 25, 30, 50, 55, 60 |
+| | `--camada-caderno-1`, `--camada-caderno-2` | 6, 7 (provisórios; a escala de camadas fecha na fase 2) |
+
+Ficam para a fase 2, com os valores do canvas: `--text-3xl`, `--text-destaque`, `--text-numero`, `--text-marca`, `--raio-folha`, as sombras novas (`--sombra-folha`, `--sombra-dialogo`, `--sombra-no-selecionado`) e `--nav-*` / `--aba-*`.
 
 ## Contraste medido
 
@@ -286,6 +323,7 @@ Razão de contraste WCAG 2.x (luminância relativa), calculada por `referencia/f
 | C62 | borda do selo "Conferido" / verde suave | `#7f9685` / `#e8eee6` | 2.70:1 | 3:1 | **não passa** |
 | C63 | proposta "ameixa" para órgão público / superfície | `#b0508a` / `#fffefa` | 4.77:1 | 3:1 | passa |
 | C64 | ícone branco / proposta "ameixa" | `#ffffff` / `#b0508a` | 4.82:1 | 3:1 | passa |
+| C65 | prazo vencendo no item ativo da barra (pílula clara) | `#8e4b28` / `#ffffff` | 6.59:1 | 4.5:1 | passa |
 
 ### Tema escuro
 
@@ -325,6 +363,10 @@ Razão de contraste WCAG 2.x (luminância relativa), calculada por `referencia/f
 | E52 | borda de campo atual / verde suave (item ativo) | `#64786a` / `#2c3c2e` | 2.47:1 | 3:1 | **não passa** |
 | E53 | borda de campo nova / verde suave (item ativo) | `#8a9c8f` / `#2c3c2e` | 4.03:1 | 3:1 | passa |
 | E54 | ícone escuro / órgão público no escuro, opção (a) | `#172315` / `#a8b3a9` | 7.52:1 | 3:1 | passa |
+| E55 | borda do botão destrutivo no escuro / superfície (fase 3) | `#a76e66` / `#202823` | 3.65:1 | 3:1 | passa |
+| E56 | barra de progresso no escuro / trilha (fase 3) | `#a8c79d` / `#3c4940` | 5.10:1 | 3:1 | passa |
+| E57 | contador no item ativo da barra, escuro (fase 3) | `#a8c79d` / `#172315` | 8.79:1 | 4.5:1 | passa |
+| E58 | prazo vencendo no item ativo da barra, escuro (pílula) | `#e6bc7a` / `#172315` | 9.19:1 | 4.5:1 | passa |
 | E41 | borda de aviso / fundo de aviso | `#aa8754` / `#372e21` | 4.00:1 | 3:1 | passa |
 | E42 | pessoa / superfície | `#3fa877` / `#202823` | 5.10:1 | 3:1 | passa |
 | E43 | empresa / superfície | `#8487e6` / `#202823` | 4.74:1 | 3:1 | passa |
@@ -359,4 +401,4 @@ Razão de contraste WCAG 2.x (luminância relativa), calculada por `referencia/f
 2. Design aplica 1, 2, 3, 7 e 9 em `tokens.css` (cor e medida, sem renomear nada).
 3. QA ajusta `testes/estilo_tokens.cjs` (piso de 14 px, raios, quebras) e o Design aplica 4, 5, 11 e 12.
 4. Frontend migra as regras por componente (parte A), usando `componentes.md`.
-5. Item 10 só depois da resposta do dono.
+5. Item 10 já decidido (P11.4, ameixa).

@@ -53,8 +53,8 @@ Serifa = `--fonte-titulo` *(novo)*, Source Serif 4. Sem serifa = `--fonte-interf
 
 ### Espaço, raio e alvo
 
-- Espaços do canvas: 4, 8, 12, 16, 24, 32 e 48 px na escala; o canvas também usa 6, 10, 14, 18, 20, 22 e 28 px em preenchimentos e intervalos, reproduzidos como estão (pergunta 8).
-- Raios: controle 8 px (`--raio-controle`), cartão 12 px (`--raio-cartao`), pílula (`--raio-pilula`). Exceções do canvas: 10 px nos cartões de "Conferir achado" e no cartão da cota; 4 px na folha do documento e no topo das barras (pergunta 3).
+- Espaços do canvas: 4, 8, 12, 16, 24, 32 e 48 px na escala. **Decisão do dono (P11.8):** preenchimento, intervalo e margem fora da grade de 4 px arredondam para cima na implementação: 6 → 8, 10 → 12, 14 → 16, 18 → 20, 22 → 24 (e 2 → 4, 42 → 44). As tabelas desta especificação mostram a medida do canvas; o Frontend aplica o arredondamento, e a conferência aceita essa diferença como regra, não como divergência.
+- Raios: controle 8 px (`--raio-controle`), cartão 12 px (`--raio-cartao`), pílula (`--raio-pilula`). **Decisão do dono (P11.3):** 12 px em todos os cartões, inclusive os que o canvas desenha com 10 px (achados, caixa da pergunta, cota); 4 px só na folha do documento e no topo das barras (`--raio-folha`).
 - Alvo de toque: 44 px de altura em desktop; 48 px nos controles principais do celular e do Entrar.
 
 ### Foco
@@ -63,7 +63,7 @@ Todo elemento interativo: `outline: 3px solid var(--theme-focus); outline-offset
 
 ### Quebras
 
-720, 1024 e 1280 px (`mudancas-de-token.md`, item 6). O canvas desenha 390 e 1440 px; o que muda entre elas, além do que está escrito em cada componente, ainda será desenhado.
+720, 1024 e 1280 px (`mudancas-de-token.md`, item 6). O canvas desenha 390 e 1440 px; as pranchas derivadas da fase 3 desenham 1024 e 390 px de duas telas ([Telas derivadas](#telas-derivadas)). A faixa de 720 a 1023 px ainda será desenhada.
 
 ### Movimento
 
@@ -172,13 +172,13 @@ Onde: Conferir achado, Visão geral. `<nav aria-label="Áreas">`.
 
 | Parte | Medida e token |
 |---|---|
-| Contêiner | largura 232 (`--mesa-sidebar`); fundo `--theme-sidebar`; borda direita 1 px `--theme-line`; preenchimento 24 16; coluna com intervalo de 24 |
+| Contêiner | largura 256 (`--mesa-sidebar`; o canvas desenha 232, decisão do dono P15.7, ver `mudancas-de-token.md`, item 7); fundo `--theme-sidebar`; borda direita 1 px `--theme-line`; preenchimento 24 16; coluna com intervalo de 24 |
 | Marca | "Vlado" e um ponto em `--theme-accent`; serifa 32/600, entrelinha 1,5 (herdada do corpo), espaçamento −0,5 px; preenchimento 0 8 |
 | Lista de áreas | coluna, intervalo de 4. Ordem: Visão geral, Documentos, Perguntar, Conferir, Quadros, Caderno, Pedidos e prazos |
-| Item | `<a>`, altura 44, preenchimento 0 12, raio 8, texto 16 `--theme-text`, sem sublinhado |
-| Contador | à direita (`margin-left:auto`), 14 px; quatro formas em `mudancas-de-token.md`, item 8 |
-| Cartão da cota | no rodapé (`margin-top:auto`); fundo `--theme-surface`, borda 1 px `--theme-line`, raio 10, preenchimento 12 14, intervalo de 6; linha "Cota do mês" (14 `--theme-muted`) e valor ("R$ 18,40 de R$ 50", 14/600); [medidor](#medidor) |
-| Perfil | `<a>` altura 44, preenchimento 0 8, intervalo de 10; avatar de 32 px, círculo `--theme-accent`, iniciais 14/600 `--theme-on-primary`, `aria-hidden`; nome 16/600; papel e redação 14 `--theme-muted`, entrelinha 1,25. Abre "Minha conta" (W08, regra 1) |
+| Item | `<a>`, altura 44, preenchimento 0 12, raio 8, texto 16 `--theme-text`, sem sublinhado; rótulo numa linha só (`white-space: nowrap`) |
+| Contador | à direita (`margin-left:auto`), 14 px, sem encolher nem quebrar (`flex: none`, `white-space: nowrap`); as formas estão em `mudancas-de-token.md`, item 8. No item ativo, o contador vira pílula clara (P15.7 e P16.4): "12" em Documentos, "4" em Conferir e "1 vence" em Pedidos e prazos, sempre inteira e na mesma linha do rótulo |
+| Cartão da cota | no rodapé (`margin-top:auto`); fundo `--theme-surface`, borda 1 px `--theme-line`, raio 12 (P11.3; o canvas desenha 10), preenchimento 12 14, intervalo de 6; linha "Cota do mês" (14 `--theme-muted`) e valor ("R$ 18,40 de R$ 50", 14/600), numa linha com 256 px de barra; [medidor](#medidor) |
+| Perfil | `<a>` altura 44, preenchimento 0 8, intervalo de 10; avatar de 32 px, círculo `--theme-accent`, iniciais 14/600 `--theme-on-primary`, `aria-hidden`; nome 16/600; papel e redação 14 `--theme-muted`, entrelinha 1,25 ("Repórter · Redação Serena" cabe numa linha com 256 px). Abre "Minha conta" (W08, regra 1) |
 
 | Estado | Aparência | Origem |
 |---|---|---|
@@ -188,9 +188,9 @@ Onde: Conferir achado, Visão geral. `<nav aria-label="Áreas">`.
 | Foco | anel de foco | canvas (regra geral) |
 | Ocupado, erro, desabilitado | não se aplicam | — |
 | Vazio | contador some quando é zero | derivado |
-| Abaixo de 1024 px | vira gaveta com `inert` quando fechada, aberta pelo botão de menu do cabeçalho | plano (UX-11, UX-17); desenho do tablet pendente |
+| Abaixo de 1280 px | vira gaveta: o conteúdo fica `inert` com ela aberta, e ela abre pelo botão de menu do cabeçalho ([tablet](#tablet)) | plano (UX-11, UX-17) e derivado; limite de 1280 px decidido pelo dono (P12.1) |
 
-O canvas não desenha ícones nos itens da barra (pergunta 6).
+Sem ícones nos itens da barra, como no canvas (decisão do dono, P11.6). Rótulo e contador dos itens nunca quebram linha (P15.7); a largura de 256 px foi medida para o item mais longo, "Pedidos e prazos" ativo com "1 vence" (188 px de 199 úteis). Perfil e cota cabem numa linha com os textos das pranchas; para nome de redação ou valor mais longo, vale a altura mínima no lugar de altura fixa (P11.5). Área nova na barra pede nova medida.
 
 <a id="medidor"></a>
 
@@ -206,7 +206,7 @@ Barra fina de proporção: cota usada, achados conferidos. Altura 6, raio pílul
 |---|---|---|---|
 | Da apuração | altura 64; preenchimento 0 32; intervalo de 16; fundo `--theme-surface`; borda inferior 1 px `--theme-line` | "Apuração" (14 `--theme-muted`) sobre o nome (16/600); à direita, estado de salvamento (ícone ✓ de 16 px em `--theme-accent`, traço 2,5, e "Salvo às 14h32" em 14 `--theme-muted`) e botão secundário "Exportar apuração" | Conferir achado |
 | Da Visão geral | sem barra; no topo do conteúdo, alinhado pela base, intervalo de 16 | "Apuração · criada em 12 de novembro" (14 `--theme-muted`) sobre o título (serifa 36/600); à direita, "Trocar de apuração" (secundário) e "Nova apuração" (principal) | Visão geral |
-| Dos quadros | altura 72; preenchimento 0 32; intervalo de 24; fundo `--theme-surface`; borda inferior 1 px `--theme-line` | "Quadros" (serifa 28/600), [abas](#abas) e ações à direita | Mapa, Linha do tempo |
+| Dos quadros | altura 72; preenchimento 0 32; intervalo de 24; fundo `--theme-surface`; borda inferior 1 px `--theme-line` | caminho de volta (botão secundário "‹ Apuração", 44 px; decisão do dono, P11.7: os quadros não têm barra lateral de propósito), "Quadros" (serifa 28/600), [abas](#abas) e ações à direita | as cinco abas dos quadros |
 | Do celular | altura 60; preenchimento 0 12; intervalo de 8; fundo `--theme-sidebar`; borda inferior 1 px `--theme-line` | botão de menu (só ícone), "Apuração" (14 `--theme-muted`) sobre o nome (16/600, cortado com reticências), cota à direita ("R$ 18,40 de 50", 14 `--theme-muted`) | Pergunta no celular |
 
 O estado de salvamento é anunciado a leitor de tela quando muda (W11, regra 9). Erro ao salvar: derivado, troca o ícone por ✕ em `--theme-danger` e o texto por "Não salvou. Tentando de novo".
@@ -215,7 +215,7 @@ O estado de salvamento é anunciado a leitor de tela quando muda (W11, regra 9).
 
 ### Abas
 
-Onde: cabeçalho dos quadros. Linha com intervalo de 4. Cada aba é `<a>`: altura 44, preenchimento 0 14, raio 8, texto 16 `--theme-text`. Ativa: `aria-current="page"`, fundo `--theme-soft`, texto `--theme-accent` 600. Foco: anel. Ao passar o mouse (derivado): fundo `--theme-soft`. Ocupado, erro, desabilitado e vazio não se aplicam. Ordem: Hipóteses, Linha do tempo, Mapa de relações, Tabelas. É o único padrão de aba da Mesa (UX-17 aponta três).
+Onde: cabeçalho dos quadros. Linha com intervalo de 4. Cada aba é `<a>`: altura 44, preenchimento 0 14, raio 8, texto 16 `--theme-text`. Ativa: `aria-current="page"`, fundo `--theme-soft`, texto `--theme-accent` 600. Foco: anel. Ao passar o mouse (derivado): fundo `--theme-soft`. Ocupado, erro, desabilitado e vazio não se aplicam. Ordem: Hipóteses, Linha do tempo, Mapa de relações, Tabelas, Comparador (cinco abas, decisão do dono P15.1; "Conferência do texto" foi para o caderno e "Entrevistas e pedidos" virou a área Pedidos e prazos). Rótulo sem quebra de linha. É o único padrão de aba da Mesa (UX-17 aponta três). No celular, as abas viram pílulas que rolam para o lado: altura 40, preenchimento 0 16, raio pílula, borda 1 px `--theme-input-line`; ativa verde cheio (`--theme-accent`, texto `--theme-on-primary` 600); "Mapa" no lugar de "Mapa de relações"; faixa com preenchimento 12 16, fundo `--theme-surface` e borda inferior 1 px `--theme-line`.
 
 <a id="achado"></a>
 
@@ -223,7 +223,7 @@ Onde: cabeçalho dos quadros. Linha com intervalo de 4. Cada aba é `<a>`: altur
 
 Onde: Conferir achado. Coluna com intervalo de 12, abaixo do título "Conferir achados" (serifa 28/600) com o progresso ao lado ("2 de 6 conferidos", 14 `--theme-muted`, alinhado pela base, intervalo de 12). A coluna tem preenchimento 28 32 e intervalo de 20 entre título, pergunta e lista.
 
-Estrutura comum: sinal de 28 px à esquerda, texto do achado (16, entrelinha 1,5) e, abaixo, a linha de fonte (14), com intervalo de 6; intervalo de 14 entre sinal e texto; preenchimento 16 18; raio 10 (pergunta 3).
+Estrutura comum: sinal de 28 px à esquerda, texto do achado (16, entrelinha 1,5) e, abaixo, a linha de fonte (14), com intervalo de 6; intervalo de 14 entre sinal e texto; preenchimento 16 18; raio 12 (P11.3; o canvas desenha 10).
 
 | Variante | Elemento | Fundo e borda | Sinal | Linha de fonte |
 |---|---|---|---|---|
@@ -248,7 +248,7 @@ Ações do cartão aberto: linha com recuo de 42 px, intervalo de 8, quebra de l
 
 ### Caixa da pergunta
 
-Onde: Conferir achado. Fundo `--theme-reading`, raio 10, preenchimento 14 18, intervalo de 4. Rótulo "Sua pergunta" (14 `--theme-muted`) sobre a pergunta (serifa 18). Só leitura: um estado (canvas).
+Onde: Conferir achado. Fundo `--theme-reading`, raio 12 (P11.3; o canvas desenha 10), preenchimento 14 18, intervalo de 4. Rótulo "Sua pergunta" (14 `--theme-muted`) sobre a pergunta (serifa 18). Só leitura: um estado (canvas).
 
 <a id="painel-original"></a>
 
@@ -260,7 +260,7 @@ Onde: Conferir achado, à direita. `<aside aria-label="Original citado">`.
 |---|---|
 | Contêiner | largura 520; fundo `--theme-sidebar`; borda esquerda 1 px `--theme-line`; preenchimento 20 24; coluna com intervalo de 14 |
 | Topo | nome do documento (16/600) sobre "Página 1 de 1 · original preservado" (14 `--theme-muted`); à direita, selo "Lida por OCR" quando a página veio de OCR |
-| Folha | fundo `--pdf-pagina` (branco nos dois temas); borda 1 px `--theme-line`; raio 4 (pergunta 3); sombra 0 1 2 alfa 0,08 (`--sombra-folha`, *nova*); ocupa a altura disponível |
+| Folha | fundo `--pdf-pagina` (branco nos dois temas); borda 1 px `--theme-line`; raio 4 (P11.3); sombra 0 1 2 alfa 0,08 (`--sombra-folha`, *nova*); ocupa a altura disponível |
 | Trecho citado | fundo `--pdf-trecho` (translúcido; exceção registrada em `mudancas-de-token.md`, item 9) e contorno de 2 px `--pdf-trecho-borda` |
 | Rodapé | "Diminuir zoom" e "Aumentar zoom" (só ícone, 44 × 44), intervalo de 8; "Abrir o original em nova aba" à direita (link 600) |
 
@@ -383,8 +383,8 @@ Onde: Mapa de relações. Área do mapa de 960 × 828 à esquerda; painel da lig
 
 | Parte | Medida e token |
 |---|---|
-| Caixa | 200 × 72 (pergunta 5); preenchimento 10 12; intervalo de 10; fundo `--theme-surface`; borda 1 px `--theme-input-line`; raio 12 |
-| Ícone do tipo | 36 × 36, `aria-hidden`. Pessoa: círculo `--mapa-pessoa`. Empresa: quadrado com raio 9 em `--mapa-organizacao`. Órgão público: quadrado com raio 3 em `--mapa-orgao` *(novo; cor em aberto, pergunta 4)*. Desenho interno em traço 2, `--theme-on-primary` (branco no claro; escuro: `#172315`, ver `mudancas-de-token.md`, item 10) |
+| Caixa | largura 200, altura mínima 72 (P11.5: o nome pode ocupar duas linhas e a caixa cresce); preenchimento 10 12; intervalo de 10; fundo `--theme-surface`; borda 1 px `--theme-input-line`; raio 12 |
+| Ícone do tipo | 36 × 36, `aria-hidden`. Pessoa: círculo `--mapa-pessoa`. Empresa: quadrado com raio 9 em `--mapa-organizacao`. Órgão público: quadrado com raio 3 em `--mapa-orgao` *(novo: ameixa, `#b0508a` no claro e `#d46a9c` no escuro; decisão do dono, P11.4)*. Desenho interno em traço 2, `--theme-on-primary` (branco no claro; escuro: `#172315`, ver `mudancas-de-token.md`, item 10) |
 | Texto | nome em `<b>` 16/700; abaixo, tipo e contagem em 14 `--theme-muted` ("Pessoa · 3 documentos", "Órgão público") |
 
 | Estado do nó | Aparência | Origem |
@@ -469,7 +469,51 @@ Erro usa as cores de erro e aviso usa as de aviso, nunca trocadas (W11, regra 6)
 
 ### Diálogo de confirmação
 
-Sem desenho no canvas. W11, regra 8: "Confirmação de ação destrutiva usa o diálogo da Mesa, nunca o do navegador, e oferece desfazer quando possível." UX-16 pede reusar o diálogo da lixeira. Está na lista do que o Design desenha antes de ser construído (regra 1 do contrato).
+> **Derivado, aprovado pelo dono em 21/11/2026.** O canvas não desenha diálogo; W11 (regra 8) e UX-16 pedem um. Pranchas em [`novas/telas/`](novas/telas/): `dialogo-simples-*`, `dialogo-destrutivo-*` e `dialogo-campo-*`, em claro e escuro, 1440 e 390 px. A tela atrás do véu é só contexto.
+
+Substitui os oito `confirm()` nativos (UX-16) e segue os dois diálogos que a Mesa já tem para a lixeira (`interface/index.html:275-290`): rubrica, título, texto, "Cancelar" com `autofocus` e a ação.
+
+| Parte | Medida e token |
+|---|---|
+| Elemento | `<dialog>` aberto com `showModal()`; `role="alertdialog"`, `aria-modal="true"`, `aria-labelledby` no título e `aria-describedby` no texto |
+| Véu | tela inteira em `--theme-backdrop`; a página atrás fica `inert` |
+| Caixa | largura 480 (no celular, a largura da tela menos 16 px de cada lado: 358 em 390); centrada nos dois eixos; fundo `--theme-surface`; raio 12; preenchimento 24; coluna com intervalo de 16; sombra `--sombra-dialogo` *(nova: `0 12px 40px` alfa 0,18 no claro; `#00000099` no escuro)* |
+| Rubrica (opcional) | 14/600, maiúsculas, `--theme-muted` ("MOVER PARA A LIXEIRA", como hoje) |
+| Título | serifa 22/600, entrelinha 1,25; nomeia a ação, e o item quando há um |
+| Texto | 16; a nota de consequência em 14 `--theme-muted` |
+| Ações | à direita, intervalo de 8, com quebra de linha, 8 px de folga acima; "Cancelar" (secundário) antes da ação |
+
+| Variante | Ação | Foco inicial e botão padrão (Enter) | Exemplo na prancha |
+|---|---|---|---|
+| Simples | principal | a ação | "Gerar novo link de ativação?" (`piloto.js:143`) |
+| Destrutiva, com o nome do item | variante destrutiva do canvas (contorno e texto de erro) | "Cancelar" | "Mover “Vila Serena — contrato de pavimentação” para a lixeira?" (`index.html:275-277`) |
+| Com campo | destrutiva, desabilitada até o nome digitado conferir | o campo; Enter só confirma com a ação habilitada | "Apagar definitivamente", com a tabela do que sai e "Digite «nome» para confirmar" (`index.html:278-290`, `gerenciar.js:154-156`) |
+
+Comportamento: o foco fica preso no diálogo (Tab e Shift+Tab circulam entre os controles); Esc fecha como "Cancelar"; ao fechar, o foco volta ao controle que abriu o diálogo; clique no véu não fecha (decisão do dono, P12.5).
+
+| Estado | Aparência | Origem |
+|---|---|---|
+| Padrão | acima | derivado |
+| Foco | anel de foco do canvas no controle focado; nas pranchas, na ação (simples), em "Cancelar" (destrutiva) e no campo (com campo) | canvas (anel) e derivado |
+| Ocupado | a ação troca o rótulo pelo gerúndio ("Apagando…", como `gerenciar.js:140`), `aria-busy` no diálogo, "Cancelar" desabilitado até a resposta. Decisão do dono (P12.5): se "Apagar definitivamente" puder demorar, vira espera longa de W11 (barra com etapa, "Cancelar" ativo, regra 3) | derivado |
+| Erro | mensagem em 14 `--theme-danger` acima das ações, com `role="alert"` (o `#apagar-erro` de hoje), no formato de W11 | wireframe W11 (regra 4) |
+| Desabilitado | a ação destrutiva da variante com campo, até o nome conferir (variante "Indisponível" do botão) | canvas (botão) |
+| Vazio | não se aplica | — |
+
+Os oito `confirm()` de hoje e a variante de cada um (rótulos de ação aprovados pelo dono, P12.6):
+
+| Onde | Texto de hoje | Variante | Ação proposta |
+|---|---|---|---|
+| `apuracao.js:57` | "Há alterações não salvas no Caderno. Sair sem salvar?" | destrutiva | "Sair sem salvar" |
+| `apuracao.js:413` | "Há alterações não salvas. Descartar essas alterações?" | destrutiva | "Descartar alterações" |
+| `apuracao.js:542` | "Excluir esta nota do caderno? As fontes serão preservadas." | destrutiva, com o nome da nota | "Excluir nota" |
+| `apuracao.js:589` | "Recarregar descarta o texto deste editor. Continuar?" | destrutiva | "Recarregar e descartar" |
+| `codex.js:582` | "Encerrar o serviço local? As execuções ativas serão interrompidas. …" | destrutiva | "Encerrar o serviço" |
+| `experiencia.js:298` | "Há texto ou alterações não salvas. Descartar e fechar?" | destrutiva | "Descartar e fechar" |
+| `piloto.js:135` | "Desativar esta conta? A pessoa sai na próxima ação." | destrutiva, com o nome da pessoa | "Desativar conta" |
+| `piloto.js:143` | "Gerar novo link de ativação? A senha atual deixa de valer e as sessões abertas são encerradas." | simples | "Gerar novo link" |
+
+"Desfazer quando possível" (W11, regra 8): excluir nota hoje não oferece desfazer (UX-16). Decisão do dono (P12.7): sem "Desfazer" por enquanto.
 
 <a id="icones"></a>
 
@@ -551,7 +595,207 @@ Tipos de relação pedidos e o ícone de cada um: sócio → `relacao-socio`; co
 
 **Derivados, aprovados pelo dono em 21/11/2026 (P11.10):** `data` (calendário: corpo de 16 × 15, linha de cabeçalho e duas argolas); `lacuna` (círculo de raio 9 com o ponto de interrogação em traço, versão vetorial do sinal "?" do canvas); `sinal-sem-suporte` (✕ em dois traços de 10 × 10), `sinal-corrigido` (lápis) e `sinal-parcial` (círculo de raio 8 com metade hachurada), que substituem os caracteres ✕, ✎ e ◐: nenhum dos três existe nas fontes da Mesa (`mudancas-de-token.md`, item 12), e na referência eles saíram de uma fonte do sistema. Os sinais ✓ e ○ existem no Source Sans 3 e continuam como texto. Os três derivados de sinal vão ao lado do texto, então levam `aria-hidden="true"`; o rótulo da tabela vale só quando aparecem sozinhos. `documento` não é derivado: é o ícone `documentos` da Mesa atual, sem mudança.
 
-**Tema escuro.** Os ícones herdam a cor do texto (`currentColor`) e passam com ela (texto sobre superfície: 12,40:1). Nas formas coloridas do mapa, o ícone usa `--theme-on-primary` (`#172315`): branco sobre a esmeralda do escuro daria 2,97:1 (`mudancas-de-token.md`, E44). A forma do órgão público no escuro aparece na prancha com `#a8b3a9`, a opção (a) da pergunta 4, ainda sem resposta do dono; o ícone escuro sobre ela dá 7,52:1 (E54) e, na opção (b), 4,92:1 sobre a ameixa (E50).
+**Tema escuro.** Os ícones herdam a cor do texto (`currentColor`) e passam com ela (texto sobre superfície: 12,40:1). Nas formas coloridas do mapa, o ícone usa `--theme-on-primary` (`#172315`): branco sobre a esmeralda do escuro daria 2,97:1 (`mudancas-de-token.md`, E44). A forma do órgão público é a ameixa (decisão do dono, P11.4): ícone branco sobre `#b0508a` no claro dá 4,82:1 (C64); ícone escuro sobre `#d46a9c` no escuro dá 4,92:1 (E50).
+
+---
+
+<a id="telas-derivadas"></a>
+
+## Telas derivadas (fase 3)
+
+> **Derivado, aprovado pelo dono em 21/11/2026** (as 27 pranchas da fase 3). Pranchas em [`novas/`](novas/README.md), renderizadas pelo mesmo processo da referência, com a faixa "Derivado · aprovado pelo dono em 21/11/2026" abaixo de cada uma, já com as decisões P11 e P12 aplicadas. Os componentes são os da especificação acima; esta seção diz só o que muda em cada largura e tema.
+
+<a id="escuro-desktop"></a>
+
+### Tema escuro no desktop
+
+Pranchas: `conferir-achado-escuro-1440`, `visao-geral-escuro-1440`, `design-system-revisado-escuro-1440`.
+
+Método: a mesma prancha do canvas, com cada cor do claro trocada pelo valor escuro do mesmo token semântico (a tabela está em `novas/ferramentas/gerar_novas.cjs`, `CLARO_ESCURO`, e segue `design-system.md` e `mudancas-de-token.md`). Estrutura, texto e medida não mudam. Ficam como estão:
+
+- a folha do documento no painel do original: papel branco com o texto do documento, nos dois temas (como `--pdf-pagina`);
+- as amostras de cor do design system: mostram a paleta, então mantêm as cores que nomeiam.
+
+O que o escuro decide e o canvas não mostra:
+
+| Elemento | Escuro | Contraste | Observação |
+|---|---|---|---|
+| Item ativo da barra lateral | fundo `--theme-accent` (`#a8c79d`), texto `--theme-on-primary` (`#172315`) | 8,79:1 | Segue o botão principal do celular escuro do canvas. Decisão do dono (P12.2): verde cheio. O CSS de hoje usa fundo `--theme-active`, texto verde e uma barra interna de 3 px (`style.css:174`), que o Frontend troca. |
+| Contador no item ativo | pílula `#172315` com texto `#a8c79d` | 8,79:1 | Token `--nav-contador-ativo-fundo` no escuro. |
+| "1 vence" na barra lateral | `--theme-warning` (`#e6bc7a`) sobre `#121714` | 10,22:1 | |
+| Botão destrutivo | borda `#a76e66` sobre `#202823` | 3,65:1 | Mínimo de 3:1 para borda de controle. |
+| Barra de progresso | `#a8c79d` sobre a trilha `#3c4940` | 5,10:1 | |
+| Sombras | `#00000033` e `#00000066` (sombras da noite) | — | |
+
+Os pares das pranchas estão na tabela de contraste de `mudancas-de-token.md`; os medidos para elas são E55 a E57, que passam. Dos pares do escuro que não passam naquela tabela, só a divisória (E51, decorativa) aparece nestas pranchas: a borda de campo antiga (E36, E52) e o ícone branco sobre a esmeralda (E44) não são usados.
+
+<a id="tablet"></a>
+
+### Tablet, 1024 px
+
+Pranchas: `conferir-achado-{claro,escuro}-1024`, `conferir-achado-gaveta-aberta-{claro,escuro}-1024`, `visao-geral-{claro,escuro}-1024`.
+
+**Gaveta (UX-11).** A barra lateral sai da tela e vira gaveta. Fechada por padrão. O cabeçalho ganha, no início, o botão "Abrir menu" (só ícone, 44 × 44, ícone de menu do canvas). Aberta, a gaveta é a barra lateral inteira (256 px, P15.7; mesmos itens, cota e perfil), sobre o conteúdo, com o véu `--theme-backdrop` e sombra `--sombra-dialogo`; o conteúdo atrás fica `inert`; o foco vai para o primeiro item; Esc ou um item escolhido fecham a gaveta e devolvem o foco ao botão. A prancha mostra a estrutura; o movimento de abrir não está desenhado.
+
+Por que gaveta em 1024 px: com a barra fixa de 232 px, a tela de conferir ficaria com 272 px para a lista de achados ao lado do painel do original (com 256 px, 248). Isso muda a faixa de 1024 a 1279 px da tabela de quebras (`mudancas-de-token.md`, item 6), que dizia "barra lateral fixa". Decisão do dono (P12.1): gaveta em toda largura abaixo de 1280 px.
+
+**Conferir achado, 1024.** Cabeçalho de 64 px: "Abrir menu", "Apuração" sobre o nome, "Salvo às 14h32" e "Exportar apuração" (o cabeçalho da apuração do canvas, mais o botão de menu). Lista com o preenchimento do desktop (28 32). Painel do original com 440 px (no lugar de 520) e folha com preenchimento 32 36. As ações do achado aberto quebram linha quando não cabem.
+
+**Visão geral, 1024.** Cabeçalho de 64 px: "Abrir menu", marca "Vlado." (serifa 28/600, entrelinha 1) e, à direita, "Cota do mês" com o valor (a cota sai da barra lateral, que agora está na gaveta). Conteúdo com preenchimento de 32 px; a mesma estrutura do desktop: título de 36 px com os dois botões à direita, cartão do próximo passo, quatro contagens em linha, perguntas e linha do tempo em duas colunas.
+
+<a id="celular-telas"></a>
+
+### Celular, 390 px
+
+Pranchas: `conferir-achado-{claro,escuro}-390`, `conferir-achado-original-{claro,escuro}-390`, `visao-geral-{claro,escuro}-390`.
+
+Cabeçalho: o do celular do canvas (60 px: "Abrir menu", "Apuração" sobre o nome cortado com reticências, cota à direita). Margens de 16 px. A barra lateral é a mesma gaveta do tablet, com a largura de 256 px.
+
+**Conferir achado, 390.** Coluna única: título de 28 px com o progresso, caixa "Sua pergunta", lista de achados. No achado aberto, as ações ficam empilhadas em botões de 48 px de largura cheia, nesta ordem: "Ver o trecho no original" (secundário), "Confere com o original" (principal), "Precisa de ajuste" (secundário), "Sem suporte" (recusa).
+
+**Original no celular.** "Ver o trecho no original" abre o original numa camada de tela cheia (`conferir-achado-original-*-390`): cabeçalho com "Achados" (volta à lista, devolvendo o foco ao achado) e o selo "Lida por OCR"; nome do documento e página; a folha; zoom e "Abrir o original em nova aba"; no pé, o achado em conferência com as três ações, para conferir sem voltar. Aprovado pelo dono (P12.3).
+
+**Visão geral, 390.** Coluna única com intervalo de 16: rubrica de data; título da apuração em serifa 28/600, entrelinha 1,2 (36 px quebraria em três linhas; decisão do dono, P12.4: 28 px, desde que o título longo caiba em duas linhas; acima disso, a segunda linha termina em reticências e o nome inteiro fica no seletor de apuração); "Trocar de apuração" e "Nova apuração" lado a lado, metade da largura cada; cartão do próximo passo em coluna, com preenchimento 20 e a chamada "Conferir agora" de 48 px; contagens em grade de 2 × 2, intervalo de 12; "Últimas perguntas" e "Linha do tempo documentada" uma abaixo da outra.
+
+**Diálogos no celular:** ver [diálogo de confirmação](#dialogo); a caixa ocupa a largura menos 16 px de cada lado.
+
+<a id="telas-aprovadas"></a>
+
+## Áreas sem tela final, aprovadas pelo dono
+
+> **Derivado, aprovado pelo dono em 21/11/2026** (P14, P14b, P15 e P16). Pranchas em [`aprovacao/`](aprovacao/LEIA-ME.md), cada uma com a faixa verde "Derivado · aprovado pelo dono em 21/11/2026", em 1440 e 390 px, nos dois temas, já com as decisões P11, P12 e a barra de 256 px (P15.7). O canvas não tem tela final destas áreas: a estrutura vem dos wireframes (W02, W04 a W07) e a aparência sai dos componentes acima. As medidas são as das pranchas depois do arredondamento para a grade de 4 px (P11.8). O escuro é a mesma tela com os tokens do escuro. Abaixo de 1280 px a barra lateral vira gaveta ([tablet](#tablet)), e no celular o cabeçalho é o do celular do canvas.
+
+Padrões que se repetem nestas telas:
+
+| Padrão | Medida e token | Onde |
+|---|---|---|
+| Painel da direita | largura 360 (340 no caderno); fundo `--theme-surface`; borda esquerda 1 px `--theme-line`; preenchimento 28 24 (28 no caderno); coluna com intervalo de 16; rubrica em 14/600 maiúsculas, `--theme-accent` ou `--theme-muted` | caderno, hipóteses, tabelas, pedidos e prazos |
+| Cartão aberto ou selecionado | borda 2 px `--theme-accent` e `--sombra-flutuante` | hipótese aberta, pedido aberto, primeira diferença no celular |
+| Item a resolver | borda 1 px tracejada `--theme-warning`, fundo `--theme-warning-bg`, texto e origem em 14 `--theme-muted` | lacunas, "falta" das hipóteses, intervalo sem documento |
+| Ação de lacuna | botão de contorno `--theme-warning`, fundo `--theme-surface`, texto `--theme-warning`: "Virar pergunta ou pedido" | hipóteses, linha do tempo no celular |
+| Título da área | serifa 28/600, entrelinha 1,2, com a contagem em 14 `--theme-muted` alinhada pela base | caderno, documentos, pedidos e prazos |
+| Título dentro dos quadros | serifa 22/600 com a contagem em 14 `--theme-muted` | hipóteses, tabelas, comparador |
+
+<a id="caderno"></a>
+
+### Caderno (W04)
+
+Pranchas: `aprovacao/caderno/proposta-*` (modo Conferir, P14.1 e P14.5), `proposta-trechos-*` (P14b.6 e o sinal "revisada", P14b.8) e `proposta-escrever-*` (P14b.7).
+
+| Parte | Medida e token |
+|---|---|
+| Moldura, 1440 | barra lateral; [cabeçalho da apuração](#cabecalhos) com "Salvo às" à direita; três colunas: esquerda de 272 px (preenchimento 28 16 28 32), centro flexível (preenchimento 28 32, borda esquerda 1 px `--theme-line`) e painel da direita de 340 px |
+| Coluna da esquerda | "Nova nota" (secundário, largura cheia); seletor "Notas \| Trechos (n)"; a lista escolhida |
+| Seletor segmentado | `role="group"`; fundo `--theme-reading`, raio 12, preenchimento 4, intervalo 4; botões de 40 px, raio 8, `aria-pressed`; o pressionado tem fundo `--theme-surface`, `--sombra-cartao` e peso 600 |
+| Nota na lista | `<a>`, preenchimento 12, raio 8; a atual (`aria-current`) com fundo `--theme-soft`, nome 600 e "versão 3 · 2 a resolver" em 14 `--theme-muted` |
+| Trecho com fonte (P14b.6) | `<label>` com caixa de seleção de 20 px (`accent-color: --theme-accent`); fundo `--theme-surface`, borda 1 px `--theme-line` (selecionado: `--theme-accent`), raio 12, preenchimento 12 16, intervalo 12; tipo ("Trecho", "Achado do jornalista", "Anotação") em 14/600 `--theme-muted`, citação em serifa 16, fonte e autoria em 14 `--theme-muted`. Abaixo: "2 selecionados (até 20)"; "Inserir no texto" (largura cheia), "Cruzar" e "Perguntar" em grade de duas colunas, intervalo 8, todos secundários; "Registrar trecho com fonte" (principal, largura cheia), que abre o formulário de hoje |
+| Topo do centro | título da nota em serifa 28/600; "Nova versão" e "Exportar" (secundários) à direita; abaixo, o par de pílulas "Conferir afirmações" e "Escrever" (`aria-pressed`; ativa verde cheio com texto `--theme-on-primary` 600, inativa com borda `--theme-input-line`) e, à direita, a contagem em 14 `--theme-muted` ("5 afirmações: 3 com fonte · 1 revisada · 1 exagero · 1 sem fonte") |
+| Texto no modo Conferir | serifa 18 `--theme-text` (a frase não muda de cor; o sinal está no sublinhado e no rótulo), entrelinha 1,9, até 70 caracteres por linha, parágrafos com intervalo de 16; cada afirmação é `<a>` com sublinhado de 2 px afastado 6 px e, ao lado, a marca em 14/600 sem quebra de linha |
+| Quatro sinais (W04) | com fonte: sublinhado contínuo `--theme-accent`, "✓ com fonte"; exagero: tracejado `--theme-warning`, "! exagero"; sem fonte: pontilhado `--theme-input-line`, "○ sem fonte" em `--theme-muted`; revisada (P14b.8): sublinhado **duplo** `--theme-accent` de 1,5 px, "✓ com fonte · revisada por você". Sempre traço e texto |
+| Legenda | cartão abaixo do texto, preenchimento 16 20, 14 px: os quatro sinais com o traço de exemplo; "revisada" explica "conferida por uma pessoa logada" |
+| Painel da afirmação selecionada | rubrica "Afirmação selecionada"; a frase em serifa 18; cartão do estado (exagero: fundo `--theme-warning-bg`, título "! Mais forte que a fonte"; revisada: fundo `--theme-soft`, borda `--theme-accent-line`, "Ana Lima marcou como revisada hoje, às 14h40"); "Evidência ligada" com a citação e "abrir o original"; no pé, "Ligar outra evidência" e "Reescrever a frase" (secundários) e "Marcar como revisada por mim" (principal) |
+| Modo Escrever (P14b.7) | o centro vira um cartão com a barra de formatação (`role="toolbar"`, botões de 40 px, raio 8: "Texto normal ▾", negrito, itálico, "• Lista", "☐ Tarefas", "+ Trecho com fonte" em `--theme-accent` 600 e "Mais" à direita; borda inferior 1 px `--theme-line`) e o texto em serifa 18, entrelinha 1,7, título 22/600; cada fonte no texto é o [selo de fonte em linha](#selo-fonte) ("Fonte 1"); no topo, "As notas são salvas enquanto você escreve." O painel da direita vira "Fontes da nota": lista numerada com a citação, a fonte e "abrir o original", e "Inserir trecho com fonte" no pé |
+| Celular, 390 | coluna única, margens de 16. Modo Conferir: seletor de nota no topo (botão de 48 px, largura cheia, "Nota: Texto da reportagem ▾") e a afirmação selecionada num painel no pé da tela com as três ações (P14.5). Escrever: o mesmo seletor, o par "Conferir \| Escrever" em pílulas de meia largura e o editor em largura cheia. Trechos: o seletor "Notas \| Trechos" no topo, a lista em largura cheia e a legenda dos sinais abaixo |
+
+| Estado | Aparência | Origem |
+|---|---|---|
+| Afirmação selecionada | contorno de 2 px `--theme-accent` afastado 3 px, raio 4, com o fundo da cor do sinal (`--theme-warning-bg` no exagero); o foco do teclado usa o anel de foco por fora | prancha aprovada (P14.1) |
+| Vazio | nota sem afirmações: o modo Conferir diz que não há frase com número ou fato a conferir e oferece "Escrever"; sem trechos: "Nenhum trecho com fonte ainda" e "Registrar trecho com fonte" | derivado (W11, regra 1) |
+| Revisada | só pessoa logada marca; o painel diz quem e quando | wireframe W04 |
+| Editor (perfil) | vê e comenta sem alterar o texto: sem "Escrever", sem "Reescrever a frase" | wireframe W04 |
+
+<a id="quadros"></a>
+
+### Quadros: hipóteses, tabelas, comparador e celular
+
+Pranchas: `aprovacao/quadros/proposta-{hipoteses,tabelas,comparador,mapa,linha-do-tempo}-*`. Cabeçalho dos quadros com as cinco [abas](#abas) (P15.1). Conteúdo com preenchimento 28 40.
+
+**Hipóteses (W05, P15.2).**
+
+| Parte | Medida e token |
+|---|---|
+| Hipótese aberta | cartão aberto, preenchimento 20 24, intervalo 16; título serifa 18/600; à direita, a contagem em 14 `--theme-muted` ("2 sustentam · 1 contraria · 1 falta") e "Editar" |
+| Três colunas | grade de três colunas iguais, intervalo 16 (celular: uma coluna, intervalo 12). Coluna: fundo `--theme-reading`, raio 12, preenchimento 16, intervalo 12, traço de 3 px no topo. Sustenta: contínuo `--theme-accent`, ✓; contraria: contínuo `--theme-danger`, ícone `sinal-sem-suporte`; falta: tracejado `--theme-warning`, ícone `lacuna`. Título da coluna 600 na cor do traço, com o ícone de 16 px |
+| Evidência | `<a>` com fundo `--theme-surface`, borda 1 px `--theme-line`, raio 8, preenchimento 12, intervalo 4; o que diz e, em 14 `--theme-muted`, "fonte · abrir o original" (W05, regra 4). "+ Ligar evidência" é link 600 |
+| Item de "falta" | item a resolver com "sem documento" em 14/600 `--theme-warning`; abaixo, a ação de lacuna (W05, regra 5) |
+| Hipóteses fechadas | cartão-botão de largura cheia, preenchimento 16 20: título em serifa 18 e a contagem à direita |
+| Nova hipótese | formulário no pé: rótulo "Escreva como afirmação que os documentos possam sustentar ou contrariar", "Cancelar" e "Criar"; no celular, "Nova hipótese" sobe para o topo, principal de 48 px |
+| Painel "Como ler" | os três sinais com o texto de cada um e a frase de W05, regra 6: "A contagem não é placar: o quadro organiza as evidências, não decide se a hipótese é verdadeira." |
+
+**Tabelas (W06, P15.3).**
+
+| Parte | Medida e token |
+|---|---|
+| Tabela | dentro de um cartão; células com preenchimento 12 16, filete inferior 1 px `--theme-line`; cabeçalho 14/600 `--theme-muted` em fundo `--theme-reading`; valores à direita, algarismos tabulares, sem quebra |
+| Três estados da célula | da fonte: a fonte é link na coluna "Fonte"; corrigida: ícone `sinal-corrigido` de 16 px em `--theme-warning` antes do valor e a linha em `--theme-active`; a conferir: "○ a conferir" em `--theme-muted` e "sem fonte ainda" na coluna da fonte |
+| Célula selecionada | anel de foco na célula; o painel da direita ("Célula selecionada") mostra o valor lido pelo OCR riscado em `--theme-muted`, o valor corrigido em serifa 18/600, o campo "Por que corrigiu (obrigatório)", "Abrir original" e "Salvar" lado a lado, e "Histórico desta célula (n)" |
+| Cálculo | cartão com preenchimento 16 20: "Cálculo", a operação num botão secundário de 40 px ("Soma ▾"), o intervalo, o resultado em serifa 18/600 e "ver a conta"; abaixo, em 14 `--theme-muted`, o que ficou fora e por quê ("A linha 4 fica fora da soma porque não tem valor conferido") |
+| Ações do cabeçalho | "Exportar CSV" (secundário) e "Adicionar linha" (principal); no celular, lado a lado no topo |
+| Celular | a tabela rola para o lado dentro do cartão (largura interna de 560 px), com o aviso "A tabela rola para o lado dentro da caixa."; o painel da célula vem abaixo, num cartão |
+
+**Comparador (W07, P15.4).** Quinta aba dos quadros.
+
+| Parte | Medida e token |
+|---|---|
+| Topo | "Comparador" e "3 diferenças: 2 de valor · 1 de data"; "Anterior" e "Próxima" (secundários) à direita |
+| Lados | dois cartões lado a lado, intervalo 16, preenchimento 20, intervalo interno 12: "Lado A" e "Lado B" em 14/600 `--theme-muted`; o documento num botão secundário de largura cheia com "▾"; o trecho em serifa 18, entrelinha 1,8; fonte e "abrir original" em 14 |
+| Diferença | retirado: fundo `--theme-danger-bg`, texto `--theme-danger`, riscado, "− " antes; incluído: fundo `--theme-soft`, texto `--theme-accent` 600, "+ " antes; raio 4 e preenchimento 0 4, como realce de texto (o sinal é `aria-hidden`; o risco e o texto bastam). Nunca só cor (W07, regra 2) |
+| Conta | cartão com "Diferença de valor", a conta por extenso em serifa 18 ("10.710.000 − 8.750.000 = R$ 1.960.000,00 (22,4%)") e "Guardar como achado a conferir" (principal) |
+| Frase do pé | "O comparador mostra o que mudou. Não diz se a mudança é irregular." (W07, regra 8) |
+| Celular | os dois lados viram seletores empilhados; as diferenças viram lista de cartões ("1 de 3 · Valor global", o retirado e o incluído um abaixo do outro, a conta na primeira), com a selecionada como cartão aberto; "Guardar como achado a conferir" de largura cheia (W07, regra 7) |
+
+**Mapa e linha do tempo no celular (P15.6).** Em 1440 continuam as telas finais do canvas ([mapa](#mapa), [linha do tempo](#linha-do-tempo)).
+
+| Tela | Estrutura |
+|---|---|
+| Mapa, 390 | lista de ligações, a leitura acessível que o canvas prevê em "Ver como lista". Um cartão por entidade: forma de 36 px com o ícone do tipo em `--theme-on-primary` (círculo para pessoa, quadrado de raio 9 para empresa, de raio 3 em ameixa para órgão público), nome 600 e "Empresa · 9 documentos" em 14 `--theme-muted`; cada ligação numa linha com filete superior, ícone da relação de 16 px, o tipo em 600 e a outra ponta, e a fonte em 14 `--theme-muted`; ligação a confirmar em `--theme-warning` ("Irmãos? A confirmar:", "sem documento"). Aviso de possível homônimo; "Adicionar ligação"; "O mapa organiza o que os documentos dizem. Ele não avalia se é verdade." |
+| Linha do tempo, 390 | coluna única: filtros em pílulas (altura 44, ativo verde cheio), o ano em serifa 36/600 com a contagem, e um evento por item: marco de 32 px à esquerda com o ícone do acontecimento de 16 px (cheio `--theme-accent` para data exata, vazado com borda 2 px para data parcial) e cartão com a data em 600, a qualificação ("data exata" em `--theme-muted`, "dia não informado" em `--theme-warning` 600), o acontecimento em serifa 18, o detalhe em 14 e o [selo de fonte isolado](#selo-fonte). O intervalo sem documento é um item a resolver com a ação de lacuna |
+
+<a id="pedidos-e-prazos"></a>
+
+### Pedidos e prazos (P15.5)
+
+Pranchas: `aprovacao/quadros/proposta-pedidos-e-prazos-*`. Área própria da barra lateral (a aba "Entrevistas e pedidos" de hoje). Sem wireframe: o desenho parte dos campos que a Mesa já tem (`interface/redacao.js`).
+
+| Parte | Medida e token |
+|---|---|
+| Moldura, 1440 | barra lateral com o item ativo e a pílula clara "1 vence" (P15.7); cabeçalho da apuração com "Exportar pauta interna" (secundário) e "Nova pergunta" (principal); lista com preenchimento 28 32, intervalo 16; painel da direita "Lacunas que pedem contato" |
+| Cartão da pergunta | fundo `--theme-surface`, borda 1 px `--theme-line`, raio 12, preenchimento 16 20, intervalo 12. Linha de cima: o tipo num selo neutro ("Pedido via LAI", "Entrevista", "Pedido de informação"), o prazo e, à direita, a situação em 14 `--theme-muted`. Depois, a pergunta em serifa 18 e, em 14 `--theme-muted`, "Destinatário: … · 2 evidências motivam a pergunta" |
+| Prazo | vencendo: selo de aviso "! vence em 5 dias · 2 de dezembro" (`--theme-warning` sobre `--theme-warning-bg`, borda `--theme-warning-line`); sem prazo: "sem prazo" em 14 `--theme-muted`; respondido: selo "✓ respondido" (`--theme-accent` sobre `--theme-soft`) e a resposta no lugar da situação ("Resposta: Ofício 88/2025, p. 1") |
+| Pergunta aberta | cartão aberto, com "Registrar resposta recebida" (principal) e "Exportar texto do pedido" (secundário) |
+| Lacunas que pedem contato | itens a resolver com o que falta e a origem ("Hipótese: …", "Linha do tempo: …", "Achado: …"); "Preparar pergunta" (secundário, largura cheia); "A pauta interna exportada não vai para a fonte: o texto do pedido sai só com as perguntas." |
+| Celular, 390 | título e contagem; "Nova pergunta" principal de 48 px e largura cheia; os cartões em coluna (a situação desce para a linha de baixo); as lacunas num cartão no fim |
+
+| Estado | Aparência | Origem |
+|---|---|---|
+| Vazio | "Nenhuma pergunta preparada ainda", o que a área guarda (pedidos de LAI, entrevistas e pedidos de informação, com prazo) e "Preparar pergunta" | derivado (W11, regra 1) |
+| Prazo vencido | selo de erro "✕ venceu em 2 de dezembro" (`--theme-danger`) e a ação "Registrar recurso" | derivado; o cálculo do prazo e o recurso são da Onda 4 (PROD-07) |
+| Contador da barra | "n vence" quando há prazo em até 5 dias; some quando não há | derivado |
+
+<a id="documentos"></a>
+
+### Documentos (W02, P16)
+
+Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e busca; a área "Cadastrar arquivos" deixa de existir e vira a área de envio desta tela (P16.1 e P16.5; comparativos em `aprovacao/cadastro/`).
+
+| Parte | Medida e token |
+|---|---|
+| Moldura, 1440 | barra lateral com "Documentos" ativo e a pílula clara "12" (P16.4); cabeçalho da apuração; conteúdo com preenchimento 28 32, intervalo 16 |
+| Topo | "Documentos" e "12 de 60" (documentos usados e o limite da redação, PROD-05); à direita, a busca no texto (W02, regra 4): rótulo "Buscar no texto dos documentos" em 14/600 `--theme-muted` e campo de 44 px, até 420 px de largura |
+| Área de envio | borda 2 px tracejada `--theme-input-line`, raio 12, preenchimento 24, fundo `--theme-surface`, centrada: "**Arraste arquivos para cá** ou escolha no computador" (link 600) e, em 14 `--theme-muted`, "PDF, DOCX, XLSX, CSV, TXT e imagens · até 50 MB por arquivo". No celular: "Escolher arquivos" (principal, 48 px, largura cheia) e a mesma linha de formatos |
+| Envio por arquivo (P16.2) | cartão com fundo `--theme-background`, `aria-busy="true"`, preenchimento 16 20, intervalo 12: "Enviando 3 arquivos" (600) e "Você pode continuar trabalhando e sair desta tela." (W02, regra 3). Uma linha por arquivo, em grade de 260 px, barra e 200 px, intervalo 16: o nome, o [medidor](#medidor) de 8 px e o resultado ("✓ Pronto, 14 pág." em `--theme-accent`; "Lendo pág. 2 de 5" em `--theme-muted`). Falha de um arquivo não derruba os outros (regra 2): ícone `sinal-sem-suporte` e o texto em `--theme-danger` 600 ("Tem macro e não foi lida. O original ficou guardado.") e "O que fazer" (secundário) (regra 6). No celular, cada arquivo vira uma coluna |
+| Recibo do lote | última linha do cartão de envio, com filete superior 1 px `--theme-line`: "Recibo do lote: **2 de 3 cadastrados**, 1 pendente. É conferido antes da primeira pergunta." e "Ver recibo" à direita (W02, regra 8) |
+| Lista, desktop (P16.3) | tabela num cartão: Documento, Páginas, Leitura e a ação; células com preenchimento 12 16 e filete 1 px `--theme-line`; cabeçalho 14/600 `--theme-muted` em fundo `--theme-reading`; a coluna da ação tem rótulo só para leitor de tela |
+| Lista, celular (P16.3) | um cartão por documento, preenchimento 16, intervalo 8: nome 600, páginas em 14 `--theme-muted`, estado de leitura e a ação |
+| Três estados de leitura | sempre sinal e texto (W02, regra 5): "✓ Texto do próprio arquivo" em `--theme-accent`; "Lida por OCR: confira números" com o ícone `sinal-parcial` em `--theme-warning` 600; "○ Imagem sem leitura" em `--theme-muted`, com a ação "Ler com OCR" (secundário). Os demais têm "Abrir original" |
+| Detalhes técnicos | hash, identificador e versão saem da lista e ficam em "Detalhes técnicos", ao abrir o documento (W02, regra 7) |
+
+| Estado | Aparência | Origem |
+|---|---|---|
+| Vazio | sem documentos: a área de envio sozinha, com "Nenhum documento nesta apuração ainda" acima; a busca fica desabilitada com a razão | derivado (W11, regra 1) |
+| Ocupado | o cartão de envio, com `aria-busy`, uma barra por arquivo e a etapa por extenso | wireframe W02 e W11, regra 2 |
+| Erro | por arquivo, no cartão de envio, com o que houve, o que foi preservado e "O que fazer" | wireframe W02, regra 6, e W11, regra 4 |
+| Limite | "12 de 60" chega a "60 de 60": a área de envio vira o estado "Limite atingido" ([estados](#estados)) | derivado (W11, regra 7) |
 
 ---
 
@@ -673,17 +917,43 @@ Nota do wireframe: "Muda o que existe hoje: o manifesto guarda um único domíni
 
 ## O que ainda falta desenhar
 
-Pela regra 1 do contrato, nada disto é construído antes de o Design desenhar e o dono aprovar: pedidos e prazos de LAI; fontes e capturas de site dentro da apuração; lixeira; configuração da organização; página pública; diálogo de confirmação; versões de celular das telas de desktop (e, no sentido inverso, o Entrar em desktop); faixas de 720 a 1279 px; tema escuro das telas de desktop. O conjunto de ícones (parte E) está na seção [Conjunto de ícones do Vlado](#conjunto-de-icones), com cinco ícones derivados, aprovados pelo dono em 21/11/2026.
+Pela regra 1 do contrato, nada disto é construído antes de o Design desenhar e o dono aprovar: os formulários de resposta e de recurso dos pedidos de LAI, com o cálculo do prazo (PROD-07); fontes e capturas de site dentro da apuração; lixeira; configuração da organização; página pública; versões de celular das demais telas de desktop (e, no sentido inverso, o Entrar em desktop); faixa de 720 a 1023 px; tema escuro das telas do canvas fora as três de desktop; sem aviso com "Desfazer" por ora (P12.7). Desenhados na fase 3 e aprovados pelo dono em 21/11/2026: diálogo de confirmação, escuro de conferir achado, visão geral e design system, tablet de 1024 px e celular de 390 px de conferir achado e visão geral ([Telas derivadas](#telas-derivadas)). O conjunto de ícones (parte E) está na seção [Conjunto de ícones do Vlado](#conjunto-de-icones), com cinco ícones derivados, aprovados pelo dono em 21/11/2026. Aprovados também em 21/11/2026, em [Áreas sem tela final](#telas-aprovadas): caderno, hipóteses, tabelas, comparador, mapa e linha do tempo no celular, Pedidos e prazos e Documentos. Têm só a captura da Mesa de hoje, sem desenho: Perguntar no desktop (há o W03), Diligências, Apurações e lixeira, e Configurações (W08 e W09 em parte).
 
-## Perguntas para o dono
+## Decisões do dono (21/11/2026)
 
-Nenhuma muda o canvas sem o seu aval. Até a resposta, a especificação segue o que está escrito em cada item.
+Respostas do dono às perguntas desta especificação e às pranchas de `aprovacao/`, repassadas pelo Maestro (P11, P12, P14, P14b, P15 e P16 da nota de decisões). Não há pergunta aberta nesta seção.
 
-1. **Largura do celular.** O canvas desenha o celular em 390 px; o plano e o QA usam 375 px. Proposta: a imagem de 390 px vale como referência de 375 px, com as mesmas margens de 16 px e nada fixo em 390. Concorda?
-2. **Tamanhos fora dos seis degraus.** O canvas declara seis degraus (14 a 36), mas usa 24 px (frase do "próximo passo"), 32 px (números e marca na barra) e 40 px (marca no Entrar). Proposta: três tokens de exceção com nome (`--text-destaque`, `--text-numero`, `--text-marca`). Ou prefere que esses textos caiam nos degraus (22, 28, 36)?
-3. **Raios que o canvas usa além dos três.** "Conferir achado" desenha cartões com 10 px e o cartão da cota tem 10 px também na Visão geral; as outras telas e o design system usam 12 px. A folha do documento e o topo das barras usam 4 px. Proposta: 12 px em todos os cartões; 4 px fica como exceção só para a folha e as barras. Concorda?
-4. **Cor do órgão público no mapa.** `#3d4a45` reprova em duas checagens da `dataviz` (lê como cinza). (a) Manter como neutro declarado, com par escuro `#a8b3a9`; ou (b) trocar pela ameixa validada, `#b0508a` no claro e `#d46a9c` no escuro?
-5. **Texto que não cabe no desenho.** O nó do mapa tem 72 px fixos e "Construtora Alfa Ltda." transborda; na barra lateral, o papel do perfil e o valor da cota quebram linha dentro de caixas fixas; o Entrar passa da moldura. Proposta: altura mínima no lugar de altura fixa (o caso comum fica igual ao desenho), nome do nó em até duas linhas. Concorda?
-6. **Ícones na barra lateral.** O canvas mostra a barra lateral só com texto; a Mesa de hoje tem ícone em cada área (`interface/desktop.js:198-214`). Seguir o canvas (sem ícones) ou manter os ícones?
-7. **Quadros sem barra lateral.** As telas do mapa e da linha do tempo não têm a barra lateral de áreas. É tela cheia de propósito, ou a barra foi omitida no desenho?
-8. **Medidas fora da grade de 4 px.** O canvas usa preenchimentos de 6, 10, 14, 18 e 22 px. A especificação reproduz as medidas exatas. Prefere assim ou arredondar para a grade de 4 px na implementação (diferença de até 2 px)?
+| Nº | Pergunta | Decisão |
+|---|---|---|
+| P11.1 | Largura do celular | A imagem de 390 px vale como referência de 375 px. |
+| P11.2 | Tamanhos fora dos seis degraus | Tokens de exceção só para 24, 32 e 40 px (`--text-destaque`, `--text-numero`, `--text-marca`). |
+| P11.3 | Raios além dos três | 12 px em todos os cartões; 4 px só na folha do documento e no topo das barras. |
+| P11.4 | Cor do órgão público | Ameixa validada: `#b0508a` no claro, `#d46a9c` no escuro. |
+| P11.5 | Texto que não cabe | Altura mínima no lugar de altura fixa. |
+| P11.6 | Ícones na barra lateral | Sem ícones, como no canvas. |
+| P11.7 | Quadros sem barra lateral | De propósito, com caminho de volta visível ("‹ Apuração" no cabeçalho dos quadros). |
+| P11.8 | Medidas fora da grade de 4 px | Arredondar para a grade de 4 px (para cima). |
+| P12.1 | Gaveta | Abaixo de 1280 px. |
+| P12.2 | Item ativo no escuro | Verde cheio. |
+| P12.3 | Original no celular | Camada de tela cheia com as ações no pé. |
+| P12.4 | Título no celular | 28 px, se o título longo couber em duas linhas. |
+| P12.5 | Clique no véu | Não fecha o diálogo; "Apagar definitivamente", se puder demorar, vira espera longa cancelável com barra de etapa (W11, regra 3). |
+| P12.6 | Rótulos dos oito `confirm()` | Aprovados. |
+| P12.7 | Desfazer | Não agora. |
+| P14.1 | Caderno em três colunas (W04) | Aprovado como desenhado, com a barra lateral do canvas. |
+| P14.5 | Caderno no celular | Seletor de nota no topo e afirmação selecionada num painel no pé. |
+| P14b.6 | Trechos com fonte e contribuições | Segunda lista da coluna da esquerda do caderno ("Notas \| Trechos"). |
+| P14b.7 | Modo "Escrever" | Como desenhado. |
+| P14b.8 | Sinal "revisada" | Sublinhado duplo verde e "revisada por você", como desenhado. |
+| P15.1 | Abas dos quadros | Cinco: Hipóteses, Linha do tempo, Mapa de relações, Tabelas, Comparador. "Conferência do texto" vai para o caderno; "Entrevistas e pedidos" vira a área Pedidos e prazos. |
+| P15.2 a P15.4 | Hipóteses, Tabelas, Comparador | Como desenhados. |
+| P15.5 | Pedidos e prazos | Como desenhado. |
+| P15.6 | Mapa e linha do tempo no celular | Mapa como lista de ligações; linha do tempo em coluna única. |
+| P15.7 | Contador "1 vence" no item ativo | Pílula clara, com a condição de que rótulo e pílula não quebrem linha. Para cumprir a condição, a barra lateral passa de 232 para 256 px em todas as telas (mudança no canvas aprovado, autorizada pelo dono; `mudancas-de-token.md`, item 7). |
+| P16.1 | Documentos | Uma tela só para acervo, envio e busca. |
+| P16.2 | Envio | Por arquivo, com o recibo do lote numa linha do cartão de envio. |
+| P16.3 | Lista de documentos | Tabela no desktop, cartões no celular. |
+| P16.4 | Contador do item ativo | "Documentos 12" vira pílula clara na página atual. |
+| P16.5 | Cadastrar arquivos | Deixa de ser área; vira a área de envio de Documentos. |
+
+As 27 pranchas da fase 3 e as de `aprovacao/` foram aprovadas e regeneradas com estas decisões, inclusive a barra de 256 px. As telas finais do canvas em `referencia/telas/` continuam como estão: são o registro do contrato; as decisões acima valem sobre elas onde houver diferença, e `referencia/com-decisoes/` mostra as sete telas com elas aplicadas.
