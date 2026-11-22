@@ -7,7 +7,6 @@ window.VLADO_I18N_EN = {
     "Pular para o conteúdo": "Skip to content",
     "Abrir navegação": "Open navigation",
     "Fechar navegação": "Close navigation",
-    "APURAÇÃO ATUAL": "CURRENT INVESTIGATION",
     "Escolha uma apuração": "Choose an investigation",
     "Documentos, achados e fontes": "Documents, findings and sources",
     "Modo claro": "Light mode",

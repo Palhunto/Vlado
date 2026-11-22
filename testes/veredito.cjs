@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const {criarMesa} = require('./dom_minimo.cjs');
+const {blocos} = require('./tokens_tema.cjs');
 
 const css = fs.readFileSync(path.join(__dirname, '..', 'interface', 'style.css'), 'utf8');
 
@@ -37,10 +38,19 @@ test('em inglês os selos dizem “AI ·” e “Checked against the original”
   assert.equal(humano.textContent, '✓ Checked against the original');
 });
 
-test('folha de estilos separa forma: pílula contornada (IA), preenchido (conferida), tracejado (pendente)', () => {
-  for (const regra of [/\.support-badge\.ai-support\{[^}]*background:transparent[^}]*border:1px solid var\(--muted\)[^}]*border-radius:999px/,
-    /\.human-review-badge\.human-conferida_no_original\{[^}]*background:var\(--green\)[^}]*color:var\(--theme-on-primary/,
-    /\.human-review-badge\.human-pendente\{[^}]*border:1px dashed var\(--muted\)/]) assert.ok(regra.test(css), `regra ausente: ${regra}`);
+// Forma do selo (docs/design/componentes.md#selo): o veredito da IA é pílula sem fundo e com borda TRACEJADA;
+// os selos humanos têm fundo e borda contínua, com sinal.
+test('folha de estilos separa forma: veredito da IA tracejado, conferência humana com fundo e borda contínua', () => {
+  for (const regra of [/\.support-badge\.ai-support\{[^}]*background:transparent[^}]*border:1px dashed var\(--muted\)[^}]*border-radius:(?:999px|var\(--raio-pilula\))/,
+    /\.human-review-badge\.human-conferida_no_original\{[^}]*background:var\(--theme-soft\)[^}]*color:var\(--theme-accent\)[^}]*border-color:var\(--theme-accent-line\)/,
+    /\.human-review-badge\.human-pendente\{[^}]*background:var\(--white\)[^}]*border-color:var\(--theme-input-line\)/]) assert.ok(regra.test(css), `regra ausente: ${regra}`);
+  // Os dois sentidos travados, em todas as regras do seletor (variações, estados e media queries): humano nunca tracejado, IA nunca contínua.
+  const humanos = blocos(css).filter(r => /human-(?:review-badge|pendente|conferida_no_original|precisa_de_ajuste|sem_suporte_suficiente)/.test(r.seletor));
+  assert.ok(humanos.length >= 4, 'regras dos selos humanos lidas');
+  for (const r of humanos) assert.doesNotMatch(r.corpo, /dashed/, `selo humano nunca tracejado: ${r.seletor}`);
+  const ia = blocos(css).filter(r => /ai-support/.test(r.seletor) && !/badge-origin/.test(r.seletor));
+  assert.ok(ia.some(r => /border:\s*1px dashed/.test(r.corpo)), 'o veredito da IA exige borda tracejada');
+  for (const r of ia) assert.doesNotMatch(r.corpo, /border:\s*1px solid/, `veredito da IA nunca com borda contínua: ${r.seletor}`);
 });
 
 // WCAG relative luminance contrast.
@@ -58,8 +68,8 @@ test('selos mantêm contraste nos dois temas', () => {
   const pares = [
     ['texto IA sobre cartão', 'ink', 'white', 4.5], ['texto IA sobre item ativo', 'ink', 'theme-active', 4.5],
     ['contorno IA', 'muted', 'white', 3], ['texto IA com ressalva', 'warning', 'white', 4.5],
-    ['texto pendente', 'muted', 'white', 4.5], ['tracejado pendente', 'muted', 'white', 3],
-    ['texto conferida', 'theme-on-primary', 'green', 4.5], ['preenchimento conferida', 'green', 'white', 3],
+    ['texto pendente', 'theme-text', 'white', 4.5], ['borda pendente', 'theme-input-line', 'white', 3],
+    ['texto conferida', 'theme-accent', 'theme-soft', 4.5],
     ['precisa de ajuste', 'warning', 'warning-bg', 4.5], ['sem suporte', 'theme-danger', 'theme-danger-bg', 4.5],
   ];
   for (const [nome, tema] of Object.entries(temas())) {
