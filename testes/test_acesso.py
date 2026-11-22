@@ -673,7 +673,10 @@ class EsquemaTest(DuasRedacoes):
     def para_a_versao_1(self):
         con = sqlite3.connect(acesso.caminho_bd(self.root))
         try:
-            con.execute('DROP INDEX eventos_por_organizacao')
+            con.execute('DROP TABLE recuperacoes')  # version 5
+            con.execute('DROP TABLE links')  # version 4 (and its column of version 5)
+            con.execute('DROP TABLE convites')  # version 3
+            con.execute('DROP INDEX eventos_por_organizacao')  # version 2, as the columns below
             for tabela, coluna in (('contas', 'idioma'), ('contas', 'excluida_em'), ('sessoes', 'aparelho'),
                                    ('sessoes', 'ip_criacao'), ('sessoes', 'ip_ultimo')):
                 con.execute(f'ALTER TABLE {tabela} DROP COLUMN {coluna}')
@@ -683,12 +686,25 @@ class EsquemaTest(DuasRedacoes):
             con.close()
         acesso._PRONTOS.clear()  # as a process that starts now
 
+    def test_banco_antigo_posto_no_lugar_com_a_mesa_em_pe_e_atualizado_na_abertura_seguinte(self):
+        # A backup older than this version restored without stopping the Mesa: the process had already prepared the
+        # store, and must not answer "unreadable" until it is restarted.
+        antes = acesso.listar(self.root)
+        prontos = set(acesso._PRONTOS)
+        self.para_a_versao_1()
+        acesso._PRONTOS.update(prontos)  # the same process, which prepared the store before
+        self.assertEqual(self.linhas('PRAGMA user_version')[0]['user_version'], 1)
+        self.assertEqual(acesso.listar(self.root), antes)
+        self.assertEqual(self.linhas('PRAGMA user_version')[0]['user_version'], acesso.ESQUEMA)
+        self.assertEqual(acesso.entrar(self.root, 'dona.a', SENHA)[2]['id'], self.dono_a)
+
     def test_armazenamento_da_versao_1_e_atualizado_com_tudo_o_que_tinha(self):
         sid = acesso.entrar(self.root, 'dona.a', SENHA)[0]
         antes = acesso.listar(self.root)
         self.para_a_versao_1()
         self.assertEqual(acesso.listar(self.root), antes)
-        self.assertEqual(self.linhas('PRAGMA user_version')[0]['user_version'], 2)
+        self.assertEqual(self.linhas('PRAGMA user_version')[0]['user_version'], acesso.ESQUEMA)  # 1 to 2, then 2 to 3
+        self.assertEqual(acesso.equipe(self.root, self.a)['convites'], [])
         self.assertEqual(acesso.sessao(self.root, sid)['conta'], self.dono_a)  # the session of before goes on
         self.assertEqual(acesso.sessoes_da_conta(self.root, self.dono_a)[0]['aparelho'], None)
         self.assertEqual(acesso.alcance(self.root, self.rep_a), (frozenset({'caso_a'}), frozenset({'caso_a'})))
@@ -892,15 +908,65 @@ class EquipeTest(DuasRedacoes):
         while proximo is not None:
             pagina = acesso.atividade(self.root, self.a, 3, proximo)
             todos, proximo = todos + pagina['eventos'], pagina['proximo']
-        self.assertEqual([e['n'] for e in todos], sorted({e['n'] for e in todos}, reverse=True))
-        da_a = {l['n'] for l in self.linhas('SELECT n FROM eventos WHERE organizacao = ?', self.a)}
-        self.assertEqual({e['n'] for e in todos}, da_a)
+        da_a = self.linhas('SELECT em, tipo, conta, por FROM eventos WHERE organizacao = ? ORDER BY n DESC', self.a)
+        self.assertEqual([{k: e[k] for k in ('em', 'tipo', 'conta', 'por')} for e in todos], da_a)  # each one, once, in order
+        self.assertEqual(set(todos[0]), {'em', 'tipo', 'conta', 'por', 'conta_nome', 'por_nome'})  # no number of the store
         texto = json.dumps(todos, ensure_ascii=False)
         for fora in ('Dono B', 'Rep B', self.dono_b, self.rep_b):
             self.assertNotIn(fora, texto)
         for invalido in (0, 201, '5', None, True):
             with self.assertRaises(ValueError):
                 acesso.atividade(self.root, self.a, invalido)
+
+    def test_atividade_de_uma_redacao_nao_mostra_quanto_acontece_nas_outras(self):
+        # The cursor is a position inside the newsroom's own events: what happens in another one never moves it.
+        for papel in ('editor', 'leitor', 'reporter'):
+            acesso.mudar_papel(self.root, self.rep_a, papel, self.dono_a, self.a)
+        antes = [acesso.atividade(self.root, self.a, 2), acesso.atividade(self.root, self.a, 200)]
+        for papel in ('editor', 'leitor', 'reporter', 'editor', 'leitor', 'reporter', 'editor'):  # seven events in B
+            acesso.mudar_papel(self.root, self.rep_b, papel, self.dono_b, self.b)
+        self.assertEqual([acesso.atividade(self.root, self.a, 2), acesso.atividade(self.root, self.a, 200)], antes)
+        acesso.mudar_papel(self.root, self.rep_a, 'editor', self.dono_a, self.a)  # one more event in A: exactly one more
+        depois = acesso.atividade(self.root, self.a, 2)
+        self.assertEqual(depois['proximo'], antes[0]['proximo'] + 1)
+        self.assertEqual(depois['eventos'][1], antes[0]['eventos'][0])
+        total_de_a = len(self.linhas('SELECT 1 FROM eventos WHERE organizacao = ?', self.a))
+        self.assertEqual(depois['proximo'], total_de_a - 1)
+        self.assertNotIn('"n"', json.dumps(depois))
+        self.assertEqual(acesso.atividade(self.root, self.a, 2, 10 ** 9)['eventos'], depois['eventos'])  # a far cursor is the top
+
+    def test_as_contas_transitorias_nao_dao_o_perfil_convidado_nem_dispensam_a_senha(self):
+        # `atualizar`, `recuperar` and `criar_conta` with `confirmar` (what a session of the Mesa calls): the same
+        # password the team's operations ask, and nobody is given the legacy profile again (contract, 2.3 and 5.15).
+        mesa = {'por': self.dono_a, 'organizacao': self.a, 'confirmar': True}
+        with self.assertRaisesRegex(ValueError, 'Papel'):
+            acesso.atualizar(self.root, self.rep_a, papel='convidado', casos=['caso_a'], **mesa)
+        for campos in ({'papel': 'dono'}, {'papel': 'admin'}):
+            with self.assertRaises(acesso.SenhaNecessaria):
+                acesso.atualizar(self.root, self.rep_a, **campos, **mesa)
+            with self.assertRaises(acesso.SenhaIncorreta):
+                acesso.atualizar(self.root, self.rep_a, **campos, **mesa, senha='senha-errada-de-teste')
+        self.assertEqual(self.registro(self.rep_a)['papel'], 'reporter')
+        self.assertEqual(acesso.atualizar(self.root, self.rep_a, papel='editor', nome='Rep A2', **mesa)['papel'], 'editor')  # no dono involved
+        self.assertEqual(acesso.atualizar(self.root, self.rep_a, papel='dono', **mesa, senha=SENHA)['papel'], 'dono')
+        with self.assertRaises(acesso.SenhaNecessaria):
+            acesso.atualizar(self.root, self.rep_a, papel='leitor', **mesa)  # changing the role of a dono
+        with self.assertRaises(acesso.SenhaNecessaria):
+            acesso.desativar(self.root, self.rep_a, **mesa)
+        self.assertEqual(acesso.atualizar(self.root, self.rep_a, nome='Rep A3', **mesa)['nome'], 'Rep A3')  # the name alone asks nothing
+        for senha, erro in ((None, acesso.SenhaNecessaria), ('senha-errada-de-teste', acesso.SenhaIncorreta)):
+            with self.assertRaises(erro):
+                acesso.recuperar(self.root, self.rep_a, **mesa, senha=senha)
+            with self.assertRaises(erro):
+                acesso.criar_conta(self.root, 'Outra Dona', 'outra.dona', papel='dono', **mesa, senha=senha)
+            with self.assertRaisesRegex(ValueError, acesso.CONTA_INEXISTENTE):  # another newsroom's: unknown, password or not
+                acesso.recuperar(self.root, self.rep_b, **mesa, senha=senha)
+        self.assertIsNotNone(self.registro(self.rep_a)['senha_hash'])
+        self.assertEqual(acesso.recuperar(self.root, self.rep_a, **mesa, senha=SENHA)[0]['situacao'], 'aguardando_senha')
+        self.assertEqual(acesso.criar_conta(self.root, 'Outra Dona', 'outra.dona', papel='dono', **mesa, senha=SENHA)[0]['papel'], 'dono')
+        self.assertEqual(acesso.criar_conta(self.root, 'Leo', 'leo', papel='leitor', **mesa)[0]['papel'], 'leitor')
+        # The terminal (the operator) is not a session: it goes on as before.
+        self.assertEqual(acesso.atualizar(self.root, self.rep_a, por='cli', papel='convidado', casos=['caso_a'])['papel'], 'convidado')
 
 
 class ContaPropriaTest(DuasRedacoes):

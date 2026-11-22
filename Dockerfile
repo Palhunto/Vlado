@@ -85,6 +85,7 @@ COPY scripts/acesso.py \
      scripts/custo.py \
      scripts/conferencia_redacao.py \
      scripts/continuidade.py \
+     scripts/correio.py \
      scripts/criar_caso.py \
      scripts/dados_sinteticos.py \
      scripts/diligencias.py \

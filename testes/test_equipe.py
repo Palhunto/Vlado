@@ -96,9 +96,17 @@ class EquipeTest(cenario.DuasRedacoes):
         self.assertFalse({self.ids['dono_b'], self.ids['reporter_b']} & {e['conta'] for e in corpo['eventos']})
         self.sem_sentinela(bruto)
         pagina = self.post('dono', 'equipe-atividade', {'limite': 2})[1]
-        self.assertEqual((len(pagina['eventos']), pagina['proximo']), (2, pagina['eventos'][-1]['n']))
+        self.assertEqual((len(pagina['eventos']), pagina['eventos']), (2, corpo['eventos'][:2]))
         seguinte = self.post('dono', 'equipe-atividade', {'limite': 2, 'antes': pagina['proximo']})[1]
-        self.assertLess(seguinte['eventos'][0]['n'], pagina['proximo'])
+        self.assertEqual(seguinte['eventos'], corpo['eventos'][2:4])
+        # No number of the store, and a cursor that only this newsroom's own activity moves: seven events in Beta
+        # change nothing in what Alfa reads (the row number of the table would jump by seven).
+        self.assertEqual(set(primeiro), {'em', 'tipo', 'conta', 'por', 'conta_nome', 'por_nome'})
+        for papel in ('editor', 'leitor', 'reporter', 'editor', 'leitor', 'reporter', 'editor'):
+            acesso.mudar_papel(self.root, self.ids['reporter_b'], papel, self.ids['dono_b'], self.b)
+        self.assertEqual(self.post('dono', 'equipe-atividade', {'limite': 2})[1], pagina)
+        acesso.mudar_papel(self.root, self.ids['reporter_b'], 'reporter', self.ids['dono_b'], self.b)
+        acesso.definir_responsavel(self.root, 'beta', self.ids['reporter_b'], 'operador', self.b)  # the scenario as it was
         for invalido in ({'limite': 0}, {'limite': 'tudo'}, {'antes': -1}, {'organizacao': self.b}, {'conta': self.ids['dono_b']}):
             self.assertEqual(self.post('dono', 'equipe-atividade', invalido)[0], 400, invalido)
         self.assertNotIn(self.ids['dono'], {e['conta'] for e in self.post('dono_b', 'equipe-atividade', {})[1]['eventos']})
