@@ -1392,7 +1392,18 @@ window.VLADO_I18N_EN = {
     "A conversa, suas perguntas complementares e rodadas sairão das listas.": "The conversation, its follow-up questions and rounds will leave the lists.",
     "Esta rodada e seus achados sairão das consultas.": "This round and its findings will leave the queries.",
     "Há outra operação em andamento. Aguarde e tente de novo.": "Another operation is in progress. Wait and try again.",
-    "Um apagamento definitivo desta apuração ficou pela metade e só se resolve na próxima partida da Mesa. Até lá, não é possível restaurar nem apagar este item; feche os programas que usem esses arquivos e reinicie a Mesa.": "A permanent deletion in this investigation was left halfway and is only settled the next time the Mesa starts. Until then, this item cannot be restored or deleted; close the programs using those files and restart the Mesa."
+    "Um apagamento definitivo desta apuração ficou pela metade e só se resolve na próxima partida da Mesa. Até lá, não é possível restaurar nem apagar este item; feche os programas que usem esses arquivos e reinicie a Mesa.": "A permanent deletion in this investigation was left halfway and is only settled the next time the Mesa starts. Until then, this item cannot be restored or deleted; close the programs using those files and restart the Mesa.",
+    // Minha conta e Equipe (conta.js, equipe.js) e o diálogo com senha (dialogo.js)
+    "Sua senha": "Your password",
+    "A senha com que você entra na Mesa.": "The password you use to sign in to the desk.",
+    "Muitas senhas erradas seguidas. Por 15 minutos, as ações que pedem a senha ficam bloqueadas para a sua conta; o resto da Mesa continua.": "Too many wrong passwords in a row. For 15 minutes, actions that ask for your password are blocked for your account; the rest of the desk keeps working.",
+    "Senha incorreta. Confira e tente de novo.": "Wrong password. Check it and try again.",
+    "Senha atual": "Current password",
+    "Nova senha": "New password",
+    "Repita a nova senha": "Repeat the new password",
+    "Mostrar": "Show",
+    "Ocultar": "Hide",
+    "Enviando…": "Sending…",
   },
   padroes: [
     // Cota do mês na barra lateral
@@ -1645,6 +1656,9 @@ window.VLADO_I18N_EN = {
     ia_passos: "The step reached its turn limit without a final answer.",
     ia_ocupado: "The API was still closing the previous turn. Try again in a moment.",
     ia_historico: "Could not save the conversation history in the API.",
-    ia_tempo_etapa: "The step went over its time limit."
+    ia_tempo_etapa: "The step went over its time limit.",
+    senha_necessaria: "Type your password to confirm.",
+    senha_atual_incorreta: "Wrong password. Check it and try again.",
+    ultimo_dono: "The newsroom needs at least one active owner."
   }
 };
