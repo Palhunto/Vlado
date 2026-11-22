@@ -71,6 +71,7 @@ CAUSAS_ERRO = {
     'limite_dia': ('sem_cota', 'limite_dia', None),
     'limite_cota_conta': ('sem_cota', 'limite_cota_conta', None),
     'limite_cota_organizacao': ('sem_cota', 'limite_cota_organizacao', None),
+    'gasto_nao_registrado': ('erro', 'gasto_nao_registrado', None),
     'modelo_nao_permitido': ('erro', 'modelo_nao_permitido', None),
 }
 
@@ -1007,12 +1008,14 @@ class Conversas:
         """Stop the round when it exceeds the per-question or daily token budget (cache included) or the
         month's quota in reais of its account or of the organization."""
         meta = self.contexts[identifier]['meta']
-        totais = None
-        if gasto:  # the month's spend first: it is added even when the token limits cannot be read
+        totais, sem_registro = None, None
+        if gasto is None and custo.tokens_totais(uso):
+            sem_registro = custo.MENSAGEM_SEM_CALCULO  # spent and not priced: never go on without a count (R1)
+        elif gasto:  # the month's spend first: it is added even when the token limits cannot be read
             try:
                 totais = custo.somar_gasto(self.root, meta.get('conta'), gasto['micro_brl'])
-            except OSError as exc:
-                self._event(identifier, 'aviso', {'mensagem': 'Gasto do mês não registrado: ' + seguro(exc)})
+            except custo.GastoSemRegistro as exc:
+                sem_registro = str(exc)  # stop before the next call (R1, R2)
         try:
             valores = limites.ler(self.root)
             dia = limites.somar_dia(self.root, custo.tokens_totais(uso))
@@ -1021,7 +1024,9 @@ class Conversas:
             valores, dia = {'tokens_por_consulta': None, 'tokens_por_dia': None}, 0
         consulta = custo.tokens_totais(total)
         motivo = causa = None
-        if valores['tokens_por_consulta'] is not None and consulta > valores['tokens_por_consulta']:
+        if sem_registro:
+            causa, motivo = 'gasto_nao_registrado', sem_registro
+        elif valores['tokens_por_consulta'] is not None and consulta > valores['tokens_por_consulta']:
             motivo = f'Limite de tokens por consulta atingido ({consulta} de {valores["tokens_por_consulta"]}).'
             causa = 'limite_consulta'
         elif valores['tokens_por_dia'] is not None and dia > valores['tokens_por_dia']:

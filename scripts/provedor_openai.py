@@ -117,10 +117,21 @@ class ProvedorOpenAI:
 
 
 def uso_da_resposta(uso) -> dict:
-    """Usage in the priced kinds (custo.TIPOS). Here ``input_tokens`` already includes the cached
-    tokens (no write is billed): the uncached part is the difference. Reasoning is part of the output."""
+    """Usage in the priced kinds (custo). Here ``input_tokens_details`` breaks ``input_tokens`` down:
+    the cache reads and writes are inside it, and the uncached part is the rest. Writes come by
+    retention (30 minutes, 12 hours); without the breakdown they count as 30 minutes, recorded in
+    ``cache_escrita_30m_suposto``. Reasoning is part of the output."""
     entrada = getattr(uso, 'input_tokens', None) or 0
-    lidos = getattr(getattr(uso, 'input_tokens_details', None), 'cached_tokens', 0) or 0
-    return {'entrada': entrada, 'saida': getattr(uso, 'output_tokens', None) or 0, 'cache_leitura': lidos,
-            'raciocinio': getattr(getattr(uso, 'output_tokens_details', None), 'reasoning_tokens', 0) or 0,
-            'entrada_sem_cache': max(0, entrada - lidos), 'cache_escrita_5m': 0, 'cache_escrita_1h': 0}
+    detalhes = getattr(uso, 'input_tokens_details', None)
+    lidos = getattr(detalhes, 'cached_tokens', 0) or 0
+    escritos = getattr(detalhes, 'cache_write_tokens', 0) or 0
+    validades = getattr(detalhes, 'cache_write_tokens_details', None)
+    resultado = {'entrada': entrada, 'saida': getattr(uso, 'output_tokens', None) or 0, 'cache_leitura': lidos,
+                 'raciocinio': getattr(getattr(uso, 'output_tokens_details', None), 'reasoning_tokens', 0) or 0,
+                 'entrada_sem_cache': max(0, entrada - lidos - escritos), 'cache_escrita': escritos}
+    if validades is not None:
+        doze = getattr(validades, 'ttl_12h_tokens', 0) or 0
+        resultado.update(cache_escrita_12h=doze, cache_escrita_30m=max(0, escritos - doze))
+    else:
+        resultado.update(cache_escrita_30m=escritos, cache_escrita_12h=0, cache_escrita_30m_suposto=escritos)
+    return resultado

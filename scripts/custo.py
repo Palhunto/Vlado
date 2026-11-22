@@ -1,17 +1,30 @@
 """Custo das perguntas em dinheiro (CUS-01, CUS-03): preço por tipo de token, cota mensal em reais.
 
 **Preço.** ``precos_modelos.json`` (versionado, com data e fonte) dá, por provedor e modelo, o
-preço em dólar por milhão de tokens de cada tipo: entrada sem cache, leitura de cache, escrita de
-cache com validade de 5 minutos e de 1 hora, e saída (o raciocínio é cobrado como saída). Os
-adaptadores (``provedor_*``) entregam o uso de cada chamada já separado nesses tipos; a OpenAI
-conta o cache dentro da entrada e não cobra escrita. Modelo sem preço na tabela não pode ser
-permitido: nenhum gasto fica sem conta.
+preço em dólar por milhão de tokens de cada tipo: entrada sem cache, leitura de cache, saída (o
+raciocínio é cobrado como saída) e escrita de cache por validade, cada provedor com as suas
+(``cache_escrita_5m`` e ``_1h`` na Anthropic, ``cache_escrita_30m`` e ``_12h`` na OpenAI). Os
+adaptadores (``provedor_*``) entregam o uso de cada chamada já separado nesses tipos. Escrita de
+uma validade que o modelo não tem na tabela é contada pela escrita mais cara dele (ou da tabela),
+com ``preco_estimado``. Modelo da Anthropic só é permitido com
+preço na tabela. Modelo da OpenAI pode ser permitido sem preço (decisão do dono, 2026-11-21): é
+contado pelo preço mais alto da tabela em cada tipo de token, com ``preco_estimado`` no registro e
+aviso no log; nenhum gasto fica sem conta. O dono acrescenta o modelo da OpenAI em
+``configuracao.json`` → ``"orcamento"`` → ``"modelos_permitidos"`` (a lista substitui a padrão:
+repita nela os modelos da Anthropic que quiser manter).
 
 **Cota.** Teto mensal em reais por conta (o administrador também tem a sua) e da organização,
 hoje a instalação inteira (``chaves_orcamento`` é o ponto único que a Onda 2 refina). O gasto de
 cada chamada é convertido pelo câmbio do momento e somado em ``ajustes/gasto_mensal.json``, em
 milionésimos de real; o mês é o do calendário em UTC. Uma pergunta é recusada antes de começar
 quando o saldo não cobre a estimativa mínima, e interrompida quando o gasto passa do teto.
+
+**Registro.** Cada gravação do gasto também atualiza uma cópia anterior
+(``gasto_mensal.anterior.json``). Registro ilegível é lido da cópia; sem cópia legível, a cota é
+tratada como esgotada, com aviso no log, nunca como zero gasto. Se o gasto não puder ser gravado
+(disco cheio, permissão) ou calculado, a pergunta em curso para antes da próxima chamada, e
+nenhuma pergunta começa até o registro voltar a gravar (a recusa antes de começar confere a
+gravação).
 
 **Um lugar só para os valores.** ``precos_modelos.json`` também traz o câmbio (``cambio``) e os
 padrões do orçamento (``orcamento_padrao``): ``mensal_por_conta_brl``, ``mensal_organizacao_brl``,
@@ -26,27 +39,49 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 import json
+import re
 from pathlib import Path
 import threading
+
+import logging
 
 from cadastrar_documentos import _atomico
 from comum import ROOT, ler_json, trava_arquivo
 
 TABELA = 'precos_modelos.json'
-TIPOS = ('entrada_sem_cache', 'cache_leitura', 'cache_escrita_5m', 'cache_escrita_1h', 'saida')
-PRECO_DE = {'entrada_sem_cache': 'entrada', 'cache_leitura': 'cache_leitura', 'cache_escrita_5m': 'cache_escrita_5m',
-            'cache_escrita_1h': 'cache_escrita_1h', 'saida': 'saida'}
+# Usage kinds with a fixed price key; cache writes are 'cache_escrita_<validity>' in both (5m, 1h, 30m, 12h...).
+TIPOS = ('entrada_sem_cache', 'cache_leitura', 'saida')
+PRECO_DE = {'entrada_sem_cache': 'entrada', 'cache_leitura': 'cache_leitura', 'saida': 'saida'}
+ESCRITA = re.compile(r'cache_escrita_\d+[mh]')
 CHAVES_ORCAMENTO = ('mensal_por_conta_brl', 'mensal_organizacao_brl', 'estimativa_minima_tokens',
                     'execucoes_simultaneas_por_conta', 'execucoes_simultaneas', 'modelos_permitidos')
 ORGANIZACAO = 'instalacao'  # the one organization until Onda 2 (accounts and organizations)
 CONTA_LOCAL = 'local'  # the single operator of the local mode
 MICRO = Decimal(1_000_000)
 MESES_GUARDADOS = 12
+SEM_PRECO = 'openai'  # the only provider whose models may be allowed without a price (estimated)
 _TRAVA = threading.Lock()
+log = logging.getLogger('vlado.custo')
 
 
 class CotaEsgotada(ValueError):
     """The month's quota does not cover the question (W11 'limite' block)."""
+
+
+class GastoSemRegistro(CotaEsgotada):
+    """The month's spend cannot be read or recorded: no question spends until it can (R1, R2)."""
+
+
+MENSAGEM_ILEGIVEL = ('O registro do gasto do mês está ilegível (ajustes/gasto_mensal.json, sem cópia anterior '
+                     'legível): a cota foi tratada como esgotada até o administrador da instalação recuperá-lo. '
+                     'Documentos, conferência e caderno seguem funcionando.')
+MENSAGEM_SEM_GRAVAR = ('O gasto do mês não pode ser registrado agora (disco cheio ou sem permissão em ajustes/): '
+                       'nenhuma pergunta é feita até o registro voltar a gravar; o que já foi concluído foi '
+                       'preservado. Documentos, conferência e caderno seguem funcionando; avise o administrador '
+                       'da instalação.')
+MENSAGEM_SEM_CALCULO = ('O gasto do mês não pode ser registrado agora: o custo da última chamada não pôde ser '
+                        'calculado (tabela de preços ilegível?). A pergunta foi interrompida para nenhum gasto ficar '
+                        'sem conta; o que já foi concluído foi preservado. Avise o administrador da instalação.')
 
 
 # --- configuração ------------------------------------------------------------------------------
@@ -79,10 +114,11 @@ def tabela_precos(root) -> dict:
         if not isinstance(lista, dict):
             raise ValueError(f'{TABELA}: "modelos.{provedor}" deve ser um objeto.')
         for modelo, preco in lista.items():
-            if not isinstance(preco, dict) or set(preco) != set(PRECO_DE.values()) or not all(
-                    type(v) in (int, float) and not isinstance(v, bool) and v >= 0 for v in preco.values()):
-                raise ValueError(f'{TABELA}: preço de {modelo} precisa de entrada, cache_leitura, '
-                                 'cache_escrita_5m, cache_escrita_1h e saida, em dólar por milhão de tokens.')
+            if (not isinstance(preco, dict) or not set(PRECO_DE.values()) <= set(preco)
+                    or any(k not in PRECO_DE.values() and not ESCRITA.fullmatch(k) for k in preco)
+                    or not all(type(v) in (int, float) and not isinstance(v, bool) and v >= 0 for v in preco.values())):
+                raise ValueError(f'{TABELA}: preço de {modelo} precisa de entrada, cache_leitura e saida, mais '
+                                 'cache_escrita_<validade> (5m, 1h, 30m, 12h...), em dólar por milhão de tokens.')
     cambio = (tabela.get('cambio') or {}).get('brl_por_usd')
     if type(cambio) not in (int, float) or isinstance(cambio, bool) or not cambio > 0:
         raise ValueError(f'{TABELA}: "cambio.brl_por_usd" deve ser um número positivo.')
@@ -131,16 +167,24 @@ def preco(root, modelo, tabela=None):
     return None, None
 
 
+def preco_maximo(tabela) -> dict:
+    """The highest price of the table in each kind of token: what an unpriced model is counted at."""
+    precos = [p for lista in tabela['modelos'].values() for p in lista.values()]
+    chaves = {k for p in precos for k in p}
+    return {k: max(p[k] for p in precos if k in p) for k in chaves}
+
+
 def modelos_permitidos(root) -> list:
-    """{'modelo', 'provedor'} of each model the installation allows; each one has a price."""
+    """{'modelo', 'provedor', 'preco_estimado'} of each model the installation allows.
+
+    A model of the table has its price. A model outside it can only be an OpenAI one, counted at
+    the highest prices (``preco_maximo``): a mistyped Anthropic name is refused at the check.
+    """
     tabela, orcamento = tabela_precos(root), ler_orcamento(root)
     permitidos = []
     for modelo in orcamento['modelos_permitidos']:
         provedor, valor = preco(root, modelo, tabela)
-        if valor is None:
-            raise ValueError(f'O modelo {modelo} está em orcamento.modelos_permitidos sem preço em {TABELA}: '
-                             'cadastre o preço antes de permitir o modelo.')
-        permitidos.append({'modelo': modelo, 'provedor': provedor})
+        permitidos.append({'modelo': modelo, 'provedor': provedor or SEM_PRECO, 'preco_estimado': valor is None})
     return permitidos
 
 
@@ -160,17 +204,18 @@ def _inteiro(valor):
 
 
 def uso_normalizado(uso) -> dict:
-    """The five priced kinds of one call (or of a sum of calls) from the adapters' usage dict.
+    """The priced kinds of one call (or of a sum of calls) from the adapters' usage dict.
 
-    Older or simulated usage with only ``entrada``/``saida`` counts ``entrada`` as uncached input.
+    Older or simulated usage with only ``entrada``/``saida`` counts ``entrada`` as uncached input,
+    and a total ``cache_escrita`` without validities as 5-minute writes (the Anthropic default).
     """
     uso = uso or {}
-    escrita_1h = _inteiro(uso.get('cache_escrita_1h'))
-    escrita_5m = (_inteiro(uso['cache_escrita_5m']) if 'cache_escrita_5m' in uso
-                  else max(0, _inteiro(uso.get('cache_escrita')) - escrita_1h))
-    return {'entrada_sem_cache': _inteiro(uso.get('entrada_sem_cache', uso.get('entrada'))),
-            'cache_leitura': _inteiro(uso.get('cache_leitura')), 'cache_escrita_5m': escrita_5m,
-            'cache_escrita_1h': escrita_1h, 'saida': _inteiro(uso.get('saida'))}
+    tokens = {'entrada_sem_cache': _inteiro(uso.get('entrada_sem_cache', uso.get('entrada'))),
+              'cache_leitura': _inteiro(uso.get('cache_leitura')), 'saida': _inteiro(uso.get('saida'))}
+    escritas = {k: _inteiro(v) for k, v in uso.items() if ESCRITA.fullmatch(k)}
+    if not escritas and _inteiro(uso.get('cache_escrita')):
+        escritas = {'cache_escrita_5m': _inteiro(uso['cache_escrita'])}
+    return {**tokens, **escritas}
 
 
 def tokens_totais(uso) -> int:
@@ -178,10 +223,30 @@ def tokens_totais(uso) -> int:
     return sum(uso_normalizado(uso).values())
 
 
-def custo_usd(uso, valor) -> Decimal:
-    """Dollars of ``uso`` at ``valor`` (prices per million tokens of each kind)."""
-    tokens = uso_normalizado(uso)
-    return sum((Decimal(tokens[tipo]) * Decimal(str(valor[PRECO_DE[tipo]])) for tipo in TIPOS), Decimal(0)) / MICRO
+def _preco_da_escrita(valor, tipo, tabela=None):
+    """Price of a cache write of validity ``tipo``; (price, estimated) when the model lacks it."""
+    if tipo in valor:
+        return valor[tipo], False
+    proprias = [v for k, v in valor.items() if ESCRITA.fullmatch(k)]
+    if proprias:
+        return max(proprias), True
+    todas = [v for k, v in preco_maximo(tabela).items() if ESCRITA.fullmatch(k)] if tabela else []
+    return (max(todas) if todas else valor['entrada'] * 2), True
+
+
+def custo_usd(uso, valor, tabela=None, estimado=None) -> Decimal:
+    """Dollars of ``uso`` at ``valor`` (prices per million tokens of each kind). ``estimado``, a
+    list, gets True when a cache write was counted at a price the model does not list."""
+    tokens, total = uso_normalizado(uso), Decimal(0)
+    for tipo, quantidade in tokens.items():
+        if tipo in PRECO_DE:
+            preco_tipo = valor[PRECO_DE[tipo]]
+        else:
+            preco_tipo, suposto = _preco_da_escrita(valor, tipo, tabela)
+            if suposto and quantidade and estimado is not None:
+                estimado.append(True)
+        total += Decimal(quantidade) * Decimal(str(preco_tipo))
+    return total / MICRO
 
 
 def cambio(root, tabela=None) -> Decimal:
@@ -200,26 +265,31 @@ def custo_da_chamada(root, modelo, uso, modelo_cobrado=None) -> dict:
     usado, valor = modelo, preco(root, modelo, tabela)[1] if modelo else None
     if valor is None and modelo_cobrado:
         usado, valor = modelo_cobrado, preco(root, modelo_cobrado, tabela)[1]
-    if valor is None:
-        candidatos = [(m, p) for lista in tabela['modelos'].values() for m, p in lista.items()]
-        usado, valor = max(candidatos, key=lambda c: (c[1]['saida'], c[1]['entrada']))
-        usado = f'{usado} (preço mais alto da tabela: modelo informado sem preço)'
+    estimado = valor is None
+    if estimado:
+        valor = preco_maximo(tabela)
+        usado = f'preço mais alto da tabela em cada tipo (sem preço: {modelo or modelo_cobrado or "modelo não informado"})'
+        log.warning('Custo estimado pelo preço mais alto da tabela: o modelo %s não tem preço em %s.',
+                    modelo or modelo_cobrado, TABELA)
     taxa = cambio(root, tabela)
-    usd = custo_usd(uso, valor)
+    suposto = []
+    usd = custo_usd(uso, valor, tabela, suposto)
+    estimado = estimado or bool(suposto)
     brl = usd * taxa
     return {'usd': str(usd.quantize(Decimal('0.000001'), ROUND_HALF_UP)),
             'brl': str(brl.quantize(Decimal('0.000001'), ROUND_HALF_UP)),
             'micro_brl': int((brl * MICRO).to_integral_value(ROUND_HALF_UP)),
-            'cambio_brl_por_usd': str(taxa), 'preco_de': usado, 'tabela_vigente_em': tabela['vigente_em'],
-            'tokens': uso_normalizado(uso)}
+            'cambio_brl_por_usd': str(taxa), 'preco_de': usado, 'preco_estimado': estimado,
+            'tabela_vigente_em': tabela['vigente_em'], 'tokens': uso_normalizado(uso)}
 
 
 def estimativa_minima_brl(root, modelo) -> Decimal:
     """Reais of a short question at ``modelo``'s uncached input and output prices."""
     estimativa = ler_orcamento(root)['estimativa_minima_tokens']
-    _, valor = preco(root, modelo)
+    tabela = tabela_precos(root)
+    _, valor = preco(root, modelo, tabela)
     if valor is None:
-        return Decimal(0)
+        valor = preco_maximo(tabela)  # an unpriced model is counted at the highest prices
     uso = {'entrada': estimativa['entrada'], 'saida': estimativa['saida']}
     return custo_usd(uso, valor) * cambio(root)
 
@@ -239,14 +309,48 @@ def _arquivo(root) -> Path:
     return Path(root) / 'ajustes' / 'gasto_mensal.json'
 
 
-def _ler_gasto(root) -> dict:
+def _reserva(root) -> Path:
+    return Path(root) / 'ajustes' / 'gasto_mensal.anterior.json'
+
+
+def _vazio():
+    return {'esquema': 1, 'moeda': 'BRL', 'unidade': 'milionesimos de real', 'meses': {}}
+
+
+def _registro(caminho):
+    """The ledger at ``caminho``; None when absent; ValueError when unreadable or malformed."""
     try:
-        dados = json.loads(_arquivo(root).read_text(encoding='utf-8'))
-    except (OSError, ValueError):
-        dados = None  # a damaged ledger restarts empty; the per-call records stay in the rounds
+        dados = json.loads(caminho.read_text(encoding='utf-8'))
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
     if not isinstance(dados, dict) or not isinstance(dados.get('meses'), dict):
-        dados = {'esquema': 1, 'moeda': 'BRL', 'unidade': 'milionesimos de real', 'meses': {}}
+        raise ValueError('estrutura inválida')
     return dados
+
+
+def _ler_gasto(root) -> dict:
+    """This installation's ledger. Unreadable: the previous copy; neither readable: GastoSemRegistro."""
+    try:
+        dados, defeito = _registro(_arquivo(root)), None
+    except ValueError as exc:
+        dados, defeito = None, exc
+    if dados is not None:
+        return dados
+    try:
+        anterior = _registro(_reserva(root))
+    except ValueError:
+        anterior = None
+    if anterior is not None:
+        if defeito is not None:
+            log.warning('Registro do gasto mensal ilegível (%s); lido da cópia anterior.', defeito)
+        return anterior
+    if defeito is None and not _reserva(root).exists():
+        return _vazio()  # nothing was ever spent here
+    log.warning('Registro do gasto mensal ilegível e sem cópia anterior legível (%s): cota tratada como esgotada.',
+                defeito or 'cópia anterior ilegível')
+    raise GastoSemRegistro(MENSAGEM_ILEGIVEL)
 
 
 def _do_mes(dados, quando):
@@ -270,6 +374,14 @@ def gasto(root, conta) -> dict:
 def somar_gasto(root, conta, micro_brl) -> dict:
     """Add one call's cost to this month's account and organization; returns the new totals."""
     chaves, quando = chaves_orcamento(conta), mes()
+    try:
+        return _somar(root, chaves, quando, micro_brl)
+    except OSError as exc:  # the lock file or the writes: no question goes on without its count (R1)
+        log.warning('Gasto do mês não gravado: %s', exc)
+        raise GastoSemRegistro(MENSAGEM_SEM_GRAVAR) from exc
+
+
+def _somar(root, chaves, quando, micro_brl):
     with _TRAVA, trava_arquivo(_arquivo(root)):
         dados = _ler_gasto(root)
         atual = _do_mes(dados, quando)
@@ -279,8 +391,10 @@ def somar_gasto(root, conta, micro_brl) -> dict:
         dados['meses'][quando] = atual
         for antigo in sorted(dados['meses'])[:-MESES_GUARDADOS]:
             del dados['meses'][antigo]
+        conteudo = (json.dumps(dados, ensure_ascii=False, indent=1) + '\n').encode('utf-8')
         _arquivo(root).parent.mkdir(parents=True, exist_ok=True)
-        _atomico(_arquivo(root), (json.dumps(dados, ensure_ascii=False, indent=1) + '\n').encode('utf-8'))
+        _atomico(_arquivo(root), conteudo)
+        _atomico(_reserva(root), conteudo)  # the copy an unreadable ledger is read from
         return {'conta': atual['contas'][chaves['conta']], 'organizacao': atual['organizacoes'][chaves['organizacao']]}
 
 
@@ -325,7 +439,9 @@ def situacao(root, conta, *, administrador=False) -> dict:
 
 
 def conferir_antes(root, conta, modelo, *, convidado=False):
-    """Refuse the question before it starts when a balance does not cover the minimum estimate."""
+    """Refuse the question before it starts when a balance does not cover the minimum estimate, or
+    when the month's spend cannot be read or recorded (an unrecorded spend would have no ceiling)."""
+    somar_gasto(root, conta, 0)  # writes the ledger again: GastoSemRegistro when it cannot
     orcamento, gastos = ler_orcamento(root), gasto(root, conta)
     estimativa = estimativa_minima_brl(root, modelo)
     teto_conta, teto_org = Decimal(str(orcamento['mensal_por_conta_brl'])), Decimal(str(orcamento['mensal_organizacao_brl']))

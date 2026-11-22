@@ -30,7 +30,17 @@ import provedor_openai  # noqa: E402
 import test_codex_integracao as integracao  # noqa: E402
 
 SONNET = 'claude-sonnet-5-5'
-PRECO_OPENAI = {'entrada': 1.25, 'cache_leitura': 0.125, 'cache_escrita_5m': 0.0, 'cache_escrita_1h': 0.0, 'saida': 10.0}
+SOL = 'gpt-6.1-sol'  # GPT Sol 6.1, prices given by the owner on 2026-11-21 (identifier to be confirmed)
+PRECO_OPENAI = {'entrada': 1.25, 'cache_leitura': 0.125, 'cache_escrita_30m': 0.0, 'cache_escrita_12h': 0.0, 'saida': 10.0}
+
+
+def uso_openai(entrada=10000, saida=2000, lidos=6000, escritos=3000, doze_horas=1000, detalhe=True):
+    """Usage as the OpenAI SDK gives it (input_tokens_details breaks input_tokens down)."""
+    validades = SimpleNamespace(ttl_30m_tokens=escritos - doze_horas, ttl_12h_tokens=doze_horas) if detalhe else None
+    return provedor_openai.uso_da_resposta(SimpleNamespace(
+        input_tokens=entrada, output_tokens=saida, output_tokens_details=SimpleNamespace(reasoning_tokens=500),
+        input_tokens_details=SimpleNamespace(cached_tokens=lidos, cache_write_tokens=escritos,
+                                             cache_write_tokens_details=validades)))
 
 
 def uso_anthropic(entrada=1000, saida=500, lidos=200000, escritos_5m=20000, escritos_1h=10000, divisao=True):
@@ -75,15 +85,26 @@ class PrecoTest(Base):
         uso = uso_anthropic(escritos_5m=30000, escritos_1h=0, divisao=False)
         self.assertEqual((uso['cache_escrita_5m'], uso['cache_escrita_1h']), (30000, 0))
 
-    def test_openai_conta_o_cache_dentro_da_entrada_e_nao_cobra_escrita(self):
-        uso = provedor_openai.uso_da_resposta(SimpleNamespace(
-            input_tokens=10000, output_tokens=2000, input_tokens_details=SimpleNamespace(cached_tokens=8000),
-            output_tokens_details=SimpleNamespace(reasoning_tokens=500)))
-        self.assertEqual(custo.uso_normalizado(uso), {'entrada_sem_cache': 2000, 'cache_leitura': 8000,
-                                                      'cache_escrita_5m': 0, 'cache_escrita_1h': 0, 'saida': 2000})
-        # 2000 x 1.25 + 8000 x 0.125 + 2000 x 10 (reasoning is output), per million.
-        self.assertEqual(custo.custo_usd(uso, PRECO_OPENAI), Decimal('0.0235'))
-        self.assertEqual(custo.tokens_totais(uso), 12000)  # not 20000: the cached part is not counted twice
+    def test_gpt_sol_conta_leitura_e_gravacao_de_30_minutos_e_12_horas_pelo_seu_preco(self):
+        uso = uso_openai()
+        self.assertEqual(custo.uso_normalizado(uso), {'entrada_sem_cache': 1000, 'cache_leitura': 6000,
+                                                      'cache_escrita_30m': 2000, 'cache_escrita_12h': 1000, 'saida': 2000})
+        provedor, preco = custo.preco(self.root, SOL)
+        self.assertEqual(provedor, 'openai')
+        # 1000 x 2 + 6000 x 0.10 + 2000 x 2.50 + 1000 x 5 + 2000 x 10 (reasoning is output), per million.
+        self.assertEqual(custo.custo_usd(uso, preco), Decimal('0.0326'))
+        self.assertEqual(custo.tokens_totais(uso), 12000)  # input + output: the cache is inside the input
+        registro = custo.custo_da_chamada(self.root, SOL, uso)
+        self.assertEqual((registro['usd'], registro['preco_de'], registro['preco_estimado']), ('0.032600', SOL, False))
+
+    def test_gpt_sol_sem_divisao_por_validade_conta_como_30_minutos_e_registra(self):
+        uso = uso_openai(detalhe=False)
+        self.assertEqual((uso['cache_escrita_30m'], uso['cache_escrita_12h'], uso['cache_escrita_30m_suposto']), (3000, 0, 3000))
+        self.assertEqual(custo.uso_normalizado(uso)['cache_escrita_30m'], 3000)
+
+    def test_validade_que_o_modelo_nao_tem_conta_pela_escrita_mais_cara_dele(self):
+        registro = custo.custo_da_chamada(self.root, SONNET, {'entrada': 0, 'saida': 0, 'cache_escrita_30m': 1_000_000})
+        self.assertEqual((registro['usd'], registro['preco_estimado']), ('4.000000', True))  # Sonnet's 1-hour write
 
     def test_custo_da_chamada_em_reais_com_o_cambio_e_a_tabela(self):
         registro = custo.custo_da_chamada(self.root, SONNET, uso_anthropic())
@@ -98,14 +119,39 @@ class PrecoTest(Base):
         self.assertEqual(custo.custo_da_chamada(self.root, 'modelo-sem-preco', uso, SONNET)['preco_de'], SONNET)
         caro = custo.custo_da_chamada(self.root, 'modelo-sem-preco', uso)
         self.assertIn('preço mais alto da tabela', caro['preco_de'])
-        self.assertEqual(caro['usd'], '8.000000')  # the most expensive input of the table
+        self.assertEqual((caro['usd'], caro['preco_estimado']), ('8.000000', True))  # the most expensive input
+        self.assertFalse(custo.custo_da_chamada(self.root, SONNET, uso)['preco_estimado'])
+
+    def test_modelo_da_openai_permitido_sem_preco_conta_pelo_maior_preco_de_cada_tipo(self):
+        self.orcamento(modelos_permitidos=[SONNET, SOL, 'gpt-outro-sem-preco'])
+        custo.conferir_modelo(self.root, 'openai', 'gpt-outro-sem-preco')
+        self.assertIn({'modelo': 'gpt-outro-sem-preco', 'provedor': 'openai', 'preco_estimado': True},
+                      custo.modelos_permitidos(self.root))
+        uso = {**uso_openai(), 'cache_escrita_5m': 1000}
+        tabela = custo.tabela_precos(self.root)
+        maximo = custo.preco_maximo(tabela)
+        self.assertEqual({k: maximo[k] for k in ('entrada', 'cache_leitura', 'saida', 'cache_escrita_12h')},
+                         {'entrada': 8.0, 'cache_leitura': 0.5, 'saida': 40.0, 'cache_escrita_12h': 5.0})
+        with self.assertLogs('vlado.custo', 'WARNING') as aviso:
+            registro = custo.custo_da_chamada(self.root, 'gpt-outro-sem-preco', uso)
+        self.assertIn('gpt-outro-sem-preco', '\n'.join(aviso.output))
+        self.assertTrue(registro['preco_estimado'])
+        self.assertEqual(Decimal(registro['usd']), custo.custo_usd(uso, maximo).quantize(Decimal('0.000001')))
+        self.assertGreater(custo.estimativa_minima_brl(self.root, 'gpt-outro-sem-preco'), custo.estimativa_minima_brl(self.root, SOL))
+        self.orcamento(modelos_permitidos=[SONNET, SOL])
+        with self.assertRaisesRegex(ValueError, 'gpt-outro-sem-preco não está entre os permitidos'):
+            custo.conferir_modelo(self.root, 'openai', 'gpt-outro-sem-preco')
 
     def test_tabela_versionada_valida_cada_preco(self):
         tabela = ler_json(ROOT / custo.TABELA)
         self.assertTrue(tabela['vigente_em'] and tabela['fonte'] and tabela['cambio']['vigente_em'])
+        self.assertIn(SOL, tabela['modelos']['openai'])
+        self.assertIn('A CONFERIR PELO DONO', tabela['fonte'])
         for _, lista in tabela['modelos'].items():
             for modelo, preco in lista.items():
-                self.assertEqual(set(preco), set(custo.PRECO_DE.values()), modelo)
+                self.assertLessEqual(set(custo.PRECO_DE.values()), set(preco), modelo)
+                self.assertTrue(all(k in custo.PRECO_DE.values() or custo.ESCRITA.fullmatch(k) for k in preco), modelo)
+        self.assertEqual(tabela['orcamento_padrao']['modelos_permitidos'], [SONNET, SOL])
         ruim = json.loads(json.dumps(tabela))
         del ruim['modelos']['anthropic'][SONNET]['cache_leitura']
         escrever_json(self.root / custo.TABELA, ruim)
@@ -126,7 +172,8 @@ class CotaTest(Base):
             self.assertEqual(custo.gasto(self.root, 'a'), {'conta': 0, 'organizacao': 0})
             custo.conferir_antes(self.root, 'a', SONNET)
         registro = ler_json(self.root / 'ajustes/gasto_mensal.json')
-        self.assertEqual(sorted(registro['meses']), ['2026-11'])  # December spent nothing yet
+        self.assertEqual(sorted(registro['meses']), ['2026-11', '2026-12'])  # the check before the question writes it
+        self.assertEqual(registro['meses']['2026-12']['contas'], {'a': 0})
 
     def test_estouro_no_meio_do_mes_recusa_com_a_mensagem_do_w11(self):
         self.orcamento(mensal_por_conta_brl=50)
@@ -160,6 +207,35 @@ class CotaTest(Base):
         self.assertEqual(administrador['moeda'], 'BRL')
         self.assertNotIn('organizacao', custo.situacao(self.root, 'a'))
 
+    def test_registro_ilegivel_nunca_vira_zero_gasto(self):
+        registro = self.root / 'ajustes/gasto_mensal.json'
+        registro.parent.mkdir()
+        registro.write_text('{corrompido', encoding='utf-8')  # and no previous copy
+        with self.assertLogs('vlado.custo', 'WARNING'), self.assertRaises(custo.GastoSemRegistro) as recusa:
+            custo.conferir_antes(self.root, 'a', SONNET)
+        self.assertIsInstance(recusa.exception, custo.CotaEsgotada)  # treated as an exhausted quota
+        self.assertEqual(erros.codigo_de(str(recusa.exception))[0], 'gasto_ilegivel')
+        with self.assertRaises(custo.GastoSemRegistro):
+            custo.situacao(self.root, 'a')
+
+    def test_registro_ilegivel_lido_da_copia_anterior(self):
+        self.gastar('a', 40)
+        (self.root / 'ajustes/gasto_mensal.json').write_text('{corrompido', encoding='utf-8')
+        with self.assertLogs('vlado.custo', 'WARNING') as aviso:
+            self.assertEqual(custo.gasto(self.root, 'a')['conta'], 40_000_000)
+        self.assertIn('cópia anterior', '\n'.join(aviso.output))
+        self.orcamento(mensal_por_conta_brl=40)
+        with self.assertLogs('vlado.custo', 'WARNING'), self.assertRaisesRegex(custo.CotaEsgotada, 'Você usou R\\$ 40,00'):
+            custo.conferir_antes(self.root, 'a', SONNET)
+
+    def test_gasto_que_nao_grava_recusa_a_pergunta(self):
+        with mock.patch.object(custo, '_atomico', side_effect=OSError(28, 'No space left on device')), \
+                self.assertLogs('vlado.custo', 'WARNING'):
+            with self.assertRaises(custo.GastoSemRegistro) as recusa:
+                custo.conferir_antes(self.root, 'a', SONNET)
+        self.assertEqual(erros.codigo_de(str(recusa.exception))[0], 'gasto_nao_registrado')
+        custo.conferir_antes(self.root, 'a', SONNET)  # writable again
+
     def test_configuracao_invalida_recusa_sem_gastar(self):
         for invalido in ({'mensal_por_conta_brl': 0}, {'mensal_organizacao_brl': 'muito'}, {'outro': 1},
                          {'execucoes_simultaneas': 0}, {'modelos_permitidos': []}, {'cambio_brl_por_usd': -1}):
@@ -178,17 +254,19 @@ class ModelosPermitidosTest(Base):
         self.assertIn('claude-fable-5-2 não está entre os permitidos nesta instalação (claude-sonnet-5-5)', str(recusa.exception))
         self.assertEqual(erros.codigo_de(str(recusa.exception))[0], 'modelo_nao_permitido')
         self.assertEqual((self.root / 'ajustes/inferencia.json').read_bytes(), antes)  # nothing saved
+        inferencia_api.salvar_inferencia(self.root, {'provedor': 'openai', 'modelo_preferido': None})  # GPT Sol 6.1
+        self.orcamento(modelos_permitidos=[SONNET, 'claude-fable-5-2'])
         with self.assertRaisesRegex(ValueError, 'nenhum deste provedor'):
             inferencia_api.salvar_inferencia(self.root, {'provedor': 'openai', 'modelo_preferido': None})
-        self.orcamento(modelos_permitidos=[SONNET, 'claude-fable-5-2'])
         inferencia_api.salvar_inferencia(self.root, {'provedor': 'anthropic', 'modelo_preferido': 'claude-fable-5-2'})
         self.assertEqual(inferencia_api.resumo_inferencia(self.root)['modelos_permitidos'],
-                         [{'modelo': SONNET, 'provedor': 'anthropic'}, {'modelo': 'claude-fable-5-2', 'provedor': 'anthropic'}])
+                         [{'modelo': SONNET, 'provedor': 'anthropic', 'preco_estimado': False},
+                          {'modelo': 'claude-fable-5-2', 'provedor': 'anthropic', 'preco_estimado': False}])
 
-    def test_modelo_permitido_precisa_de_preco(self):
-        self.orcamento(modelos_permitidos=['modelo-caro-sem-preco'])
-        with self.assertRaisesRegex(ValueError, 'sem preço em precos_modelos.json'):
-            custo.conferir_modelo(self.root, 'anthropic', 'modelo-caro-sem-preco')
+    def test_modelo_da_anthropic_sem_preco_nao_entra_nos_permitidos(self):
+        self.orcamento(modelos_permitidos=['claude-sonet-5-5'])  # a mistyped name: no price, so it is never Anthropic
+        with self.assertRaisesRegex(ValueError, 'claude-sonet-5-5 não está entre os permitidos'):
+            custo.conferir_modelo(self.root, 'anthropic', 'claude-sonet-5-5')
         self.tabela(modelos={'anthropic': {}, 'openai': {'modelo-openai-sintetico': PRECO_OPENAI}})
         self.orcamento(modelos_permitidos=['modelo-openai-sintetico'])
         custo.conferir_modelo(self.root, 'openai', 'modelo-openai-sintetico')
@@ -236,7 +314,8 @@ class PerguntaTest(unittest.TestCase):
         return {'caso': 'alpha', 'pergunta': 'Pergunta técnica sintética.', **extra}
 
     def test_gasto_com_cache_registrado_por_chamada_e_estouro_no_meio_interrompe(self):
-        self.orcamento(mensal_por_conta_brl=1.0)
+        # The simulated model has no price: its minimum estimate is at the highest prices, kept small here.
+        self.orcamento(mensal_por_conta_brl=1.0, estimativa_minima_tokens={'entrada': 1000, 'saida': 100})
         identificador = self.start()
         rpc = self.manager.rpc
         uso = uso_anthropic()  # R$ 0,6435 at Sonnet 5.5
@@ -266,6 +345,30 @@ class PerguntaTest(unittest.TestCase):
         eventos = self.manager.eventos(identificador)['eventos']
         self.assertTrue(any(e['tipo'] == 'aviso' and 'Limites de tokens não conferidos' in e['dados']['mensagem']
                             for e in eventos))
+
+    def test_gasto_que_nao_grava_interrompe_e_recusa_a_proxima(self):
+        identificador = self.start()
+        with mock.patch.object(custo, '_atomico', side_effect=OSError(28, 'No space left on device')), \
+                self.assertLogs('vlado.custo', 'WARNING'):
+            self.manager.rpc.emit('item/usage', {'turnId': 'turn-1', 'modelo': SONNET, 'uso': uso_anthropic()})
+            aguardar_fim(self.manager, identificador)
+            eventos = self.manager.eventos(identificador)['eventos']
+            self.assertTrue(any(e['tipo'] == 'erro' and e['dados']['mensagem'].startswith(
+                'O gasto do mês não pode ser registrado agora') for e in eventos))
+            self.assertTrue(any(method == 'turn/interrupt' for method, _ in self.manager.rpc.calls))
+            self.assertEqual(self.manager.contexts[identificador]['meta']['situacao']['causa'], 'gasto_nao_registrado')
+            with self.assertRaisesRegex(custo.GastoSemRegistro, 'nenhuma pergunta é feita até o registro voltar'):
+                self.manager.perguntar(self.pergunta())
+        self.assertTrue(self.manager.perguntar(self.pergunta())['conversa'])  # recorded again: questions go on
+
+    def test_custo_que_nao_calcula_interrompe(self):
+        identificador = self.start()
+        with mock.patch.object(custo, 'custo_da_chamada', side_effect=ValueError('precos_modelos.json ilegível')):
+            self.manager.rpc.emit('item/usage', {'turnId': 'turn-1', 'modelo': SONNET, 'uso': uso_anthropic()})
+            aguardar_fim(self.manager, identificador)
+        eventos = self.manager.eventos(identificador)['eventos']
+        self.assertTrue(any(e['tipo'] == 'erro' and 'o custo da última chamada não pôde ser calculado'
+                            in e['dados']['mensagem'] for e in eventos))
 
     def test_administrador_tambem_tem_cota(self):
         self.orcamento(mensal_por_conta_brl=5.0)
