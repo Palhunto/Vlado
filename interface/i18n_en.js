@@ -1360,6 +1360,7 @@ window.VLADO_I18N_EN = {
     "Hash (SHA-256)": "Hash (SHA-256)",
     "Identificador": "Identifier",
     "Imagem sem leitura": "Image not read",
+    "Sem texto lido": "No text read",
     "Lida em parte: confira as páginas sem texto": "Partly read: check the pages without text",
     "Não foi lido. O original ficou guardado.": "Not read. The original was kept.",
     "PDF, DOCX, XLSX, CSV, TXT e imagens · até 50 MB por arquivo": "PDF, DOCX, XLSX, CSV, TXT and images · up to 50 MB per file",

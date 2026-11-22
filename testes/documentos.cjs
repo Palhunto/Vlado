@@ -57,7 +57,10 @@ test('estados de leitura: três da prancha mais "em parte" e "não foi lido", se
   assert.equal(digitalizado.chave, 'parcial'); assert.equal(digitalizado.texto, 'Lida em parte: confira as páginas sem texto');
   assert.equal(protegido.chave, 'erro'); assert.equal(protegido.texto, 'Não foi lido. O original ficou guardado.'); assert.equal(protegido.sinal, 'sem-suporte'); assert.equal(protegido.tom, 'erro');
   assert.equal(planilha.chave, 'texto', 'outros formatos entram com o texto do arquivo');
-  assert.equal(Documentos.leitura(doc('D9', 'imagem.png', {paginas_pdf: 1, paginas_sem_texto: [1]})).chave, 'sem-leitura', 'todas as páginas sem texto = sem leitura');
+  assert.equal(Documentos.leitura(doc('D9', 'imagem.png', {paginas_pdf: 1, paginas_sem_texto: [1]})).chave, 'sem-leitura', 'imagem sem OCR continua Imagem sem leitura');
+  const digitalizada = Documentos.leitura(doc('D10', 'medicao 03 digitalizada sintetica.pdf', {paginas_pdf: 1, paginas_sem_texto: [1], paginas_ocr: [], paginas_com_erro: []}));
+  assert.equal(digitalizada.chave, 'sem-texto', 'PDF com 0 páginas de texto = Sem texto lido'); assert.equal(digitalizada.texto, 'Sem texto lido'); assert.equal(digitalizada.marca, '○'); assert.equal(digitalizada.tom, 'neutro');
+  assert.equal(Documentos.leitura(doc('D11', 'misto.pdf', {paginas_pdf: 3, paginas_sem_texto: [2], paginas_ocr: [], paginas_com_erro: []})).chave, 'parcial', 'só parte sem texto continua Lida em parte');
 });
 
 test('lista: uma tabela com Documento, Páginas, Leitura e a ação; hash e identificador só em Detalhes técnicos (regras 5 e 7)', async () => {
