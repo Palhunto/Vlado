@@ -920,7 +920,7 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 
 <a id="contas"></a>
 
-## Contas: Minha conta e Equipe (Onda 2)
+## Contas: Minha conta, Equipe e convite (Onda 2)
 
 > **Derivado, 22/11/2026, a pedido do Maestro.** A estrutura vem dos wireframes W08 e W09 do canvas ([regras](#regras-dos-wireframes)) e das decisões do dono sobre o contrato de contas (P27 e P28). Os dados vêm da entrega 2 de Contas (`lancamento/contas-o2`, `92f06f1`; contrato em `.maestro/equipe/CONTRATO_CONTAS.md`, seções 5.4, 5.5, 5.15 e 8.3; formatos em `testes/test_sessoes_conta.py` e `testes/test_equipe.py`). Não há prancha. A aparência sai dos componentes acima, como nas áreas sem tela final, e a conferência é feita contra o wireframe e esta seção. Se o dono quiser outro desenho, vale o dele. O escuro é a mesma tela com os tokens do escuro.
 
@@ -928,7 +928,8 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 
 - **Minha conta** abre pelo perfil no rodapé da [barra lateral](#barra-lateral) (W08, regra 1). Abaixo de 1280 px, abre pelo mesmo perfil no pé da gaveta. Com a página aberta, o perfil leva `aria-current="page"` e nenhum item de área fica selecionado. No modo `local`, sem contas, não há perfil nem Minha conta.
 - **Para o dono**, Minha conta, Equipe e Configurações são três [abas](#abas) no topo da página, nessa ordem; no celular, pílulas de 44 (P20b). Quem não é dono vê só Minha conta, sem a linha de abas. Cada aba aparece pela capacidade que `GET /api/sessao` devolve: Equipe com `equipe-listar`, Configurações com `ia-config`. A Mesa não decide pelo nome do papel.
-- O botão "Configurações" do cabeçalho leva à aba Configurações. "Contas de acesso" continua em Configurações, como hoje, até o convite por e-mail da E3 de Contas; sai junto com as operações `contas-*`, na mesma integração do convite (decisão do dono, P30). Depois disso, em Configurações fica só a configuração da IA, com a senha da [tabela](#dialogo-senha).
+- O botão "Configurações" do cabeçalho leva à aba Configurações. "Contas de acesso" continua em Configurações, como hoje, até o convite por e-mail da E3 de Contas; sai junto com as operações `contas-*`, na mesma integração dos [convites](#convites) (decisão do dono, P30). Depois disso, em Configurações fica só a configuração da IA, com a senha da [tabela](#dialogo-senha).
+- **Aceitar convite** (`/aceitar/<token>`) e **Redefinir a senha** (`/redefinir/<token>`) são páginas públicas da família do Entrar ([aceitar convite](#aceitar-convite)).
 
 ### Moldura comum
 
@@ -1007,7 +1008,7 @@ Só para quem tem `equipe-listar`, isto é, o dono. Os dados vêm de `equipe-lis
 | TETO MENSAL | campo "Teto de gasto com IA, em reais", de 44 px e até 160 px de largura, `inputmode="decimal"`, aceitando "30" e "30,50"; "Salvar" (secundário). Apoio: "Padrão da redação: R$ 50. Não passa do teto da redação." Com teto próprio, "Usar o padrão" ([link](#link)) o apaga. A Mesa envia `teto_brl` como texto com ponto ("30.50"), nunca como número, e `null` para voltar ao padrão (`equipe-teto` com `conta`). Recusa: o texto do servidor abaixo do campo |
 | ACESSO | conta ativa: "Desativar" e "Remover da redação" (destrutivos). Conta desativada: "Reativar" (secundário, sem diálogo) e "Remover da redação". Apoio: "Desativar encerra as sessões e para as perguntas em curso; as apurações ficam. Remover exclui a conta." Os diálogos estão na [tabela](#dialogo-senha) |
 
-Criar conta com link e "Recuperar acesso" continuam em "Contas de acesso", em Configurações, até a E3 (P30; [exceções](#contas-excecoes)).
+Criar conta com link e "Recuperar acesso" continuam em "Contas de acesso", em Configurações, até a integração dos [convites](#convites) (P30; [exceções](#contas-excecoes)).
 
 **Abaixo da tabela**, em grade de duas colunas:
 
@@ -1037,7 +1038,125 @@ Frases da atividade. "Fulano" é `por_nome` e "Beltrano" é `conta_nome`; quando
 | `login_bloqueado` | A entrada de Beltrano foi bloqueada por muitas tentativas |
 | qualquer outro | Ação de administração |
 
-**Só o dono na redação**: a tabela tem uma linha, e abaixo dela vem o texto da exceção do convite.
+**Só o dono na redação**: a tabela tem uma linha. Antes dos convites, abaixo dela vem o texto da exceção do convite; depois, nada: "Convidar pessoa" está no topo.
+
+<a id="convites"></a>
+
+### Convites na Equipe (W09, E3)
+
+*(Derivado, 22/11/2026.)* Entram com a E3 de Contas (`281a468`; `testes/test_convites.py`; contrato, 8.1 e 12). Na mesma integração saem as `contas-*` e "Contas de acesso" (P30), e a exceção do convite deixa de valer.
+
+**"Convidar pessoa"** é botão principal, à direita do título da Equipe, alinhado pela base (W09). No celular, fica abaixo do título, com largura cheia e 48 px. O título ganha a contagem dos pendentes: "6 pessoas · 2 convites pendentes".
+
+**Diálogo "Convidar pessoa"**, da família do [diálogo](#dialogo), com a ação principal "Convidar" ("Convidando…"). Os campos vêm em coluna, com intervalo de 16:
+
+| Campo | Comportamento |
+|---|---|
+| E-mail | `type="email"`, `autocomplete="off"`, `translate="no"`; recebe o foco inicial |
+| Papel | caixa com Leitor, Repórter, Editor e Dono; vem em Leitor, o menor alcance. Abaixo, em 14 `--theme-muted`, uma linha que diz o que o papel escolhido faz, tirada da regra 1 do W09: "Lê e pergunta.", "Cria apurações e envia documentos.", "Confere e revisa o texto.", "Administra a redação e vê todas as apurações." |
+| Apurações | `<fieldset>` com legenda "Apurações" e uma caixa de marcar por apuração da redação, com rolagem a partir de 6 itens. Com o papel Dono, a lista dá lugar ao texto "Dono alcança todas as apurações da redação." O servidor ignora as apurações de um dono |
+| Idioma do convite | Português ou English; vem no idioma da conta de quem convida. É o idioma do e-mail e da página do convite |
+| Sua senha | só com o papel Dono: o campo da variante [com senha](#dialogo-senha), que aparece abaixo dos outros quando Dono é escolhido (contrato, 5.15) |
+
+Erros:
+
+- antes do envio: e-mail em branco, "Falta o e-mail. Escreva o e-mail da pessoa."; e-mail sem a forma de endereço, "E-mail inválido. Confira o endereço, por exemplo ana@redacao.org.";
+- `convite_duplicado` (400): o texto do servidor abaixo do campo E-mail ("Essa pessoa já faz parte da redação." ou "Já há um convite pendente para esse e-mail: reenvie ou cancele o que existe.");
+- `limite_de_convites` (429) e as demais recusas: o texto do servidor no erro do diálogo;
+- senha: como na [variante com senha](#dialogo-senha).
+
+O resultado depende de como o convite saiu (campo `envio`):
+
+| `envio` | O que a tela faz |
+|---|---|
+| `enviado` | o diálogo fecha; linha de estado "✓ Convite enviado para ana@redacao.org." |
+| `tela` (o servidor devolve `link`) | o diálogo troca o formulário pelo link, sem fechar: título "Envie o link a ana@redacao.org"; texto "Mande por um canal seguro, pessoalmente ou por mensageiro cifrado. O link vale até 29 de nov., uma única vez, e não será mostrado de novo."; campo só de leitura com o link (`translate="no"`), "Copiar link" (secundário) e "Já enviei" (principal), que fecha. Esc e "Já enviei" fecham do mesmo jeito; o link não fica na página depois disso. É o mesmo cuidado da "Contas de acesso" de hoje |
+| `falha` | o diálogo fecha; linha de estado em 14/600 `--theme-warning`, com "!" e `role="status"`: "! O e-mail para ana@redacao.org não saiu. O convite está entre os pendentes; reenvie quando quiser." Não é erro de quem convidou: cores de aviso |
+
+A tela não distingue o convite para um e-mail que tem conta em outra redação: a resposta do servidor é a mesma de qualquer outro, e a tela também (contrato, 8.1).
+
+**Convites pendentes** ficam na mesma tabela das pessoas, depois delas (W09), em `equipe-listar`, campo `convites`:
+
+| Coluna | Conteúdo |
+|---|---|
+| Pessoa | o e-mail em 16, `translate="no"`; abaixo, em 14 `--theme-muted`, sinal e texto do envio: "◐ Convite enviado há 2 dias · vence em 5 dias" (`enviado`); "◐ Link criado há 2 dias · vence em 5 dias" (`tela`); com `falha`, "! O e-mail não saiu · reenvie", em 14/600 `--theme-warning`. Prazos por `enviado_em` e `expira_em`; no último dia, "vence hoje" |
+| Papel | o papel em texto, sem caixa: para mudar, cancela-se e convida-se de novo |
+| Apurações | como nas pessoas; "Todas" para dono |
+| Uso no mês | "—" |
+| Ação | "Reenviar" e "Cancelar convite", os dois com cara de [link](#link) e altura mínima 44, um ao lado do outro, com intervalo de 16 e quebra |
+
+No celular, cada convite vira um cartão depois dos cartões das pessoas, com as duas ações em botões secundários de largura cheia.
+
+- **Reenviar** age direto, sem diálogo, e gera um link novo: o anterior deixa de valer e o prazo recomeça (`equipe-convite-reenviar` com `convite`). Resultado: com `enviado`, "✓ Convite reenviado para ana@redacao.org. O link anterior deixou de valer."; com `tela`, o mesmo diálogo do link, com o título "Novo link para ana@redacao.org"; com `falha`, o aviso acima. Antes de uma hora, o servidor recusa (429 `limite_de_convites`): o texto dele vai à linha de estado, em 14 `--theme-danger`, com `role="alert"`.
+- **Cancelar convite** abre a variante destrutiva: "Cancelar o convite de ana@redacao.org?", com o texto "O link deixa de valer. Você pode convidar o mesmo e-mail de novo." A ação é "Cancelar convite" e o botão de sair é "Manter convite", não "Cancelar", para não haver dois "Cancelar". Resultado: "✓ Convite de ana@redacao.org cancelado." (`equipe-convite-cancelar` com `convite`).
+- Convite que já não existe (cancelado em outra aba, aceito, vencido) responde "Convite não encontrado.": a lista recarrega, sem erro.
+
+Na atividade, frases novas:
+
+| Tipo | Frase |
+|---|---|
+| `convite_enviado` | Fulano convidou um e-mail |
+| `convite_reenviado` | Fulano reenviou um convite |
+| `convite_cancelado` | Fulano cancelou um convite |
+| `convite_aceito` | Beltrano aceitou o convite e entrou na redação |
+| `convite_expirado` | Um convite venceu |
+
+A atividade não leva o e-mail, que é dado de quem ainda não é da redação.
+
+<a id="aceitar-convite"></a>
+
+### Aceitar convite (W10) e redefinir a senha
+
+*(Derivado, 22/11/2026.)* São seções novas da página do Entrar (`entrar.html`), irmãs de "Definir sua senha" e "Criar administrador". Usam o mesmo [formulário de entrada](#entrar), com a mesma página, cartão, campos de 48 px, botão grande e rodapé. No desktop, que o canvas não desenha, o cartão fica centrado, com até 440 px de largura. O token vem do caminho da página e é lido pelo script. A página não carrega nada de fora (W10 e contrato, 5.2).
+
+**Aceitar convite** (`/aceitar/<token>`). Ao abrir, a página chama `convite-consultar` com o token. Enquanto espera, o cartão mostra o esqueleto curto. O idioma da página é o do convite (`idioma`); "English" ou "Português" no rodapé troca.
+
+| Parte | Conteúdo |
+|---|---|
+| Rubrica | "CONVITE", 14/600 maiúsculas, `--theme-muted` |
+| Título | serifa 22/600: "Entre na Redação Serena" (`redacao`) |
+| Texto | 16: "Rui Castro convidou **ana@redacao.org** como Repórter." (`convidado_por`, `email` em 600 e `translate="no"`, `papel`). Abaixo, em 14 `--theme-muted`: "Convite válido até 29 de nov." (`expira_em`) |
+| E-mail | não é campo: o e-mail do convite está no texto e não muda aqui (W10, regra 3). Um `input` oculto com `autocomplete="username"` e o e-mail permite ao gerenciador de senhas guardar o par certo |
+| Seu nome | campo, `autocomplete="name"`, até 120 caracteres; recebe o foco inicial |
+| Crie uma senha | [campo de senha](#campo) com "Mostrar", `autocomplete="new-password"`; apoio "De 12 a 256 caracteres. Pode colar ou usar o gerenciador de senhas." (W10). Um campo só, como no W10 |
+| Termos | caixa de marcar "Li e aceito os termos de uso e a política de privacidade do teste.", com os dois links da própria instalação, obrigatória, só quando `termos_versao` não é nulo; envia a versão lida ([exceções](#contas-excecoes)) |
+| Ação | principal grande "Criar conta e entrar" ("Criando a conta…") |
+| Aviso de teste | abaixo da ação, o bloco de aviso do Entrar, com o texto do passo 3 do W10: "Antes de começar" (16/600) e "O Vlado está em teste. Use só documentos públicos: trechos são enviados ao provedor de IA." (14) |
+
+Erros de campo: os da entrada ([estados](#estados)), "Falta o nome. Escreva o seu nome." e "A senha deve ter de 12 a 256 caracteres.". Termos sem marcar: "Falta aceitar os termos. Marque a caixa para continuar."
+
+Respostas:
+
+| Resposta | O que a página faz |
+|---|---|
+| 200 do aceite (`conta`, `csrf`, `destino`) | a sessão já está aberta; vai para `destino` |
+| 400 `convite_invalido`, na consulta ou no aceite | o cartão dá lugar ao estado "Convite sem efeito": título "Este convite não vale mais"; texto do servidor ("Convite inválido, cancelado ou vencido. Peça um novo a quem convidou."); [link](#link) "Ir para a entrada". É uma resposta só para todo link que não cria conta: a página não tenta adivinhar a causa (contrato, 8.1) |
+| 400 com o nome ou a senha | o texto do servidor abaixo do campo a que se refere; sem saber qual, na caixa de aviso do formulário |
+| 429 `bloqueado` | caixa de aviso do formulário com o texto do servidor ("Muitas tentativas. Aguarde alguns minutos e tente de novo.") |
+| 503 | caixa de aviso: "Registro de acesso indisponível. Avise a administração.", como no Entrar |
+
+**Esqueci a senha.** No Entrar, o link "Esqueci a senha" fica na linha do rótulo da senha, à direita, em 14/600 (o [campo](#campo) do canvas). Ele troca o formulário pela seção "Criar uma senha nova":
+
+- campo E-mail (48 px, `autocomplete="email"`);
+- ação principal grande "Enviar link" ("Enviando…");
+- [link](#link) "Voltar para a entrada".
+
+A resposta é sempre a mesma (`senha-esqueci`, contrato, 5.3): o cartão mostra "Se houver uma conta com esse e-mail, enviamos um link para criar uma senha nova. Ele vale por 1 hora e uma única vez. Confira também a caixa de spam." e "Voltar para a entrada". Abaixo, em 14 `--theme-muted`: "Entra com um login antigo, sem e-mail? Fale com quem administra o serviço."
+
+Com o transporte `tela` não há a quem mandar o link, e "Esqueci a senha" fica desligado (contrato, 8.1). Nesse caso, no lugar do link, fica o texto de hoje: "Esqueceu a senha? Fale com quem administra o serviço." Como a página sabe se o e-mail está ligado se combina com Contas.
+
+**Redefinir a senha** (`/redefinir/<token>`). Cartão com o título "Crie uma senha nova" e os campos:
+
+- Senha nova: [campo de senha](#campo) com "Mostrar", `autocomplete="new-password"`, com o apoio de tamanho, recebendo o foco inicial;
+- Código do autenticador: só quando a conta tiver segundo fator ([exceções](#contas-excecoes)).
+
+A ação é a principal grande "Salvar a senha nova" ("Salvando…"). Respostas:
+
+- sucesso: o cartão mostra "Senha nova salva. Entre com ela." e a ação principal "Entrar", que leva ao Entrar;
+- link inválido, usado ou vencido: o estado "Este link não vale mais", com o texto do servidor e o link "Pedir outro link", que abre "Esqueci a senha";
+- senha fora do tamanho, 429 e 503: como no aceite.
+
+A forma exata da resposta de `senha-redefinir` (se abre sessão e quantas encerra) se confere com Contas quando a rota existir. Se ela abrir sessão, a página vai a `destino`, como no aceite.
 
 <a id="contas-excecoes"></a>
 
@@ -1052,11 +1171,17 @@ A conferência destas telas não barra por elas. Cada uma volta ao wireframe qua
 | W08: cidade aproximada da sessão | aparelho, último uso e endereço | não volta: decisão 5 do contrato (P27) |
 | W08: "14 perguntas" no uso do mês | só o valor em reais | `GET /api/cota` trazer a contagem |
 | W08: "Exportar meus dados" e "Excluir minha conta" | o cartão Seus dados, só com o caminho por pessoa | houver `conta-exportar` e `conta-excluir` (contrato, 8.4); "Excluir" vem com o diálogo com senha e o nome digitado |
-| W09: "Convidar pessoa", convites pendentes e "Reenviar" | nada no lugar do botão. Abaixo da tabela, em 14 `--theme-muted`: numa instalação com uma redação só, "Para incluir alguém, crie uma conta em Configurações, Contas de acesso.", com "Contas de acesso" como [link](#link) para a aba; com mais de uma redação, onde `contas-criar` já é recusada (`5e342fe`), "Para incluir alguém na redação, fale com quem administra o serviço." | o convite por e-mail da E3 de Contas (contrato, 8.1). As `contas-*` e "Contas de acesso" saem na mesma integração (P30) |
+| W09: "Convidar pessoa", convites pendentes e "Reenviar" | nada no lugar do botão. Abaixo da tabela, em 14 `--theme-muted`: numa instalação com uma redação só, "Para incluir alguém, crie uma conta em Configurações, Contas de acesso.", com "Contas de acesso" como [link](#link) para a aba; com mais de uma redação, onde `contas-criar` já é recusada (`5e342fe`), "Para incluir alguém na redação, fale com quem administra o serviço." | volta com a E3 de Contas (`281a468`), já especificada em [convites](#convites). As `contas-*` e "Contas de acesso" saem na mesma integração (P30) |
+| W10: passo 2, "Proteja a conta com um segundo passo" (código QR, código de 6 dígitos; obrigatório para dono e editor) | o aceite termina no passo 1 e vai direto a `destino` | houver segundo fator (contrato, 8.2). Volta como passo seguinte ao aceite, com "Passo 1 de 3" nos três; no celular, telas em sequência (W10, regra 8) |
+| W10: passo 3, códigos de reserva com "Copiar" e "Baixar" | fora; o aviso "Antes de começar" do passo 3 sobe para o passo 1 | houver segundo fator |
+| W10: caixa de aceite dos termos | fora enquanto `termos_versao` vem nulo | houver termos (contrato, 8.4; texto da Documentação, D6) |
+| W10: "Abrir a apuração de exemplo" e o tour (regra 7) | o aceite vai a `destino`, o destino inicial do servidor | houver apuração de exemplo e tour |
+| Redefinir a senha: código do autenticador | fora | houver segundo fator |
+| "Esqueci a senha" com o transporte `tela` | o texto "Esqueceu a senha? Fale com quem administra o serviço." | não volta: decisão 12 do contrato; a produção usa `smtp` |
 | W09: cartão "Chave de IA da redação" | a chave continua em Configurações, como hoje, com a senha | houver chave por redação (contrato, 8.5, parte da Plataforma) |
 | W09: "aviso em 80%" e "redação convidada para o teste" | só o teto e a contagem de pessoas | o servidor informar o aviso e a situação do teste |
 | W09: "Ana entrou de novo aparelho" na atividade | a atividade sem esse evento | houver aparelho conhecido (contrato, 8.2 e 8.3) |
-| "Recuperar acesso" na Equipe | fica em Configurações, "Contas de acesso", como hoje (P30) | houver `equipe-recuperar`, com dupla confirmação (contrato, 8.2) |
+| "Recuperar acesso" na Equipe | fica em Configurações, "Contas de acesso", como hoje (P30). Depois da integração dos convites, que tira as `contas-*`, fica fora: com e-mail, a pessoa usa "Esqueci a senha"; com `tela`, quem administra o serviço recupera | houver `equipe-recuperar`, com dupla confirmação (contrato, 8.2) |
 | Autor de conta removida como "Conta excluída" | o texto de remover não promete a troca | vier o ciclo de vida (contrato, 8.4 e 12) |
 
 ### Ganchos com o resto da Mesa
@@ -1068,6 +1193,8 @@ A conferência destas telas não barra por elas. Cada uma volta ao wireframe qua
 | As caixas "Idioma" e "Tema" usam o mesmo estado dos botões "English" e "Modo escuro" do cabeçalho. Mudar num lugar muda no outro | Lume e Vitral |
 | O estado "Redação suspensa" ([estados](#estados)) vale para a Mesa inteira, a partir de qualquer resposta 403 `redacao_suspensa` | Lume |
 | O campo de senha no "Apagar definitivamente" (`gerenciar.js`) e em Configurações (`configuracao_ia.js`) entra na mesma integração em que o servidor passa a pedi-la | Vitral, com Contas |
+| As rotas `GET /aceitar/<token>` e `GET /redefinir/<token>` servem a página do Entrar, que abre a seção certa pelo caminho | Contas (rota) e Vitral (seções) |
+| Como o Entrar sabe se "Esqueci a senha" está ligado (transporte diferente de `tela`) | Contas e Vitral |
 
 ---
 
