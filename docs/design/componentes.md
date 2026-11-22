@@ -929,6 +929,21 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 - "Acervo conferido? Explore o que os documentos permitem afirmar." com "Perguntar aos documentos" (principal) no pé, como próximo passo.
 - "Ver recibo" abre o recibo conferido num cartão logo abaixo do cartão de envio. O cartão mostra só o que o envio não mostrou: título 16/600 ("Recibo do lote: 3 de 3 arquivos"), novos e duplicados ("3 novos · nenhum duplicado") e "Detalhes técnicos" com apuração e versão. O resultado de cada arquivo já está no cartão de envio e não se repete. Plural concordado, sem "(s)".
 
+**O que vem de "Cadastrar arquivos" quando a área sai** *(derivado, 22/11/2026, a pedido do Lume, para a R4)*. As duas funções ficam na própria Documentos, que é a tela do acervo (P16.1).
+
+- **Avisos do preparo de PDF**, no topo da tela, entre o título e a área de envio. É um cartão no padrão "Limite atingido" de [estados](#estados): fundo `--theme-warning-bg`, borda 1 px `--theme-warning-line` e título com "!" em `--theme-warning`. Não é erro: nada foi perdido.
+  - **PDF cadastrado sem preparo:** título "! Há PDFs ainda sem preparo", com o resumo de hoje ("3 PDFs cadastrados ainda não foram preparados") e "Preparar PDFs pendentes" (secundário). O apoio fica em 14 `--theme-muted`: "Usa as cópias já cadastradas, sem reenviar." Enquanto prepara, o botão fica "Preparando…" e o cartão recebe `aria-busy`. Quando termina, o cartão sai e a linha de estado diz quantos foram preparados.
+  - **Extrator de PDF indisponível:** título "! A leitura de PDF não está disponível neste computador", o texto de hoje e, num `<details>` "Detalhes técnicos", o que o ambiente informa. Os dois avisos podem aparecer juntos, um sobre o outro, com intervalo de 8.
+- **Páginas do site** (fontes web), só em apuração com site. É um cartão abaixo da lista de documentos, no bloco base, com o título "Páginas de prefeitura.sp.gov.br" (o domínio da apuração, `translate="no"`) em 16/600.
+  - **Formulário,** só para quem pode capturar (o dono, contrato 2.4; pela capacidade que `GET /api/sessao` devolve):
+    - "Endereço da página": campo `type="url"`, com a dica "https://prefeitura.sp.gov.br/…";
+    - "Observação (opcional)";
+    - "Capturar página" (secundário, "Capturando…");
+    - apoio: "Só páginas deste site. A captura guarda a página como estava agora."
+  - **Lista "Páginas capturadas":** uma linha por captura, com o título ou o endereço, a data e "Ler" ([link](#link)). "Ler" abre o texto capturado logo abaixo, como hoje, com o foco no título da leitura. Sem capturas: "Nenhuma página capturada ainda."
+  - **Erros:** no campo do endereço, com o texto do servidor (página de outro site, endereço inválido).
+  - **Celular:** os campos e o botão em largura cheia.
+
 <a id="nova-apuracao"></a>
 
 ### Nova apuração (W01)
