@@ -38,7 +38,16 @@ function networkFailure(message, cause) {
   failure.rede = true; failure.cause = cause;
   return failure;
 }
+// Operações que o servidor recusa ao papel convidado (fora de OPERACOES_CONVIDADO em scripts/rotas_contas.py). Pedi-las só gera uma linha
+// operacao_negada no registro de acessos; a recusa local tem a mesma forma da do servidor.
+const SO_ADMINISTRADOR = new Set(['ambiente', 'ia-config', 'analises', 'gerenciar-listar', 'inventario', 'apuracao-notas', 'diligencias-listar', 'caderno-listar']);
 async function api(operation, data, binary = false) {
+  if (document.body.dataset.papel === 'convidado' && SO_ADMINISTRADOR.has(operation)) {
+    const result = {estado: 'erro', erro: 'Operação não permitida para esta conta.', codigo: 'operacao_proibida'};
+    const failure = new Error(window.I18N?.erro ? window.I18N.erro(result) : result.erro);
+    failure.result = result;
+    throw failure;
+  }
   let response;
   try {
     response = await fetch(`/api/${operation}`, {method: 'POST',

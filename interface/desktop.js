@@ -322,6 +322,8 @@
     finally{button.disabled=false;}
   }
   async function loadInventory(force=false){
+    // The guest has no access to the inventory (403): ask nothing and leave the header as it is.
+    if(document.body.dataset.papel==='convidado'){window.barraMesa.definir('documentos','');return;}
     const caseId=current();if(!force&&loadedCase===caseId)return;
     const ticket=++sequence;loadedCase=caseId;inventory=null;loading=!!caseId;$('mesa-acervo-erro').hidden=true;window.barraMesa.definir('documentos','');
     $('mesa-atualizar-acervo').disabled=loading;
