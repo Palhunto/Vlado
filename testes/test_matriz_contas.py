@@ -112,7 +112,8 @@ class ContratoTest(unittest.TestCase):
     def test_operacoes_do_servidor_e_da_matriz_sao_as_mesmas(self):
         self.assertEqual(autorizacao.operacoes_com_sessao(), set(interface_pesquisa.OPERACOES_API))
         self.assertEqual(set(autorizacao.PUBLICAS), set(interface_pesquisa.OPERACOES_PUBLICAS))
-        self.assertEqual(self.publicas - self.novas, set(autorizacao.PUBLICAS))
+        self.assertEqual(self.publicas - set(autorizacao.PENDENTES), set(autorizacao.PUBLICAS))
+        self.assertEqual(self.publicas - self.novas, {'entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin'})
         self.assertEqual({c for c in autorizacao.MATRIZ if c.startswith('GET:')},
                          {'GET:/', 'GET:/api/sessao', 'GET:/api/integracao', 'GET:/api/catalogo', 'GET:/api/fila', 'GET:/api/cota'})
 

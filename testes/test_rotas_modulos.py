@@ -35,7 +35,8 @@ OPERACOES = {
     'caso-incluir', 'caso-participantes', 'caso-responsavel', 'caso-retirar',
     'conta-atualizar', 'conta-senha-trocar', 'conta-sessao-encerrar', 'conta-sessoes', 'conta-sessoes-encerrar-outras',
     'conta-ver', 'equipe-atividade', 'equipe-desativar', 'equipe-listar', 'equipe-papel', 'equipe-reativar',
-    'equipe-remover', 'equipe-teto',
+    'equipe-remover', 'equipe-teto', 'equipe-convidar', 'equipe-convite-reenviar', 'equipe-convite-cancelar',
+    'equipe-recuperar', 'equipe-recuperar-confirmar', 'conta-email-trocar',
     'caderno-documentos', 'caderno-exportar', 'caderno-listar', 'caderno-original', 'caderno-salvar',
     'cobertura', 'codex-caderno-previa', 'codex-cancelar', 'codex-corpus-previa', 'codex-desligar',
     'codex-diligencias-previa', 'codex-documentos-cadastrar', 'codex-eventos', 'codex-listar',
@@ -59,10 +60,10 @@ OPERACOES = {
 
 
 class RotasModulosTest(unittest.TestCase):
-    def test_lista_branca_tem_as_131_operacoes(self):
-        # The 114 of before, the four `caso-*` (contrato de contas, 5.6), six `conta-*` (5.4) and seven `equipe-*` (5.5).
-        self.assertEqual(len(OPERACOES), 131)
-        self.assertEqual(len(interface_pesquisa.OPERACOES_API), 131, 'operação repetida na lista branca')
+    def test_lista_branca_tem_as_137_operacoes(self):
+        # The 114 of before, the four `caso-*` (contrato de contas, 5.6), seven `conta-*` (5.4) and twelve `equipe-*` (5.5).
+        self.assertEqual(len(OPERACOES), 137)
+        self.assertEqual(len(interface_pesquisa.OPERACOES_API), 137, 'operação repetida na lista branca')
         self.assertEqual(set(interface_pesquisa.OPERACOES_API), OPERACOES)
 
     def test_publicas_ficam_fora_da_lista_com_sessao(self):

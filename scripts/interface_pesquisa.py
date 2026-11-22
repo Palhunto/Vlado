@@ -34,6 +34,7 @@ import fontes_web
 import revisao_humana
 import apuracao
 import autorizacao
+import correio
 import rotas_achados
 import rotas_caderno
 import rotas_conversa
@@ -701,8 +702,13 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             if path.startswith('/convite/'):
                 self._convite_antigo()
                 return
-            if path == '/entrar' or re.fullmatch(r'/ativar(/[A-Za-z0-9_-]{1,100})?', path):
-                # Static page without case data; the token stays in the path, read by entrar.js.
+            if path == '/api/entrada':
+                # Public, before any session: what the sign-in page may offer. Nothing of any account.
+                self._json(200, {'esqueci_senha': self._esqueci_ligado()})
+                return
+            if path == '/entrar' or re.fullmatch(r'/ativar(/[A-Za-z0-9_-]{1,100})?|/(aceitar|redefinir|confirmar-email)/[A-Za-z0-9_-]{1,100}', path):
+                # Static page without case data; the token stays in the path, read by entrar.js. Like every answer,
+                # it goes with `Cache-Control: no-store` and `Referrer-Policy: no-referrer` (`_send`).
                 self._send(200, rotas_estaticas.conteudo('entrar.html'), 'text/html; charset=utf-8')
                 return
             if path in ('/', '/api/catalogo', '/api/integracao', '/api/fila', '/api/cota') and self._principal() is None:
@@ -1016,10 +1022,21 @@ def main():
         proxies_confiaveis.validar_ambiente()  # lista de proxies inválida: não sobe, com a mensagem
     except ValueError as exc:
         raise SystemExit(str(exc)) from None
+    if args.modo != 'local':
+        ambiente = os.environ.get('VLADO_AMBIENTE', '').strip()
+        try:  # with real data the hosted service does not start without real e-mail delivery (decision 12)
+            correio.conferir_partida(args.modo, ambiente if ambiente in AMBIENTES else 'homologacao')
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from None
     # Extraction and OCR in separate processes; VLADO_EXTRACAO=local keeps them in threads.
     with Servidor((args.host, args.porta), root=Path(args.dados) if args.dados else ROOT,
                   modo=args.modo, origem=args.origem,
                   extracao=os.environ.get('VLADO_EXTRACAO') or 'processos') as server:
+        if server.com_contas:
+            try:  # the daily sweep also runs at the start: invitations past their date, old activity
+                acesso.manutencao(server.root)
+            except (ValueError, OSError):
+                pass  # an unreadable store answers 503 to each request; it does not stop the start
         print(f'Mesa de apuração ({args.modo}): {server.origin}', flush=True)
         print('Encerre com Ctrl+C.', flush=True)
         if args.modo != 'piloto' and not args.sem_abrir:

@@ -70,6 +70,8 @@ ID_CASO = re.compile(r'[a-z0-9][a-z0-9_-]{0,63}')
 ID_CONTA = re.compile(r'[0-9a-f]{16}')
 ID_ORGANIZACAO = re.compile(r'org[0-9a-f]{16}')
 LOGIN = re.compile(r'[a-z0-9][a-z0-9._-]{2,63}')
+# An e-mail address as the store keeps it (lower case). It never has `|` nor `#`, which the attempt counters use.
+EMAIL = re.compile(r'[a-z0-9][a-z0-9._%+-]{0,63}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+')
 SENHA_MIN, SENHA_MAX = 12, 256
 SESSAO_HORAS = 12
 INATIVIDADE_HORAS = 2
@@ -81,7 +83,16 @@ BLOQUEIO_MINUTOS = 15
 TENTATIVAS_IP_MINUTO = 20
 MAX_EVENTOS = 1000
 MAX_TENTATIVAS_GUARDADAS = 2000
-ESQUEMA = 2  # PRAGMA user_version of the store; `_ATUALIZACOES` takes an older store up to it
+CONVITE_DIAS = 7  # an invitation is valid for a week, once (decision 15)
+CONVITES_PENDENTES = 50  # per newsroom: an invitation must not become a way to fill somebody's mailbox
+REENVIO_MINUTOS = 60  # each invitation is sent again at most once an hour
+CONVITES_POR_ENDERECO = 3  # messages a newsroom sends to the same address in that hour, cancelled ones included
+ATIVIDADE_DIAS = 90  # the newsroom's activity is kept for 90 days (decision 15)
+REDEFINICAO_MINUTOS = 60  # a password-reset link is valid for one hour, once (decision 15)
+REDEFINICAO_INTERVALO_MINUTOS = 5  # the same address is sent at most one reset message in this time
+CHAVE_ESQUECI = '#esqueci|'  # when a reset was last asked for an address, whether an account has it or not
+RECUPERACAO_HORAS = 24  # a recovery asked by a dono: how long it waits for the second dono, and how long its link lives
+ESQUEMA = 5  # PRAGMA user_version of the store; `_ATUALIZACOES` takes an older store up to it
 ESPERA_BD_S = 10
 NOME_PADRAO_REDACAO = 'Redação'
 CREDENCIAIS = 'Login ou senha incorretos.'
@@ -95,6 +106,9 @@ SENHA_NECESSARIA = 'Digite a sua senha para confirmar.'
 SENHA_INCORRETA = 'Senha incorreta.'
 ULTIMO_DONO = 'A redação precisa de ao menos um dono ativo.'
 TETO_INVALIDO = 'Informe o teto em reais, com até duas casas decimais (por exemplo, 50 ou 50.00).'
+CONVITE_INVALIDO = 'Convite inválido, cancelado ou vencido. Peça um novo a quem convidou.'
+CONVITE_INEXISTENTE = 'Convite não encontrado.'
+LINK_INVALIDO = 'Link inválido, usado ou vencido. Peça outro em Esqueci a senha.'
 CHAVE_CONFIRMACAO = '#senha|'  # attempt counter of the password asked again; `#` never starts a login
 
 _HASHER = PasswordHasher()  # library defaults (argon2id); check_needs_rehash follows them
@@ -157,6 +171,22 @@ CREATE TABLE eventos (
     n INTEGER PRIMARY KEY AUTOINCREMENT, em TEXT NOT NULL, tipo TEXT NOT NULL, conta TEXT, por TEXT,
     organizacao TEXT);
 CREATE INDEX eventos_por_organizacao ON eventos (organizacao, n);
+CREATE TABLE convites (
+    id TEXT PRIMARY KEY, organizacao TEXT NOT NULL REFERENCES organizacoes(id), email TEXT NOT NULL,
+    papel TEXT NOT NULL, casos TEXT NOT NULL DEFAULT '[]', idioma TEXT, token_sha256 TEXT UNIQUE,
+    estado TEXT NOT NULL DEFAULT 'pendente', criado_em TEXT NOT NULL, criado_por TEXT NOT NULL, expira_em TEXT NOT NULL,
+    enviado_em TEXT NOT NULL, envio TEXT, encerrado_em TEXT, conta TEXT);
+CREATE INDEX convites_por_organizacao ON convites (organizacao, estado);
+CREATE INDEX convites_por_email ON convites (email);
+CREATE TABLE links (
+    token_sha256 TEXT PRIMARY KEY, tipo TEXT NOT NULL, conta TEXT NOT NULL REFERENCES contas(id),
+    criado_em TEXT NOT NULL, expira_em TEXT NOT NULL, dado TEXT);
+CREATE INDEX links_por_conta ON links (conta, tipo);
+CREATE TABLE recuperacoes (
+    id TEXT PRIMARY KEY, organizacao TEXT NOT NULL REFERENCES organizacoes(id), conta TEXT NOT NULL REFERENCES contas(id),
+    pedida_por TEXT NOT NULL, pedida_em TEXT NOT NULL, expira_em TEXT NOT NULL, estado TEXT NOT NULL DEFAULT 'pendente',
+    confirmada_por TEXT, encerrada_em TEXT);
+CREATE INDEX recuperacoes_por_organizacao ON recuperacoes (organizacao, estado);
 """
 # From each older version of the store to the next one (applied in order, each in one transaction).
 _ATUALIZACOES = {1: ('ALTER TABLE contas ADD COLUMN idioma TEXT',
@@ -164,7 +194,22 @@ _ATUALIZACOES = {1: ('ALTER TABLE contas ADD COLUMN idioma TEXT',
                      'ALTER TABLE sessoes ADD COLUMN aparelho TEXT',
                      'ALTER TABLE sessoes ADD COLUMN ip_criacao TEXT',
                      'ALTER TABLE sessoes ADD COLUMN ip_ultimo TEXT',
-                     'CREATE INDEX eventos_por_organizacao ON eventos (organizacao, n)')}
+                     'CREATE INDEX eventos_por_organizacao ON eventos (organizacao, n)'),
+                 2: ('CREATE TABLE convites (id TEXT PRIMARY KEY, organizacao TEXT NOT NULL REFERENCES organizacoes(id),'
+                     " email TEXT NOT NULL, papel TEXT NOT NULL, casos TEXT NOT NULL DEFAULT '[]', idioma TEXT,"
+                     " token_sha256 TEXT UNIQUE, estado TEXT NOT NULL DEFAULT 'pendente', criado_em TEXT NOT NULL,"
+                     ' criado_por TEXT NOT NULL, expira_em TEXT NOT NULL, enviado_em TEXT NOT NULL, envio TEXT,'
+                     ' encerrado_em TEXT, conta TEXT)',
+                     'CREATE INDEX convites_por_organizacao ON convites (organizacao, estado)',
+                     'CREATE INDEX convites_por_email ON convites (email)'),
+                 3: ('CREATE TABLE links (token_sha256 TEXT PRIMARY KEY, tipo TEXT NOT NULL,'
+                     ' conta TEXT NOT NULL REFERENCES contas(id), criado_em TEXT NOT NULL, expira_em TEXT NOT NULL)',
+                     'CREATE INDEX links_por_conta ON links (conta, tipo)'),
+                 4: ('ALTER TABLE links ADD COLUMN dado TEXT',
+                     'CREATE TABLE recuperacoes (id TEXT PRIMARY KEY, organizacao TEXT NOT NULL REFERENCES organizacoes(id),'
+                     ' conta TEXT NOT NULL REFERENCES contas(id), pedida_por TEXT NOT NULL, pedida_em TEXT NOT NULL,'
+                     " expira_em TEXT NOT NULL, estado TEXT NOT NULL DEFAULT 'pendente', confirmada_por TEXT, encerrada_em TEXT)",
+                     'CREATE INDEX recuperacoes_por_organizacao ON recuperacoes (organizacao, estado)')}
 
 
 class RegistroIlegivel(ValueError):
@@ -217,6 +262,44 @@ class SenhaIncorreta(Recusada):
 class UltimoDono(Recusada):
     """The newsroom would be left without an active dono."""
     status, codigo, motivo = 400, 'ultimo_dono', 'ultimo_dono'
+
+
+class ConviteDuplicado(Recusada):
+    """The e-mail is already of the own newsroom, as a person or as a pending invitation (the dono sees both)."""
+    status, codigo, motivo = 400, 'convite_duplicado', 'validacao'
+
+
+class LimiteDeConvites(Recusada):
+    """Too many pending invitations in the newsroom, or the same one sent again too soon."""
+    status, codigo, motivo = 429, 'limite_de_convites', 'limite'
+
+
+class ConviteInvalido(ValueError):
+    """One refusal for every invitation link that creates nothing: unknown, used, cancelled, expired, or of an
+    e-mail that already has an account. `motivo` goes to the audit log only."""
+
+    def __init__(self, motivo='link_invalido'):
+        super().__init__(CONVITE_INVALIDO)
+        self.motivo = motivo
+
+
+class SenhaInvalida(ValueError):
+    """The password somebody chose is out of size (the public pages answer it with their own code)."""
+
+
+class LinkInvalido(ValueError):
+    """One refusal for every password-reset link that changes nothing: unknown, used, expired, or of an account
+    that is no longer active. `motivo` goes to the audit log only."""
+
+    def __init__(self, motivo='link_invalido', mensagem=None):
+        super().__init__(mensagem or LINK_INVALIDO)
+        self.motivo = motivo
+
+
+class SoPeloOperador(Recusada):
+    """A recovery the Mesa cannot complete with two parties (no other dono to confirm, or no way to hand the link to
+    the person): it is done by the operator of the service, at the terminal."""
+    status, codigo, motivo = 400, 'recuperacao_pelo_operador', 'validacao'
 
 
 def agora() -> datetime:
@@ -702,7 +785,7 @@ def _validar_horas(horas) -> int:
 
 def _validar_senha(senha) -> str:
     if not isinstance(senha, str) or not SENHA_MIN <= len(senha) <= SENHA_MAX:
-        raise ValueError(f'A senha deve ter de {SENHA_MIN} a {SENHA_MAX} caracteres.')
+        raise SenhaInvalida(f'A senha deve ter de {SENHA_MIN} a {SENHA_MAX} caracteres.')
     return senha
 
 
@@ -752,8 +835,21 @@ def _donos_ativos(tx: _Tx, organizacao: str, exceto: str | None = None) -> int:
                  organizacao, exceto)['total']
 
 
+def _cancelar_convites_de(tx: _Tx, cid: str, momento: datetime | None = None) -> None:
+    """The pending invitations of who stops being a dono, is deactivated or is removed do not outlive it: an
+    invitation is an act of a dono, and stays good only while the one who made it could still make it."""
+    momento = momento or agora()
+    for convite in tx.todos("SELECT id, organizacao FROM convites WHERE criado_por = ? AND estado = 'pendente'", cid):
+        tx.ex("UPDATE convites SET estado = 'cancelado', token_sha256 = NULL, encerrado_em = ? WHERE id = ?",
+              _iso(momento), convite['id'])
+        _evento(tx, 'convite_cancelado', None, cid, momento, organizacao=convite['organizacao'])
+
+
 def _derrubar_sessoes(tx: _Tx, cid: str) -> None:
+    """End every session of the account. A password-reset link still pending dies with them: whatever ends the
+    sessions (deactivation, recovery, removal, a new password) must not leave a way back in."""
     tx.ex('DELETE FROM sessoes WHERE conta = ?', cid)
+    tx.ex('DELETE FROM links WHERE conta = ?', cid)
 
 
 def _emitir_ativacao(tx: _Tx, cid: str, horas: int, motivo: str, momento: datetime) -> str:
@@ -1107,6 +1203,7 @@ def desativar(root: Path, cid, por='cli', organizacao: str | None = None, *, con
               ' WHERE id = ?', cid)
         _derrubar_sessoes(tx, cid)
         _sem_responsabilidade(tx, cid)
+        _cancelar_convites_de(tx, cid)
         _evento(tx, 'conta_desativada', cid, por)
         return _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid))
 
@@ -1115,7 +1212,7 @@ def reativar(root: Path, cid, por='cli', organizacao: str | None = None) -> dict
     with _bd(root, escrever=True) as tx:
         conta = _conta(tx, cid, organizacao)
         tx.ex('UPDATE contas SET ativa = 1 WHERE id = ?', cid)
-        _limpar_tentativas(tx, conta['login'])
+        _limpar_tentativas(tx, conta)
         _evento(tx, 'conta_reativada', cid, por)
         return _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid))
 
@@ -1167,6 +1264,8 @@ def atualizar(root: Path, cid, por='cli', *, nome=None, papel=None, casos=None, 
                 _definir_participacoes(tx, conta, casos, por, momento)
         if novo_papel not in RESPONSAVEIS:
             _sem_responsabilidade(tx, cid)
+        if novo_papel != 'dono':
+            _cancelar_convites_de(tx, cid, momento)
         depois = _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), momento)
         campos = [nome_campo for nome_campo, chave in (('nome', 'nome'), ('papel', 'papel'), ('casos', 'casos'),
                                                        ('cota', 'cota_diaria')) if antes[chave] != depois[chave]]
@@ -1191,7 +1290,7 @@ def recuperar(root: Path, cid, por='cli', horas=ATIVACAO_HORAS, organizacao: str
         _derrubar_sessoes(tx, cid)
         tx.ex('UPDATE contas SET senha_hash = NULL, senha_definida_em = NULL WHERE id = ?', cid)
         token = _emitir_ativacao(tx, cid, horas, 'recuperacao', momento)
-        _limpar_tentativas(tx, conta['login'])
+        _limpar_tentativas(tx, conta)
         _evento(tx, 'recuperacao_emitida', cid, por, momento)
         return _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), momento), token
 
@@ -1213,7 +1312,8 @@ def equipe(root: Path, organizacao: str) -> dict:
             ultimo = tx.um('SELECT MAX(ultimo_uso) AS em FROM sessoes WHERE conta = ?', conta['id'])['em']
             pessoas.append({**_publico(tx, conta, momento), 'responsavel_de': _alcance(tx, conta)[1],
                             'sessao_aberta': bool(ultimo), 'ultimo_uso': ultimo})
-        return {'redacao': dict(redacao), 'pessoas': pessoas}
+        return {'redacao': dict(redacao), 'pessoas': pessoas, 'convites': _convites_pendentes(tx, organizacao, momento),
+                'recuperacoes': [_recuperacao_publica(tx, r) for r in _recuperacoes_pendentes(tx, organizacao, momento)]}
 
 
 def mudar_papel(root: Path, cid, papel, por: str, organizacao: str, senha=None, ip=None) -> dict:
@@ -1238,6 +1338,8 @@ def mudar_papel(root: Path, cid, papel, por: str, organizacao: str, senha=None, 
             tx.ex('UPDATE contas SET papel = ?, cota_diaria = NULL WHERE id = ?', papel, cid)
             if papel not in RESPONSAVEIS:
                 _sem_responsabilidade(tx, cid)
+            if papel != 'dono':
+                _cancelar_convites_de(tx, cid, momento)
             _evento(tx, 'papel_alterado', cid, por, momento, papel=papel)
         return _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), momento)
 
@@ -1257,10 +1359,11 @@ def remover(root: Path, cid, por: str, organizacao: str, senha=None, ip=None) ->
         if conta['papel'] == 'dono' and conta['ativa'] and not _donos_ativos(tx, organizacao, exceto=cid):
             raise UltimoDono(ULTIMO_DONO)
         _derrubar_sessoes(tx, cid)
+        _cancelar_convites_de(tx, cid, momento)
         tx.ex('DELETE FROM participacoes WHERE conta = ?', cid)
         _sem_responsabilidade(tx, cid)
         tx.ex('DELETE FROM uso_diario WHERE conta = ?', cid)
-        _limpar_tentativas(tx, conta['login'])
+        _limpar_tentativas(tx, conta)
         tx.ex('DELETE FROM tentativas WHERE chave = ?', CHAVE_CONFIRMACAO + cid)
         tx.ex("UPDATE contas SET ativa = 0, nome = '', login = NULL, email = NULL, senha_hash = NULL, senha_definida_em = NULL,"
               ' cota_diaria = NULL, teto_mensal_brl = NULL, idioma = NULL, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
@@ -1331,6 +1434,508 @@ def atividade(root: Path, organizacao: str, limite: int = 50, antes=None) -> dic
                              'conta_nome': nomes.get(l['conta']), 'por_nome': nomes.get(l['por'])}
                             for l in reversed(linhas[inicio:fim])],
                 'proximo': inicio + 1 if inicio > 0 else None}
+
+
+# --- invitations (equipe-convidar, convite-*) ---------------------------------------------------
+
+def _validar_email(email) -> str:
+    texto = email.strip().lower() if isinstance(email, str) else ''
+    if not 6 <= len(texto) <= 254 or not EMAIL.fullmatch(texto):
+        raise ValueError('Informe um e-mail válido.')
+    return texto
+
+
+def _convite_publico(tx: _Tx, convite) -> dict:
+    """What the dono sees of an invitation of the own newsroom. Never the token, and never whether the e-mail has
+    an account in another newsroom."""
+    quem = tx.um('SELECT nome FROM contas WHERE id = ? AND excluida_em IS NULL', convite['criado_por'])
+    return {'id': convite['id'], 'email': convite['email'], 'papel': convite['papel'], 'casos': json.loads(convite['casos']),
+            'idioma': convite['idioma'] or IDIOMAS[0], 'estado': convite['estado'], 'criado_em': convite['criado_em'],
+            'enviado_em': convite['enviado_em'], 'expira_em': convite['expira_em'], 'envio': convite['envio'],
+            'convidado_por': convite['criado_por'], 'convidado_por_nome': quem['nome'] if quem else None}
+
+
+def _contexto_do_convite(tx: _Tx, convite) -> dict:
+    """What the message needs and no answer to the dono carries: the names, and whether the e-mail already has an
+    account (the link then creates nothing, and the message says why)."""
+    redacao = tx.um('SELECT nome FROM organizacoes WHERE id = ?', convite['organizacao'])
+    quem = tx.um('SELECT nome FROM contas WHERE id = ? AND excluida_em IS NULL', convite['criado_por'])
+    return {'redacao': redacao['nome'], 'convidado_por': quem['nome'] if quem else None,
+            'sem_efeito': bool(tx.um('SELECT 1 FROM contas WHERE email = ?', convite['email']))}
+
+
+def _pendente(convite, momento: datetime) -> bool:
+    return convite['estado'] == 'pendente' and _data(convite['expira_em']) > momento
+
+
+def _convites_pendentes(tx: _Tx, organizacao: str, momento: datetime) -> list[dict]:
+    linhas = tx.todos("SELECT * FROM convites WHERE organizacao = ? AND estado = 'pendente' ORDER BY criado_em, rowid", organizacao)
+    return [_convite_publico(tx, linha) for linha in linhas if _pendente(linha, momento)]
+
+
+def _vencer_convites(tx: _Tx, momento: datetime, organizacao: str | None = None) -> int:
+    """Close the pending invitations past their date (their links are dead since then) and say so in the activity."""
+    vencidos = [c for c in tx.todos("SELECT id, organizacao, expira_em FROM convites WHERE estado = 'pendente'")
+                if _data(c['expira_em']) <= momento and organizacao in (None, c['organizacao'])]
+    for convite in vencidos:
+        tx.ex("UPDATE convites SET estado = 'expirado', token_sha256 = NULL, encerrado_em = ? WHERE id = ?",
+              _iso(momento), convite['id'])
+        _evento(tx, 'convite_expirado', None, 'manutencao', momento, organizacao=convite['organizacao'])
+    return len(vencidos)
+
+
+def _convite_da_redacao(tx: _Tx, convite_id, organizacao: str, momento: datetime):
+    """A pending invitation of this newsroom, or one refusal for an unknown id, an invitation of another newsroom
+    and one already accepted, cancelled or expired."""
+    convite = (tx.um('SELECT * FROM convites WHERE id = ? AND organizacao = ?', convite_id, organizacao)
+               if isinstance(convite_id, str) else None)
+    if not convite or not _pendente(convite, momento):
+        raise ValueError(CONVITE_INEXISTENTE)
+    return convite
+
+
+def convidar(root: Path, organizacao: str, por: str, email, papel, casos=(), idioma=None, senha=None,
+             ip: str | None = None) -> tuple[dict, str, dict]:
+    """Invite an e-mail into the newsroom, with a role and (but for a dono) the cases the person will take part in.
+    Returns (invitation as the dono sees it, token, context for the message). The token exists only in the link:
+    the store keeps its hash. Inviting as dono asks the password of who invites (contract, 5.15).
+
+    An e-mail that already has an account in ANOTHER newsroom gets the same answer as any other: the invitation is
+    listed, sent again, cancelled and expires like the rest, and only the message (context `sem_efeito`) tells the
+    person that the link creates nothing. An e-mail of the own newsroom is refused, saying why."""
+    email = _validar_email(email)
+    if papel not in ATRIBUIVEIS:
+        raise ValueError('Papel de acesso inválido.')
+    casos = [] if papel == 'dono' else _validar_casos(casos or [], vazio=True)
+    if idioma is not None and idioma not in IDIOMAS:
+        raise ValueError('Idioma inválido: use pt ou en.')
+
+    def conferir(tx, momento):
+        if tx.um('SELECT 1 FROM contas WHERE email = ? AND organizacao = ?', email, organizacao):
+            raise ConviteDuplicado('Essa pessoa já faz parte da redação.')
+        pendentes = [c for c in tx.todos("SELECT email, estado, expira_em FROM convites WHERE organizacao = ?"
+                                         " AND estado = 'pendente'", organizacao) if _pendente(c, momento)]
+        if any(c['email'] == email for c in pendentes):
+            raise ConviteDuplicado('Já há um convite pendente para esse e-mail: reenvie ou cancele o que existe.')
+        if len(pendentes) >= CONVITES_PENDENTES:
+            raise LimiteDeConvites(f'A redação já tem {CONVITES_PENDENTES} convites pendentes. Cancele algum ou espere vencer.')
+        # Cancelling and inviting again is not a way around "once an hour": each message to the address counts.
+        recentes = [c for c in tx.todos('SELECT enviado_em FROM convites WHERE organizacao = ? AND email = ?', organizacao, email)
+                    if _data(c['enviado_em']) + timedelta(minutes=REENVIO_MINUTOS) > momento]
+        if len(recentes) >= CONVITES_POR_ENDERECO:
+            raise LimiteDeConvites('Esse e-mail já recebeu convites demais desta redação na última hora. Espere para convidar de novo.')
+        for caso in casos:
+            _caso_da_redacao(tx, caso, organizacao)
+    with _bd(root) as tx:
+        conferir(tx, agora())  # what is wrong with the invitation is said before the password is asked
+    if papel == 'dono':
+        confirmar_senha(root, por, senha, ip)
+    token = secrets.token_urlsafe(32)
+    with _bd(root, escrever=True) as tx:
+        momento = agora()
+        _vencer_convites(tx, momento, organizacao)
+        conferir(tx, momento)
+        convite_id = secrets.token_hex(8)
+        while tx.um('SELECT 1 FROM convites WHERE id = ?', convite_id):
+            convite_id = secrets.token_hex(8)
+        tx.ex('INSERT INTO convites (id, organizacao, email, papel, casos, idioma, token_sha256, criado_em, criado_por,'
+              ' expira_em, enviado_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', convite_id, organizacao, email, papel,
+              json.dumps(casos), idioma, _hash(token), _iso(momento), por, _iso(momento + timedelta(days=CONVITE_DIAS)),
+              _iso(momento))
+        convite = tx.um('SELECT * FROM convites WHERE id = ?', convite_id)
+        contexto = _contexto_do_convite(tx, convite)
+        _evento(tx, 'convite_enviado', None, por, momento, organizacao=organizacao, papel=papel,
+                **({'motivo': 'email_em_uso'} if contexto['sem_efeito'] else {}))
+        return _convite_publico(tx, convite), token, contexto
+
+
+def reenviar_convite(root: Path, organizacao: str, por: str, convite_id) -> tuple[dict, str, dict]:
+    """Send a pending invitation again: a new token and a new week, and the link of before stops working.
+    At most once an hour for each invitation. Returns what `convidar` returns."""
+    token = secrets.token_urlsafe(32)
+    with _bd(root, escrever=True) as tx:
+        momento = agora()
+        convite = _convite_da_redacao(tx, convite_id, organizacao, momento)
+        if _data(convite['enviado_em']) + timedelta(minutes=REENVIO_MINUTOS) > momento:
+            raise LimiteDeConvites('Esse convite foi enviado há menos de uma hora. Espere para reenviar.')
+        tx.ex('UPDATE convites SET token_sha256 = ?, expira_em = ?, enviado_em = ?, envio = NULL WHERE id = ?',
+              _hash(token), _iso(momento + timedelta(days=CONVITE_DIAS)), _iso(momento), convite['id'])
+        convite = tx.um('SELECT * FROM convites WHERE id = ?', convite['id'])
+        contexto = _contexto_do_convite(tx, convite)
+        _evento(tx, 'convite_reenviado', None, por, momento, organizacao=organizacao)
+        return _convite_publico(tx, convite), token, contexto
+
+
+def cancelar_convite(root: Path, organizacao: str, por: str, convite_id) -> dict:
+    """Cancel a pending invitation: its link stops working at once."""
+    with _bd(root, escrever=True) as tx:
+        momento = agora()
+        convite = _convite_da_redacao(tx, convite_id, organizacao, momento)
+        tx.ex("UPDATE convites SET estado = 'cancelado', token_sha256 = NULL, encerrado_em = ? WHERE id = ?",
+              _iso(momento), convite['id'])
+        _evento(tx, 'convite_cancelado', None, por, momento, organizacao=organizacao)
+        return _convite_publico(tx, tx.um('SELECT * FROM convites WHERE id = ?', convite['id']))
+
+
+def registrar_envio(root: Path, convite_id: str, resultado: str) -> None:
+    """How the delivery of the invitation's message went (`enviado`, `falha`, or `tela` when the link was shown to
+    who invited): the dono sees it in the list of pending invitations."""
+    if resultado not in ('enviado', 'falha', 'tela'):
+        raise ValueError('Resultado de envio desconhecido.')
+    with _bd(root, escrever=True) as tx:
+        tx.ex('UPDATE convites SET envio = ? WHERE id = ?', resultado, convite_id)
+
+
+def _por_convite(tx: _Tx, token, momento: datetime):
+    """The pending invitation of a link that can still create an account, or ConviteInvalido."""
+    if not isinstance(token, str) or not 20 <= len(token) <= 100:
+        raise ConviteInvalido()
+    convite = tx.um("SELECT * FROM convites WHERE token_sha256 = ? AND estado = 'pendente'", _hash(token))
+    if not convite:
+        raise ConviteInvalido()
+    if _data(convite['expira_em']) <= momento:
+        raise ConviteInvalido('link_expirado')
+    if tx.um('SELECT 1 FROM contas WHERE email = ?', convite['email']):
+        raise ConviteInvalido('email_em_uso')  # one account belongs to one newsroom only
+    redacao = tx.um('SELECT situacao FROM organizacoes WHERE id = ?', convite['organizacao'])
+    if not redacao or redacao['situacao'] != 'ativa':
+        raise ConviteInvalido()
+    return convite
+
+
+def _convite_recusado(exc: ConviteInvalido) -> None:
+    registro_acesso.registrar('ativacao_falha', 'falha', motivo=exc.motivo, acesso_operacao='aceitar')
+
+
+def consultar_convite(root: Path, token) -> dict:
+    """What the acceptance page shows (read-only): newsroom, e-mail, role, who invited, until when. The e-mail comes
+    from the invitation and is not changed on acceptance. `termos_versao` is None until the terms exist."""
+    try:
+        with _bd(root) as tx:
+            convite = _por_convite(tx, token, agora())
+            contexto = _contexto_do_convite(tx, convite)
+            return {'redacao': contexto['redacao'], 'email': convite['email'], 'papel': convite['papel'],
+                    'convidado_por': contexto['convidado_por'], 'expira_em': convite['expira_em'],
+                    'idioma': convite['idioma'] or IDIOMAS[0], 'termos_versao': None}
+    except ConviteInvalido as exc:
+        _convite_recusado(exc)
+        raise
+
+
+def aceitar_convite(root: Path, token, nome, senha, termos_versao=None, ip: str | None = None, cliente='web',
+                    aparelho=None) -> tuple[str, str, dict]:
+    """Accept an invitation: the account is born with the invitation's e-mail, role and participations, and its
+    first session opens. Returns what `entrar` returns. The link works once."""
+    nome, senha = _validar_nome(nome), _validar_senha(senha)
+    if termos_versao is not None:
+        raise ValueError('Versão dos termos desconhecida.')  # the terms come with their own delivery
+    try:
+        with _bd(root) as tx:
+            _por_convite(tx, token, agora())  # refuse before spending time on the hash
+        with _VezDoHash():
+            senha_hash = _HASHER.hash(senha)
+        with _bd(root, escrever=True) as tx:
+            momento = agora()
+            convite = _por_convite(tx, token, momento)
+            cid = secrets.token_hex(8)
+            while tx.um('SELECT 1 FROM contas WHERE id = ?', cid):
+                cid = secrets.token_hex(8)
+            tx.ex('INSERT INTO contas (id, organizacao, papel, nome, email, idioma, senha_hash, senha_definida_em, criada_em,'
+                  ' criada_por) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', cid, convite['organizacao'], convite['papel'], nome,
+                  convite['email'], convite['idioma'], senha_hash, _iso(momento), _iso(momento), convite['criado_por'])
+            # A case deleted, or moved, since the invitation is left out: the rest of the invitation still holds.
+            casos = [caso for caso in json.loads(convite['casos'])
+                     if tx.um('SELECT 1 FROM casos WHERE caso = ? AND organizacao = ? AND apagada_em IS NULL',
+                              caso, convite['organizacao'])]
+            _definir_participacoes(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), casos, convite['criado_por'], momento)
+            tx.ex("UPDATE convites SET estado = 'aceito', token_sha256 = NULL, encerrado_em = ?, conta = ? WHERE id = ?",
+                  _iso(momento), cid, convite['id'])
+            _evento(tx, 'convite_aceito', cid, cid, momento, papel=convite['papel'])
+            sid, csrf = _abrir_sessao(tx, cid, momento, cliente, aparelho, ip)
+            return sid, csrf, _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), momento)
+    except ConviteInvalido as exc:
+        _convite_recusado(exc)
+        raise
+
+
+def manutencao(root: Path) -> dict:
+    """The daily sweep (`acesso.py manutencao`, and once when the server starts): closes the invitations past their
+    date and prunes the newsrooms' activity older than ATIVIDADE_DIAS (what leaves goes to the audit log, as when
+    the window is full). Inactive accounts come with the life cycle."""
+    with _bd(root, escrever=True) as tx:
+        momento = agora()
+        vencidos = _vencer_convites(tx, momento)
+        limite, podados = _iso(momento - timedelta(days=ATIVIDADE_DIAS)), 0
+        for antigo in tx.todos('SELECT n, em, tipo, conta, por FROM eventos WHERE em <= ? ORDER BY n', limite):
+            copia = {k: antigo[k] for k in ('em', 'tipo', 'conta', 'por')}
+            tx.depois.append(lambda copia=copia: registro_acesso.arquivar_evento(copia))
+            tx.ex('DELETE FROM eventos WHERE n = ?', antigo['n'])
+            podados += 1
+        # Recovery requests nobody confirmed in time, and links past their date, are just cleared.
+        recuperacoes = tx.ex("UPDATE recuperacoes SET estado = 'expirada', encerrada_em = ? WHERE estado = 'pendente'"
+                             ' AND expira_em <= ?', _iso(momento), _iso(momento)).rowcount
+        tx.ex('DELETE FROM links WHERE expira_em <= ?', _iso(momento))
+        return {'convites_vencidos': vencidos, 'eventos_podados': podados, 'recuperacoes_vencidas': recuperacoes}
+
+
+# --- password reset by e-mail (senha-esqueci, senha-redefinir) ------------------------------------
+
+def _destinatario(conta) -> dict:
+    """What a message to the account's own address needs: never shown to anybody else."""
+    return {'id': conta['id'], 'email': conta['email'], 'nome': conta['nome'], 'idioma': conta['idioma'] or IDIOMAS[0]}
+
+
+def pedir_redefinicao(root: Path, email) -> tuple[str, dict] | None:
+    """A person forgot the password and typed the e-mail. Returns (token, who to write to) when a message must go,
+    or None; the caller answers the same in both cases, and what it does next must not depend on which.
+
+    The store is written the same way whether an account has the address or not (when a reset was last asked for
+    it), so neither the answer nor its time tells. An address gets at most one message every
+    REDEFINICAO_INTERVALO_MINUTOS, and a new link kills the one before. Only an active account with a password, in
+    an active newsroom, gets a link; the token exists only in the message."""
+    texto = email.strip().lower() if isinstance(email, str) else ''
+    if not 6 <= len(texto) <= 254 or not EMAIL.fullmatch(texto):
+        return None
+    token, chave = secrets.token_urlsafe(32), CHAVE_ESQUECI + texto
+    with _bd(root, escrever=True) as tx:
+        momento = agora()
+        ultimo = tx.um('SELECT em FROM tentativas WHERE chave = ?', chave)
+        conta = tx.um('SELECT * FROM contas WHERE email = ?', texto)
+        if ultimo and ultimo['em'] and _data(ultimo['em']) + timedelta(minutes=REDEFINICAO_INTERVALO_MINUTOS) > momento:
+            return None  # asked a moment ago: nothing new is sent, to anybody
+        tx.ex('INSERT INTO tentativas (chave, falhas, bloqueado_ate, em) VALUES (?, 0, NULL, ?) ON CONFLICT (chave) DO UPDATE'
+              ' SET em = excluded.em', chave, _iso(momento))
+        _podar_tentativas(tx, momento)
+        redacao = tx.um('SELECT situacao FROM organizacoes WHERE id = ?', conta['organizacao']) if conta else None
+        if not conta or not conta['ativa'] or not conta['senha_hash'] or not redacao or redacao['situacao'] != 'ativa':
+            tx.depois.append(lambda: registro_acesso.registrar(
+                'redefinicao_pedida', 'falha', conta['id'] if conta else None, momento,
+                motivo='conta_inativa' if conta else 'nao_encontrado',
+                login_ref=None if conta else registro_acesso.referencia_do_login(texto)))
+            return None
+        tx.ex("DELETE FROM links WHERE conta = ? AND tipo = 'redefinicao'", conta['id'])
+        tx.ex("INSERT INTO links (token_sha256, tipo, conta, criado_em, expira_em) VALUES (?, 'redefinicao', ?, ?, ?)",
+              _hash(token), conta['id'], _iso(momento), _iso(momento + timedelta(minutes=REDEFINICAO_MINUTOS)))
+        _evento(tx, 'redefinicao_pedida', conta['id'], conta['id'], momento)
+        return token, _destinatario(conta)
+
+
+def _por_link(tx: _Tx, token, tipos: tuple, momento: datetime, mensagem=None):
+    """(link, account) of a link that can still be used, or LinkInvalido."""
+    if not isinstance(token, str) or not 20 <= len(token) <= 100:
+        raise LinkInvalido(mensagem=mensagem)
+    link = tx.um('SELECT * FROM links WHERE token_sha256 = ?', _hash(token))
+    if not link or link['tipo'] not in tipos:
+        raise LinkInvalido(mensagem=mensagem)
+    if _data(link['expira_em']) <= momento:
+        raise LinkInvalido('link_expirado', mensagem)
+    conta = tx.um('SELECT * FROM contas WHERE id = ?', link['conta'])
+    if not conta or not conta['ativa'] or conta['excluida_em']:
+        raise LinkInvalido(mensagem=mensagem)
+    return link, conta
+
+
+LINKS_DE_SENHA = ('redefinicao', 'recuperacao')  # the person asked ("esqueci a senha") or a dono asked for the person
+
+
+def redefinir_senha(root: Path, token, senha) -> dict:
+    """Set a new password from the link of the reset message, or of the recovery a dono asked: every session of the
+    account ends, the link (and any other pending one) dies, and the person signs in next. Returns who to tell
+    that the password changed."""
+    senha = _validar_senha(senha)
+    try:
+        with _bd(root) as tx:
+            _por_link(tx, token, LINKS_DE_SENHA, agora())  # refuse before spending time on the hash
+        with _VezDoHash():
+            senha_hash = _HASHER.hash(senha)
+        with _bd(root, escrever=True) as tx:
+            momento = agora()
+            _, conta = _por_link(tx, token, LINKS_DE_SENHA, momento)
+            cid = conta['id']
+            tx.ex('UPDATE contas SET senha_hash = ?, senha_definida_em = ?, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
+                  ' ativacao_motivo = NULL WHERE id = ?', senha_hash, _iso(momento), cid)
+            _derrubar_sessoes(tx, cid)
+            _limpar_tentativas(tx, conta)
+            tx.ex('DELETE FROM tentativas WHERE chave = ?', CHAVE_CONFIRMACAO + cid)
+            _evento(tx, 'senha_redefinida', cid, cid, momento)
+            return _destinatario(conta)
+    except LinkInvalido as exc:
+        registro_acesso.registrar('ativacao_falha', 'falha', motivo=exc.motivo, acesso_operacao='redefinir')
+        raise
+
+
+# --- recovery asked by a dono (equipe-recuperar, equipe-recuperar-confirmar) ----------------------
+
+RECUPERACAO_INEXISTENTE = 'Pedido de recuperação não encontrado.'
+SO_PELO_OPERADOR = 'Essa recuperação é feita pelo operador do serviço, pelo terminal.'
+
+
+def _link_de_recuperacao(tx: _Tx, conta, momento: datetime) -> str:
+    """A fresh recovery link of the account (the one before dies). Nothing of the account changes until it is used."""
+    token = secrets.token_urlsafe(32)
+    tx.ex("DELETE FROM links WHERE conta = ? AND tipo = 'recuperacao'", conta['id'])
+    tx.ex("INSERT INTO links (token_sha256, tipo, conta, criado_em, expira_em) VALUES (?, 'recuperacao', ?, ?, ?)",
+          _hash(token), conta['id'], _iso(momento), _iso(momento + timedelta(hours=RECUPERACAO_HORAS)))
+    return token
+
+
+def _recuperacao_publica(tx: _Tx, linha) -> dict:
+    nomes = {c['id']: c['nome'] for c in tx.todos('SELECT id, nome FROM contas WHERE id IN (?, ?) AND excluida_em IS NULL',
+                                                  linha['conta'], linha['pedida_por'])}
+    return {'id': linha['id'], 'conta': linha['conta'], 'conta_nome': nomes.get(linha['conta']),
+            'pedida_por': linha['pedida_por'], 'pedida_por_nome': nomes.get(linha['pedida_por']),
+            'pedida_em': linha['pedida_em'], 'expira_em': linha['expira_em'], 'estado': linha['estado']}
+
+
+def _recuperacoes_pendentes(tx: _Tx, organizacao: str, momento: datetime) -> list:
+    linhas = tx.todos("SELECT * FROM recuperacoes WHERE organizacao = ? AND estado = 'pendente' ORDER BY pedida_em, rowid",
+                      organizacao)
+    return [linha for linha in linhas if _data(linha['expira_em']) > momento]
+
+
+def _outros_donos(tx: _Tx, organizacao: str, *exceto) -> int:
+    return len([c for c in tx.todos("SELECT id FROM contas WHERE organizacao = ? AND papel = 'dono' AND ativa = 1"
+                                    ' AND excluida_em IS NULL AND senha_hash IS NOT NULL', organizacao)
+                if c['id'] not in exceto])
+
+
+def pedir_recuperacao(root: Path, organizacao: str, por: str, cid, senha=None, ip: str | None = None, *,
+                      com_envio: bool, na_tela: bool = False) -> dict:
+    """A dono asks the recovery of another person's access. Always two parties (contract, 8.2), always the password
+    of who asks, and the account is checked before the password.
+
+    - The person is not a dono, has an e-mail and there is real delivery (`com_envio`): the link goes to the person,
+      who is the second party; nothing changes until it is used. Returns `{estado: 'enviada', token, destinatario,
+      por_email: True}`.
+    - The person is not a dono and the link may be shown on the screen (`na_tela`: the installed Mesa, one machine
+      and one newsroom, never the hosted service): the password of who asks is the confirmation, and the link is
+      handed to who asked (decision P33). Returns `{estado: 'confirmada', ..., por_email: False}`.
+    - The person is a dono: the request waits RECUPERACAO_HORAS for a third dono (`confirmar_recuperacao`); returns
+      `{estado: 'aguardando_confirmacao', recuperacao}`. It is only accepted when, once confirmed, the link has a way
+      to the person (her e-mail with real delivery, or the screen where allowed).
+    - No third dono, or no way to hand the link over (the hosted service never shows it): SoPeloOperador."""
+    def conferir(tx, momento):
+        alvo = _conta(tx, cid, organizacao)
+        if cid == por:
+            raise ValueError('Para a sua própria senha, use "Esqueci a senha" ou a página Minha conta.')
+        if not alvo['ativa']:
+            raise ValueError('Reative a conta antes de recuperar o acesso dela.')
+        por_email = bool(com_envio and alvo['email'])
+        direto = alvo['papel'] != 'dono' and (por_email or na_tela)
+        if not direto:
+            if not (por_email or na_tela) or not _outros_donos(tx, organizacao, por, cid):
+                raise SoPeloOperador(SO_PELO_OPERADOR)
+            if any(r['conta'] == cid for r in _recuperacoes_pendentes(tx, organizacao, momento)):
+                raise ValueError('Já há um pedido de recuperação à espera de confirmação para essa conta.')
+        elif tx.um("SELECT 1 FROM links WHERE conta = ? AND tipo = 'recuperacao' AND criado_em > ?", cid,
+                   _iso(momento - timedelta(minutes=REDEFINICAO_INTERVALO_MINUTOS))):
+            raise ValueError('Um link de recuperação acabou de ser enviado a essa pessoa. Espere alguns minutos.')
+        return alvo, direto, por_email
+    with _bd(root) as tx:
+        conferir(tx, agora())  # an unknown account, or one of another newsroom, is refused before the password
+    confirmar_senha(root, por, senha, ip)
+    with _bd(root, escrever=True) as tx:
+        momento = agora()
+        alvo, direto, por_email = conferir(tx, momento)
+        _evento(tx, 'recuperacao_pedida', cid, por, momento)
+        if direto:
+            return {'estado': 'enviada' if por_email else 'confirmada', 'token': _link_de_recuperacao(tx, alvo, momento),
+                    'destinatario': _destinatario(alvo), 'por_email': por_email}
+        rid = secrets.token_hex(8)
+        while tx.um('SELECT 1 FROM recuperacoes WHERE id = ?', rid):
+            rid = secrets.token_hex(8)
+        tx.ex('INSERT INTO recuperacoes (id, organizacao, conta, pedida_por, pedida_em, expira_em) VALUES (?, ?, ?, ?, ?, ?)',
+              rid, organizacao, cid, por, _iso(momento), _iso(momento + timedelta(hours=RECUPERACAO_HORAS)))
+        return {'estado': 'aguardando_confirmacao',
+                'recuperacao': _recuperacao_publica(tx, tx.um('SELECT * FROM recuperacoes WHERE id = ?', rid))}
+
+
+def confirmar_recuperacao(root: Path, organizacao: str, por: str, rid, senha=None, ip: str | None = None, *,
+                          com_envio: bool, na_tela: bool = False) -> dict:
+    """A third dono (neither who asked nor the person) confirms a pending recovery, with the own password; the link
+    is then made. Returns `{estado, token, destinatario, por_email}`: with `por_email` the caller sends the link to
+    the person; without it (only where `na_tela` is allowed) the caller shows it to who confirmed.
+    An unknown request, one of another newsroom, an expired one and one whose asker is no longer a dono are the same."""
+    def conferir(tx, momento):
+        linha = (tx.um("SELECT * FROM recuperacoes WHERE id = ? AND organizacao = ? AND estado = 'pendente'", rid, organizacao)
+                 if isinstance(rid, str) else None)
+        if not linha or _data(linha['expira_em']) <= momento:
+            raise ValueError(RECUPERACAO_INEXISTENTE)
+        pediu = tx.um("SELECT 1 FROM contas WHERE id = ? AND organizacao = ? AND papel = 'dono' AND ativa = 1"
+                      ' AND excluida_em IS NULL', linha['pedida_por'], organizacao)
+        alvo = tx.um('SELECT * FROM contas WHERE id = ? AND excluida_em IS NULL', linha['conta'])
+        if not pediu or not alvo or not alvo['ativa']:
+            raise ValueError(RECUPERACAO_INEXISTENTE)
+        if por in (linha['pedida_por'], linha['conta']):
+            raise ValueError('A confirmação precisa vir de outro dono: nem de quem pediu, nem da própria pessoa.')
+        por_email = bool(com_envio and alvo['email'])
+        if not por_email and not na_tela:
+            raise SoPeloOperador(SO_PELO_OPERADOR)
+        return linha, alvo, por_email
+    with _bd(root) as tx:
+        conferir(tx, agora())
+    confirmar_senha(root, por, senha, ip)
+    with _bd(root, escrever=True) as tx:
+        momento = agora()
+        linha, alvo, por_email = conferir(tx, momento)
+        tx.ex("UPDATE recuperacoes SET estado = 'confirmada', confirmada_por = ?, encerrada_em = ? WHERE id = ?",
+              por, _iso(momento), linha['id'])
+        _evento(tx, 'recuperacao_confirmada', alvo['id'], por, momento)
+        return {'estado': 'enviada' if por_email else 'confirmada', 'token': _link_de_recuperacao(tx, alvo, momento),
+                'destinatario': _destinatario(alvo), 'por_email': por_email}
+
+
+# --- the own e-mail (conta-email-trocar, email-confirmar) -----------------------------------------
+
+LINK_DE_EMAIL_INVALIDO = 'Link inválido, usado ou vencido. Peça outro em Minha conta.'
+
+
+def pedir_troca_de_email(root: Path, cid, email, senha=None, ip: str | None = None) -> dict:
+    """The person asks to change the own e-mail (or to give one, for an account that came without): asks the
+    password, and the change only happens when the link sent to the NEW address is used.
+
+    An address that another account already has, of any newsroom, gets the same answer as a free one: the request
+    is kept, without effect, and `enviar` tells the caller to send nothing to it. Returns
+    `{token, novo, idioma, enviar, antigo}`; `antigo` is the current address, to be told of the request."""
+    novo = _validar_email(email)
+    confirmar_senha(root, cid, senha, ip)
+    token = secrets.token_urlsafe(32)
+    with _bd(root, escrever=True) as tx:
+        conta = _conta(tx, cid)
+        momento = agora()
+        if conta['email'] == novo:
+            raise ValueError('Esse já é o e-mail da conta.')
+        if tx.um("SELECT 1 FROM links WHERE conta = ? AND tipo = 'email' AND criado_em > ?", cid,
+                 _iso(momento - timedelta(minutes=REDEFINICAO_INTERVALO_MINUTOS))):
+            raise ValueError('Você pediu essa troca há pouco. Espere alguns minutos para pedir de novo.')
+        em_uso = bool(tx.um('SELECT 1 FROM contas WHERE email = ?', novo))
+        tx.ex("DELETE FROM links WHERE conta = ? AND tipo = 'email'", cid)
+        tx.ex("INSERT INTO links (token_sha256, tipo, conta, criado_em, expira_em, dado) VALUES (?, 'email', ?, ?, ?, ?)",
+              _hash(token), cid, _iso(momento), _iso(momento + timedelta(minutes=REDEFINICAO_MINUTOS)), novo)
+        _evento(tx, 'email_troca_pedida', cid, cid, momento, **({'motivo': 'email_em_uso'} if em_uso else {}))
+        return {'token': token, 'novo': novo, 'idioma': conta['idioma'] or IDIOMAS[0], 'enviar': not em_uso,
+                'antigo': conta['email'], 'conta': cid}
+
+
+def confirmar_email(root: Path, token) -> dict:
+    """The link sent to the new address was opened: the account's e-mail changes, and with it the identifier of the
+    sign-in. Every pending link of the account dies. A link of an address that got an account meanwhile changes
+    nothing, with the refusal of any dead link."""
+    try:
+        with _bd(root, escrever=True) as tx:
+            momento = agora()
+            link, conta = _por_link(tx, token, ('email',), momento, LINK_DE_EMAIL_INVALIDO)
+            if tx.um('SELECT 1 FROM contas WHERE email = ?', link['dado']):
+                raise LinkInvalido('email_em_uso', LINK_DE_EMAIL_INVALIDO)
+            antigo = conta['email']
+            _limpar_tentativas(tx, conta)
+            tx.ex('UPDATE contas SET email = ? WHERE id = ?', link['dado'], conta['id'])
+            tx.ex('DELETE FROM links WHERE conta = ?', conta['id'])
+            _evento(tx, 'email_trocado', conta['id'], conta['id'], momento, campos=['email'])
+            return {'conta': conta['id'], 'novo': link['dado'], 'antigo': antigo, 'idioma': conta['idioma'] or IDIOMAS[0]}
+    except LinkInvalido as exc:
+        registro_acesso.registrar('ativacao_falha', 'falha', motivo=exc.motivo, acesso_operacao='confirmar_email')
+        raise
 
 
 # --- first administrator (local mode with accounts) ----------------------------------------------
@@ -1409,7 +2014,7 @@ def ativar(root: Path, token, senha) -> dict:
         cid = conta['id']
         tx.ex('UPDATE contas SET senha_hash = ?, senha_definida_em = ?, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
               ' ativacao_motivo = NULL WHERE id = ?', senha_hash, _iso(momento), cid)
-        _limpar_tentativas(tx, conta['login'])
+        _limpar_tentativas(tx, conta)
         _evento(tx, 'senha_definida', cid, cid, momento)
         return _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), momento)
 
@@ -1470,9 +2075,11 @@ def _chave_tentativa(login: str, ip: str | None) -> str:
     return f'{login}|{ip}' if ip else login
 
 
-def _limpar_tentativas(tx: _Tx, login: str | None) -> None:
-    if login:
-        tx.ex("DELETE FROM tentativas WHERE chave = ? OR substr(chave, 1, ?) = ?", login, len(login) + 1, login + '|')
+def _limpar_tentativas(tx: _Tx, conta) -> None:
+    """Forget the sign-in counters of every identifier of the account (the old login and the e-mail)."""
+    for login in (conta['login'], conta['email']):
+        if login:
+            tx.ex("DELETE FROM tentativas WHERE chave = ? OR substr(chave, 1, ?) = ?", login, len(login) + 1, login + '|')
 
 
 def _bloqueado(tx: _Tx, chave: str, momento: datetime) -> bool:
@@ -1551,6 +2158,19 @@ def _ip_valido(ip) -> str | None:
         return None
 
 
+def _abrir_sessao(tx: _Tx, cid: str, momento: datetime, cliente, aparelho, ip: str | None) -> tuple[str, str]:
+    """A new session of the account: (session id, csrf token). Only the hash of the id is kept."""
+    sid, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+    _limpar_sessoes(tx, momento)
+    tx.ex('INSERT INTO sessoes (id_sha256, publico, conta, csrf, criada_em, expira_em, ultimo_uso, cliente,'
+          ' aparelho, ip_criacao, ip_ultimo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          _hash(sid), secrets.token_hex(8), cid, csrf, _iso(momento),
+          _iso(momento + timedelta(hours=SESSAO_HORAS)), _iso(momento), _cliente(cliente),
+          _aparelho(aparelho), _ip_valido(ip), _ip_valido(ip))
+    tx.depois.append(lambda: registro_acesso.registrar('login_ok', 'ok', cid, momento, cliente=_cliente(cliente), ip=ip))
+    return sid, csrf
+
+
 def entrar(root: Path, login, senha, ip: str | None = None, cliente='web', aparelho=None) -> tuple[str, str, dict]:
     """Return (session id, csrf token, public account). One generic refusal for every bad credential.
     Every outcome goes to the audit log: success, wrong credentials, lockout and per-address limit (never the text typed).
@@ -1563,10 +2183,14 @@ def entrar(root: Path, login, senha, ip: str | None = None, cliente='web', apare
         raise
     login = login.strip().lower() if isinstance(login, str) else ''
     senha = senha if isinstance(senha, str) and len(senha) <= SENHA_MAX else ''
-    valido = bool(LOGIN.fullmatch(login))
+    # The identifier typed is the e-mail (accounts born of an invitation) or the old login; counters, blocks and
+    # answers are the same whether an account has it or not.
+    por_email = '@' in login
+    valido = bool(len(login) <= 254 and EMAIL.fullmatch(login)) if por_email else bool(LOGIN.fullmatch(login))
     chave = _chave_tentativa(login, ip)
     with _bd(root) as tx:
-        conta = tx.um('SELECT id, ativa, senha_hash FROM contas WHERE login = ?', login) if valido else None
+        conta = (tx.um(f'SELECT id, ativa, senha_hash FROM contas WHERE {"email" if por_email else "login"} = ?', login)
+                 if valido else None)
         cid = conta['id'] if conta else None
         bloqueado = valido and _bloqueado(tx, chave, momento)
         guardado = conta['senha_hash'] if conta and conta['ativa'] else None
@@ -1591,15 +2215,7 @@ def entrar(root: Path, login, senha, ip: str | None = None, cliente='web', apare
                 if _HASHER.check_needs_rehash(guardado):
                     tx.ex('UPDATE contas SET senha_hash = ? WHERE id = ?', _HASHER.hash(senha), cid)
                 tx.ex('DELETE FROM tentativas WHERE chave = ?', chave)
-                sid, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
-                _limpar_sessoes(tx, momento)
-                tx.ex('INSERT INTO sessoes (id_sha256, publico, conta, csrf, criada_em, expira_em, ultimo_uso, cliente,'
-                      ' aparelho, ip_criacao, ip_ultimo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                      _hash(sid), secrets.token_hex(8), cid, csrf, _iso(momento),
-                      _iso(momento + timedelta(hours=SESSAO_HORAS)), _iso(momento), _cliente(cliente),
-                      _aparelho(aparelho), _ip_valido(ip), _ip_valido(ip))
-                tx.depois.append(lambda: registro_acesso.registrar('login_ok', 'ok', cid, momento,
-                                                                   cliente=_cliente(cliente), ip=ip))
+                sid, csrf = _abrir_sessao(tx, cid, momento, cliente, aparelho, ip)
                 aberta = (sid, csrf, _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), momento))
         elif valido:
             bloqueou = _registrar_falha(tx, chave, cid if conta else None, momento)
@@ -1755,7 +2371,8 @@ def trocar_senha(root: Path, cid, senha_atual, senha_nova, sessao_atual=None, ip
         tx.ex('UPDATE contas SET senha_hash = ?, senha_definida_em = ?, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
               ' ativacao_motivo = NULL WHERE id = ?', senha_hash, _iso(momento), cid)
         encerradas = tx.ex('DELETE FROM sessoes WHERE conta = ? AND publico IS NOT ?', cid, sessao_atual).rowcount
-        _limpar_tentativas(tx, conta['login'])
+        tx.ex('DELETE FROM links WHERE conta = ?', cid)  # a reset link asked before the change is dead
+        _limpar_tentativas(tx, conta)
         _evento(tx, 'senha_trocada', cid, cid, momento)
         return encerradas
 
@@ -1906,6 +2523,7 @@ def _principal() -> int:
     atribui.add_argument('--responsavel', help='Id de uma conta dono ou repórter da redação')
     migra = sub.add_parser('migrar', help='Leva o acesso.json para o armazenamento novo')
     migra.add_argument('--simular', action='store_true', help='Só mostra o relatório; não grava nada')
+    sub.add_parser('manutencao', help='Varredura diária: vence convites e poda a atividade antiga')
     args = parser.parse_args()
     if args.comando in ('criar-admin', 'criar-conta', 'recuperar'):
         if args.comando == 'criar-admin':
@@ -1935,6 +2553,8 @@ def _principal() -> int:
             _imprimir(simular_migracao(ROOT))
         else:
             _imprimir({'estado': 'migrado', **relatorio_migracao(ROOT)})
+    elif args.comando == 'manutencao':
+        _imprimir(manutencao(ROOT))
     else:
         _imprimir(atualizar(ROOT, args.id, por='cli', casos=_casos_cli(args.casos)))
     return 0
