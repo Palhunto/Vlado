@@ -376,7 +376,12 @@ class PapeisTest(Http):
         self.assertEqual(self.publico('entrar', {'login': 'ana', 'senha': SENHA})[0], 401)
         self.assertEqual(self.post(self.admin, 'contas-reativar', {'id': self.ana_id})[0], 200)
         self.entrar('ana')
-        status, result = self.post(self.admin, 'contas-recuperar', {'id': self.bia_id})
+        # The recovery link opens the other person's account: it asks the password of who does it (contract, 5.15).
+        for senha, codigo in (({}, 'senha_necessaria'), ({'senha': 'senha-errada-de-teste'}, 'senha_atual_incorreta')):
+            status, result = self.post(self.admin, 'contas-recuperar', {'id': self.bia_id, **senha})
+            self.assertEqual((status, result.get('codigo')), (403, codigo))
+        self.assertEqual(self.post(self.bia, 'codex-status', {})[0], 200)  # nothing happened to the account
+        status, result = self.post(self.admin, 'contas-recuperar', {'id': self.bia_id, 'senha': SENHA})
         self.assertEqual(status, 200)
         self.assertIn('/ativar/', result['link'])
         self.assertEqual(self.post(self.bia, 'codex-status', {})[0], 401)
@@ -385,15 +390,35 @@ class PapeisTest(Http):
         segundo = self.conta('Chefe', 'chefe', papel='admin')
         chefe = self.entrar('chefe')
         self.assertEqual(self.post(chefe, 'contas-listar', {})[0], 200)
-        status, _ = self.post(self.admin, 'contas-atualizar', {'id': segundo, 'papel': 'convidado', 'casos': ['alpha']})
+        # Changing the role of a dono asks the password, by whatever name the operation goes (contract, 5.15) ...
+        status, result = self.post(self.admin, 'contas-atualizar', {'id': segundo, 'papel': 'leitor', 'casos': ['alpha']})
+        self.assertEqual((status, result.get('codigo')), (403, 'senha_necessaria'))
+        self.assertEqual(self.post(self.admin, 'contas-desativar', {'id': segundo})[1].get('codigo'), 'senha_necessaria')
+        self.assertEqual(self.post(chefe, 'contas-listar', {})[0], 200)
+        # ... and nobody is given the legacy guest profile again (contract, 2.3).
+        status, _ = self.post(self.admin, 'contas-atualizar', {'id': segundo, 'papel': 'convidado', 'casos': ['alpha'], 'senha': SENHA})
+        self.assertEqual(status, 400)
+        status, _ = self.post(self.admin, 'contas-atualizar', {'id': segundo, 'papel': 'leitor', 'casos': ['alpha'], 'senha': SENHA})
         self.assertEqual(status, 200)
         self.assertEqual(self.post(chefe, 'contas-listar', {})[0], 403)
 
+    def test_promover_a_dono_pelas_contas_antigas_pede_a_senha(self):
+        for papel in ('admin', 'dono'):
+            for senha, codigo in (({}, 'senha_necessaria'), ({'senha': 'senha-errada-de-teste'}, 'senha_atual_incorreta')):
+                status, result = self.post(self.admin, 'contas-atualizar', {'id': self.ana_id, 'papel': papel, **senha})
+                self.assertEqual((status, result.get('codigo')), (403, codigo), papel)
+        status, result = self.post(self.admin, 'contas-criar', {'nome': 'Outra Chefe', 'login': 'outra.chefe', 'papel': 'admin'})
+        self.assertEqual((status, result.get('codigo')), (403, 'senha_necessaria'))
+        self.assertEqual(self.post(self.ana, 'contas-listar', {})[0], 403)  # still a guest
+        self.assertNotIn('outra.chefe', [c['login'] for c in self.post(self.admin, 'contas-listar', {})[1]['contas']])
+        self.assertEqual(self.post(self.admin, 'contas-atualizar', {'id': self.ana_id, 'papel': 'admin', 'senha': SENHA})[0], 200)
+        self.assertEqual(self.post(self.ana, 'contas-listar', {})[0], 200)
+
     def test_ultimo_admin_protegido_pela_interface(self):
-        status, result = self.post(self.admin, 'contas-desativar', {'id': self.admin_id})
+        status, result = self.post(self.admin, 'contas-desativar', {'id': self.admin_id, 'senha': SENHA})
         self.assertEqual(status, 400)
         self.assertIn('último', result['erro'])
-        status, _ = self.post(self.admin, 'contas-atualizar', {'id': self.admin_id, 'papel': 'convidado', 'casos': ['alpha']})
+        status, _ = self.post(self.admin, 'contas-atualizar', {'id': self.admin_id, 'papel': 'leitor', 'casos': ['alpha'], 'senha': SENHA})
         self.assertEqual(status, 400)
 
     def test_contas_criar_valida_casos_existentes(self):

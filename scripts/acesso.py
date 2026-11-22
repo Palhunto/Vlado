@@ -303,7 +303,11 @@ def _bd(root: Path, escrever: bool = False):
             con.row_factory = sqlite3.Row
             con.execute('PRAGMA foreign_keys = ON')
             if con.execute('PRAGMA user_version').fetchone()[0] != ESQUEMA:
-                raise _ilegivel()
+                # An older store put in place while this process runs (a backup restored without stopping the Mesa)
+                # is brought up here too, not only on the first use by the process.
+                _atualizar_esquema(con)
+                if con.execute('PRAGMA user_version').fetchone()[0] != ESQUEMA:
+                    raise _ilegivel()
             con.execute('BEGIN IMMEDIATE' if escrever else 'BEGIN')
         except sqlite3.Error as exc:
             raise _ilegivel() from exc
@@ -1030,17 +1034,20 @@ def definir_responsavel(root: Path, caso, cid, por: str, organizacao: str) -> di
 # --- administration ---------------------------------------------------------------------------
 
 def criar_conta(root: Path, nome, login, papel='convidado', casos=(), cota_diaria=20,
-                horas=ATIVACAO_HORAS, por='cli', organizacao=None) -> tuple[dict, str]:
+                horas=ATIVACAO_HORAS, por='cli', organizacao=None, *, confirmar=False, senha=None, ip=None) -> tuple[dict, str]:
     """Return (public record, activation token). The token is shown once and only its hash is kept.
 
     `casos` are the participations (required for the legacy `convidado`, optional for editor, reporter and leitor,
-    ignored for a dono). The newsroom is `organizacao`, or the one of the account `por`, or the installation's only one."""
+    ignored for a dono). The newsroom is `organizacao`, or the one of the account `por`, or the installation's only one.
+    With `confirmar` (a session of the Mesa), creating a dono asks the password of who does it (contract, 5.15)."""
     nome, login, papel = _validar_nome(nome), _validar_login(login), papel_valido(papel)
     if papel == 'convidado':
         casos, cota_diaria = _validar_casos(casos), _validar_cota(cota_diaria)
     else:
         casos, cota_diaria = ([] if papel == 'dono' else _validar_casos(casos or [], vazio=True)), None
     horas = _validar_horas(horas)
+    if confirmar and papel == 'dono':
+        confirmar_senha(root, por, senha, ip)
     with _bd(root, escrever=True) as tx:
         momento = agora()
         if tx.um('SELECT 1 FROM contas WHERE login = ?', login):
@@ -1114,10 +1121,12 @@ def reativar(root: Path, cid, por='cli', organizacao: str | None = None) -> dict
 
 
 def atualizar(root: Path, cid, por='cli', *, nome=None, papel=None, casos=None, cota_diaria=None,
-              organizacao: str | None = None) -> dict:
+              organizacao: str | None = None, confirmar=False, senha=None, ip=None) -> dict:
     """Change name, role, participations or daily quota. Takes effect on the account's next request.
 
-    A change of role keeps the participations. Whoever stops being dono or reporter no longer answers for cases."""
+    A change of role keeps the participations. Whoever stops being dono or reporter no longer answers for cases.
+    With `confirmar` (a session of the Mesa), promoting to dono and changing the role of a dono ask the password of
+    who does it, as `mudar_papel` does (contract, 5.15): the name of the operation is not a way around it."""
     if nome is not None:
         nome = _validar_nome(nome)
     if papel is not None:
@@ -1126,8 +1135,18 @@ def atualizar(root: Path, cid, por='cli', *, nome=None, papel=None, casos=None, 
         casos = _validar_casos(casos, vazio=True)
     if cota_diaria is not None:
         cota_diaria = _validar_cota(cota_diaria)
+
+    def sensivel(tx):
+        atual = _conta(tx, cid, organizacao)['papel']
+        return papel is not None and atual != papel and 'dono' in (atual, papel)
+    confirmada = confirmar and _senha_se(root, por, senha, ip, sensivel)
     with _bd(root, escrever=True) as tx:
         conta = _conta(tx, cid, organizacao)
+        if confirmar and papel == 'convidado' and conta['papel'] != 'convidado':
+            # The legacy profile only exists in accounts that came with it (contract, 2.3): nobody is given it again.
+            raise ValueError('Papel de acesso inválido.')
+        if confirmar and sensivel(tx) and not confirmada:
+            raise SenhaNecessaria(SENHA_NECESSARIA)
         momento = agora()
         novo_papel = papel or conta['papel']
         if (conta['papel'] == 'dono' and novo_papel != 'dono' and conta['ativa']
@@ -1155,9 +1174,17 @@ def atualizar(root: Path, cid, por='cli', *, nome=None, papel=None, casos=None, 
         return depois
 
 
-def recuperar(root: Path, cid, por='cli', horas=ATIVACAO_HORAS, organizacao: str | None = None) -> tuple[dict, str]:
-    """Administrative recovery: end every session, clear the password and issue a new activation link."""
+def recuperar(root: Path, cid, por='cli', horas=ATIVACAO_HORAS, organizacao: str | None = None, *, confirmar=False,
+              senha=None, ip=None) -> tuple[dict, str]:
+    """Administrative recovery: end every session, clear the password and issue a new activation link.
+    With `confirmar` (a session of the Mesa) it always asks the password of who does it: the link it gives back
+    opens the other person's account (contract, 5.15). The account is checked first, so one that does not exist, or
+    is of another newsroom, answers the same with or without a password."""
     horas = _validar_horas(horas)
+    if confirmar:
+        with _bd(root) as tx:
+            _conta(tx, cid, organizacao)
+        confirmar_senha(root, por, senha, ip)
     with _bd(root, escrever=True) as tx:
         conta = _conta(tx, cid, organizacao)
         momento = agora()
@@ -1284,20 +1311,26 @@ def definir_teto(root: Path, organizacao: str, por: str, valor, cid=None, teto_p
 def atividade(root: Path, organizacao: str, limite: int = 50, antes=None) -> dict:
     """Accesses and administration acts of one newsroom, newest first: type, time, who and by whom. No content of
     any case, and never the refusals of the gate (those tell what exists elsewhere: they go to the audit log only).
-    `antes` continues a previous page (its `proximo`)."""
+    `antes` continues a previous page (its `proximo`).
+
+    No number of the store leaves here: the row number of the events table counts every newsroom, and its jumps
+    would tell one newsroom how much happens in the others. `proximo` is a position inside this newsroom's own
+    events (1 is the oldest one kept), which only its own activity moves."""
     if type(limite) is not int or not 1 <= limite <= 200:
         raise ValueError('O limite da atividade deve ficar entre 1 e 200.')
     if antes is not None and (type(antes) is not int or antes < 1):
         raise ValueError('Continuação da atividade inválida.')
     with _bd(root) as tx:
-        linhas = tx.todos('SELECT n, em, tipo, conta, por FROM eventos WHERE organizacao = ? AND n < ? ORDER BY n DESC LIMIT ?',
-                          organizacao, antes if antes is not None else 1 << 62, limite + 1)
+        # At most MAX_EVENTOS rows: the window of each newsroom.
+        linhas = tx.todos('SELECT em, tipo, conta, por FROM eventos WHERE organizacao = ? ORDER BY n', organizacao)
         nomes = {c['id']: c['nome'] for c in tx.todos(
             'SELECT id, nome FROM contas WHERE organizacao = ? AND excluida_em IS NULL', organizacao)}
-        pagina = linhas[:limite]
-        return {'eventos': [{'n': l['n'], 'em': l['em'], 'tipo': l['tipo'], 'conta': l['conta'], 'por': l['por'],
-                             'conta_nome': nomes.get(l['conta']), 'por_nome': nomes.get(l['por'])} for l in pagina],
-                'proximo': pagina[-1]['n'] if len(linhas) > limite else None}
+        fim = len(linhas) if antes is None else min(antes - 1, len(linhas))
+        inicio = max(0, fim - limite)
+        return {'eventos': [{'em': l['em'], 'tipo': l['tipo'], 'conta': l['conta'], 'por': l['por'],
+                             'conta_nome': nomes.get(l['conta']), 'por_nome': nomes.get(l['por'])}
+                            for l in reversed(linhas[inicio:fim])],
+                'proximo': inicio + 1 if inicio > 0 else None}
 
 
 # --- first administrator (local mode with accounts) ----------------------------------------------

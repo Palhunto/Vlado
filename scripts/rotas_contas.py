@@ -238,8 +238,11 @@ class RotasContas:
         """Account management (admin only, hosted mode). A refused operation is audited (`admin_recusada`)."""
         try:
             return self._contas_executar(operation, data, principal)
-        except (ValueError, OSError):
-            registro_acesso.registrar('admin_recusada', 'falha', principal.get('conta'), motivo='validacao',
+        except (acesso.SenhaIncorreta, acesso.Bloqueado):
+            raise  # already audited where the password is checked (`acesso.confirmar_senha`)
+        except (ValueError, OSError) as exc:
+            registro_acesso.registrar('admin_recusada', 'falha', principal.get('conta'),
+                                      motivo=getattr(exc, 'motivo', 'validacao'), codigo=getattr(exc, 'codigo', None),
                                       alvo=data.get('id') if isinstance(data.get('id'), str) else None)
             raise
 
@@ -247,8 +250,14 @@ class RotasContas:
         """Account management (dono only, own newsroom). Activation links are returned once, never stored.
 
         Every account id is looked up inside the caller's newsroom: one of another newsroom reads as unknown.
-        The old interface still speaks `admin`: it is accepted on the way in and given back on the way out."""
+        The old interface still speaks `admin`: it is accepted on the way in and given back on the way out.
+
+        While these operations exist they ask the password of who does it (field `senha`) wherever the team's do
+        (contract, 5.15): creating a dono, promoting to dono, changing the role of a dono, deactivating a dono and
+        every recovery. The check is the same one (`acesso.confirmar_senha`): the name of the operation is not a
+        way around it. And they no longer give the legacy `convidado` profile to an account that is not one."""
         root, por, redacao = self.server.root, principal['conta'], principal['organizacao']['id']
+        senha = {'confirmar': True, 'senha': data.get('senha'), 'ip': self._ip()}
         if operation == 'contas-listar':
             return {'contas': [_como_antes(c) for c in acesso.listar(root, redacao)],
                     'eventos': acesso.eventos(root, 50, redacao)}
@@ -262,19 +271,19 @@ class RotasContas:
             papel = data.get('papel', 'convidado')
             registro, token = acesso.criar_conta(root, data.get('nome'), data.get('login'), papel=papel,
                                                  casos=data.get('casos') or [], cota_diaria=data.get('cota_diaria', 20),
-                                                 horas=horas, por=por, organizacao=redacao)
+                                                 horas=horas, por=por, organizacao=redacao, **senha)
             return {'conta': _como_antes(registro), 'link': f'{self.server.origin}/ativar/{token}'}
         if operation == 'contas-recuperar':
-            registro, token = acesso.recuperar(root, data.get('id'), por=por, horas=horas, organizacao=redacao)
+            registro, token = acesso.recuperar(root, data.get('id'), por=por, horas=horas, organizacao=redacao, **senha)
             return {'conta': _como_antes(registro), 'link': f'{self.server.origin}/ativar/{token}'}
         if operation == 'contas-desativar':
-            registro = acesso.desativar(root, data.get('id'), por=por, organizacao=redacao)
+            registro = acesso.desativar(root, data.get('id'), por=por, organizacao=redacao, **senha)
             self._parar_execucoes(registro['id'], ())
             return {'conta': _como_antes(registro)}
         if operation == 'contas-reativar':
             return {'conta': _como_antes(acesso.reativar(root, data.get('id'), por=por, organizacao=redacao))}
         campos = {k: data[k] for k in ('nome', 'papel', 'casos', 'cota_diaria') if data.get(k) is not None}
-        registro = acesso.atualizar(root, data.get('id'), por=por, organizacao=redacao, **campos)
+        registro = acesso.atualizar(root, data.get('id'), por=por, organizacao=redacao, **campos, **senha)
         if registro.get('casos') is not None:  # not a dono: executions on cases it no longer reaches stop
             self._parar_execucoes(registro['id'], registro.get('casos') or ())
         return {'conta': _como_antes(registro)}
