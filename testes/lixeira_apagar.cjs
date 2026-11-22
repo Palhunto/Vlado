@@ -34,7 +34,7 @@ function abrir({idioma = 'pt', apagar = () => ({estado: 'apagado', item: ALCANCE
     }});
   return {mesa, pendentes, liberar: async () => { pendentes.shift().resolve(); await mesa.esperar(8); }};
 }
-const botaoApagar = mesa => mesa.$('gerenciar-lixeira').querySelectorAll('button').find(b => /^Apagar definitivamente|^Delete permanently/.test(b.textContent));
+const botaoApagar = mesa => [...mesa.$('gerenciar-lixeira').querySelectorAll('button')].find(b => /^Apagar definitivamente|^Delete permanently/.test(b.textContent));
 async function abrirDialogo(opcoes) {
   const f = abrir(opcoes);
   await f.mesa.esperar(12);
@@ -51,7 +51,7 @@ test('item da lixeira oferece “Apagar definitivamente…” ao lado de Restaur
   const {mesa} = abrir();
   await mesa.esperar(12);
   assert.deepEqual(mesa.erros, []);
-  const textos = mesa.$('gerenciar-lixeira').querySelectorAll('button').map(b => b.textContent);
+  const textos = [...mesa.$('gerenciar-lixeira').querySelectorAll('button')].map(b => b.textContent);
   assert.deepEqual(textos, ['Restaurar', 'Apagar definitivamente…']);
   assert.ok(botaoApagar(mesa).classList.contains('danger'));
 });
@@ -70,7 +70,7 @@ test('diálogo de alerta abre com foco em Cancelar e calcula o alcance antes de 
   assert.deepEqual(mesa.chamadas.find(c => c.operacao === 'lixeira-alcance').dados, {item: ITEM.id});
   await liberar();
   assert.equal(mesa.$('apagar-alcance').hidden, false);
-  const linhas = mesa.$('apagar-categorias').querySelectorAll('tr').map(tr => tr.querySelectorAll('th,td').map(c => c.textContent));
+  const linhas = [...mesa.$('apagar-categorias').querySelectorAll('tr')].map(tr => [...tr.querySelectorAll('th,td')].map(c => c.textContent));
   assert.deepEqual(linhas, [['Conversas', '2', '512 KB'], ['misterio', '1', '10 B'], ['Rodadas de análise', '1', '1,0 MB']]);
   assert.equal(mesa.$('apagar-total').textContent, '4 arquivos, 1,5 MB');
   assert.match(mesa.$('apagar-preservadas').textContent, /^Estas rodadas continuam porque são usadas por outras conversas: R001/);

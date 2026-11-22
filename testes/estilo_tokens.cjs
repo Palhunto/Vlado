@@ -10,12 +10,17 @@ const path = require('node:path');
 const {raiz, ler, semComentarios, tokens, blocos, propriedades, claro, escuro, cor, contraste} = require('./tokens_tema.cjs');
 
 const css = ler('style.css');
-// Sheets whose rules paint the Mesa: none may hold a colour value of its own.
-// Folhas da Onda 3 que entram por commits do Frontend: valem o contrato assim que o arquivo existir (sem lista a
-// editar de novo, e sem o teste citar arquivo ausente). Presente, é checado como as demais: nada de cor ou medida solta.
-const FOLHAS_DA_ONDA_3 = ['componentes_o3.css'];
-const FOLHAS = ['style.css', 'caderno.css', 'entrar.css', 'redacao.css',
-  ...FOLHAS_DA_ONDA_3.filter(nome => fs.existsSync(path.join(raiz, nome)))];
+// Sheets whose rules paint the Mesa: none may hold a colour value of its own. São TODAS as .css de interface/ (fora de
+// vendor/, fonts/ e icones/, que são subpastas): folha nova entra no contrato sozinha, sem lista por nome a esquecer.
+// Exceção explícita e única: tokens.css, o lugar onde as cores moram (checado por testes próprios abaixo).
+const FOLHAS_FORA_DO_CONTRATO = ['tokens.css'];
+const FOLHAS = fs.readdirSync(raiz).filter(nome => nome.endsWith('.css') && !FOLHAS_FORA_DO_CONTRATO.includes(nome)).sort();
+
+test('a lista de folhas vem do disco e não encolhe em silêncio', () => {
+  for (const nome of ['style.css', 'caderno.css', 'entrar.css', 'redacao.css']) assert.ok(FOLHAS.includes(nome), `${nome} fora do contrato`);
+  assert.ok(!FOLHAS.includes('tokens.css'));
+  for (const nome of FOLHAS_FORA_DO_CONTRATO) assert.ok(fs.existsSync(path.join(raiz, nome)), `exceção ${nome} não existe mais`);
+});
 
 test('tokens.css é carregado antes das folhas da Mesa e da página de entrada', () => {
   for (const pagina of ['index.html', 'entrar.html']) {

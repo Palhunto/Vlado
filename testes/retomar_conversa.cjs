@@ -46,7 +46,7 @@ async function abrir({estado = conversa(), papel = 'admin', modo = 'local', idio
   return {mesa, entregar};
 }
 const botao = mesa => mesa.$('codex-retomar');
-const etapas = mesa => mesa.$('codex-execucao-etapas').querySelectorAll('li').map(li => [li.dataset.estado, li.querySelector('.run-step-name').textContent]);
+const etapas = mesa => [...mesa.$('codex-execucao-etapas').querySelectorAll('li')].map(li => [li.dataset.estado, li.querySelector('.run-step-name').textContent]);
 
 test('conversa interrompida mostra selo, mensagem, causa, etapas e o botão com a próxima etapa', async () => {
   const {mesa} = await abrir();

@@ -94,7 +94,7 @@ async function abrir({rascunhos = servidorRascunhos(), local = memoria(), semRed
   };
   const estado = () => mesa.doc.querySelector('.rascunho-estado');
   const oferta = () => mesa.doc.querySelector('.rascunho-oferta');
-  const botao = rotulo => oferta().querySelectorAll('button').find(b => b.textContent === rotulo);
+  const botao = rotulo => [...oferta().querySelectorAll('button')].find(b => b.textContent === rotulo);
   const salvamentos = () => envios.filter(e => e.op === 'rascunhos-salvar');
   return {mesa, avancar, escrever, estado, oferta, botao, envios, salvamentos, local, rascunhos, relogio};
 }
@@ -382,7 +382,7 @@ test('entrada do caso mostra concluído e pendente com links para cada pendênci
   assert.match(feito, /3 documentos cadastrados/);
   assert.match(feito, /Análise R002: concluída até a etapa «plano»/);
   assert.match(feito, /Diligências encerradas: 1/);
-  const links = caixa.querySelector('.mesa-resume-pending').querySelectorAll('a');
+  const links = [...caixa.querySelector('.mesa-resume-pending').querySelectorAll('a')];
   const textos = links.map(a => a.textContent);
   assert.deepEqual(textos, ['Páginas sem texto extraível: visual.pdf', 'Análise R002: próxima etapa «busca»',
     'Conversa interrompida, pronta para retomar: Contratos da merenda', 'Hipóteses em aberto: 2',

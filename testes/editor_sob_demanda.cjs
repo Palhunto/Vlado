@@ -15,7 +15,7 @@ const api = operacao => ({
   'apuracao-nota': {caso: 'alfa', revisao_caderno: 1, nota: NOTA, fontes: []},
   inventario: {caso_id: 'alfa', corpus_id: 'c1', documentos: [], total_documentos: 0}}[operacao] || {});
 const VERSAO = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'interface', 'vendor', 'vditor', 'manifesto.json'), 'utf8')).version;
-const vditorScripts = mesa => mesa.doc.head.querySelectorAll('script').filter(s => s.src.startsWith('/vendor/vditor/'));
+const vditorScripts = mesa => [...mesa.doc.head.querySelectorAll('script')].filter(s => s.src.startsWith('/vendor/vditor/'));
 
 async function abrirCaderno(opcoes = {}) {
   const mesa = criarMesa({api, catalogo: [ALFA], url: 'http://127.0.0.1:8765/?area=apuracao&caso=alfa', ...opcoes});
@@ -45,7 +45,7 @@ test('outras áreas não pedem o editor; o caderno pede e mostra o carregamento'
   const v = `?v=${VERSAO}`;
   assert.deepEqual(vditorScripts(mesa).map(s => s.src), [`/vendor/vditor/dist/index.min.js${v}`, `/vendor/vditor/dist/js/lute/lute.min.js${v}`,
     `/vendor/vditor/dist/js/i18n/pt_BR.js${v}`, `/vendor/vditor/dist/js/icons/ant.js${v}`]);
-  assert.deepEqual(mesa.doc.head.querySelectorAll('link').filter(l => l.href.startsWith('/vendor/')).map(l => l.href),
+  assert.deepEqual([...mesa.doc.head.querySelectorAll('link')].filter(l => l.href.startsWith('/vendor/')).map(l => l.href),
     [`/vendor/vditor/dist/index.css${v}`, `/vendor/vditor/dist/css/content-theme/light.css${v}`]);
   assert.equal(mesa.$('vditorLuteScript').src, `/vendor/vditor/dist/js/lute/lute.min.js${v}`, 'ids reconhecidos pelo próprio Vditor');
   assert.equal(mesa.$('vditorContentTheme').href, `/vendor/vditor/dist/css/content-theme/light.css${v}`);
