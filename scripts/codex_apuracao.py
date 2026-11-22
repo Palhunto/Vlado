@@ -7,8 +7,10 @@ import hashlib
 from datetime import datetime, timezone
 import itertools
 import json
+import logging
 from pathlib import Path
 import re
+import secrets
 import shutil
 import threading
 import time
@@ -87,6 +89,99 @@ CAUSAS_ERRO = {
 def montar_situacao(codigo, mensagem=None, causa=None):
     return {'codigo': codigo, 'mensagem': mensagem or MENSAGENS_SITUACAO[codigo],
             'causa': causa, 'em_utc': datetime.now(timezone.utc).isoformat()}
+
+
+# SEG-06: o texto cru de uma exceção (caminho do servidor, nome de arquivo, corpo do provedor) nunca chega a um convidado, nem pelos
+# eventos nem pela situação da conversa. Fica gravado como está (o administrador vê o detalhe) e no log do servidor, ligados por uma
+# referência curta ("ref. 1a2b3c4d") que o convidado pode passar ao administrador. Para o convidado, na leitura:
+#   - ErroIA com código conhecido: o texto em português de CAUSAS_ERRO (ou, nos códigos sem texto, a mensagem curada do próprio
+#     módulo de custo, cortada em " Detalhe:");
+#   - qualquer outra exceção, e ErroIA sem código: um texto fixo.
+# Dados gravados antes desta versão não são reescritos.
+log = logging.getLogger('vlado.conversas')
+FALHA_INTERNA = 'A execução falhou por um erro interno. O que já foi concluído foi preservado.'
+ERRO_DE_CONSULTA = 'Erro ao consultar o índice desta rodada.'
+DETALHE = ' Detalhe:'
+REFERENCIA = re.compile(r' ?\[ref ([0-9a-f]{8})\]')
+
+
+def mensagem_publica(erro, codigo=None) -> str:
+    """O texto de falha que um convidado pode ler (sem o detalhe da exceção)."""
+    if codigo is None and isinstance(erro, ErroIA):
+        codigo = erro.codigo
+    if codigo in CAUSAS_ERRO and CAUSAS_ERRO[codigo][2]:
+        return CAUSAS_ERRO[codigo][2]
+    if isinstance(erro, ErroIA) and codigo in CAUSAS_ERRO:
+        return str(erro).split(DETALHE)[0].strip() or FALHA_INTERNA  # o módulo de custo escreve estas mensagens
+    return FALHA_INTERNA
+
+
+def registrar_falha(erro, codigo=None, publica=None) -> dict:
+    """Dados do evento de falha: `mensagem` (o texto completo, para o administrador), `publica` (o que o convidado lê) e `ref`.
+    O detalhe vai também para o log do servidor, com a mesma referência."""
+    ref = secrets.token_hex(4)
+    bruto = seguro(erro)
+    log.warning('falha da conversa (ref %s): %s', ref, bruto)
+    return {'mensagem': bruto, 'publica': f'{publica or mensagem_publica(erro, codigo)} (ref. {ref})', 'ref': ref}
+
+
+def evento_curado(texto):
+    """Dados de um evento de erro cujo texto fixo, escrito aqui, já é seguro para qualquer leitor (declara a `publica`)."""
+    return {'mensagem': texto, 'publica': texto}
+
+
+# Aviso sem `publica` que parece conter caminho, nome de arquivo ou erro de sistema: para o convidado vira texto fixo. É a rede de
+# segurança (o caminho certo é passar por registrar_falha ou evento_curado), então erra para o lado de omitir:
+#  - caminho absoluto POSIX (/qualquer/raiz/...), de unidade do Windows (C:\..., C:/...) ou UNC (\\servidor\...);
+#  - caminho relativo da Mesa (casos/, execucoes/, saidas/, indice/ ...) e barra invertida entre dois nomes;
+#  - erro de sistema (Errno, Traceback, WinError) e extensão de arquivo que a Mesa lê ou grava.
+EXTENSOES = ('pdf', 'docx?', 'xlsx?', 'pptx?', 'odt', 'ods', 'rtf', 'csv', 'tsv', 'json', 'jsonl', 'txt', 'md', 'log', 'xml', 'html?',
+             'ya?ml', 'sqlite3?', 'db', 'lock', 'tmp', 'age', 'gz', 'tar', 'zip', 'png', 'jpe?g', 'tiff?', 'gif', 'webp', 'bmp', 'svg')
+SUSPEITO = re.compile(
+    r"(?:(?<![\w.)\]/-])/[A-Za-z_~$.][\w.$~-]*"                                   # /dados, /dados/vlado/execucoes/...
+    r"|(?<![\w])[A-Za-z]:[\\/]"                                                      # C:\ ou C:/
+    r"|\\\\[\w.$-]+\\"                                                           # \\servidor\compartilhamento
+    r"|[\w.$-]+\\[\w.$-]+"                                                          # pasta\arquivo
+    r"|\b(?:casos|execucoes|conversas|entrada|entradas|lixeira|ajustes|segredos|acesso|saidas|indice|derivados|originais)/"
+    r"|Errno|WinError|Traceback"
+    r"|\.(?:" + "|".join(EXTENSOES) + r")\b)", re.IGNORECASE)
+AVISO_OMITIDO = 'Aviso interno omitido; o detalhe está no registro do servidor.'
+
+
+def sanear_texto(texto):
+    """Texto de situação ou de evento para convidado: corta o ' Detalhe: ...' e deixa só a referência."""
+    if not isinstance(texto, str):
+        return texto
+    achado = REFERENCIA.search(texto)
+    limpo = REFERENCIA.sub('', texto.split(DETALHE)[0]).rstrip()
+    return limpo + (f' (ref. {achado.group(1)})' if achado and '(ref. ' not in limpo else '')
+
+
+def situacao_para_convidado(situacao):
+    if not isinstance(situacao, dict):
+        return situacao
+    return {**situacao, 'mensagem': sanear_texto(situacao.get('mensagem'))}
+
+
+def evento_para_convidado(evento):
+    dados = evento.get('dados') if isinstance(evento, dict) else None
+    if not isinstance(dados, dict):
+        return evento
+    ref = dados.get('ref')
+    publica = dados.get('publica')
+    if publica:
+        return {**evento, 'dados': {**{k: v for k, v in dados.items() if k not in ('publica', 'ref', 'detalhe')}, 'mensagem': publica}}
+    if evento.get('tipo') == 'erro':
+        # Todo evento de erro sem `publica` é falha interna para o convidado: cobre eventos gravados antes desta regra e qualquer
+        # ponto que um dia esqueça de declará-la. O texto cru nunca sai.
+        sufixo = f' (ref. {ref})' if isinstance(ref, str) and re.fullmatch(r'[0-9a-f]{8}', ref) else ' (sem referência)'
+        return {**evento, 'dados': {'mensagem': FALHA_INTERNA + sufixo}}
+    dados = {k: v for k, v in dados.items() if k not in ('ref', 'detalhe')}
+    if isinstance(dados.get('mensagem'), str):
+        dados['mensagem'] = sanear_texto(dados['mensagem'])
+        if evento.get('tipo') == 'aviso' and SUSPEITO.search(dados['mensagem']):
+            dados['mensagem'] = AVISO_OMITIDO
+    return {**evento, 'dados': dados}
 
 
 def classificar_erro(codigo, detalhe=None):
@@ -241,7 +336,7 @@ class Conversas:
                     metadata['estado'] = 'interrompido'
                     metadata['situacao'] = montar_situacao('interrompido', 'O backend foi reiniciado durante a execução. '
                         'O que já foi concluído foi preservado; você pode tentar novamente.', 'reinicio')
-                    self._event(identifier, 'erro', {'mensagem': 'Backend reiniciado durante a execução; saída parcial preservada.'})
+                    self._event(identifier, 'erro', evento_curado('Backend reiniciado durante a execução; saída parcial preservada.'))
                     self._save(identifier)
             ctx = self.contexts[identifier]
             ctx['usado_em'], ctx['uso'] = time.monotonic(), next(self._usos)
@@ -298,6 +393,8 @@ class Conversas:
                         'você pode tentar novamente.', 'reinicio')}
                 item.update(situacao=situacao_de(meta), retomavel=retomavel(meta),
                             pergunta=meta.get('pergunta_atual'), rodada=meta.get('rodada'))
+                if dono is not None:  # SEG-06: guests never read the raw exception text
+                    item['situacao'] = situacao_para_convidado(item['situacao'])
                 result.append(item)
         return {'conversas': result}
 
@@ -359,6 +456,9 @@ class Conversas:
             batch = ctx['events'][after:after + 100]
             conversa = {**ctx['meta'], 'situacao': situacao_de(ctx['meta']), 'retomavel': retomavel(ctx['meta']),
                         'progresso': self._progresso(ctx['meta'])}
+            if dono is not None:  # SEG-06: guests never read the raw exception text
+                conversa['situacao'] = situacao_para_convidado(conversa['situacao'])
+                batch = [evento_para_convidado(evento) for evento in batch]
             return {'conversa': conversa, 'eventos': batch,
                     'acervos': self._acervos(ctx),
                     'cursor': batch[-1]['seq'] if batch else after}
@@ -816,11 +916,12 @@ class Conversas:
             self._execute_stages(identifier, question, rpc)
         except trava_cadastro.TravaInterrompida as exc:
             # Cancelled, or the Mesa is shutting down, while waiting to freeze: nothing was frozen.
-            self._event(identifier, 'aviso', {'mensagem': seguro(exc)})
+            self._event(identifier, 'aviso', evento_curado(seguro(exc)))  # fixed texts of TravaInterrompida
             self._finish(identifier, 'interrompido')
         except Exception as exc:
-            self._event(identifier, 'erro', {'mensagem': seguro(exc)})
-            self._registrar_causa(ctx, getattr(exc, 'codigo', None), seguro(exc))
+            falha = registrar_falha(exc)
+            self._event(identifier, 'erro', falha)
+            self._registrar_causa(ctx, getattr(exc, 'codigo', None), f"{falha['mensagem']} [ref {falha['ref']}]")
             if ctx['meta'].get('turn_id') and self.rpc and not self.rpc.closed:
                 try:
                     self.rpc.call('turn/interrupt', {'threadId': ctx['meta']['thread_id'], 'turnId': ctx['meta']['turn_id']})
@@ -891,7 +992,7 @@ class Conversas:
                     if rpc.closed or self.stopping or not ctx['busy']:
                         return
                     if time.monotonic() >= deadline:
-                        self._event(identifier, 'erro', {'mensagem': 'Tempo máximo de 10 minutos para esta etapa excedido; saídas parciais preservadas.'})
+                        self._event(identifier, 'erro', evento_curado('Tempo máximo de 10 minutos para esta etapa excedido; saídas parciais preservadas.'))
                         self._registrar_causa(ctx, 'tempo_etapa')
                         ctx['cancel'] = True
                         self._interrupt(identifier)
@@ -905,7 +1006,11 @@ class Conversas:
                 if stage in pipeline.accepted:
                     break
                 pipeline.last_error = pipeline.last_error or f'A etapa {stage} terminou sem uma entrega validada por guardar.'
-                self._event(identifier, 'aviso', {'mensagem': pipeline.last_error + (' Nova tentativa automática.' if attempt == 1 else ' Limite de tentativas atingido.')})
+                continuacao = ' Nova tentativa automática.' if attempt == 1 else ' Limite de tentativas atingido.'
+                # last_error é o texto de QUALQUER exceção ao guardar a etapa (caminho, trecho de documento): vai inteiro para o
+                # administrador e para o log; o convidado lê só o texto fixo.
+                self._event(identifier, 'aviso', registrar_falha(pipeline.last_error + continuacao,
+                                                                 publica=f'A etapa {stage} terminou sem uma entrega validada.' + continuacao))
             if stage not in pipeline.accepted:
                 self._finish(identifier, 'incompleto')
                 return
@@ -918,7 +1023,8 @@ class Conversas:
                 publication = pipeline.finalize()
                 break
             except (ValueError, OSError, KeyError) as exc:
-                self._event(identifier, 'aviso', {'mensagem': 'Falha na verificação/publicação: ' + seguro(exc)})
+                self._event(identifier, 'aviso', registrar_falha('Falha na verificação/publicação: ' + str(exc),
+                                                 publica='Falha na verificação ou na publicação da resposta.'))
                 if attempt == 2:
                     raise
         if ctx.get('cancel'):
@@ -945,7 +1051,7 @@ class Conversas:
                     if ctx.get('turn_done'):
                         ctx['turn_result'] = {'status': 'failed'}
                         ctx['turn_done'].set()
-                    self._event(identifier, 'erro', {'mensagem': 'Conexão com a API perdida. Saídas parciais preservadas.'})
+                    self._event(identifier, 'erro', evento_curado('Conexão com a API perdida. Saídas parciais preservadas.'))
                     self._registrar_causa(ctx, 'conexao')
                     self._finish(identifier, 'erro')
             return
@@ -981,10 +1087,10 @@ class Conversas:
                 return  # completion of an earlier, already abandoned turn must not end the current stage
             status = {'completed': 'concluido', 'interrupted': 'interrompido', 'failed': 'erro'}.get(turn['status'], 'erro')
             if turn.get('error'):
-                self._registrar_causa(ctx, seguro(turn['error'].get('codexErrorInfo')) if turn['error'].get('codexErrorInfo') else None,
-                                      seguro(turn['error'].get('message', turn['error'])))
-                self._event(identifier, 'erro', {'mensagem': seguro(turn['error'].get('message', turn['error'])),
-                            'codigo': seguro(turn['error'].get('codexErrorInfo'))})
+                codigo_erro = seguro(turn['error'].get('codexErrorInfo')) if turn['error'].get('codexErrorInfo') else None
+                falha = registrar_falha(turn['error'].get('message', turn['error']), codigo_erro)
+                self._registrar_causa(ctx, codigo_erro, f"{falha['mensagem']} [ref {falha['ref']}]")
+                self._event(identifier, 'erro', {**falha, 'codigo': codigo_erro})
             if ctx.get('turn_done'):
                 ctx['turn_result'] = turn
                 ctx['turn_done'].set()
@@ -993,7 +1099,8 @@ class Conversas:
         elif method == 'item/usage':
             self._uso(identifier, params)
         elif method in ('error', 'warning'):
-            self._event(identifier, 'aviso', {'mensagem': seguro(params.get('message', params.get('reason', method)))})
+            self._event(identifier, 'aviso', registrar_falha(params.get('message', params.get('reason', method)),
+                                                 publica='Aviso do provedor recebido; o detalhe está no registro do servidor.'))
 
     def _uso(self, identifier, params):
         """Token usage per provider call: one new file per call and running totals for the round."""
@@ -1004,7 +1111,8 @@ class Conversas:
             gasto = custo.custo_da_chamada(self.root, modelo, uso, ctx.get('modelo_cobrado'))
         except (ValueError, OSError) as exc:
             gasto = None
-            self._event(identifier, 'aviso', {'mensagem': 'Custo da chamada não calculado: ' + seguro(exc)})
+            self._event(identifier, 'aviso', registrar_falha('Custo da chamada não calculado: ' + str(exc),
+                                                 publica='Custo da chamada não calculado.'))
         with self.lock:
             ctx['uso_numero'] = ctx.get('uso_numero', 0) + 1
             numero = ctx['uso_numero']
@@ -1028,7 +1136,8 @@ class Conversas:
                     falha = seguro(exc)
             self._save(identifier)
         if falha:
-            self._event(identifier, 'aviso', {'mensagem': f'Registro de uso da API {numero:04} não gravado: {falha}'})
+            self._event(identifier, 'aviso', registrar_falha(f'Registro de uso da API {numero:04} não gravado: {falha}',
+                                                 publica=f'Registro de uso da API {numero:04} não gravado.'))
         self._event(identifier, 'uso', {'etapa': registro['etapa'], 'modelo': modelo, 'uso': uso, 'total': total,
                                         **({'custo_brl': gasto['brl']} if gasto else {})})
         self._aplicar_limites(identifier, uso, total, gasto)
@@ -1049,7 +1158,8 @@ class Conversas:
             valores = limites.ler(self.root)
             dia = limites.somar_dia(self.root, custo.tokens_totais(uso))
         except (ValueError, OSError) as exc:
-            self._event(identifier, 'aviso', {'mensagem': 'Limites de tokens não conferidos: ' + seguro(exc)})
+            self._event(identifier, 'aviso', registrar_falha('Limites de tokens não conferidos: ' + str(exc),
+                                                 publica='Limites de tokens não conferidos.'))
             valores, dia = {'tokens_por_consulta': None, 'tokens_por_dia': None}, 0
         consulta = custo.tokens_totais(total)
         motivo = causa = None
@@ -1075,7 +1185,7 @@ class Conversas:
         if not motivo or ctx.get('cancel'):
             return
         self._registrar_causa(ctx, causa, motivo + ' O que já foi concluído foi preservado.')
-        self._event(identifier, 'erro', {'mensagem': motivo + ' A execução foi interrompida; saídas parciais preservadas.'})
+        self._event(identifier, 'erro', evento_curado(motivo + ' A execução foi interrompida; saídas parciais preservadas.'))
         ctx['cancel'] = True
         # Interrupt outside the provider worker that delivered this usage notification.
         threading.Thread(target=self._interrupt, args=(identifier,), daemon=True).start()
@@ -1160,7 +1270,7 @@ class Conversas:
                 content = [{'type': 'inputText', 'text': limitar_texto(json.dumps(result, ensure_ascii=False))}] + images
                 answer = {'success': result.get('estado') != 'erro_consulta', 'contentItems': content}
             except Exception as exc:
-                self._event(identifier, 'aviso', {'mensagem': seguro(exc)})
+                self._event(identifier, 'aviso', registrar_falha(exc, publica='Falha ao executar a ferramenta de consulta.'))
                 answer = {'success': False, 'contentItems': [{'type': 'inputText', 'text': seguro(exc)}]}
             try:
                 self.rpc.send({'id': message['id'], 'result': answer})
@@ -1321,7 +1431,7 @@ class Conversas:
             try:
                 self._start().call('turn/interrupt', {'threadId': ctx['meta']['thread_id'], 'turnId': ctx['meta']['turn_id']})
             except ErroIA as exc:
-                self._event(identifier, 'erro', {'mensagem': seguro(exc)})
+                self._event(identifier, 'erro', registrar_falha(exc))
                 self._finish(identifier, 'erro')
 
     def ferramenta(self, identifier, args):
@@ -1425,7 +1535,8 @@ class Conversas:
             if action != 'guardar' and result.get('estado') != 'erro_consulta':
                 ctx['pipeline'].observed(action)
             if result.get('estado') == 'erro_consulta':
-                self._event(identifier, 'aviso', {'mensagem': 'Erro de consulta: ' + seguro(result.get('erro'))})
+                falha = registrar_falha('Erro de consulta: ' + str(result.get('erro')), publica=ERRO_DE_CONSULTA)
+                self._event(identifier, 'aviso', falha)
             self._event(identifier, 'ferramenta', {'acao': action, 'arquivo': str(path.relative_to(self.root)),
                         'retornados': result.get('retornados'), 'etapa': result.get('etapa')})
         return result, images

@@ -97,8 +97,8 @@ class RotasConversa:
             # extraction queue, with no lock held while it is read; new questions on this one wait.
             with manager.reservar_para_documentos(data.get('caso'), data.get('conversa')):
                 result = receber_documentos(self.server.root, {'caso': data.get('caso'),
-                    'arquivos': data.get('arquivos'), 'natureza': data.get('natureza', 'nao_informada')},
-                    fila=self.server.fila)
+                    'arquivos': data.get('arquivos'), 'natureza': data.get('natureza')},
+                    fila=self.server.fila, fluxo=self.__dict__.get('_fluxo'))
         elif operation == 'codex-eventos':
             result = manager.eventos(data.get('conversa'), data.get('cursor', 0), data.get('espera', 0), dono=dono,
                                      casos=casos_liberados)

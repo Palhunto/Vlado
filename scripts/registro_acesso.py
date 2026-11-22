@@ -61,6 +61,8 @@ EVENTOS = frozenset({
     'operacao_negada', 'admin_recusada', 'migracao_v1',
     # downloads
     'download',
+    # pedido recusado por excesso de pedidos em curso do mesmo endereço (429, CONF-03)
+    'pedido_recusado',
     # do próprio registro
     'evento_arquivado', 'registro_cheio'})
 RESULTADOS = frozenset({'ok', 'falha', 'negado', 'interrompido'})
@@ -88,7 +90,7 @@ _CTX = threading.local()
 _ESCRITA = threading.Lock()
 _ESTADO = {'limpeza': 0.0, 'cheio': set(), 'aviso': 0.0, 'chave': {}}
 # Falhas que um anônimo gera à vontade: só elas sofrem o teto do dia e a agregação por IP.
-ANONIMOS = frozenset({'login_falha', 'ativacao_falha'})
+ANONIMOS = frozenset({'login_falha', 'ativacao_falha', 'pedido_recusado'})
 _AGREGADOS: dict = {}
 _AGREGA = threading.Lock()
 

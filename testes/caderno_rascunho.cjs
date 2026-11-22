@@ -45,7 +45,7 @@ async function abrir({salvar, notaServidor = nota(), outras = [], sessao = {}, m
     if (op === 'codex-listar') return {conversas: []};
     return {};
   };
-  const mesa = criarMesa({modo, papel, catalogo, scripts: PILHA.filter(nome => nome !== 'editor_notas.js'),
+  const mesa = criarMesa({modo, papel, catalogo, scripts: PILHA.filter(nome => !['editor_notas.js', 'dialogo.js'].includes(nome)),
     url: 'http://127.0.0.1:8765/?area=apuracao&caso=alfa',
     preparar: janela => {
       janela.sessionStorage = armazenamento;
@@ -59,7 +59,7 @@ async function abrir({salvar, notaServidor = nota(), outras = [], sessao = {}, m
       janela.crypto = {randomUUID: () => `00000000-0000-4000-8000-${String(++uuid).padStart(12, '0')}`};
       janela.getSelection = () => null;
       janela.confirmar = true; janela.confirmacoes = 0;
-      janela.confirm = () => { janela.confirmacoes++; return janela.confirmar; };
+      janela.Dialogo = {confirmar: async opcoes => { janela.confirmacoes++; janela.ultimaConfirmacao = opcoes; return janela.confirmar; }};
       janela.navigator = {clipboard: {writeText: async () => {}}};
       janela.fetch = async (rota, opcoes = {}) => {
         if (String(rota) === '/api/catalogo') return {ok: true, json: async () => ({casos: catalogo})};
@@ -230,6 +230,8 @@ test('excluir a nota apaga o rascunho dela', async () => {
   assert.ok(f.rascunho());
   f.mesa.$('apuracao-excluir').click();
   await f.mesa.esperar(12);
+  assert.equal(f.mesa.janela.ultimaConfirmacao.item, f.mesa.$('apuracao-nota-titulo').value, 'o diálogo de excluir nomeia a nota (e não "Excluir ?")');
+  assert.ok(f.mesa.janela.ultimaConfirmacao.item, 'a nota tem título');
   assert.ok(f.chamadas.some(c => c.op === 'apuracao-nota-excluir'));
   assert.equal(f.rascunho(), null);
 });

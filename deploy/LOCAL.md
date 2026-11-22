@@ -149,6 +149,7 @@ em modo local), o mesmo registro é criado em `registro/` dentro da pasta de dad
 | Endereço | `https://vlado.localhost:9443`, só neste computador (`127.0.0.1`) |
 | Porta HTTP | fechada de propósito (o redirecionamento do Caddy iria para a 443, que é a da homologação) |
 | Projeto Compose | `vlado-local` (volumes `vlado-local_*`, rede `vlado-local_default`) |
+| Sub-rede da rede | `172.29.40.0/24` fixa (`VLADO_REDE_SUBNET`): a Mesa confia no `X-Forwarded-For` de quem fala por ela e conta cada cliente pelo IP que o Caddy escreve. Se colidir com outra rede ou VPN ("Pool overlaps"), troque por outra faixa privada livre. No Docker Desktop, na própria máquina, todos os clientes locais aparecem com o endereço de entrada da rede (é do Docker) |
 | Imagens | `vlado:local-dono` e `vlado-backup:local-dono` (nada em `vlado:local`) |
 | Domínio | `vlado.localhost`: não é o `localhost` da homologação, então os cookies não se misturam |
 

@@ -28,6 +28,13 @@
 	request_body {
 		max_size 80MB
 	}
+	# Cabeçalhos (SEG-06). `-Server` tira o "Server" da resposta: o do Caddy e o do upstream (que traria a versão do
+	# Python). Não repassamos versão nenhuma.
+	# HSTS: só no Caddyfile público (aqui a CA é a local e o navegador não deve fixar um nome de teste); a Mesa em modo
+	# piloto manda o próprio HSTS de qualquer modo.
+	header {
+		-Server
+	}
 	# Registro de acesso: mesmo bloco de deploy/Caddyfile (um teste confere que são idênticos). Sem URI, sem
 	# cabeçalhos, sem corpo; token mascarado em "rota". Ver os comentários em deploy/Caddyfile.
 	# O log padrão do contêiner (opções globais, acima) leva o mesmo filtro, igual ao de deploy/Caddyfile.
@@ -48,5 +55,18 @@
 			}
 		}
 	}
-	reverse_proxy vlado:8765
+	# Conexão do Caddy para a Mesa: a Mesa fecha a conexão mantida ociosa aos 10 s (CONF-03). Se o Caddy a reutilizasse
+	# no instante em que ela fecha, o pedido sairia como 502. keepalive de 5 s: o Caddy descarta a conexão ociosa antes
+	# da Mesa (e `keepalive off` desligaria a reutilização por completo, se um dia 5 s não bastar).
+	reverse_proxy vlado:8765 {
+		transport http {
+			keepalive 5s
+		}
+	}
+	# Erros gerados pelo próprio Caddy (502 com a Mesa fora do ar, por exemplo) não passam pelo `header` acima: o Server
+	# e o HSTS são tratados aqui também, e o corpo é só o status.
+	handle_errors {
+		header -Server
+		respond "{err.status_code} {err.status_text}"
+	}
 }

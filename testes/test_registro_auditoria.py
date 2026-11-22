@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acesso
 import registro_acesso as reg
+from relogio_fixo import fixar
 from test_acesso import SENHA, hasher_rapido
 
 
@@ -354,6 +355,7 @@ class DiaCheioDeFalhasTest(Base):
         self.assertEqual([l['classe'] for l in self.linhas() if l['evento'] == 'registro_cheio'], ['total'])
 
     def test_excesso_de_tentativas_do_mesmo_ip_vira_uma_linha_por_ip_e_por_minuto(self):
+        fixar(self)  # a linha é por minuto: nada de cruzar a virada no meio do teste
         reg.iniciar_requisicao(lambda: None)
         for _ in range(5000):
             reg.registrar_limite_ip('login_falha', '203.0.113.9', '203.0.113.9', cliente='web')
@@ -398,6 +400,7 @@ class DiaCheioDeFalhasTest(Base):
         self.assertTrue(all(l['evento'] == 'login_falha' and l['ip'] is None for l in self.linhas()))
 
     def test_acesso_entrar_agrega_o_que_passa_do_limite(self):
+        fixar(self)  # a linha é por minuto: nada de cruzar a virada no meio do teste
         hasher_rapido(self)
         acesso.limpar_limites()
         raiz = self.base / 'dados'
@@ -431,7 +434,7 @@ class ComposeEBackupTest(unittest.TestCase):
             self.assertNotIn('/app/registro', servicos[nome], nome)
         for linha in ('VLADO_REGISTRO: /app/registro', 'VLADO_REGISTRO_RETENCAO_DIAS: ${VLADO_REGISTRO_RETENCAO_DIAS:-30}',
                       'VLADO_REGISTRO_DIA_MAX_MB: ${VLADO_REGISTRO_DIA_MAX_MB:-50}',
-                      'VLADO_PROXIES_CONFIAVEIS: ${VLADO_PROXIES_CONFIAVEIS:-}',
+                      'VLADO_PROXIES_CONFIAVEIS: ${VLADO_REDE_SUBNET:-172.29.99.0/24}${VLADO_PROXIES_CONFIAVEIS:+,${VLADO_PROXIES_CONFIAVEIS}}',
                       'VLADO_PROXIES_CONFIAVEIS_AMPLAS: ${VLADO_PROXIES_CONFIAVEIS_AMPLAS:-}'):
             self.assertIn(linha, servicos['vlado'], linha)
         volumes = (self.RAIZ / 'docker-compose.yml').read_text(encoding='utf-8').split('\nvolumes:\n', 1)[1]
@@ -461,7 +464,7 @@ class ComposeEBackupTest(unittest.TestCase):
         monitoramento = (self.RAIZ / 'deploy' / 'MONITORAMENTO.md').read_text(encoding='utf-8')
         for trecho in ('## Registro de auditoria da Mesa (SEG-02)', 'login_falha', 'sessao_expirada', 'recuperacao_emitida',
                        'operacao_negada', '`download`', 'login_ref', 'caso_ref', 'VLADO_REGISTRO_RETENCAO_DIAS',
-                       '## IP do cliente atrás de CDN ou WAF (SEG-05)', 'VLADO_PROXIES_CONFIAVEIS', 'trusted_proxies',
+                       '## IP do cliente atrás do Caddy e de CDN ou WAF (SEG-05, CONF-03)', 'VLADO_PROXIES_CONFIAVEIS', 'trusted_proxies',
                        'primeiro salto que não está na'):
             self.assertIn(trecho, monitoramento, trecho)
         for nome in ('homologacao', 'editorial', 'demonstracao'):

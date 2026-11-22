@@ -17,9 +17,9 @@ const [origin, output, chrome] = process.argv.slice(2);
     await page.locator('#gerenciar-nome').filter({hasText:'Caso sintético ' + id}).waitFor();
   }
   async function confirm() {
-    await page.locator('#excluir-dialogo[open]').waitFor();
-    await page.click('#excluir-dialogo button[value="excluir"]');
-    await page.locator('#excluir-dialogo').waitFor({state:'hidden'});
+    await page.locator('dialog.dialogo[open]').waitFor();
+    await page.click('dialog.dialogo .dialogo-acoes button.danger');
+    await page.locator('dialog.dialogo').waitFor({state:'detached'});
   }
   try {
     await page.goto(origin);
@@ -32,7 +32,7 @@ const [origin, output, chrome] = process.argv.slice(2);
     assert.equal(await page.locator('#gerenciar-rodadas button').count(), 1);
     checks.push('Gerenciamento separado, sem seleção automática; rodadas vinculadas agrupadas na conversa.');
     await page.click('#gerenciar-excluir-caso');
-    assert.equal(await page.locator('#excluir-dialogo button[value="cancelar"]').evaluate(el => el === document.activeElement), true);
+    assert.equal(await page.locator('dialog.dialogo .dialogo-acoes button.secondary').evaluate(el => el === document.activeElement), true);
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#gerenciar-caso').inputValue(), 'alpha');
     assert.match(await page.locator('#gerenciar-lixeira').innerText(), /vazia/);

@@ -4,37 +4,44 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="session-token" content="__SESSION_TOKEN__">
+  <meta name="vlado-versoes" content='__VERSOES__'>
   <title>Vlado</title>
   <meta name="theme-color" content="#171d1a">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icones/vlado.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icones/vlado-192.png">
-  <link rel="stylesheet" href="/tokens.css">
-  <link rel="stylesheet" href="/style.css">
-  <link rel="stylesheet" href="/caderno.css">
-  <link rel="preload" href="/fonts/SourceSans3-Upright.otf" as="font" type="font/otf" crossorigin media="(min-width: 1051px)">
-  <link rel="stylesheet" href="/redacao.css">
-  <script src="/i18n.js" defer></script>
-  <script src="/leitura.js" defer></script>
-  <script src="/app.js" defer></script>
-  <script src="/fontes_web.js" defer></script>
-  <script src="/revisao.js" defer></script>
-  <script src="/observacoes.js" defer></script>
-  <script src="/continuidade.js" defer></script>
-  <script src="/caderno.js" defer></script>
-  <script src="/editor_notas.js" defer></script>
-  <script src="/apuracao.js" defer></script>
-  <script src="/diligencias.js" defer></script>
-  <script src="/quadros.js" defer></script>
-  <script src="/analise.js" defer></script>
-  <script src="/indicador_salvamento.js" defer></script>
-  <script src="/codex.js" defer></script>
-  <script src="/configuracao_ia.js" defer></script>
-  <script src="/piloto.js" defer></script>
-  <script src="/gerenciar.js" defer></script>
-  <script src="/experiencia.js" defer></script>
-  <script src="/desktop.js" defer></script>
-  <script src="/redacao.js" defer></script>
+  <link rel="stylesheet" href="/tokens.css?v=__V:tokens.css__">
+  <link rel="stylesheet" href="/style.css?v=__V:style.css__">
+  <link rel="stylesheet" href="/componentes_o3.css?v=__V:componentes_o3.css__">
+  <link rel="stylesheet" href="/caderno.css?v=__V:caderno.css__">
+  <link rel="preload" href="/fonts/SourceSans3-latin.woff2?v=__V:SourceSans3-latin.woff2__" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/SourceSerif4-latin.woff2?v=__V:SourceSerif4-latin.woff2__" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/redacao.css?v=__V:redacao.css__">
+  <script src="/i18n.js?v=__V:i18n.js__" defer></script>
+  <script src="/leitura.js?v=__V:leitura.js__" defer></script>
+  <script src="/dialogo.js?v=__V:dialogo.js__" defer></script>
+  <script src="/estados.js?v=__V:estados.js__" defer></script>
+  <script src="/envio.js?v=__V:envio.js__" defer></script>
+  <script src="/documentos.js?v=__V:documentos.js__" defer></script>
+  <script src="/app.js?v=__V:app.js__" defer></script>
+  <script src="/fontes_web.js?v=__V:fontes_web.js__" defer></script>
+  <script src="/revisao.js?v=__V:revisao.js__" defer></script>
+  <script src="/observacoes.js?v=__V:observacoes.js__" defer></script>
+  <script src="/continuidade.js?v=__V:continuidade.js__" defer></script>
+  <script src="/caderno.js?v=__V:caderno.js__" defer></script>
+  <script src="/editor_notas.js?v=__V:editor_notas.js__" defer></script>
+  <script src="/apuracao.js?v=__V:apuracao.js__" defer></script>
+  <script src="/diligencias.js?v=__V:diligencias.js__" defer></script>
+  <script src="/quadros.js?v=__V:quadros.js__" defer></script>
+  <script src="/analise.js?v=__V:analise.js__" defer></script>
+  <script src="/indicador_salvamento.js?v=__V:indicador_salvamento.js__" defer></script>
+  <script src="/codex.js?v=__V:codex.js__" defer></script>
+  <script src="/configuracao_ia.js?v=__V:configuracao_ia.js__" defer></script>
+  <script src="/piloto.js?v=__V:piloto.js__" defer></script>
+  <script src="/gerenciar.js?v=__V:gerenciar.js__" defer></script>
+  <script src="/experiencia.js?v=__V:experiencia.js__" defer></script>
+  <script src="/desktop.js?v=__V:desktop.js__" defer></script>
+  <script src="/redacao.js?v=__V:redacao.js__" defer></script>
 </head>
 <body data-idioma-padrao="__IDIOMA_PADRAO__" data-papel="__PAPEL__" data-modo="__MODO__">
   <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
@@ -203,6 +210,7 @@
         <button id="enviar-documentos">Enviar e cadastrar agora</button>
       </form>
       <p id="cadastro-status" role="status" aria-live="polite"></p>
+      <div id="cadastro-envio"></div>
       <p id="cadastro-erro" role="alert" hidden></p>
       <div id="cadastro-preparacao" class="notice" hidden><p id="cadastro-preparacao-resumo"></p><button id="cadastro-preparar" type="button" class="secondary">Preparar PDFs pendentes</button><p class="small">Usa as cópias já cadastradas, sem reenvio. A nova preparação vale para próximas conversas; análises anteriores são preservadas.</p></div>
       <div id="cadastro-recibo" hidden></div>
@@ -273,23 +281,6 @@
       <p id="gerenciar-erro" role="alert" hidden></p>
       <section class="panel" aria-labelledby="lixeira-titulo"><div class="section-heading"><h2 id="lixeira-titulo">Lixeira</h2><span id="lixeira-contagem" class="support-badge"></span></div><p class="small">Restaurar devolve o item às listas. Se a apuração também foi excluída, restaure-a primeiro. Apagar definitivamente remove do projeto os arquivos do item e não pode ser desfeito.</p><ul id="gerenciar-lixeira" class="manage-list"></ul></section>
     </section>
-    <dialog id="excluir-dialogo" aria-labelledby="excluir-titulo" aria-describedby="excluir-descricao">
-      <form method="dialog"><p class="eyebrow">MOVER PARA A LIXEIRA</p><h2 id="excluir-titulo"></h2><p id="excluir-descricao"></p><p class="small">Você poderá restaurar em Apurações e lixeira. Documentos e registros serão preservados.</p><div class="actions"><button value="cancelar" class="secondary" autofocus>Cancelar</button><button value="excluir" class="danger">Mover para a lixeira</button></div></form>
-    </dialog>
-    <dialog id="apagar-dialogo" class="delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="apagar-titulo" aria-describedby="apagar-descricao">
-      <h2 id="apagar-titulo">Apagar definitivamente</h2>
-      <p id="apagar-item" class="delete-item"></p>
-      <p id="apagar-descricao">Os arquivos listados saem do projeto. A Mesa não consegue recuperá-los depois.</p>
-      <p id="apagar-status" class="small" role="status" aria-live="polite"></p>
-      <div id="apagar-alcance" hidden>
-        <table class="delete-scope"><caption class="sr-only">O que será apagado</caption><thead><tr><th scope="col">Categoria</th><th scope="col">Arquivos</th><th scope="col">Tamanho</th></tr></thead><tbody id="apagar-categorias"></tbody><tfoot><tr><th scope="row">Total</th><td id="apagar-total" colspan="2"></td></tr></tfoot></table>
-        <p id="apagar-preservadas" class="small" hidden></p>
-        <p id="apagar-backup" class="notice"></p>
-        <label class="delete-confirm"><span id="apagar-nome-rotulo"></span><input id="apagar-nome" type="text" maxlength="300" autocomplete="off" spellcheck="false" translate="no"></label>
-      </div>
-      <p id="apagar-erro" role="alert" hidden></p>
-      <div class="actions"><button id="apagar-cancelar" type="button" class="secondary" autofocus>Cancelar</button><button id="apagar-confirmar" type="button" class="danger" disabled>Apagar definitivamente</button></div>
-    </dialog>
     <section id="selecao-acervo" class="panel scope-panel" aria-label="Selecionar acervo">
       <div class="section-heading"><div><h2 id="contexto-pauta">Selecione uma apuração</h2></div><button type="button" id="atualizar" class="secondary">Atualizar lista</button></div>
       <details id="acervo-escolha" open><summary>Escolher análise e conjunto de documentos</summary>
@@ -302,8 +293,8 @@
     </section>
     <div id="area-documentos">
     <select id="documentos-aba" hidden aria-label="Visualização dos documentos"><option value="acervo">Acervo cadastrado</option><option value="pesquisa">Pesquisar no conteúdo</option></select>
-    <nav class="mesa-tabs" aria-label="Documentos"><button id="mesa-aba-acervo" type="button" aria-pressed="true">Acervo cadastrado</button><button id="mesa-aba-pesquisa" type="button" aria-pressed="false">Pesquisar no conteúdo</button><button id="mesa-aba-recibo" type="button">Cadastro e recibo</button></nav>
-    <section id="mesa-acervo" aria-label="Acervo cadastrado"><div class="mesa-upload-banner"><div><h2>Mais documentos para esta apuração?</h2><p>Cadastre e confira o novo lote antes de incorporá-lo à próxima análise.</p></div><button id="mesa-adicionar" type="button">Adicionar documentos</button></div><div class="mesa-acervo-toolbar"><label>Encontrar documento<input id="mesa-filtrar-documento" type="search" name="nome_documento" placeholder="Busque pelo nome…" autocomplete="off"></label><label>Leitura<select id="mesa-filtrar-leitura"><option value="todos">Todos os documentos</option><option value="limitacoes">Com limitações de extração</option></select></label><button id="mesa-atualizar-acervo" type="button" class="secondary">Atualizar acervo</button></div><p id="mesa-acervo-status" role="status" aria-live="polite"></p><p id="mesa-acervo-erro" role="alert" hidden></p><div id="mesa-acervo-lista"></div><div class="mesa-acervo-next"><p>Acervo conferido? Explore o que os documentos permitem afirmar.</p><button id="mesa-perguntar" type="button">Perguntar aos documentos →</button></div></section>
+    <nav class="mesa-tabs" aria-label="Documentos"><button id="mesa-aba-acervo" type="button" aria-pressed="true">Acervo cadastrado</button><button id="mesa-aba-pesquisa" type="button" aria-pressed="false">Pesquisar no conteúdo</button></nav>
+    <section id="mesa-acervo" aria-label="Acervo cadastrado"><div class="docs-topo"><p id="docs-contagem" class="docs-contagem" role="status"></p><label class="docs-busca">Encontrar documento<input id="mesa-filtrar-documento" type="search" name="nome_documento" placeholder="Busque pelo nome…" autocomplete="off"></label></div><div id="documentos-zona"></div><div id="documentos-envio"></div><div id="documentos-recibo" class="docs-recibo" tabindex="-1" hidden></div><div class="mesa-acervo-toolbar"><label>Leitura<select id="mesa-filtrar-leitura"><option value="todos">Todos os documentos</option><option value="limitacoes">Com limitações de extração</option></select></label><button id="mesa-atualizar-acervo" type="button" class="secondary">Atualizar acervo</button></div><p id="mesa-acervo-status" role="status" aria-live="polite"></p><p id="mesa-acervo-erro" role="alert" hidden></p><div id="mesa-acervo-lista"></div><div class="mesa-acervo-next"><p>Acervo conferido? Explore o que os documentos permitem afirmar.</p><button id="mesa-perguntar" type="button">Perguntar aos documentos →</button></div></section>
     <div id="mesa-pesquisa">
     <section class="panel" aria-label="Pesquisar documentos">
       <details id="busca-tecnica" open><summary>Versão da busca nestes documentos</summary><div class="index-selection"><label>Versão da busca documental<select id="geracao" disabled><option value="">Selecione a versão</option></select></label><p class="small">Cada versão pesquisa os documentos preservados da análise selecionada. A seleção continua explícita.</p></div></details>

@@ -9,7 +9,7 @@ const path = require('node:path');
 const {criarMesa} = require('./dom_minimo.cjs');
 
 const DICIONARIO = {textos: {'Visão geral': 'Overview'}, padroes: [], erros: {}};
-const scriptsDoDicionario = mesa => mesa.doc.querySelectorAll('script').filter(no => String(no.src || no.getAttribute?.('src') || '').includes('i18n_en.js'));
+const scriptsDoDicionario = mesa => [...mesa.doc.querySelectorAll('script')].filter(no => String(no.src || no.getAttribute?.('src') || '').includes('i18n_en.js'));
 
 async function abrir(idioma = 'pt') {
   const mesa = criarMesa({idioma, scripts: ['i18n.js'], url: 'http://127.0.0.1:8765/?area=inicio'});
@@ -50,12 +50,33 @@ test('se o dicionário não carregar, a tela segue em português e não trava', 
   scriptsDoDicionario(mesa)[0].onerror();
   await promessa;
   assert.equal(rotulo.textContent, 'Visão geral');
+  // O idioma não vira inglês: lang continua pt-BR (leitor de tela) e a preferência não é gravada (a pessoa não fica presa em inglês).
+  assert.equal(mesa.janela.I18N.idioma(), 'pt');
+  assert.equal(mesa.doc.documentElement.lang, 'pt-BR');
+  assert.notEqual(mesa.janela.localStorage.getItem('vlado-idioma'), 'en');
 });
 
-test('a URL do dicionário leva o hash do <meta name="vlado-versoes"> quando o servidor o informa', async () => {
+test('preferência já gravada em inglês e dicionário que falha: a tela fica em português e a preferência é mantida para tentar de novo', async () => {
+  const mesa = criarMesa({idioma: 'pt', armazenamento: {'vlado-idioma': 'en'}, scripts: ['i18n.js'], url: 'http://127.0.0.1:8765/?area=inicio'});
+  await mesa.esperar(6);
+  const tag = scriptsDoDicionario(mesa)[0];
+  assert.ok(tag, 'a carga em inglês pede o dicionário');
+  tag.onerror();
+  await mesa.esperar(6);
+  assert.equal(mesa.janela.I18N.idioma(), 'pt');
+  assert.equal(mesa.doc.documentElement.lang, 'pt-BR');
+  assert.equal(mesa.janela.localStorage.getItem('vlado-idioma'), 'en', 'a preferência continua gravada');
+});
+
+test('a URL do dicionário leva o hash do <meta name="vlado-versoes"> quando o servidor o informa, e a URL simples quando não', async () => {
+  // O index.html traz o marcador __VERSOES__ (o servidor o troca pelo JSON); sem servidor ele não é JSON e a URL fica simples.
+  const sem = await abrir('pt');
+  sem.janela.I18N.definir('en');
+  assert.equal(scriptsDoDicionario(sem)[0].src, '/i18n_en.js');
   const mesa = await abrir('pt');
-  const meta = mesa.doc.createElement('meta'); meta.setAttribute('name', 'vlado-versoes'); meta.setAttribute('content', JSON.stringify({'i18n_en.js': 'abc123def456'}));
-  mesa.doc.head.append(meta);
+  const meta = mesa.doc.querySelector('meta[name="vlado-versoes"]');
+  assert.ok(meta, 'o index.html declara o meta das versões');
+  meta.setAttribute('content', JSON.stringify({'i18n_en.js': 'abc123def456'}));
   mesa.janela.I18N.definir('en');
   assert.equal(scriptsDoDicionario(mesa)[0].src, '/i18n_en.js?v=abc123def456');
 });

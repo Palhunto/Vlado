@@ -54,7 +54,7 @@
   window.limparRascunhosCaderno = () => { stopEverything(); drafts.clearAll(); };
   // Before signing out: save what can be saved; if something is left, ask. True means "go on".
   window.prepararSaidaCaderno = async () => {
-    if (await flush() || !pending() || window.confirm(t('Há alterações não salvas no Caderno. Sair sem salvar?'))) { stopEverything(); return true; }
+    if (await flush() || !pending() || await Dialogo.confirmar({variante:'destrutivo', titulo:'Sair sem salvar?', texto:'Há alterações não salvas no Caderno.', acao:'Sair sem salvar'})) { stopEverything(); return true; }
     return false;
   };
   const accountReady = document.body.dataset.modo === 'local' || document.body.dataset.conta ? Promise.resolve()
@@ -410,7 +410,7 @@
     }
     return !dirty && !retryPayload && !conflict;
   }
-  const discard = () => window.confirm(t('Há alterações não salvas. Descartar essas alterações?'));
+  const discard = () => Dialogo.confirmar({variante:'destrutivo', titulo:'Descartar alterações?', texto:'Há alterações não salvas.', acao:'Descartar alterações'});
   // The writer chose to drop the open note's unsaved text: its draft goes too.
   function dropDraft() { if (current) drafts.remove(caseId, current.id); }
   const pending = () => dirty || !!retryPayload;
@@ -421,7 +421,7 @@
   async function openNote(id, {force = false} = {}) {
     if (!force && current?.id === id) { setDrawer(null); return; }
     if (!force && current) {
-      if (!(await flush()) && pending()) { if (!discard()) return; abandon(); }
+      if (!(await flush()) && pending()) { if (!(await discard())) return; abandon(); }
       else if (!pending() && !offeredDraft) dropDraft();  // all confirmed; an offered draft waits for a choice
     }
     const ticket = ++noteSequence, captured = caseId;
@@ -468,13 +468,13 @@
   $('apuracao-caso').addEventListener('change', async () => {
     const target = $('apuracao-caso').value;
     if (current && !(await flush()) && pending()) {
-      if (!discard()) { $('apuracao-caso').value = caseId; return; }
+      if (!(await discard())) { $('apuracao-caso').value = caseId; return; }
       abandon();
     }
     load(target, null);
   });
   $('apuracao-atualizar').addEventListener('click', async () => {
-    if ((await flush()) || !pending() || discard()) { if (pending()) abandon(); catalog(); }
+    if ((await flush()) || !pending() || await discard()) { if (pending()) abandon(); catalog(); }
   });
   $('apuracao-nota-titulo').addEventListener('input', changed);
   $('apuracao-form').addEventListener('submit', event => { event.preventDefault(); flush(); });
@@ -521,7 +521,7 @@
   });
   $('apuracao-nova').addEventListener('click', async () => {
     if (!caseId || creating) return;
-    if (!(await flush()) && pending()) { if (!discard()) return; abandon(); }
+    if (!(await flush()) && pending()) { if (!(await discard())) return; abandon(); }
     // A lost answer is resent with the same id, so the note is not created twice.
     if (createRequest?.caso !== caseId) createRequest = {caso:caseId, id:uid(), titulo:t('Nova nota')};
     const request = createRequest;
@@ -539,7 +539,7 @@
     } finally { creating = false; if (!offeredDraft) lockEditing(false); controls(); }
   });
   $('apuracao-excluir').addEventListener('click', async () => {
-    if (!current || !window.confirm(t('Excluir esta nota do caderno? As fontes serão preservadas.'))) return;
+    if (!current || !(await Dialogo.confirmar({variante:'destrutivo', titulo:'Excluir {item}?', item:current.nota.titulo, texto:'As fontes serão preservadas.', acao:'Excluir nota', gatilho:$('apuracao-excluir')}))) return;
     await flush();
     const target = current;
     loading = true; controls(); error();
@@ -586,7 +586,7 @@
   });
   $('apuracao-recarregar').addEventListener('click', async () => {
     if (!current) return;
-    if (!copied && !window.confirm(t('Recarregar descarta o texto deste editor. Continuar?'))) return;
+    if (!copied && !(await Dialogo.confirmar({variante:'destrutivo', titulo:'Recarregar a nota?', texto:'Recarregar descarta o texto deste editor.', acao:'Recarregar e descartar', gatilho:$('apuracao-recarregar')}))) return;
     abandon();
     await openNote(current.id, {force:true});
   });
@@ -636,7 +636,7 @@
     try {
       if (current && !(await flush()) && pending()) {
         if (open) throw new Error(t('Não foi possível salvar a nota aberta. Tente de novo antes de inserir o trecho.'));
-        if (!discard()) throw new Error(t('A nota aberta tem alterações não salvas. Salve ou descarte antes de inserir o trecho.'));
+        if (!(await discard())) throw new Error(t('A nota aberta tem alterações não salvas. Salve ou descarte antes de inserir o trecho.'));
         abandon();
       }
       const revision = open ? current.revisao : captured.notes.find(note => note.id === target)?.revisao;
@@ -674,13 +674,17 @@
   window.addEventListener('acervo-alterado', () => { if (!$('area-apuracao').hidden) catalog(); });
   window.addEventListener('vlado-idioma', () => { renderList(); renderSources(); renderIndicator(); authorship(current?.nota); taskCount(); });
   // Switching the investigation waits for a save that is running or about to run.
-  window.prepararTrocaApuracao = () => {
+  // The change itself is synchronous for the caller; with unsaved text the answer comes from the dialog, so this returns false and,
+  // once the writer confirms, `retomar` repeats the switch.
+  window.prepararTrocaApuracao = retomar => {
     editor.sync?.();
     if (inflight || timer) {
       save(); $('experiencia-status').textContent = t('Aguarde o salvamento da nota.'); return false;
     }
-    if (pending() && !discard()) return false;
-    if (pending()) abandon();
+    if (pending()) {
+      discard().then(ok => { if (ok) { abandon(); retomar?.(); } });
+      return false;
+    }
     return true;
   };
   controls(); drawerLabels();

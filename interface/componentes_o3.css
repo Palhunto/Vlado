@@ -1,0 +1,169 @@
+/* Componentes novos da Onda 3, partes B e D (docs/design/componentes.md). Carregado depois do style.css; só tokens. */
+
+/* === Diálogo de confirmação (componentes.md#dialogo; dialogo.js) === */
+.dialogo{
+  width:min(480px,calc(100% - 2 * var(--espaco-4)));
+  max-width:none;
+  max-height:calc(100% - 2 * var(--espaco-4));
+  padding:var(--espaco-6);
+  border:0;
+  border-radius:var(--raio-cartao);
+  background:var(--theme-surface);
+  color:var(--theme-text);
+  box-shadow:var(--sombra-dialogo);
+  overflow:auto;
+}
+.dialogo[open]{display:flex;flex-direction:column;gap:var(--espaco-4)}
+.dialogo::backdrop{background:var(--theme-backdrop);backdrop-filter:none}
+.dialogo :is(h2,p){margin:0;overflow-wrap:anywhere}
+.dialogo-rubrica{font-size:var(--text-md);font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--theme-muted)}
+.dialogo-titulo{font:600 var(--text-xl)/1.25 var(--fonte-titulo);color:var(--theme-text)}
+.dialogo-texto{font-size:var(--text-base);line-height:1.5}
+.dialogo-nota{font-size:var(--text-md);line-height:1.5;color:var(--theme-muted)}
+.dialogo-campo{display:flex;flex-direction:column;gap:var(--espaco-2);font-size:var(--text-base);font-weight:400}
+.dialogo-campo strong{font-weight:600}
+.dialogo-campo input{width:100%;min-height:44px;box-sizing:border-box;font-size:var(--text-base);font-weight:400}
+.dialogo-erro{font-size:var(--text-md);line-height:1.5;color:var(--theme-danger)}
+.dialogo-erro[hidden],.dialogo-progresso[hidden]{display:none}
+.dialogo-acoes{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--espaco-2);padding-top:var(--espaco-2)}
+.dialogo-progresso{display:flex;flex-direction:column;gap:var(--espaco-2)}
+.dialogo-etapa{font-size:var(--text-base);line-height:1.5}
+
+/* === Barra de progresso (componentes.md#medidor: 8 px na espera longa e no envio) === */
+.medidor-progresso{height:8px;border-radius:var(--raio-pilula);background:var(--theme-line);overflow:hidden}
+.medidor-progresso::before{content:'';display:block;height:100%;width:var(--uso,0%);border-radius:inherit;background:var(--theme-accent);
+  transition:width var(--duracao-media) var(--curva-padrao)}
+@media (prefers-reduced-motion:reduce) {
+  .medidor-progresso::before{transition:none}
+}
+
+/* === Estados de tela (componentes.md#estados; estados.js) === */
+.estado-bloco{display:flex;flex-direction:column;gap:var(--espaco-2);padding:var(--espaco-4);border:1px solid var(--theme-line);border-radius:var(--raio-cartao);
+  background:var(--theme-surface);color:var(--theme-text);margin:var(--espaco-4) 0}
+.estado-bloco :is(p,details){margin:0}
+.estado-titulo{display:flex;align-items:center;gap:var(--espaco-2);font-size:var(--text-base);font-weight:600;line-height:1.5}
+.estado-texto{font-size:var(--text-base);line-height:1.5}
+.estado-nota{font-size:var(--text-md);line-height:1.5;color:var(--theme-muted)}
+.estado-acoes{display:flex;flex-wrap:wrap;gap:var(--espaco-2);padding-top:var(--espaco-2)}
+.estado-erro{background:var(--theme-danger-bg);border-color:var(--theme-danger-line)}
+.estado-erro .estado-titulo{color:var(--theme-danger)}
+.estado-sinal{flex:none;width:var(--espaco-4);height:var(--espaco-4);fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.estado-detalhes{font-size:var(--text-md);color:var(--theme-muted)}
+/* "Detalhes" com cara de link (componentes.md#estados): 14/600 de acento, sublinhado, 44 px de altura. */
+.estado-detalhes summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600;color:var(--theme-accent);text-decoration:underline}
+.estado-detalhes code{overflow-wrap:anywhere}
+/* Espera curta: três barras, 70, 90 e 50 % da largura. Sem animação: com prefers-reduced-motion e sem, o esqueleto fica parado. */
+.estado-esqueleto{display:flex;flex-direction:column;gap:var(--espaco-2);padding:var(--espaco-4) 0}
+.estado-esqueleto span{display:block;height:14px;border-radius:var(--raio-folha);background:var(--theme-line)}
+.estado-esqueleto span:nth-child(1){width:70%}
+.estado-esqueleto span:nth-child(2){width:90%}
+.estado-esqueleto span:nth-child(3){width:50%}
+.campo-erro{margin:var(--espaco-1) 0 0;font-size:var(--text-md);font-weight:400;line-height:1.5;color:var(--theme-danger)}
+:is(input,select,textarea)[aria-invalid="true"]{border:2px solid var(--theme-danger)}
+button[aria-disabled="true"]{cursor:progress}
+
+/* === Envio por arquivo (componentes.md#documentos, W02; envio.js) === */
+.envio-cartao{display:flex;flex-direction:column;gap:var(--espaco-3);padding:var(--espaco-4) var(--espaco-5);margin:var(--espaco-4) 0;
+  border:1px solid var(--theme-line);border-radius:var(--raio-cartao);background:var(--theme-background);color:var(--theme-text)}
+.envio-cartao :is(p,ul){margin:0}
+/* Título e aviso na mesma linha, pela linha de base, com quebra. */
+.envio-cabeca{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--espaco-2)}
+.envio-cabeca .estado-nota{margin:0}
+.envio-titulo{font-size:var(--text-base);font-weight:600;line-height:1.5}
+.envio-lista{display:flex;flex-direction:column;gap:var(--espaco-3);padding:0;list-style:none}
+/* Nome, barra (ou o texto do erro, quando a linha falhou) e resultado (ou "O que fazer"). */
+.envio-arquivo{display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr) minmax(0,200px);align-items:center;column-gap:var(--espaco-4);row-gap:var(--espaco-2)}
+.envio-arquivo[data-falha="true"]{grid-template-columns:minmax(0,260px) minmax(0,1fr) auto}
+.envio-nome{overflow-wrap:anywhere;font-size:var(--text-base)}
+.envio-resultado{display:flex;align-items:flex-start;gap:var(--espaco-2);font-size:var(--text-base);line-height:1.5;color:var(--theme-muted)}
+.envio-resultado[data-tom="ok"]{color:var(--theme-accent)}
+.envio-resultado[data-tom="aviso"]{color:var(--theme-warning);font-weight:600}
+.envio-resultado[data-tom="erro"]{color:var(--theme-danger);font-weight:600}
+.envio-explicacao{grid-column:1 / -1;color:var(--theme-muted)}
+.envio-recibo{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--espaco-2) var(--espaco-3);padding-top:var(--espaco-3);border-top:1px solid var(--theme-line);font-size:var(--text-md)}
+/* "Ver recibo" é link: 14/600 de acento, sublinhado, à direita também no celular. */
+.envio-link{margin-left:auto;font-size:var(--text-md);font-weight:600;color:var(--theme-accent);text-decoration:underline}
+.envio-recibo[hidden],.envio-ajuda[hidden],.envio-explicacao[hidden],.envio-arquivo [hidden],.envio-cartao .estado-acoes[hidden]{display:none}
+@media (max-width:719px) {
+  .envio-arquivo,.envio-arquivo[data-falha="true"]{grid-template-columns:minmax(0,1fr)}
+  .envio-ajuda{justify-self:start}
+}
+
+/* === Documentos (componentes.md#documentos, W02; documentos.js) === */
+.docs-topo{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:var(--espaco-3) var(--espaco-4);margin-bottom:var(--espaco-4)}
+.docs-contagem{margin:0;font-size:var(--text-base);color:var(--theme-muted)}
+.docs-busca{display:flex;flex-direction:column;gap:var(--espaco-1);width:min(420px,100%);font-size:var(--text-md);font-weight:600;color:var(--theme-muted)}
+.docs-busca input{min-height:44px;font-weight:400;font-size:var(--text-base)}
+/* Área de envio: arrastar ou escolher; no celular, só o botão principal e a linha de formatos. */
+.docs-zona{display:flex;flex-direction:column;align-items:center;gap:var(--espaco-2);padding:var(--espaco-6);margin-bottom:var(--espaco-4);text-align:center;
+  border:2px dashed var(--theme-input-line);border-radius:var(--raio-cartao);background:var(--theme-surface);color:var(--theme-text)}
+.docs-zona[hidden]{display:none}
+.docs-zona-ativa{border-color:var(--theme-accent);background:var(--theme-soft)}
+.docs-zona p{margin:0}
+.docs-zona-chamada{font-size:var(--text-base)}
+.docs-formatos{font-size:var(--text-md);color:var(--theme-muted)}
+.docs-escolher,.docs-abrir{min-height:0;padding:0;border:0;background:none;color:var(--theme-accent);font-size:inherit;font-weight:600;text-decoration:underline;cursor:pointer}
+.docs-escolher:hover,.docs-abrir:hover{background:none;color:var(--theme-primary-hover)}
+.docs-abrir{min-height:44px;padding:0 var(--espaco-2);font-size:var(--text-base)}
+.docs-escolher-celular{display:none;width:100%;min-height:48px}
+@media (max-width:719px) {
+  .docs-zona{padding:0;border:0;background:none;text-align:left;align-items:stretch}
+  .docs-zona-chamada{display:none}
+  .docs-escolher-celular{display:inline-flex}
+  .docs-formatos{text-align:center}
+}
+.docs-recibo{padding:var(--espaco-4);margin-bottom:var(--espaco-4);border:1px solid var(--theme-line);border-radius:var(--raio-cartao);background:var(--theme-surface)}
+.docs-recibo[hidden]{display:none}
+.docs-recibo :is(h3,p,ul){margin:0 0 var(--espaco-2)}
+/* Lista: tabela num cartão; no celular, um cartão por documento. */
+.docs-tabela{margin-bottom:var(--espaco-4);border:1px solid var(--theme-line);border-radius:var(--raio-cartao);background:var(--theme-surface);overflow:hidden}
+.docs-lista{width:100%;border-collapse:collapse;font-size:var(--text-base)}
+.docs-lista th{padding:var(--espaco-3) var(--espaco-4);text-align:left;font-size:var(--text-md);font-weight:600;color:var(--theme-muted);background:var(--theme-reading)}
+.docs-lista td{padding:var(--espaco-3) var(--espaco-4);border-top:1px solid var(--theme-line);vertical-align:middle}
+.docs-lista tbody tr:first-child td{border-top:0}
+.docs-acao{text-align:right}
+.docs-titulo{overflow-wrap:anywhere}
+.docs-leitura{display:inline-flex;align-items:flex-start;gap:var(--espaco-2);color:var(--theme-muted)}
+.docs-leitura[data-tom="ok"]{color:var(--theme-accent)}
+.docs-leitura[data-tom="aviso"]{color:var(--theme-warning);font-weight:600}
+.docs-leitura[data-tom="erro"]{color:var(--theme-danger);font-weight:600}
+.docs-tecnicos{margin-top:var(--espaco-1);font-size:var(--text-md);color:var(--theme-muted)}
+.docs-tecnicos summary{cursor:pointer}
+.docs-tecnicos-dados{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:var(--espaco-1) var(--espaco-3);margin:var(--espaco-2) 0 0}
+.docs-tecnicos-dados dt{font-weight:600}
+.docs-tecnicos-dados dd{margin:0;overflow-wrap:anywhere}
+@media (max-width:719px) {
+  .docs-tabela{border:0;background:none;overflow:visible}
+  .docs-lista,.docs-lista tbody,.docs-lista tr,.docs-lista td{display:block}
+  .docs-lista thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+  .docs-lista tr{display:flex;flex-direction:column;gap:var(--espaco-2);padding:var(--espaco-4);margin-bottom:var(--espaco-3);border:1px solid var(--theme-line);border-radius:var(--raio-cartao);background:var(--theme-surface)}
+  .docs-lista td{padding:0;border:0}
+  .docs-lista td.docs-nome{display:contents}
+  .docs-nome .docs-titulo{order:0;font-weight:600}
+  .docs-paginas{order:1}
+  .docs-lista td:nth-child(3){order:2}
+  .docs-acao{order:3}
+  .docs-nome .docs-tecnicos{order:4;margin-top:0}
+  .docs-paginas{font-size:var(--text-md);color:var(--theme-muted)}
+  .docs-acao{text-align:left}
+  .docs-abrir{padding:0}
+}
+/* "Leitura" vai até 420 px, como a busca, com "Atualizar acervo" ao lado (a faixa de baixo de 720 px empilha, no style.css). */
+@media (min-width:720px) {
+  .mesa-acervo-toolbar label:first-child{flex:0 1 420px}
+}
+.docs-recibo-titulo{font-size:var(--text-base);font-weight:600}
+/* Aviso do recibo (natureza informada diferente da apuração): cor de aviso, com sinal, nunca a de erro. */
+.docs-aviso{display:flex;align-items:flex-start;gap:var(--espaco-2);color:var(--theme-warning);font-weight:600}
+
+/* Diálogo com campo e conteúdo do servidor (Apagar definitivamente): linha do item, tabela do que sai e linha de estado. */
+.dialogo-linha{font-size:var(--text-base);font-weight:600;line-height:1.5}
+.dialogo-corpo{display:flex;flex-direction:column;gap:var(--espaco-3)}
+.dialogo-corpo:empty{display:none}
+.dialogo-tabela{width:100%;border-collapse:collapse;font-size:var(--text-md)}
+.dialogo-tabela th,.dialogo-tabela td{padding:var(--espaco-2) 0;border-bottom:1px solid var(--theme-line);text-align:right}
+.dialogo-tabela thead th{font-weight:600;color:var(--theme-muted)}
+.dialogo-tabela th:first-child{text-align:left;font-weight:600}
+.dialogo-tabela tbody th{color:var(--theme-text)}
+.dialogo-tabela tfoot th,.dialogo-tabela tfoot td{border-bottom:0;font-weight:600}
+.dialogo-tabela th+td,.dialogo-tabela td+td{padding-left:var(--espaco-4)}

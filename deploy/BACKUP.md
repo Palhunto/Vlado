@@ -34,7 +34,32 @@ Passo a passo para o dono e para quem opera o servidor. O que é decisão ou ato
 | casos (originais, derivados, cadastros) **e a fila de extração `casos/.fila/`**, rodadas e índices, conversas, lixeira, entrada, **contas (`acesso/`, com hashes de senha)**, ajustes | `segredos/` (chaves de API coladas na Mesa) | Uma chave de API se cola de novo (ou fica na variável de ambiente do servidor); um backup é mais fácil de vazar que um volume. O volume `segredos` nem é montado no serviço de backup. |
 | | dados do Caddy (`caddy_data`: certificado e conta ACME) | O Caddy emite de novo sozinho. |
 | | `configuracao.json` e o código | Fazem parte da imagem (`VLADO_VERSAO`). |
+| | `casos/.apagando/`, `conversas/.apagando/`, `execucoes/.apagando/` e `lixeira/.apagando/` (quarentena do que foi mandado apagar e os manifestos dos apagamentos em curso) | Dado que a pessoa mandou apagar: nunca entra no backup. |
 | | pastas de preparo (`.lote_*`, `.r_*`, `.novo_*`...), `casos/.cadastro.trava`, `casos/.fila/.coordenador` e os `*.lock` | Trabalho em andamento e arquivos de trava, não dados: a Mesa recria a trava no primeiro uso. |
+
+### Quarentena do apagamento (`.apagando/`): FORA do backup
+
+A quarentena é a do apagamento da Plataforma (`scripts/apagamento.py`, `QUARENTENA`). Quando a pessoa manda apagar um caso, uma
+conversa ou uma rodada, a Mesa move o dado para `<volume>/.apagando/<id>/`, na raiz de `casos/`, `conversas/` e `execucoes/`, e o
+remove em segundo plano; o manifesto de cada apagamento em curso (id, tipo, caso, fase, caminhos relativos, sem título) fica em
+`lixeira/.apagando/<item>.json`. Enquanto isso o dado está em quarentena. **O backup exclui as quatro pastas `.apagando`**: é dado que a pessoa mandou apagar, e levá-lo para um backup retido por meses desfaria o apagamento. Diferente
+dos marcadores de operação (`.lote_*`, `.indice_*`...), a quarentena **não faz o backup esperar nem recusar**: a remoção pode demorar
+e nada ali volta a ser dado. A exclusão vale só na raiz dessas quatro pastas (o prefixo `.apagando`); uma pasta de mesmo nome mais
+fundo, dentro de um caso, é dado do caso. **Por que também o manifesto em `lixeira/`:** ele descreve dado que a pessoa mandou apagar e
+não serve sem os arquivos (que não estão no backup); restaurado sozinho, só faria a Mesa concluir um apagamento sem nada a remover. O
+resto de `lixeira/` (o índice dos itens que a pessoa ainda pode restaurar) continua no backup. Uma restauração não traz a quarentena de
+volta. O que já estava em backups anteriores à
+ordem de apagar continua neles até a retenção vencer (como já diz o aviso da tela de apagamento).
+
+**Uma exceção: a fase `renomeando`.** No começo de um apagamento, enquanto as pastas do item são movidas para a quarentena (sob as
+travas, e por isso curto), o manifesto em `lixeira/.apagando/<item>.json` está na fase `renomeando`: o item ainda não está inteiro
+na lixeira nem inteiro na quarentena, e um backup feito nesse meio o guardaria **sem as pastas já movidas**. Por isso, nessa fase,
+o manifesto **é um marcador**, como a trava de cadastro: o backup espera (`VLADO_BACKUP_ESPERA_S`) e, se uma cópia estiver em curso
+quando ele surgir, a descarta e refaz. Passada a fase (`removendo`, o ponto sem volta) volta a valer o que está acima: não espera. Se
+a Mesa caiu nesse meio, o manifesto fica parado em `renomeando` até a próxima partida desfazê-lo; depois de duas horas parado
+(`VLADO_BACKUP_MARCADOR_IDADE_MAX_S`) ele deixa de fazer esperar e o backup segue com um **aviso no manifesto do backup**
+(`apagamento interrompido na renomeação ... o item pode estar incompleto neste backup`). A Mesa desfaz a renomeação ao partir e o
+item volta inteiro à lixeira; o backup seguinte já o guarda inteiro.
 
 ### Registro de auditoria (`registro/`, SEG-02): FORA do backup, de propósito
 
