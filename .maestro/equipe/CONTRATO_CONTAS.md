@@ -10,7 +10,7 @@ related: ['[[PLANO_LANCAMENTO]]', '[[DIAGNOSTICO_LANCAMENTO]]', '[[CONTRATO_EVID
 
 Este é o contrato do sistema de contas da Onda 2 (branch `lancamento/contas-o2`, criada de `cb9afa8`). Ele define redações, papéis, posse de apuração, a matriz operação × papel, o isolamento entre redações, a migração das contas atuais e o armazenamento, e desenha e-mail, segundo fator, sessões e ciclo de vida. Fecha CON-01 a CON-07, PROD-04 e SEG-07 e liga a cota de CUS-01 às contas.
 
-**Nenhum código foi escrito.** O contrato precisa do parecer do Revisor, da segunda leitura da matriz pelo Maestro e da aprovação do dono do projeto. Onde o texto diz "hoje", descreve o código em `cb9afa8`. Onde diz "passa a", descreve o que a Onda 2 entrega. Nomes de módulos, operações e campos novos são propostas que este contrato fixa quando for aprovado. As 16 perguntas que a primeira versão levou ao dono do projeto foram respondidas em 22/11/2026 (P27), todas pela recomendação; a seção 11 as registra como decisões, e o texto cita cada uma como "decisão N".
+**O contrato foi aprovado pelo dono do projeto em 22/11/2026 (P28), com duas ressalvas para o código, registradas na seção 11.** O código entra por entregas, e a seção 12 diz o que já existe. Onde o texto diz "hoje", descreve o código em `cb9afa8`. Onde diz "passa a", descreve o que a Onda 2 entrega. Nomes de módulos, operações e campos novos são propostas que este contrato fixa quando for aprovado. As 16 perguntas que a primeira versão levou ao dono do projeto foram respondidas em 22/11/2026 (P27), todas pela recomendação; a seção 11 as registra como decisões, e o texto cita cada uma como "decisão N".
 
 Dois usos da palavra "dono" aparecem aqui. **Dono**, sem complemento, é o papel dentro de uma redação. **Dono do projeto** é quem decide sobre o Vlado.
 
@@ -723,18 +723,36 @@ O dono do projeto respondeu às 16 perguntas deste contrato em 22/11/2026 e adot
 
 Depende também de decisões já registradas: D6 (controlador dos dados), para os termos e a política; D7 (e-mail do domínio), para o transporte real.
 
+**Aprovação (P28, 22/11/2026).** O dono do projeto aprovou este contrato na revisão 2 (`22bbc97`), com duas ressalvas para o código:
+
+1. **Rebaixar ou desativar outro dono pede a senha de quem faz.** Vale para `equipe-papel`, quando o alvo é dono e o papel novo não é, e para `equipe-desativar`, quando o alvo é dono. As duas se somam à lista da seção 5.15 e entram com o código das operações `equipe-*`.
+2. **O contador de tentativas por identificador sem conta tem teto global.** A seção 8.2 diz que esse contador nunca é despejado antes do prazo e que só o teto por endereço limita a tabela; com a ressalva, o total de contadores de identificadores sem conta passa a ter um teto da instalação. O número e o que acontece ao atingi-lo são fixados na entrega da entrada em dois passos, com teste, e passam pelo Revisor.
+
+Nenhuma das duas muda uma célula da matriz.
+
 ## 12. Verificação
 
-Nada a rodar ainda: este contrato não tem código. Quando houver:
+**Entrega 1, em código:** o portão (`scripts/autorizacao.py`, com a matriz como dado), redações, papéis, posse e participação em `acesso/contas.sqlite`, a migração do `acesso.json`, as operações `caso-*` e os ganchos no servidor e nas rotas. Rodam hoje:
 
 - `python -m unittest discover -s testes -p test_matriz_contas.py -v`: cada célula da matriz e a igualdade entre este arquivo e `autorizacao.MATRIZ`.
 - `python -m unittest discover -s testes -p test_isolamento_redacoes.py -v`: travessia entre redações.
 - `python -m unittest discover -s testes -p test_migracao_contas.py -v`: não ampliação, autoria, reversão e repetição.
-- `-p test_convites.py`, `-p test_segundo_fator.py`, `-p test_sessoes_conta.py`, `-p test_ciclo_conta.py`, `-p test_correio.py`: seção 8.
 - `testes/test_acesso.py` e `testes/test_autorizacao.py`, atualizados para o modelo novo.
+
+**O que a entrega 1 ainda não tem,** e onde o código difere do texto até lá:
+
+- As operações de `autorizacao.PENDENTES` (`conta-*`, `equipe-*`, convite, redefinição de senha e segundo fator) respondem 404. As seis `contas-*` continuam, só para o dono e só sobre a própria redação (`autorizacao.TRANSITORIAS`), e saem quando a tela Equipe entrar (seção 5.5).
+- `data-papel` leva `admin` para o dono enquanto a interface não conhece os papéis novos; os outros papéis vão com o próprio nome. `GET /api/sessao` já devolve os valores novos e `capacidades`.
+- `pendencias` sai sempre vazia: segundo fator e termos entram com a seção 8.
+- Tentativas de entrada: vale o bloqueio por identificador e endereço de hoje. O teto por identificador, o modo protegido e o aparelho conhecido (seção 8.2) entram com a entrada em dois passos.
+- Chave de IA: numa instalação `piloto` com mais de uma redação, `ia-config-salvar` é recusada a todos e `ia-config` não mostra os quatro últimos caracteres da chave do serviço, até a chave própria de cada redação existir (seção 8.5).
+- O registro de auditoria descarta os códigos, motivos, papéis e eventos novos até as listas fechadas de `registro_acesso.py` os receberem (pedido à Plataforma, seção 10); até lá, `acesso_negado` com motivo não chega ao registro.
+- Backup: `acesso.copia_consistente` e `acesso.encerrar_todas_as_sessoes` existem, e o `backup.py` ainda não as usa (pedido à Infra, seção 10). Enquanto não usar, uma restauração traz de volta as sessões que estavam no banco copiado.
+
+Chegam com as próximas entregas: `-p test_convites.py`, `-p test_segundo_fator.py`, `-p test_sessoes_conta.py`, `-p test_ciclo_conta.py`, `-p test_correio.py` (seção 8).
 
 Portão da Onda 2: a matriz inteira coberta por teste; o Revisor tenta atravessar de uma redação para outra e não consegue; segunda leitura da matriz pelo Maestro.
 
 **Manual Follow-Up** (exige pessoa; nenhum agente marca como feito): aprovação deste contrato pelo dono do projeto; confirmação, por quem responde pela LGPD (D6), da decisão 10; contratação do envio de e-mail (D7); ensaio da migração numa cópia dos dados reais, pelo operador; conferência do segundo fator no aplicativo Android, que está congelado (D8).
 
-Status: proposta, sem código. Revisão 2, de 22/11/2026, sobre `1972f1b`: decisões do dono do projeto registradas (P27); correção do achado B1 do Revisor e da família dele (seções 4.5, 5.4, 8.1 e 8.2); ressalvas do Revisor (seções 4.2, 4.3, 4.5, 5.5, 5.15 e 10); ressalvas M1 a M3 da segunda leitura do Maestro (M1 na seção 5.6; M2 nas seções 2.1, 2.4, 5.1 e 5.8; M3 nas seções 2.5, 4.2 e 4.6). Aguarda a conferência do Revisor e do Maestro e a aprovação do dono do projeto.
+Status: aprovado pelo dono do projeto em 22/11/2026 (P28), com as duas ressalvas da seção 11; entrega 1 em código (seção 12). Revisão 2, de 22/11/2026, sobre `1972f1b`: decisões do dono do projeto registradas (P27); correção do achado B1 do Revisor e da família dele (seções 4.5, 5.4, 8.1 e 8.2); ressalvas do Revisor (seções 4.2, 4.3, 4.5, 5.5, 5.15 e 10); ressalvas M1 a M3 da segunda leitura do Maestro (M1 na seção 5.6; M2 nas seções 2.1, 2.4, 5.1 e 5.8; M3 nas seções 2.5, 4.2 e 4.6).
