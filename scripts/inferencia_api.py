@@ -59,7 +59,7 @@ class ErroIA(ValueError):
 _CODIGOS_SDK = (
     (('AuthenticationError', 'PermissionDeniedError'), 'autenticacao',
      'A API recusou a chave ou a permissão. Confira a chave configurada no servidor.'),
-    (('RateLimitError', 'OverloadedError', 'EnforcedSpendLimitReachedError', 'ServiceUnavailableError'),
+    (('RateLimitError', 'OverloadedError', 'ServiceUnavailableError'),
      'limite', 'Limite de uso ou capacidade da API atingido. Tente novamente mais tarde.'),
     (('APIConnectionError', 'APITimeoutError', 'GatewayTimeoutError', 'DeadlineExceededError',
       'RequestTimeoutError'), 'conexao', 'Falha de conexão ou prazo esgotado na API.'),
@@ -67,11 +67,27 @@ _CODIGOS_SDK = (
 )
 
 
+# Billing, not capacity (CONF-04): retrying does not help until the provider account is settled.
+# Anthropic: 402 billing_error, and 429 enforced_spend_limit_reached (the account's monthly spend
+# cap, in error.details.error_code); OpenAI: 429 insufficient_quota (in error.code and error.type).
+CODIGOS_COBRANCA = ('billing_error', 'enforced_spend_limit_reached', 'insufficient_quota')
+MENSAGEM_COBRANCA = ('A conta do provedor da IA está sem crédito ou chegou ao teto de gasto dela; tentar de novo '
+                     'não resolve até a cobrança ser regularizada na conta do provedor.')
+
+
+def _cobranca(exc, nomes) -> bool:
+    if 'EnforcedSpendLimitReachedError' in nomes or getattr(exc, 'status_code', None) == 402:
+        return True
+    return any(getattr(exc, campo, None) in CODIGOS_COBRANCA for campo in ('type', 'code', 'error_code'))
+
+
 def mapear_erro(exc: Exception) -> ErroIA:
     """Classify SDK errors by class name (both SDKs share them) without importing the SDKs."""
     if isinstance(exc, ErroIA):
         return exc
     nomes = {cls.__name__ for cls in type(exc).__mro__}
+    if _cobranca(exc, nomes):
+        return ErroIA(f'{MENSAGEM_COBRANCA} Detalhe: {seguro(exc)}', codigo='cobranca')
     for classes, codigo, mensagem in _CODIGOS_SDK:
         if nomes.intersection(classes):
             return ErroIA(f'{mensagem} Detalhe: {seguro(exc)}', codigo=codigo)

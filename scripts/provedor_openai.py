@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import json
 
-from inferencia_api import ErroIA, Resposta, mapear_erro, seguro
+from inferencia_api import CODIGOS_COBRANCA, MENSAGEM_COBRANCA, ErroIA, Resposta, mapear_erro, seguro
 
 NOME = 'openai'
 TIMEOUT = 600
-CODIGOS_LIMITE = ('rate_limit_exceeded', 'insufficient_quota')
+CODIGOS_LIMITE = ('rate_limit_exceeded',)  # insufficient_quota is billing: CODIGOS_COBRANCA
 LIMITE_ARGUMENTOS = 8000
 
 
@@ -55,6 +55,8 @@ def _argumentos(bruto):
 def _falha(erro):
     codigo = getattr(erro, 'code', None)
     mensagem = seguro(getattr(erro, 'message', None) or 'Falha informada pela API.')
+    if codigo in CODIGOS_COBRANCA:
+        return ErroIA(f'{MENSAGEM_COBRANCA} Detalhe: {mensagem}', codigo='cobranca')
     return ErroIA('Falha na API: ' + mensagem, codigo='limite' if codigo in CODIGOS_LIMITE else None)
 
 

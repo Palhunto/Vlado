@@ -61,6 +61,9 @@ MENSAGENS_SITUACAO = {
 CAUSAS_ERRO = {
     'autenticacao': ('erro', 'autenticacao', 'A API recusou a chave ou não há chave configurada. Corrija a chave em Conexão e opções e tente novamente.'),
     'limite': ('sem_cota', 'limite_api', 'Limite de uso ou capacidade da API atingido. Aguarde e tente novamente.'),
+    'cobranca': ('sem_cota', 'cobranca_api', 'A conta do provedor da IA está sem crédito ou chegou ao teto de gasto '
+                 'dela. Tentar de novo não resolve até a cobrança ser regularizada na conta do provedor; avise quem '
+                 'administra a Mesa. O que já foi concluído foi preservado.'),
     'conexao': ('erro', 'conexao', 'Falha de conexão com a API ou prazo esgotado. Verifique a rede e tente novamente.'),
     'servidor': ('erro', 'servidor', 'Erro temporário no servidor do provedor. Tente novamente.'),
     'max_tokens': ('erro', 'max_tokens', 'A resposta foi truncada pelo limite de tokens de saída. Aumente max_tokens_saida em configuracao.json e tente novamente.'),
