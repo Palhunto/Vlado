@@ -129,7 +129,7 @@ linha de base é do Windows, e as duas não batem pixel a pixel. O que roda no C
 
 ## Tamanho
 
-130 imagens PNG sem perda, 16,8 MB no total (as mais pesadas são as telas de 1440 px). Cada
+130 imagens PNG sem perda, 17,4 MB no total (as mais pesadas são as telas de 1440 px). Cada
 `gerar` completo acrescenta esse tanto ao histórico do git: refazer a linha de base só no portão de cada tela ou fase,
 não a cada commit, e usar recorte (`--telas`, `--larguras`, `--temas`) para trocar só o que mudou.
 

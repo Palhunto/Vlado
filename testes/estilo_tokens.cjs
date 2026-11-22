@@ -11,7 +11,11 @@ const {raiz, ler, semComentarios, tokens, blocos, propriedades, claro, escuro, c
 
 const css = ler('style.css');
 // Sheets whose rules paint the Mesa: none may hold a colour value of its own.
-const FOLHAS = ['style.css', 'caderno.css', 'entrar.css', 'redacao.css'];
+// Folhas da Onda 3 que entram por commits do Frontend: valem o contrato assim que o arquivo existir (sem lista a
+// editar de novo, e sem o teste citar arquivo ausente). Presente, é checado como as demais: nada de cor ou medida solta.
+const FOLHAS_DA_ONDA_3 = ['componentes_o3.css'];
+const FOLHAS = ['style.css', 'caderno.css', 'entrar.css', 'redacao.css',
+  ...FOLHAS_DA_ONDA_3.filter(nome => fs.existsSync(path.join(raiz, nome)))];
 
 test('tokens.css é carregado antes das folhas da Mesa e da página de entrada', () => {
   for (const pagina of ['index.html', 'entrar.html']) {
