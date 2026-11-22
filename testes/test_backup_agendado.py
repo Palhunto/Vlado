@@ -297,6 +297,23 @@ class CifraTest(Base):
             backup.restaurar(self.base / 'd2', arquivo, identidade=self.identidade(OUTRA))
         self.assertFalse((self.base / 'd2').exists() and any((self.base / 'd2').iterdir()))
 
+    def test_falha_ao_decifrar_nao_deixa_pasta_em_trabalho_tmp(self):
+        # J7: o __exit__ não roda quando o __enter__ falha; a pasta de decifragem era esquecida em /trabalho/tmp.
+        arquivo = backup.criar(self.root, self.base / 'copias', destinatarios=[PUBLICA])
+        trab = self.base / 'trab'
+        with self.assertRaisesRegex(ValueError, 'decifrar'):
+            backup.restaurar(self.base / 'd2', arquivo, identidade=self.identidade(OUTRA), trabalho=trab)
+        with self.assertRaisesRegex(ValueError, 'decifrar'):
+            backup.verificar(arquivo, self.identidade(OUTRA), trab)
+        self.assertEqual(list(trab.glob('*')), [], 'sobrou pasta de decifragem')
+        # Arquivo cifrado corrompido depois de decifrar (não é um gzip): também limpa.
+        corrompido = self.base / 'copias' / 'vlado-corrompido.tar.gz.age'
+        cabecalho = arquivo.read_bytes().partition(b'\n')[0]
+        corrompido.write_bytes(cabecalho + b'\n' + bytes(b ^ 0x5A for b in b'isto nao e um gzip'))
+        with self.assertRaises(Exception):
+            backup.verificar(corrompido, self.identidade(), trab)
+        self.assertEqual(list(trab.glob('*')), [], 'sobrou pasta de decifragem')
+
     def test_verificar_confere_hashes_sem_escrever_dados(self):
         arquivo = backup.criar(self.root, self.base / 'copias', destinatarios=[PUBLICA])
         resumo = backup.verificar(arquivo, self.identidade(), self.base / 'trab')
@@ -318,6 +335,64 @@ class CifraTest(Base):
         self.assertEqual(caminho, apagar)
         self.assertEqual(caminho.read_text(encoding='utf-8').strip(), f'ID:{PUBLICA}')
         caminho.unlink()
+
+
+class RestauracaoPelaEntradaPadraoTest(Base):
+    """I6/J9: `restaurar -` não carrega o arquivo inteiro na memória; vai para disco em blocos, com teto."""
+
+    class Fluxo:
+        """Leitor que só aceita ler em blocos e guarda o maior pedido; read() sem tamanho é erro."""
+        def __init__(self, dados: bytes):
+            self.dados, self.pos, self.maior = dados, 0, 0
+
+        def read(self, n=-1):
+            if n is None or n < 0:
+                raise AssertionError('leu o fluxo inteiro de uma vez')
+            self.maior = max(self.maior, n)
+            bloco = self.dados[self.pos:self.pos + n]
+            self.pos += len(bloco)
+            return bloco
+
+    def test_restaura_em_fluxo_e_nao_deixa_arquivo_temporario(self):
+        arquivo = backup.criar(self.root, self.base / 'copias')  # .tar.gz sem cifra
+        fluxo = self.Fluxo(arquivo.read_bytes())
+        entrada = type('E', (), {'buffer': fluxo})
+        destino, trab = self.base / 'destino', self.base / 'trab'
+        with patch.object(backup.sys, 'stdin', entrada):
+            backup.restaurar(destino, '-', trabalho=trab)
+        self.assertLessEqual(fluxo.maior, 1 << 20, 'blocos de no máximo 1 MiB')
+        self.assertEqual((destino / 'casos/c1/originais/D001.txt').read_text(encoding='utf-8'), 'documento sintético')
+        self.assertEqual(list(trab.glob('*')), [], 'o arquivo da entrada padrão não some')
+
+    def test_acima_do_teto_recusa_com_mensagem_clara_e_limpa(self):
+        trab = self.base / 'trab'
+        fluxo = self.Fluxo(b'x' * (3 << 20))
+        with patch.dict(os.environ, {'VLADO_BACKUP_STDIN_MAX_GB': '0.001'}):  # ~1 MiB
+            with self.assertRaisesRegex(ValueError, r'passa de .* GB.*VLADO_BACKUP_STDIN_MAX_GB.*Nada foi restaurado'):
+                with backup._entrada_em_disco(fluxo, trab):
+                    self.fail('não deveria abrir')
+        self.assertEqual(list(trab.glob('*')), [])
+        self.assertLess(fluxo.pos, 3 << 20, 'parou de ler ao passar do teto')
+
+    def test_teto_invalido_e_explicado_e_o_padrao_e_dez_gigas(self):
+        with patch.dict(os.environ, {'VLADO_BACKUP_STDIN_MAX_GB': 'muito'}):
+            with self.assertRaisesRegex(ValueError, 'VLADO_BACKUP_STDIN_MAX_GB'):
+                backup._limite_stdin_bytes()
+        with patch.dict(os.environ, {'VLADO_BACKUP_STDIN_MAX_GB': ''}):
+            self.assertEqual(backup._limite_stdin_bytes(), 10 << 30)
+
+    def test_entrada_que_nao_e_gzip_nao_deixa_rastro(self):
+        trab = self.base / 'trab'
+        entrada = type('E', (), {'buffer': self.Fluxo(b'isto nao e um gzip')})
+        with patch.object(backup.sys, 'stdin', entrada):
+            with self.assertRaises(Exception):
+                backup.restaurar(self.base / 'destino', '-', trabalho=trab)
+        self.assertEqual(list(trab.glob('*')), [])
+
+    def test_o_codigo_nao_le_a_entrada_inteira_para_a_memoria(self):
+        fonte = (RAIZ / 'scripts' / 'backup.py').read_text(encoding='utf-8')
+        self.assertNotIn('sys.stdin.buffer.read()', fonte)
+        self.assertNotRegex(fonte, r'BytesIO\(sys\.stdin')
 
 
 class RetencaoTest(unittest.TestCase):
