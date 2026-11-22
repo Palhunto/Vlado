@@ -164,8 +164,7 @@
     }
     composerState();geometry();
   }
-  const originalArea = showArea;
-  showArea = name => {originalArea(name);navigationState();geometry();};
+  registrarGanchoArea({depois: () => {navigationState();geometry();}});
   window.addEventListener('mesa-rota-alterada',navigationState);
   window.addEventListener('mesa-consulta',event => {if (event.detail.area === 'achados') compactFindings();});
   new MutationObserver(composerState).observe($('codex-mensagens'),{childList:true,subtree:true});
