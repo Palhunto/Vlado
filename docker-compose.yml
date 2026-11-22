@@ -77,6 +77,9 @@ services:
       VLADO_EXTRACAO_TETO_MEMORIA_MB: ${VLADO_EXTRACAO_TETO_MEMORIA_MB:-}
       VLADO_EXTRACAO_TETO_CPU_S: ${VLADO_EXTRACAO_TETO_CPU_S:-}
       VLADO_EXTRACAO_NUCLEOS: ${VLADO_EXTRACAO_NUCLEOS:-}
+      # Teto do registro bruto das consultas ao índice, por rodada (SEG-06). Vazio: 2000 arquivos e 256 MB.
+      VLADO_CONSULTAS_MAX_ARQUIVOS: ${VLADO_CONSULTAS_MAX_ARQUIVOS:-}
+      VLADO_CONSULTAS_MAX_MB: ${VLADO_CONSULTAS_MAX_MB:-}
       # SEG-02: registro de auditoria (autenticação, administração, downloads), uma linha JSON por evento, sem conteúdo, no
       # volume `registro` (o serviço de backup NÃO o monta: fora do backup, de propósito; ver deploy/BACKUP.md).
       VLADO_REGISTRO: /app/registro

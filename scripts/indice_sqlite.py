@@ -5,6 +5,7 @@ from contextlib import closing
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import sqlite3
@@ -449,7 +450,50 @@ def _cobertura(con):
             'aviso': 'Cobertura de texto extraido; nao comprova leitura visual, fidelidade ou ausencia no acervo.'}
 
 
+# SEG-06: teto do registro bruto das consultas, por rodada. Cada consulta (busca, leitura de contexto, cobertura) grava um JSON
+# novo em saidas/consultas_sqlite/ da rodada; sem teto, uma rodada com milhares de consultas encheria o volume de dados.
+#
+# Decisão: o texto da consulta e as passagens devolvidas CONTINUAM no registro bruto. Ele mora dentro da pasta da rodada do caso,
+# com o mesmo acesso, o mesmo backup e o mesmo ciclo de vida do caso (sai junto quando o caso é apagado), é o registro editorial
+# das consultas que o AGENTS.md manda preservar e nunca vai para um registro global (o registro de auditoria da Mesa não vê a
+# busca). Amostrar ou apagar os mais antigos quebraria essa garantia (cada resultado tem um registro bruto); por isso o desenho é
+# o teto: passado ele, a consulta é recusada com mensagem clara, nada é apagado e o registro já feito fica preservado.
+# Variáveis: VLADO_CONSULTAS_MAX_ARQUIVOS (padrão 2000) e VLADO_CONSULTAS_MAX_MB (padrão 256), por rodada.
+TETO_ARQUIVOS_PADRAO = 2000
+TETO_MB_PADRAO = 256
+
+
+def _teto(nome: str, padrao: int, maximo: int) -> int:
+    bruto = os.environ.get(nome, '').strip()
+    if not bruto:
+        return padrao
+    try:
+        return max(1, min(maximo, int(bruto)))
+    except ValueError as exc:
+        raise ValueError(f'{nome} deve ser um número inteiro.') from exc
+
+
+def _conferir_teto_do_registro(pasta: Path) -> None:
+    """Recusa uma consulta nova quando a rodada já guarda arquivos demais ou bytes demais de registro bruto."""
+    maximo_arquivos = _teto('VLADO_CONSULTAS_MAX_ARQUIVOS', TETO_ARQUIVOS_PADRAO, 10_000_000)
+    maximo_mb = _teto('VLADO_CONSULTAS_MAX_MB', TETO_MB_PADRAO, 1_048_576)
+    arquivos = total = 0
+    try:
+        with os.scandir(pasta) as itens:
+            for item in itens:
+                if item.is_file(follow_symlinks=False):
+                    arquivos += 1
+                    total += item.stat(follow_symlinks=False).st_size
+    except FileNotFoundError:
+        return
+    if arquivos >= maximo_arquivos or total >= maximo_mb << 20:
+        raise ValueError(f'Teto do registro de consultas desta rodada atingido ({arquivos} arquivos, {total >> 20} MB; limite '
+                         f'{maximo_arquivos} arquivos ou {maximo_mb} MB). Abra uma nova rodada para continuar consultando; o '
+                         'registro bruto das consultas anteriores foi preservado.')
+
+
 def _salvar_log(run, result):
+    _conferir_teto_do_registro(dentro(run, 'saidas/consultas_sqlite'))
     relative = f'saidas/consultas_sqlite/{uuid.uuid4().hex}.json'
     result['arquivo_log'] = relative
     result['executada_em_utc'] = datetime.now(timezone.utc).isoformat()
