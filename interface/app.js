@@ -559,12 +559,21 @@ const humanReviewStates = {
   sem_suporte_suficiente:['Sem suporte suficiente','Os documentos consultados não permitem sustentar a afirmação.']
 };
 // Human checks are solid marks; only a check against the original carries ✓ (text, not color).
+// Sinais dos selos como SVG embutido (a fonte da Mesa não tem ✕ ✎ ◐ e a CSP não aceita imagem data:); desenhos de docs/design/icones/.
+const SINAIS = {'sem-suporte': 'M7 7l10 10M17 7L7 17', parcial: 'M20 12a8 8 0 11-16 0 8 8 0 0116 0zM12 4v16M12 8h3M12 12h4M12 16h3', corrigido: 'M5 19l1-4L16 5l3 3L9 18zM14 7l3 3'};
+function sinalSvg(nome) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); svg.classList.add('mesa-sinal');
+  const caminho = document.createElementNS('http://www.w3.org/2000/svg', 'path'); caminho.setAttribute('d', SINAIS[nome]); svg.append(caminho);
+  return svg;
+}
 function humanReviewBadge(item) {
   const state = item.revisao_humana?.estado || 'pendente';
   const badge = element('span', undefined, `human-review-badge human-${state}`);
   if (state === 'conferida_no_original') {
     const mark = element('span', '✓'); mark.setAttribute('aria-hidden', 'true'); badge.append(mark, ' ');
   }
+  if (state === 'sem_suporte_suficiente') badge.append(sinalSvg('sem-suporte'), ' ');
   badge.append(humanReviewStates[state][0]);
   return badge;
 }

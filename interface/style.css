@@ -1783,6 +1783,8 @@ body[data-modo="piloto"] #codex-desligar{display:none}
 .human-review-badge.human-precisa_de_ajuste{background:var(--theme-warning-bg);color:var(--theme-warning);border-color:var(--theme-warning-line)}
 .human-review-badge.human-precisa_de_ajuste::before{content:'! ' / ''}
 .human-review-badge.human-sem_suporte_suficiente{background:var(--theme-danger-bg);color:var(--theme-danger);border-color:var(--theme-danger-line)}
+/* Sinal em SVG embutido (traço do texto): ✕ sem suporte, ✎ corrigida, ◐ leitura parcial. */
+.mesa-sinal{width:1em;height:1em;vertical-align:-.125em;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
 /* Work-area heading: the area name, then the investigation it belongs to, on one line. */
 .intro{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;margin:0 0 22px;max-width:none}
 .intro h1{font:600 var(--text-2xl)/1.2 var(--fonte-titulo);margin:0;max-width:none;text-wrap:balance}

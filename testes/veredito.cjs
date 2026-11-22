@@ -26,6 +26,10 @@ test('selo da IA traz o prefixo “IA ·”; conferência humana traz ✓ em tex
   const pendente = avaliar('humanReviewBadge')({});
   assert.equal(pendente.textContent, 'Pendente');
   assert.ok(pendente.classList.contains('human-pendente'));
+  // "Sem suporte suficiente" leva o sinal ✕ como SVG embutido, junto do texto (componentes.md#selo: sempre sinal e texto).
+  const sem = avaliar('humanReviewBadge')({revisao_humana: {estado: 'sem_suporte_suficiente'}});
+  assert.ok(sem.querySelector('svg.mesa-sinal'), 'sinal ✕ ausente');
+  assert.equal(sem.textContent.trim(), 'Sem suporte suficiente');
 });
 
 test('em inglês os selos dizem “AI ·” e “Checked against the original”', () => {
