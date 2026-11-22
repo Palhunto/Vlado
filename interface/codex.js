@@ -331,6 +331,8 @@
       if (list.conversas.some(c => c.id === conversation)) $('codex-conversa').value = conversation;
       else if (conversation && !active && !submitting) clear();
       destination();
+      // Guests have no access to the documents (the server refuses the inventory): ask nothing and show no document panel.
+      if (guest()) return;
       // A problem in the current inventory must not hide frozen conversations.
       const inventory = await api('inventario', {caso:caseId});
       if (version !== inventoryVersion || caseId !== $('codex-caso').value) return;
@@ -547,7 +549,7 @@
         state(data.conversa.estado);
         limitations();
         if (renderFailure) throw renderFailure;
-        if (!active && data.eventos.length < 100) { await conversations(); return; }
+        if (!active && data.eventos.length < 100) { window.atualizarCotaBarra?.(true); await conversations(); return; }
       } catch (error) {
         if (version !== view) return;
         if (error.rede) { await lostConnection(++attempt); continue; }

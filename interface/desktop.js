@@ -366,19 +366,23 @@
     const card=$('mesa-cota');
     try{
       const res=await window.fetch?.('/api/cota');if(!res?.ok)throw new Error('sem cota');
-      const block=(await res.json())?.conta;if(!block)throw new Error('sem cota');
+      const data=await res.json(),account=data?.conta;if(!account)throw new Error('sem cota');
+      // Administrators also get the installation's quota: the card shows the tighter of the two (smaller balance), so it never shows a
+      // balance that the installation's ceiling has already taken away. A guest only gets its own account.
+      const org=data.organizacao,block=org&&Number(org.saldo_brl)<Number(account.saldo_brl)?org:account,scope=block===org?'instalação':'';
       const used=Number(block.gasto_brl),cap=Number(block.teto_brl);if(!Number.isFinite(used)||!Number.isFinite(cap)||cap<=0)throw new Error('sem cota');
       const money=(value,full)=>new Intl.NumberFormat('pt-BR',{minimumFractionDigits:full?2:0,maximumFractionDigits:2}).format(value);
       const pct=Math.min(100,Math.round(used/cap*100));
       const value=`R$ ${money(used,true)} de R$ ${money(cap,!Number.isInteger(cap))}`,spent=Boolean(block.esgotada);
       // Used up is never shown by colour alone (W11, rules 6 and 7): the label changes, a "!" comes first and the aria-label says it.
-      $('mesa-cota-rotulo').textContent=spent?'Cota esgotada':'Cota do mês';
+      $('mesa-cota-rotulo').textContent=scope?(spent?'Cota da instalação esgotada':'Cota da instalação'):(spent?'Cota esgotada':'Cota do mês');
       $('mesa-cota-valor').textContent=value;
       $('mesa-cota-medidor').style.setProperty('--uso',(spent?100:pct)+'%');
-      $('mesa-cota-medidor').setAttribute('aria-label',spent?`Cota do mês esgotada: ${value}`:`${pct}% da cota usada`);
+      $('mesa-cota-medidor').setAttribute('aria-label',scope?(spent?`Cota da instalação esgotada: ${value}`:`${pct}% da cota da instalação usada`):(spent?`Cota do mês esgotada: ${value}`:`${pct}% da cota usada`));
       card.dataset.esgotada=String(spent);card.hidden=false;
     }catch(_){card.hidden=true;}
   }
+  window.atualizarCotaBarra=force=>loadQuota(force);   // codex.js chama ao terminar cada pergunta
   loadQuota(true);
   window.addEventListener('focus',()=>loadQuota());
   // Profile in the sidebar footer: name and role from the session; it opens Configurações (shown only when piloto.js allows it).

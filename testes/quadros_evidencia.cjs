@@ -95,10 +95,22 @@ test('linha do tempo: filtro por tipo de data e distinção entre data exata e p
   assert.equal(eventos().length, 2);
   const [parcial, exata] = eventos();
   assert.ok(parcial.classList.contains('marco-parcial'));
-  assert.match(parcial.textContent, /2021 · Data parcial: ano/);
+  // Parte E (componentes.md#linha-do-tempo): dia e mês na coluna da data, o ano no cabeçalho do grupo, e o qualificador diz o que não se sabe.
+  assert.match(parcial.textContent, /2021mês e dia não informados/);
+  assert.ok(parcial.querySelector('.tempo-qualificador.is-parcial'), 'o qualificador de data parcial tem o destaque de aviso, além do texto');
   assert.ok(exata.classList.contains('marco-exato'));
-  assert.match(exata.textContent, /12\/03\/2021 · Data exata/);
+  assert.match(exata.textContent, /12 mardata exata/);
   assert.equal(exata.querySelector('time').getAttribute('datetime'), '2021-03-12');
+  assert.equal(exata.querySelector('time').getAttribute('title'), '12/03/2021', 'a data completa fica no title');
+  // Marco com o ícone do tipo de data (assinatura = contrato, fato = calendário) e o ano como cabeçalho do grupo, com a contagem.
+  assert.ok(parcial.querySelector('.tempo-marco svg.tempo-marco-icone path'));
+  assert.equal(m.$('quadros-tempo').querySelectorAll('.tempo-ano-titulo').length, 1);
+  assert.equal(m.$('quadros-tempo').querySelector('.tempo-ano-titulo').textContent, '2021');
+  assert.equal(m.$('quadros-tempo').querySelector('.tempo-ano-conta').textContent, '2 acontecimentos · 2 com documento');
+  // O selo da fonte é o primeiro botão do cartão e abre o original; a evidência inteira fica recolhida em "Evidência da data".
+  assert.ok(exata.querySelector('button.tempo-selo'));
+  assert.ok(exata.querySelector('details.tempo-evidencia'));
+  assert.equal(m.$('quadros-tempo').querySelector('.tempo-tudo').getAttribute('aria-pressed'), 'true', '"Tudo" aparece ligado quando nada foi filtrado');
   const caixas = m.$('quadros-tempo').querySelectorAll('.tempo-filtro input');
   assert.deepEqual(caixas.map(c => c.value), ['fato', 'assinatura', 'publicacao']);
   caixas[1].checked = false; caixas[1].dispatchEvent(new Evento('change', {bubbles: true})); await m.esperar(8);

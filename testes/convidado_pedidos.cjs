@@ -30,6 +30,17 @@ for (const desktop of [false, true]) {
   });
 }
 
+for (const desktop of [false, true]) {
+  test(`convidado abre Perguntar sem erro no banner e sem o painel de documentos (${desktop ? 'desktop' : 'celular'})`, async () => {
+    const {mesa} = await abrir('convidado', desktop);
+    assert.equal(mesa.$('area-codex').hidden, false, 'o convidado está em Perguntar');
+    assert.equal(mesa.$('codex-erro').hidden, true, 'a recusa do inventário não pode aparecer como erro da conversa');
+    assert.equal(mesa.$('codex-erro').textContent, '');
+    const css = fs.readFileSync(path.join(__dirname, '..', 'interface', 'style.css'), 'utf8');
+    assert.match(css, /data-papel="convidado"\] #codex-inventario-detalhes/, 'o painel de documentos é escondido para o convidado');
+  });
+}
+
 test('administrador segue pedindo inventário e a lista de diligências', async () => {
   const {operacoes} = await abrir('admin', true);
   assert.ok(operacoes.includes('inventario'));

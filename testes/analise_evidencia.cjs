@@ -145,8 +145,14 @@ test('mapa: SVG sem biblioteca, forma por tipo, traço por situação e evidênc
   const m = mesa(); const painel = await aba(m, 'mapa');
   const desenho = painel.querySelector('svg.mapa-svg');
   assert.ok(desenho);
-  assert.equal(desenho.querySelectorAll('.mapa-no.pessoa circle').length, 2);
-  assert.equal(desenho.querySelectorAll('.mapa-no.organizacao rect').length, 1);
+  // Parte E: cada nó leva o ícone do tipo na forma do tipo (círculo para pessoa, quadrado para organização), com o nome e o tipo por escrito.
+  assert.equal(desenho.querySelectorAll('.mapa-no.pessoa .mapa-ico svg.mapa-ico-svg').length, 2);
+  assert.equal(desenho.querySelectorAll('.mapa-no.organizacao .mapa-ico svg.mapa-ico-svg').length, 1);
+  assert.equal(desenho.querySelectorAll('.mapa-no .mapa-sub').length, 3, 'o tipo vem escrito em cada nó (Pessoa ou Organização)');
+  // Cada ligação tem o rótulo em pílula, com o ícone do tipo de relação e o texto do tipo (nunca só o ícone).
+  const pilulas = desenho.querySelectorAll('.mapa-pilula');
+  assert.equal(pilulas.length, 2);
+  for (const pilula of pilulas) { assert.ok(pilula.querySelector('.mapa-pilula-icone path')); assert.ok(pilula.querySelector('.mapa-pilula-texto').textContent.length > 0); }
   const [documentada, inferida] = desenho.querySelectorAll('.mapa-ligacao');
   assert.ok(documentada.classList.contains('traco-solido'));
   assert.ok(inferida.classList.contains('traco-tracejado'));
@@ -201,4 +207,19 @@ test('textos das telas de análise têm tradução para o inglês', () => {
     'Leve o foco a uma célula para ver a fonte, o estado e a última correção.', 'Lista de pessoas e organizações']) {
     assert.ok(textos[chave], `tradução de “${chave}”`);
   }
+});
+
+test('ícone da relação pelo texto do tipo: sócio, parentesco, cargo, pagamento, contrato; o resto, vínculo', async () => {
+  const m = mesa(); await aba(m, 'mapa');
+  const icone = m.janela.Quadros.iconeRelacao;
+  assert.equal(icone('Sócio'), 'relacao-socio');
+  assert.equal(icone('Sócia'), 'relacao-socio');
+  assert.equal(icone('Irmãos? A confirmar'), 'relacao-parentesco');
+  assert.equal(icone('Servidora até 2023'), 'relacao-cargo');
+  assert.equal(icone('pagou'), 'pagamento');
+  assert.equal(icone('Contrato 041/2025'), 'contrato');
+  assert.equal(icone('Subcontrato'), 'contrato');
+  assert.equal(icone('Vinculada'), 'relacao-vinculo');
+  assert.equal(icone('fiscal de contrato com'), 'contrato');
+  assert.equal(icone(''), 'relacao-vinculo');
 });

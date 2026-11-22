@@ -13,7 +13,7 @@ const ALFA = {id: 'alfa', titulo: 'Pauta Alfa', rodadas: []};
 async function abrir(cota, idioma = 'pt') {
   const mesa = criarMesa({desktop: true, modo: 'piloto', papel: 'admin', idioma, url: 'http://127.0.0.1:8765/?area=inicio&caso=alfa', catalogo: [ALFA],
     api: operacao => {
-      if (operacao === 'cota') { if (cota instanceof Error) throw cota; return cota; }
+      if (operacao === 'cota') { if (cota instanceof Error) throw cota; return typeof cota === 'function' ? cota() : cota; }
       return ({inventario: {caso_id: 'alfa', corpus_id: 'c1', documentos: [], total_documentos: 0}, 'diligencias-listar': {resultados: []}}[operacao] || {});
     }});
   await mesa.esperar(20);
@@ -60,4 +60,43 @@ test('folha de estilos: esgotada troca fundo, borda, texto, sinal "!" e medidor 
   assert.match(corpos, /color:var\(--theme-warning\)/);
   assert.ok(esgotada.some(r => /rotulo::before/.test(r.seletor) && /content:'! '/.test(r.corpo)), 'sinal ! antes do rótulo');
   assert.ok(esgotada.some(r => /medidor::before/.test(r.seletor) && /var\(--theme-warning\)/.test(r.corpo)), 'medidor de aviso');
+});
+
+// Administrador também recebe a cota da instalação: o cartão mostra a mais apertada (a de menor saldo).
+const comOrganizacao = (conta_, organizacao) => ({mes: '2026-11', moeda: 'BRL', conta: conta_, organizacao});
+const bloco = (gasto, teto, saldo, esgotada = false) => ({gasto_brl: gasto, teto_brl: teto, saldo_brl: saldo, esgotada});
+
+test('administrador: se a instalação tem menos saldo que a conta, o cartão mostra a da instalação', async () => {
+  const mesa = await abrir(comOrganizacao(bloco('10.00', '50.00', '40.00'), bloco('99.00', '100.00', '1.00')));
+  assert.equal(mesa.$('mesa-cota-rotulo').textContent, 'Cota da instalação');
+  assert.equal(mesa.$('mesa-cota-valor').textContent, 'R$ 99,00 de R$ 100');
+  assert.equal(mesa.$('mesa-cota-medidor').getAttribute('aria-label'), '99% da cota da instalação usada');
+});
+
+test('administrador: instalação esgotada vira o estado esgotado, com o rótulo da instalação', async () => {
+  const mesa = await abrir(comOrganizacao(bloco('10.00', '50.00', '40.00'), bloco('100.00', '100.00', '0.00', true)));
+  assert.equal(mesa.$('mesa-cota').dataset.esgotada, 'true');
+  assert.equal(mesa.$('mesa-cota-rotulo').textContent, 'Cota da instalação esgotada');
+  assert.equal(mesa.$('mesa-cota-medidor').getAttribute('aria-label'), 'Cota da instalação esgotada: R$ 100,00 de R$ 100');
+});
+
+test('administrador: se a conta tem menos saldo que a instalação, o cartão segue na conta', async () => {
+  const mesa = await abrir(comOrganizacao(bloco('45.00', '50.00', '5.00'), bloco('60.00', '500.00', '440.00')));
+  assert.equal(mesa.$('mesa-cota-rotulo').textContent, 'Cota do mês');
+  assert.equal(mesa.$('mesa-cota-valor').textContent, 'R$ 45,00 de R$ 50');
+});
+
+test('ao terminar uma pergunta, codex.js atualiza o cartão: atualizarCotaBarra(true) pede a rota de novo', async () => {
+  let atual = conta('10.00', '50.00');
+  const mesa = await abrir(() => atual);
+  assert.equal(mesa.$('mesa-cota-valor').textContent, 'R$ 10,00 de R$ 50');
+  atual = conta('12.30', '50.00');
+  mesa.janela.atualizarCotaBarra(true);
+  await mesa.esperar(6);
+  assert.equal(mesa.$('mesa-cota-valor').textContent, 'R$ 12,30 de R$ 50');
+});
+
+test('codex.js avisa o cartão quando a pergunta termina (o acompanhamento para de esperar eventos)', () => {
+  const codigo = fs.readFileSync(path.join(__dirname, '..', 'interface', 'codex.js'), 'utf8');
+  assert.match(codigo, /if \(!active && data\.eventos\.length < 100\) \{ window\.atualizarCotaBarra\?\.\(true\);/);
 });

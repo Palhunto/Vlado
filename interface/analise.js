@@ -235,38 +235,79 @@
     for (const v of r.evidencias || []) lista.append(Q.evidencia(casoId, v));
     saida.append(lista);
   }
+  // Ícone do tipo de relação, pelo texto livre do tipo (sócio, parentesco, cargo, pagamento, contrato); o rótulo sempre leva o texto também.
+  const semAcento = texto => String(texto || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+  function iconeRelacao(tipo) {
+    const x = semAcento(tipo);
+    if (/soci/.test(x)) return 'relacao-socio';
+    if (/irma|\bpai\b|\bmae\b|filh|conjuge|espos|marido|parent|primo|\btio\b|\btia\b|sobrinh|neto|\bavo|genro|nora|cunhad/.test(x)) return 'relacao-parentesco';
+    if (/cargo|servidor|diretor|secretari|nomead|president|gerente|funcionari|cedid|lotad/.test(x)) return 'relacao-cargo';
+    if (/pagou|pagamento|\bpago|repass|empenh|recebeu/.test(x)) return 'pagamento';
+    if (/contrat|licit|convenio|aditiv/.test(x)) return 'contrato';
+    return 'relacao-vinculo';
+  }
+  Q.iconeRelacao = iconeRelacao;   // exposto para o teste do mapeamento
+  const iconeNo = e => (e.tipo === 'organizacao' ? 'empresa' : 'pessoa');   // órgão público: pede um campo de natureza no Core (hoje só pessoa ou organização)
+  const cortar = (texto, max) => { const x = String(texto || ''); return x.length > max ? `${x.slice(0, max - 1).trimEnd()}…` : x; };
+  // Ícone dentro do SVG do mapa: o caminho do Design, na escala pedida, em torno do ponto (cx, cy).
+  function icone(nome, cx, cy, tamanho, classe) {
+    const g = svg('g', {class: classe, transform: `translate(${cx - tamanho / 2} ${cy - tamanho / 2}) scale(${tamanho / 24})`, 'aria-hidden': 'true'});
+    g.append(svg('path', {d: Q.CAMINHOS[nome] || Q.CAMINHOS['relacao-vinculo']}));
+    return g;
+  }
   function diagrama(casoId, mapa, nomes, saida) {
-    const n = mapa.entidades.length, L = 640, A = 420, cx = L / 2, cy = A / 2, raio = Math.min(cx, cy) - 70;
-    const pos = Object.fromEntries(mapa.entidades.map((e, i) => {
-      const ang = -Math.PI / 2 + (2 * Math.PI * i) / Math.max(n, 1);
-      return [e.id, n === 1 ? [cx, cy] : [Math.round(cx + raio * Math.cos(ang)), Math.round(cy + raio * Math.sin(ang))]];
+    const n = mapa.entidades.length, L = 640, A = 520, LARG = 184, ALT = 68, cx = L / 2, cy = A / 2;
+    const rx = Math.max(0, cx - LARG / 2 - 10), ry = Math.max(0, cy - ALT / 2 - 30);
+    // A entidade mais ligada vai ao centro e as demais ao redor, para as ligações saírem dela como raios e os rótulos não caírem sobre os nós.
+    const grau = {}; for (const r of mapa.relacoes) { grau[r.origem] = (grau[r.origem] || 0) + 1; grau[r.destino] = (grau[r.destino] || 0) + 1; }
+    const centro = n >= 3 ? [...mapa.entidades].sort((a, b) => (grau[b.id] || 0) - (grau[a.id] || 0))[0] : null;
+    const anel = mapa.entidades.filter(e => e !== centro);
+    const pos = Object.fromEntries(mapa.entidades.map(e => {
+      if (e === centro || n === 1) return [e.id, [cx, cy]];
+      const i = anel.indexOf(e), ang = -Math.PI / 2 + (2 * Math.PI * i) / Math.max(anel.length, 1);
+      return [e.id, [Math.round(cx + rx * Math.cos(ang)), Math.round(cy + ry * Math.sin(ang))]];
     }));
     const desenho = svg('svg', {viewBox: `0 0 ${L} ${A}`, class: 'mapa-svg', role: 'group', 'aria-label': t('Diagrama do mapa. A lista ao lado traz as mesmas ligações.')});
+    const rotulos = [];
     for (const r of mapa.relacoes) {
       const [x1, y1] = pos[r.origem] || [cx, cy], [x2, y2] = pos[r.destino] || [cx, cy];
       const g = svg('g', {class: `mapa-ligacao traco-${traco(r.situacao)}`, tabindex: '0', role: 'button', 'aria-pressed': 'false',
         'aria-label': `${nomes[r.origem]} — ${r.tipo} — ${nomes[r.destino]}: ${t(SIT_RELACAO[r.situacao] || r.situacao)}`});
       g.dataset.relacao = r.id;
       g.append(svg('line', {x1, y1, x2, y2, class: 'mapa-linha'}), svg('line', {x1, y1, x2, y2, class: 'mapa-alvo'}));
+      // Rótulo da ligação: pílula com o ícone do tipo e o texto do tipo, no meio da linha; segue a ligação (ativa, foco).
+      const texto = cortar(r.tipo, 20), largura = Math.round(34 + texto.length * 7.4);
+      // Ligação que sai da entidade central: o rótulo fica a 62% do caminho, longe do nó do centro; as demais, no meio.
+      const doCentro = centro && r.origem === centro.id ? 1 : centro && r.destino === centro.id ? 2 : 0, f = doCentro ? 0.62 : 0.5;
+      const [bx, by, ex, ey] = doCentro === 2 ? [x2, y2, x1, y1] : [x1, y1, x2, y2], mx = Math.round(bx + (ex - bx) * f), my = Math.round(by + (ey - by) * f);
+      const pilula = svg('g', {class: `mapa-pilula traco-${traco(r.situacao)}`, transform: `translate(${mx - largura / 2} ${my - 14})`, 'aria-hidden': 'true'});
+      pilula.append(svg('rect', {width: largura, height: 28, rx: 14, class: 'mapa-pilula-fundo'}), icone(iconeRelacao(r.tipo), 16, 14, 14, 'mapa-pilula-icone'));
+      const rotuloTexto = svg('text', {x: 28, y: 19, class: 'mapa-pilula-texto', translate: 'no'}); rotuloTexto.textContent = texto; pilula.append(rotuloTexto);
       const abrir = () => {
         for (const outro of desenho.querySelectorAll('.mapa-ligacao')) { outro.classList.remove('is-ativa'); outro.setAttribute('aria-pressed', 'false'); }
-        g.classList.add('is-ativa'); g.setAttribute('aria-pressed', 'true'); detalheRelacao(casoId, saida, r, nomes);
+        for (const outra of desenho.querySelectorAll('.mapa-pilula')) outra.classList.remove('is-ativa');
+        g.classList.add('is-ativa'); pilula.classList.add('is-ativa'); g.setAttribute('aria-pressed', 'true'); detalheRelacao(casoId, saida, r, nomes);
       };
+      pilula.addEventListener('click', abrir);
       // Focus only highlights the line (CSS); the live detail panel changes on Enter, Space or click.
       g.addEventListener('click', abrir);
       g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(); } });
-      desenho.append(g);
+      desenho.append(g); rotulos.push(pilula);
     }
+    // Nós por cima das linhas e abaixo dos rótulos: caixa em HTML (o texto quebra e corta com reticências), ícone do tipo na forma do tipo.
     for (const e of mapa.entidades) {
       const [x, y] = pos[e.id], g = svg('g', {class: `mapa-no ${e.tipo}`});
-      g.append(e.tipo === 'organizacao' ? svg('rect', {x: x - 11, y: y - 11, width: 22, height: 22, rx: 3, class: 'mapa-forma'}) : svg('circle', {cx: x, cy: y, r: 12, class: 'mapa-forma'}));
-      // Label on the outer side of the ring (above nodes in the top half, below in the bottom half),
-      // so links, which run towards the centre, do not cross it; side nodes anchor away from the centre.
-      const acima = n > 1 && y < cy, lado = Math.abs(x - cx) > raio * 0.6 ? (x < cx ? 'end' : 'start') : 'middle';
-      const rotulo = svg('text', {x: lado === 'middle' ? x : x + (lado === 'start' ? 18 : -18), y: lado === 'middle' ? (acima ? y - 20 : y + 30) : y + 5,
-        'text-anchor': lado, class: 'mapa-rotulo', translate: 'no'}); rotulo.textContent = e.nome;
-      g.append(rotulo); desenho.append(g);
+      const fo = svg('foreignObject', {x: x - LARG / 2, y: y - ALT / 2, width: LARG, height: ALT});
+      const cartao = element('div', undefined, 'mapa-cartao');
+      const forma = element('span', undefined, 'mapa-ico'); forma.setAttribute('aria-hidden', 'true'); forma.append(Q.icone(iconeNo(e), 'mapa-ico-svg'));
+      const textos = element('span', undefined, 'mapa-cartao-texto');
+      textos.append(dado('b', e.nome, 'mapa-nome'), element('span', e.tipo === 'organizacao' ? t('Organização') : t('Pessoa'), 'mapa-sub'));
+      cartao.append(forma, textos); fo.append(cartao); g.append(fo, svg('title'));
+      g.lastChild.textContent = e.nome;
+      desenho.append(g);
     }
+    // Os rótulos das ligações vão por cima dos nós (as linhas ficam por baixo, saindo do centro de cada um).
+    for (const pilula of rotulos) desenho.append(pilula);
     return desenho;
   }
   function listaMapa(casoId, mapa, nomes, saida) {
