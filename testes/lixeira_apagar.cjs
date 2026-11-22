@@ -20,13 +20,13 @@ const SUCESSO = {estado: 'apagado', item: ALCANCE.item, categorias: ALCANCE.cate
 const QUARENTENA = 'Parte do item não pôde ser removida agora e volta à lixeira na próxima partida da Mesa. Até lá, não restaure nem apague este item de novo.';
 
 // Every lixeira call can be held open to observe the in-flight state. The trash list follows what the server "deleted".
-function abrir({idioma = 'pt', apagar = () => SUCESSO, alcance = () => structuredClone(ALCANCE)} = {}) {
+function abrir({idioma = 'pt', apagar = () => SUCESSO, alcance = () => structuredClone(ALCANCE), modo = 'local'} = {}) {
   const pendentes = [];
   const estado = {apagado: false};
   const segurar = resposta => new Promise((resolve, reject) => pendentes.push({resolve: () => {
     try { resolve(resposta()); } catch (erro) { reject(erro); }
   }}));
-  const mesa = criarMesa({idioma, armazenamento: idioma === 'en' ? {'vlado-idioma': 'en'} : {}, catalogo: [ALFA],
+  const mesa = criarMesa({modo, idioma, armazenamento: idioma === 'en' ? {'vlado-idioma': 'en'} : {}, catalogo: [ALFA],
     url: 'http://127.0.0.1:8765/?area=gerenciar&caso=alfa', api: operacao => {
       if (operacao === 'gerenciar-listar') return {casos: [ALFA], conversas: [], lixeira: estado.apagado ? [] : [structuredClone(ITEM)]};
       if (operacao === 'lixeira-alcance') return segurar(alcance);
@@ -40,7 +40,7 @@ const botaoApagar = mesa => [...mesa.$('gerenciar-lixeira').querySelectorAll('bu
 const dialogo = mesa => mesa.doc.querySelector('dialog.dialogo');
 const campo = mesa => dialogo(mesa).querySelector('input');
 const botoes = mesa => [...dialogo(mesa).querySelectorAll('.dialogo-acoes button')];
-const erro = mesa => dialogo(mesa).querySelector('.dialogo-erro');
+const erro = mesa => dialogo(mesa).querySelector('.dialogo-erro[role="alert"]');  // o erro do diálogo (os de campo não têm role)
 const estadoDoAlcance = mesa => dialogo(mesa).querySelector('.dialogo-nota[role="status"]');
 async function abrirDialogo(opcoes) {
   const f = abrir(opcoes);
@@ -244,4 +244,78 @@ test('alcance de um item com apagamento pela metade: o texto aparece no diálogo
   assert.equal(campo(mesa).disabled, true);
   assert.equal(botoes(mesa)[1].disabled, true);
   assert.equal(dialogo(mesa).querySelector('table'), null, 'sem tabela: não há o que confirmar');
+});
+
+// --- onde há contas (modo piloto ou local-contas): o servidor pede a senha de quem apaga (contrato de contas, 5.15; #dialogo-senha) ---
+const senhaDe = mesa => dialogo(mesa).querySelector('input[type="password"]');
+const mensagemDoCampoDeSenha = mesa => [...dialogo(mesa).querySelectorAll('.dialogo-erro-campo')].filter(p => !p.hidden).map(p => p.textContent);
+const recusaDoServidor = (codigo, erro, estado = 'proibido') => Object.assign(new Error(erro), {result: {estado, codigo, erro}});
+
+test('modo local (sem contas): nenhum campo de senha, e o pedido não leva `senha`', async () => {
+  const {mesa, liberar} = await abrirDialogo();
+  await liberar();
+  assert.equal(dialogo(mesa).querySelectorAll('input').length, 1, 'só o campo do nome');
+  digitar(mesa, 'Conversa velha'); botoes(mesa)[1].click(); await mesa.esperar(4); await liberar();
+  assert.equal('senha' in mesa.chamadas.find(c => c.operacao === 'lixeira-apagar').dados, false);
+});
+
+test('com contas: o campo "Sua senha" fica abaixo do campo do nome; a ação só habilita com o nome conferido e a senha preenchida; o pedido leva `senha`', async () => {
+  const {mesa, liberar} = await abrirDialogo({modo: 'piloto'});
+  await liberar();
+  const entradas = [...dialogo(mesa).querySelectorAll('input')];
+  assert.equal(entradas.length, 2); assert.ok(entradas[0] === campo(mesa) && entradas[1] === senhaDe(mesa), 'o nome primeiro, a senha abaixo');
+  assert.equal(senhaDe(mesa).type, 'password'); assert.equal(senhaDe(mesa).autocomplete, 'current-password');
+  assert.match(dialogo(mesa).textContent, /Sua senha/); assert.match(dialogo(mesa).textContent, /A senha com que você entra na Mesa\./);
+  assert.ok(mesa.doc.activeElement === campo(mesa), 'o foco inicial segue no campo do nome');
+  const [, confirmar] = botoes(mesa);
+  assert.equal(confirmar.disabled, true);
+  digitar(mesa, 'Conversa velha'); assert.equal(confirmar.disabled, true, 'só o nome: ainda falta a senha');
+  digitar(mesa, 'outro nome'); senhaDe(mesa).value = 'minha-senha'; senhaDe(mesa).dispatchEvent(new Evento('input', {bubbles: true}));
+  assert.equal(confirmar.disabled, true, 'só a senha: o nome não confere');
+  digitar(mesa, 'conversa velha'); assert.equal(confirmar.disabled, false);
+  confirmar.click(); await mesa.esperar(4); await liberar();
+  assert.deepEqual(JSON.parse(JSON.stringify(mesa.chamadas.find(c => c.operacao === 'lixeira-apagar').dados)),
+    {item: ITEM.id, nome: 'conversa velha', confirmacao: ALCANCE.confirmacao, senha: 'minha-senha'});
+  assert.equal(dialogo(mesa), null, 'apagou: o diálogo fecha');
+  assert.equal(mesa.$('gerenciar-status').textContent.startsWith('Apagado definitivamente'), true);
+});
+
+test('senha incorreta: o erro vai ao campo da senha (limpo, com o foco) e o nome digitado fica; a nova tentativa manda a senha nova', async () => {
+  let tentativa = 0;
+  const {mesa, liberar} = await abrirDialogo({modo: 'piloto', apagar: () => {
+    tentativa += 1;
+    if (tentativa === 1) throw recusaDoServidor('senha_atual_incorreta', 'Senha incorreta.');
+    return SUCESSO;
+  }});
+  await liberar();
+  digitar(mesa, 'Conversa velha'); senhaDe(mesa).value = 'errada'; senhaDe(mesa).dispatchEvent(new Evento('input', {bubbles: true}));
+  botoes(mesa)[1].click(); await mesa.esperar(4); await liberar();
+  assert.deepEqual(mensagemDoCampoDeSenha(mesa), ['Senha incorreta. Confira e tente de novo.']);
+  assert.equal(senhaDe(mesa).value, ''); assert.ok(mesa.doc.activeElement === senhaDe(mesa)); assert.equal(campo(mesa).value, 'Conversa velha', 'o nome digitado fica');
+  assert.equal(erro(mesa).hidden, true, 'não é erro do diálogo');
+  assert.equal(botoes(mesa)[1].disabled, true, 'sem senha a ação espera');
+  senhaDe(mesa).value = 'certa'; senhaDe(mesa).dispatchEvent(new Evento('input', {bubbles: true}));
+  botoes(mesa)[1].click(); await mesa.esperar(4); await liberar();
+  assert.deepEqual(mesa.chamadas.filter(c => c.operacao === 'lixeira-apagar').map(c => c.dados.senha), ['errada', 'certa']);
+  assert.equal(dialogo(mesa), null);
+});
+
+test('bloqueio (429): o texto de 15 minutos no erro do diálogo, a ação indisponível e só Cancelar; outra recusa fica com o texto do servidor e a senha sai do campo', async () => {
+  const {mesa, liberar} = await abrirDialogo({modo: 'piloto', apagar: () => { throw recusaDoServidor('bloqueado', 'Muitas tentativas.', 'bloqueado'); }});
+  await liberar();
+  digitar(mesa, 'Conversa velha'); senhaDe(mesa).value = 'x'; senhaDe(mesa).dispatchEvent(new Evento('input', {bubbles: true}));
+  botoes(mesa)[1].click(); await mesa.esperar(4); await liberar();
+  assert.match(erro(mesa).textContent, /^Muitas senhas erradas seguidas\. Por 15 minutos/); assert.equal(erro(mesa).getAttribute('role'), 'alert');
+  assert.equal(botoes(mesa)[1].disabled, true); assert.equal(botoes(mesa)[0].disabled, false);
+  const outra = await abrirDialogo({modo: 'piloto', apagar: () => { throw new Error(QUARENTENA); }});
+  await outra.liberar();
+  digitar(outra.mesa, 'Conversa velha'); senhaDe(outra.mesa).value = 'x'; senhaDe(outra.mesa).dispatchEvent(new Evento('input', {bubbles: true}));
+  botoes(outra.mesa)[1].click(); await outra.mesa.esperar(4); await outra.liberar();
+  assert.equal(erro(outra.mesa).textContent, QUARENTENA); assert.equal(senhaDe(outra.mesa).value, '', 'uma recusa que não é da senha leva a senha embora');
+});
+
+test('com contas, em inglês: "Your password" e o apoio saem em inglês', async () => {
+  const {mesa, liberar} = await abrirDialogo({modo: 'piloto', idioma: 'en'});
+  await liberar();
+  assert.match(dialogo(mesa).textContent, /Your password/); assert.match(dialogo(mesa).textContent, /The password you use to sign in to the desk\./);
 });
