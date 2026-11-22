@@ -332,6 +332,8 @@ def _registrado(root: Path, item_id: str, confirmacao: str) -> bool:
 def _concluir_registros(root: Path, manifesto: dict) -> None:
     """Catalog, trash and the deletion record, after the point of no return; idempotent."""
     item, resumo = manifesto['item'], manifesto['resumo']
+    if manifesto.get('sem_registro'):
+        return  # concluded and recorded before (see _concluir_ilegivel)
     _atualizar_registros(root, item)
     if not _registrado(root, item['id'], resumo['confirmacao']):
         _registrar(root, item, manifesto['quem'], resumo)
@@ -389,10 +391,12 @@ def aguardar(prazo: float | None = None) -> bool:
         threads[0].join(resta)
 
 
-def _concluir_ilegivel(root: Path, item_id: str, caminho: Path) -> None:
+def _concluir_ilegivel(root: Path, item_id: str) -> dict:
     """A manifest that cannot be read: it exists only after the person confirmed the deletion, so the
-    deletion is concluded from the trash entry (when it is still there): its roots, the quarantine,
-    catalog, trash and a record that says so. OSError leaves it for the next try."""
+    deletion is concluded from the trash entry (when it is still there). Under the lock, like any
+    deletion, only the quick part: the item's roots still in place go to the quarantine too, a readable
+    manifest in ``removendo`` replaces the unreadable one, and catalog, trash and a record that says so.
+    Returns that manifest; its files are removed outside the lock. OSError leaves it for the next try."""
     log.warning('Apagamento definitivo %s: manifesto ilegível; o item já tinha sido confirmado para apagar, '
                 'então o apagamento é concluído a partir da lixeira.', item_id)
     item = next((i for i in lixeira.ativos(root) if i['id'] == item_id), None)
@@ -402,18 +406,27 @@ def _concluir_ilegivel(root: Path, item_id: str, caminho: Path) -> None:
             raizes = _escopo(root, item)['raizes']
         except (ValueError, KeyError, OSError):
             raizes = []
-    for rel in [*raizes, *(f'{volume}/{QUARENTENA}/{item_id}' for volume in VOLUMES)]:
-        entradas: dict[str, tuple[str, int]] = {}
-        pastas: list[str] = []
-        _varrer(root, rel, entradas, pastas)
-        _remover(root, sorted(entradas), pastas)
-    _limpar_quarentena_vazia(root, item_id)
-    if item is not None:
-        _atualizar_registros(root, item)
-        if not _registrado(root, item_id, 'manifesto_ilegivel'):
-            _registrar(root, item, 'partida da Mesa (manifesto ilegível)',
-                       {'conversas': [], 'rodadas': [], 'categorias': {}, 'totais': {}, 'confirmacao': 'manifesto_ilegivel'})
-    caminho.unlink(missing_ok=True)
+    pares = []
+    for volume in VOLUMES:  # what the unreadable manifest had already moved
+        pasta = dentro(root, f'{volume}/{QUARENTENA}/{item_id}')
+        for parte in sorted(pasta.iterdir()) if pasta.is_dir() else []:
+            pares.append([None, f'{volume}/{QUARENTENA}/{item_id}/{parte.name}'])
+    for numero, origem in enumerate(raizes):  # and what was still in place
+        if os.path.lexists(_alvo(root, origem)):
+            destino = f'{origem.split("/")[0]}/{QUARENTENA}/{item_id}/i{numero}'
+            _renomear(root, origem, destino)
+            pares.append([origem, destino])
+    identidade = ({k: item.get(k) for k in ('id', 'tipo', 'caso', 'conversa', 'rodada')} if item is not None
+                  else {'id': item_id, 'tipo': None, 'caso': None, 'conversa': None, 'rodada': None})
+    manifesto = {'esquema': 1, 'item': identidade, 'fase': 'removendo', 'quem': 'partida da Mesa (manifesto ilegível)',
+                 'em_utc': datetime.now(timezone.utc).isoformat(), 'raizes': pares,
+                 'resumo': {'conversas': [], 'rodadas': [], 'categorias': {}, 'totais': {},
+                            'confirmacao': 'manifesto_ilegivel'},
+                 # Gone from the trash already: its registries were concluded, and recorded, before.
+                 'sem_registro': item is None}
+    _gravar_manifesto(root, manifesto)  # readable from here on: a crash during the removal concludes it
+    _concluir_registros(root, manifesto)
+    return manifesto
 
 
 def retomar(root, *, segundo_plano: bool = False, espera: float | None = None) -> dict:
@@ -438,7 +451,7 @@ def retomar(root, *, segundo_plano: bool = False, espera: float | None = None) -
                     log.warning('Apagamento definitivo: manifesto %s fora do padrão; ficou como está.', caminho.name)
                     continue
                 try:
-                    _concluir_ilegivel(root, caminho.stem, caminho)
+                    pendentes.append(_concluir_ilegivel(root, caminho.stem))  # its files: outside the lock
                     resumo['ilegiveis'] += 1
                 except OSError as exc:
                     log.warning('Apagamento definitivo %s: não concluído (%s); a próxima partida tenta de novo.',

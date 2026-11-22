@@ -208,6 +208,41 @@ class QuedaTest(Base):
         self.assertEqual([(r['item_id'], r['confirmacao']) for r in self.registros()],
                          [(self.item['id'], 'manifesto_ilegivel')])
 
+    def test_remocao_de_um_ilegivel_fica_fora_da_trava(self):
+        # The Coruja's proof: with an unreadable manifest the files were removed inside the cadastro lock.
+        from cadastrar_documentos import _trava
+        real, vezes = os.rename, [0]
+
+        def cai_na_segunda(origem, destino):
+            vezes[0] += 1
+            if vezes[0] == 2:
+                raise Queda()
+            return real(origem, destino)
+        with mock.patch('apagamento.os.rename', side_effect=cai_na_segunda), self.assertRaises(Queda):
+            apagamento.apagar(self.root, self.item['id'], self.token(), quem='admin')
+        (self.root / apagamento.MANIFESTOS / f'{self.item["id"]}.json').write_text('{quebrado', encoding='utf-8')
+        desfeito = os.unlink
+
+        def devagar(caminho, *args, **kwargs):  # about 70 files at 50 ms: some seconds of removal
+            if na_quarentena(caminho):
+                time.sleep(0.05)
+            return desfeito(caminho, *args, **kwargs)
+        self.addCleanup(apagamento.aguardar, 60)
+        with mock.patch('apagamento.os.unlink', side_effect=devagar), self.assertLogs('vlado.apagamento', 'WARNING'):
+            self.assertEqual(apagamento.retomar(self.root, segundo_plano=True)['ilegiveis'], 1)
+            self.assertTrue(self.quarentena())  # still being removed
+            inicio = time.monotonic()
+            with _trava(self.root, espera=1.0):  # another taking of the lock gets it
+                pass
+            self.assertLess(time.monotonic() - inicio, 1.0)
+            self.assertTrue(self.quarentena(), 'a remoção terminou antes da conferência: o teste não mediu nada')
+            self.assertTrue(apagamento.aguardar(60))
+        self.assertEqual(self.retrato(), {})
+        self.assertEqual((lixeira.ativos(self.root), self.no_catalogo()), ([], False))
+        self.assertEqual((self.quarentena(), self.manifestos()), ([], []))
+        self.assertEqual([(r['item_id'], r['confirmacao']) for r in self.registros()],
+                         [(self.item['id'], 'manifesto_ilegivel')])
+
     def test_partida_nunca_cai_e_tenta_de_novo_em_segundo_plano(self):
         import trava_cadastro
         chamadas, feito = [], threading.Event()
