@@ -1,0 +1,7 @@
+# Dependências só dos testes de regressão visual (testes/regressao_visual.py).
+# Ficam FORA do requirements.txt: a imagem da Mesa não leva navegador nem bibliotecas de teste.
+#   python -m venv ~/.cache/vlado-visual-venv && ~/.cache/vlado-visual-venv/bin/pip install -r testes/requirements-teste.txt
+#   ~/.cache/vlado-visual-venv/bin/python -m playwright install chromium     (uma vez; baixa o Chromium do Playwright)
+# O servidor e o semeador continuam rodando no Python do projeto (.venv, com requirements.txt).
+playwright==1.65.2
+pillow==13.0.0
