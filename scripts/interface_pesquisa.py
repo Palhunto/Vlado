@@ -47,6 +47,7 @@ import fila_extracao
 from codex_apuracao import Conversas
 import acesso
 import proxies_confiaveis
+import apagamento
 import registro_acesso
 import lixeira
 import trava_cadastro
@@ -60,7 +61,8 @@ from rotas_conversa import RotasConversa, RESPONDIDO, CAMPOS_INTERNOS_CONVERSA, 
 import rotas_documentos
 from rotas_documentos import MAX_UPLOAD, catalogo, receber_documentos  # noqa: F401
 from rotas_downloads import RotasDownloads
-from rotas_estaticas import ASSETS, RotasEstaticas
+import rotas_estaticas
+from rotas_estaticas import ASSETS, RotasEstaticas  # noqa: F401
 from rotas_gestao import IA_OPERACOES, RotasGestao
 
 # local: single operator without sign-in; local-contas: accounts over plain HTTP on 127.0.0.1
@@ -664,7 +666,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 return
             primeiro = path in ('/', '/entrar', '/primeiro-acesso') and self._primeiro_acesso()
             if path == '/primeiro-acesso' and primeiro:
-                self._send(200, (ASSETS / 'entrar.html').read_bytes(), 'text/html; charset=utf-8')
+                self._send(200, rotas_estaticas.conteudo('entrar.html'), 'text/html; charset=utf-8')
                 return
             if path == '/primeiro-acesso' or (primeiro and path in ('/', '/entrar')):
                 self._send(303, b'', 'text/plain; charset=utf-8',
@@ -676,7 +678,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 return
             if path == '/entrar' or re.fullmatch(r'/ativar(/[A-Za-z0-9_-]{1,100})?', path):
                 # Static page without case data; the token stays in the path, read by entrar.js.
-                self._send(200, (ASSETS / 'entrar.html').read_bytes(), 'text/html; charset=utf-8')
+                self._send(200, rotas_estaticas.conteudo('entrar.html'), 'text/html; charset=utf-8')
                 return
             if path in ('/', '/api/catalogo', '/api/integracao', '/api/fila', '/api/cota') and self._principal() is None:
                 self._sem_principal(api=path != '/')
@@ -873,18 +875,40 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         return self.server.fila.aguardar(lote)
 
     def _estado_da_fila(self):
-        """`GET /api/fila?lote=<id>` or `?caso=<id>`: state of the extraction queue (administrators).
+        """`GET /api/fila?lote=<id>` or `?caso=<id>`: state of the extraction queue.
 
-        Read only, no case content; the contract of each batch is in `fila_extracao`.
+        Read only, no case content; the contract of each batch is in `fila_extracao`. Administrators
+        see every batch. Whoever else sees a case (a guest, in the cases released to it, re-read at each
+        request) sees that case's batches, for the progress of an upload (UX-05): ``?caso=`` of one of
+        them, or ``?lote=`` of a batch of one of them; another case's batch reads as not found (its
+        existence is not told), and the receipt goes without its file path.
         """
         principal = self._principal()
-        if principal is None or principal['papel'] != 'admin':
+        if principal is None:
             self._proibido()
             return
         consulta = parse_qs(urlsplit(self.path).query)
         lote, caso = (consulta.get(k, [None])[0] for k in ('lote', 'caso'))
         try:
-            self._json(200, self.server.fila.consultar(lote=lote, caso=caso))
+            if principal['papel'] == 'admin':
+                self._json(200, self.server.fila.consultar(lote=lote, caso=caso))
+                return
+            liberados = principal.get('casos') or []
+            if lote is not None:
+                resposta = self.server.fila.consultar(lote=lote)
+                if resposta['lote'].get('caso') not in liberados:
+                    raise ValueError('Lote não encontrado na fila.')
+                lotes = [resposta['lote']]
+            elif isinstance(caso, str) and caso in liberados:
+                resposta = self.server.fila.consultar(caso=caso)
+                lotes = resposta['lotes']
+            else:
+                self._proibido()
+                return
+            for item in lotes:
+                if isinstance(item.get('recibo'), dict):
+                    item['recibo'] = {k: v for k, v in item['recibo'].items() if k != 'arquivo_recibo'}
+            self._json(200, resposta)
         except ValueError as exc:
             self._json(400, {'erro': str(exc)})
 
@@ -907,6 +931,13 @@ def servir(server, prazo=PRAZO_ENCERRAMENTO):
         resumo = {}
     if resumo.get('abandonada') or resumo.get('antiga_removida') or resumo.get('preparo_removido'):
         print('Partida: trava de cadastro recuperada de uma execução interrompida.', flush=True)
+    try:  # a permanent deletion cut by a crash: back to the trash, whole, or concluded (in the background)
+        apagados = apagamento.retomar(server.root, segundo_plano=True)
+    except OSError as exc:
+        print(f'Partida: apagamento definitivo interrompido não retomado ({exc.strerror or exc}).', file=sys.stderr, flush=True)
+    else:
+        if apagados['desfeitos'] or apagados['concluidos']:
+            print('Partida: apagamento definitivo interrompido retomado.', flush=True)
     anteriores = {}
     if threading.current_thread() is threading.main_thread():
         for nome in ('SIGTERM', 'SIGBREAK'):
