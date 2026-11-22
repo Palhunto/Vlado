@@ -25,7 +25,7 @@ test('entrar sem login: o erro vai para o campo do login, com o texto do login, 
   await enviar(mesa, 'entrar-form');
   const campo = mesa.$('entrar-login'), [aviso] = avisos(mesa);
   assert.equal(avisos(mesa).length, 1);
-  assert.equal(aviso.textContent, 'Falta o login. Use o login da sua conta.');
+  assert.equal(aviso.textContent, 'Falta o e-mail. Escreva o e-mail da sua conta.');
   assert.equal(campo.getAttribute('aria-invalid'), 'true');
   assert.ok((campo.getAttribute('aria-describedby') || '').split(/\s+/).includes(aviso.id));
   assert.ok(!campo.closest('label').contains(aviso), 'a mensagem não entra no nome do campo');
@@ -51,12 +51,12 @@ test('com login e sem senha o erro vai para a senha, com o texto da senha (nunca
 test('o erro junto ao campo troca de idioma sem voltar depois de a pessoa digitar', async () => {
   const mesa = await abrir();
   await enviar(mesa, 'entrar-form');
-  assert.equal(avisos(mesa)[0].textContent, 'Falta o login. Use o login da sua conta.', 'com os dois em branco, a mensagem vai no login');
+  assert.equal(avisos(mesa)[0].textContent, 'Falta o e-mail. Escreva o e-mail da sua conta.', 'com os dois em branco, a mensagem vai no login');
   assert.equal(mesa.$('entrar-login').getAttribute('aria-invalid'), 'true');
   assert.equal(mesa.$('entrar-senha').getAttribute('aria-invalid'), null);
   mesa.$('entrar-idioma').click(); await mesa.esperar(4);
   assert.equal(avisos(mesa).length, 1, 'continua um só aviso');
-  assert.equal(avisos(mesa)[0].textContent, 'The login is missing. Use the login of your account.');
+  assert.equal(avisos(mesa)[0].textContent, 'The e-mail is missing. Write the e-mail of your account.');
   const campo = mesa.$('entrar-login');
   campo.value = 'a'; campo.dispatchEvent(new Evento('input', {bubbles: true}));
   mesa.$('entrar-idioma').click(); await mesa.esperar(4);
@@ -72,7 +72,7 @@ test('resposta do servidor (senha errada) segue na caixa de aviso, sem marcar ca
   await enviar(mesa, 'entrar-form');
   assert.equal(avisos(mesa).length, 0);
   assert.equal(mesa.$('entrar-mensagem').hidden, false);
-  assert.equal(mesa.$('entrar-mensagem').textContent, 'Login ou senha incorretos.');
+  assert.equal(mesa.$('entrar-mensagem').textContent, 'E-mail ou senha não conferem. Confira e tente de novo.');
   assert.equal(mesa.$('entrar-login').getAttribute('aria-invalid'), null);
 });
 

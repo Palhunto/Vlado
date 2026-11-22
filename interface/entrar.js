@@ -5,7 +5,7 @@
   const $ = id => document.getElementById(id);
   const TEXTOS = {
     pt: {
-      titulo_pagina: 'Entrar · Vlado', titulo_entrar: 'Entrar na Mesa de apuração',
+      titulo_pagina: 'Entrar · Vlado', titulo_entrar: 'Entrar',
       intro_entrar: 'Use o login e a senha da sua conta.', rotulo_login: 'Login', rotulo_senha: 'Senha',
       mostrar: 'Mostrar', ocultar: 'Ocultar', botao_entrar: 'Entrar', entrando: 'Entrando…',
       titulo_ativar: 'Definir sua senha',
@@ -15,9 +15,9 @@
       botao_ativar: 'Definir senha', salvando: 'Salvando…', ir_entrar: 'Entrar com a nova senha',
       idioma: 'English', idioma_rotulo: 'Switch to English',
       tema_claro: 'Modo claro', tema_escuro: 'Modo escuro',
-      erro_credenciais: 'Login ou senha incorretos.',
+      erro_credenciais: 'E-mail ou senha não conferem. Confira e tente de novo.',
       erro_bloqueado: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.',
-      erro_login_vazio: 'Falta o login. Use o login da sua conta.',
+      erro_login_vazio: 'Falta o e-mail. Escreva o e-mail da sua conta.',
       erro_senha_vazia: 'Falta a senha. Use a senha da sua conta.',
       erro_nome_vazio: 'Falta o nome. Escreva o seu nome.',
       erro_login_regra: 'Login inválido. Use de 3 a 64 caracteres: letras minúsculas, números, ponto, hífen ou sublinhado, começando por letra ou número.',
@@ -38,6 +38,10 @@
       admin_criado: 'Administrador criado. Agora entre com o login e a senha.',
       esqueci: 'Esqueceu a senha? Fale com quem administra o serviço.',
       esqueci_link: 'Esqueci a senha',
+      frase_marca: 'Apuração documental com a fonte de cada afirmação à vista.',
+      teste_titulo: 'O Vlado está em teste com redações convidadas',
+      teste_texto: 'O acesso chega por convite, no e-mail da sua redação. Recebeu um? Abra o link do convite para criar a conta.',
+      rodape_texto: 'Use só documentos públicos. Trechos são enviados ao provedor de IA para análise.',
       carregando: 'Carregando…',
       rubrica_convite: 'CONVITE',
       titulo_aceitar: 'Entre na {redacao}',
@@ -84,7 +88,7 @@
       titulo_confirmar: 'Confirmar o e-mail',
     },
     en: {
-      titulo_pagina: 'Sign in · Vlado', titulo_entrar: 'Sign in to the investigation desk',
+      titulo_pagina: 'Sign in · Vlado', titulo_entrar: 'Sign in',
       intro_entrar: 'Use your account login and password.', rotulo_login: 'Login', rotulo_senha: 'Password',
       mostrar: 'Show', ocultar: 'Hide', botao_entrar: 'Sign in', entrando: 'Signing in…',
       titulo_ativar: 'Set your password',
@@ -94,9 +98,9 @@
       botao_ativar: 'Set password', salvando: 'Saving…', ir_entrar: 'Sign in with the new password',
       idioma: 'Português', idioma_rotulo: 'Mudar para português',
       tema_claro: 'Light mode', tema_escuro: 'Dark mode',
-      erro_credenciais: 'Incorrect login or password.',
+      erro_credenciais: 'E-mail or password do not match. Check and try again.',
       erro_bloqueado: 'Too many attempts. Wait a few minutes and try again.',
-      erro_login_vazio: 'The login is missing. Use the login of your account.',
+      erro_login_vazio: 'The e-mail is missing. Write the e-mail of your account.',
       erro_senha_vazia: 'The password is missing. Use the password of your account.',
       erro_nome_vazio: 'The name is missing. Write your name.',
       erro_login_regra: 'Invalid login. Use 3 to 64 characters: lowercase letters, numbers, dot, hyphen or underscore, starting with a letter or number.',
@@ -117,6 +121,10 @@
       admin_criado: 'Administrator created. Now sign in with the login and password.',
       esqueci: 'Forgot your password? Talk to whoever runs the service.',
       esqueci_link: 'Forgot password',
+      frase_marca: 'Documentary reporting with the source of every claim in sight.',
+      teste_titulo: 'Vlado is in trial with invited newsrooms',
+      teste_texto: 'Access comes by invitation, at your newsroom e-mail. Got one? Open the invitation link to create the account.',
+      rodape_texto: 'Use public documents only. Excerpts are sent to the AI provider for analysis.',
       carregando: 'Loading…',
       rubrica_convite: 'INVITATION',
       titulo_aceitar: 'Join {redacao}',
@@ -247,7 +255,7 @@
   }));
 
   async function iniciarEntrar() {
-    $('entrar-secao').hidden = false;
+    $('entrar-secao').hidden = false; $('entrar-teste').hidden = false;
     try {  // Already signed in: go straight to the desk.
       const sessao = await fetch('/api/sessao', {credentials: 'same-origin'});
       if (sessao.ok) { window.location.replace('/'); return; }
@@ -354,6 +362,7 @@
   const modelo = (chave, valores) => t(chave).replace(/\{(\w+)\}/g, (todo, nome) => (nome in valores ? valores[nome] : todo));
   function secao(id) {
     for (const outra of document.querySelectorAll('main > section')) outra.hidden = outra.id !== id;
+    $('entrar-teste').hidden = id !== 'entrar-secao';   // o aviso de teste é só da entrada
   }
   const destinoSeguro = destino => (typeof destino === 'string' && /^\/(?![/\\])/.test(destino) ? destino : '/');
   // Esconde o token do endereço e do histórico: fica só na memória desta página.

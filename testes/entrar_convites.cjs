@@ -298,3 +298,42 @@ test('as seções novas em inglês', async () => {
   assert.equal(redefinir.mesa.$('redefinir-titulo').textContent, 'Create a new password');
   assert.equal(redefinir.mesa.$('redefinir-enviar').textContent, 'Save the new password');
 });
+
+// --- O Entrar do canvas (R5 da pré-entrega do Design; componentes.md#entrar) -----------------------------------------------------------------
+test('o Entrar tem marca e frase acima do cartão, "Entrar", "E-mail" e "Senha", o aviso de teste e o rodapé do canvas', async () => {
+  const {mesa} = await abrir({url: 'http://127.0.0.1:8765/entrar'});
+  assert.equal(mesa.doc.querySelector('.entrar-topo .brand').textContent, 'Vlado.');
+  assert.equal(mesa.doc.querySelector('.entrar-frase').textContent, 'Apuração documental com a fonte de cada afirmação à vista.');
+  assert.equal(mesa.$('entrar-titulo').textContent, 'Entrar');
+  assert.equal(mesa.$('entrar-login').closest('label').querySelector('span').textContent, 'E-mail', 'a entrada aceita o e-mail (e o login antigo)');
+  assert.equal(mesa.$('entrar-login').getAttribute('autocomplete'), 'username');
+  assert.equal(mesa.$('entrar-enviar').textContent, 'Entrar');
+  assert.equal(visivel(mesa, 'entrar-teste'), true);
+  assert.equal(mesa.$('entrar-teste').querySelector('.entrar-aviso-titulo').textContent, 'O Vlado está em teste com redações convidadas');
+  assert.ok(mesa.$('entrar-teste').textContent.includes('O acesso chega por convite, no e-mail da sua redação. Recebeu um? Abra o link do convite para criar a conta.'));
+  const rodape = mesa.doc.querySelector('.entrar-rodape');
+  assert.ok(rodape.textContent.includes('Use só documentos públicos. Trechos são enviados ao provedor de IA para análise.'));
+  assert.ok(rodape.contains(mesa.$('entrar-idioma')) && rodape.contains(mesa.$('entrar-tema')), 'idioma e tema ficam no rodapé');
+  assert.equal(mesa.doc.querySelector('.entrar-topo').contains(mesa.$('entrar-idioma')), false);
+  mesa.$('entrar-idioma').click(); await mesa.esperar(3);
+  assert.equal(mesa.$('entrar-titulo').textContent, 'Sign in');
+  assert.equal(mesa.doc.querySelector('.entrar-frase').textContent, 'Documentary reporting with the source of every claim in sight.');
+  assert.equal(mesa.$('entrar-idioma').textContent, 'Português');
+});
+
+test('o aviso de teste é só da entrada: some no convite, na redefinição e em Esqueci a senha', async () => {
+  assert.equal(visivel((await abrir()).mesa, 'entrar-teste'), false, 'convite');
+  assert.equal(visivel((await abrir({url: URL_REDEFINIR})).mesa, 'entrar-teste'), false, 'redefinir');
+  const esqueci = await abrir({url: 'http://127.0.0.1:8765/entrar', entrada: {esqueci_senha: true}});
+  esqueci.mesa.$('entrar-esqueci').click(); await esqueci.mesa.esperar(3);
+  assert.equal(visivel(esqueci.mesa, 'entrar-teste'), false, 'Esqueci a senha');
+  esqueci.mesa.$('esqueci-voltar').click(); await esqueci.mesa.esperar(3);
+  assert.equal(visivel(esqueci.mesa, 'entrar-teste'), true, 'de volta à entrada');
+});
+
+test('o Entrar não oferece o que o dono tirou: chave de acesso, e não inventa os links de Termos e Privacidade sem destino', async () => {
+  const {mesa} = await abrir({url: 'http://127.0.0.1:8765/entrar'});
+  const texto = mesa.doc.body.textContent;
+  assert.ok(!/chave de acesso/i.test(texto));
+  assert.equal([...mesa.doc.querySelectorAll('a')].filter(a => /termos|privacidade/i.test(a.textContent)).length, 0);
+});

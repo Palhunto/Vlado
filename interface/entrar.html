@@ -18,17 +18,13 @@
   <main id="conteudo" class="entrar-cartao">
     <header class="entrar-topo">
       <span class="brand" translate="no">Vlado<span>.</span></span>
-      <div class="entrar-preferencias">
-        <button id="entrar-idioma" class="secondary" type="button" translate="no">English</button>
-        <button id="entrar-tema" class="secondary" type="button">Modo claro</button>
-      </div>
+      <p class="entrar-frase" data-t="frase_marca">Apuração documental com a fonte de cada afirmação à vista.</p>
     </header>
 
     <section id="entrar-secao" hidden aria-labelledby="entrar-titulo">
       <h1 id="entrar-titulo" data-t="titulo_entrar">Entrar na Mesa de apuração</h1>
-      <p class="small" data-t="intro_entrar">Use o login e a senha da sua conta.</p>
       <form id="entrar-form" novalidate>
-        <label for="entrar-login"><span data-t="rotulo_login">Login</span>
+        <label for="entrar-login"><span data-t="rotulo_email">E-mail</span>
           <input id="entrar-login" name="username" type="text" autocomplete="username" autocapitalize="none"
                  autocorrect="off" spellcheck="false" inputmode="text" maxlength="64" required>
         </label>
@@ -188,6 +184,16 @@
     </section>
 
     <p id="entrar-mensagem" class="entrar-mensagem" role="alert" aria-live="assertive" tabindex="-1" hidden></p>
+    <div id="entrar-teste" class="entrar-aviso entrar-teste" hidden>
+      <p class="entrar-aviso-titulo" data-t="teste_titulo">O Vlado está em teste com redações convidadas</p>
+      <p class="small" data-t="teste_texto">O acesso chega por convite, no e-mail da sua redação. Recebeu um? Abra o link do convite para criar a conta.</p>
+    </div>
+    <footer class="entrar-rodape">
+      <p class="small" data-t="rodape_texto">Use só documentos públicos. Trechos são enviados ao provedor de IA para análise.</p>
+      <p class="entrar-rodape-links small">
+        <button id="entrar-idioma" class="entrar-link-rodape" type="button" translate="no">English</button><span aria-hidden="true"> · </span><button id="entrar-tema" class="entrar-link-rodape" type="button">Modo claro</button>
+      </p>
+    </footer>
     <noscript><p>Ative o JavaScript para entrar. / Enable JavaScript to sign in.</p></noscript>
   </main>
 </body>
