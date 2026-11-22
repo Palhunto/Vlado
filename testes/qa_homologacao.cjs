@@ -1,7 +1,7 @@
 // Homologação ponta a ponta em modo hospedado (login real), headless Chrome atrás do proxy TLS de teste.
 // Invocado por qa_homologacao.py; as senhas chegam só por VLADO_QA_CONTAS e nunca são gravadas.
 const {chromium, request} = require('playwright');
-const {irParaCadastro, irParaGerenciar} = require('./qa_navegacao.cjs');
+const {irParaCadastro} = require('./qa_navegacao.cjs');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
@@ -91,9 +91,6 @@ async function abrirFonte(page) {
 async function fecharOriginal(page) {
   await page.click('#original-fechar');
   await page.locator('#original-dialogo').waitFor({state: 'hidden'});
-}
-function contaNaLista(page, nome) {
-  return page.locator('#acesso-lista>li').filter({has: page.getByRole('heading', {name: nome, exact: true})});
 }
 
 (async () => {
@@ -276,10 +273,9 @@ function contaNaLista(page, nome) {
     for (const area of ['#ver-cadastro', '#ver-apuracao', '#ver-gerenciar', '#ver-achados', '#ver-documentos']) {
       assert.equal(await a.locator(area).isVisible(), false, 'área de admin visível: ' + area);
     }
-    assert.equal(await a.locator('#acesso-painel').isVisible(), false);
     await a.locator('#codex-caso option[value="alpha"]').waitFor({state: 'attached'});
     assert.deepEqual(await a.locator('#codex-caso option').evaluateAll(os => os.map(o => o.value).filter(Boolean)), ['alpha']);
-    marcar('papeis', 'Convidada A entra direto em Perguntar à IA, vê só o caso X (alpha) e não vê cadastro, Caderno, achados nem contas.');
+    marcar('papeis', 'Convidada A entra direto em Perguntar à IA, vê só o caso X (alpha) e não vê cadastro, Caderno nem achados.');
     const conversaA = await perguntar(a, 'alpha', 'O que declara o documento sintético do caso X?');
     const referenciaA = await abrirFonte(a);
     await a.locator('#original-conteudo pre').filter({hasText: 'Alfabeto'}).waitFor();
@@ -329,45 +325,10 @@ function contaNaLista(page, nome) {
     marcar('papeis', 'Convidado B não vê o caso X nem a conversa de A; fetch direto a codex-eventos/codex-original com a conversa de A, codex-listar do caso X, apuracao-exportar e apuracao-notas são recusados.');
     await b.screenshot({path: path.join(shots, 'convidado-b.png')});
 
-    atual = admin;
-    await irParaGerenciar(admin);
-    await admin.locator('#acesso-painel:not([hidden])').waitFor();
-    const linhaA = contaNaLista(admin, contas.a.nome);
-    await linhaA.getByRole('button', {name: 'Alterar apurações'}).click();
-    await linhaA.locator('form select').selectOption(['beta']);
-    await linhaA.getByRole('button', {name: 'Salvar alterações'}).click();
-    await admin.locator('#acesso-mensagem').filter({hasText: 'Acesso alterado'}).waitFor();
-    const depoisDeRetirar = {
-      'codex-eventos da conversa do caso X': await chamar(a, 'codex-eventos', {conversa: conversaA, cursor: 0}),
-      'codex-original da conversa do caso X': await chamar(a, 'codex-original', {conversa: conversaA, referencia: referenciaA}),
-      'codex-perguntar no caso X': await chamar(a, 'codex-perguntar', {caso: 'alpha', pergunta: 'Ainda posso?'}),
-    };
-    for (const [nome, r] of Object.entries(depoisDeRetirar)) assert.ok([400, 403].includes(r.status), `${nome}: ${JSON.stringify(r)}`);
-    assert.equal(depoisDeRetirar['codex-perguntar no caso X'].codigo, 'caso_nao_liberado');
-    assert.equal(depoisDeRetirar['codex-eventos da conversa do caso X'].codigo, 'conversa_indisponivel');
-    resultado.recusas_apos_retirar_caso = depoisDeRetirar;
-    await a.reload();
-    await a.locator('#codex-caso option[value="beta"]').waitFor({state: 'attached'});
-    assert.equal(await a.locator('#codex-caso option[value="alpha"]').count(), 0);
-    marcar('papeis', 'Admin retira o caso X de A pela interface de contas; a próxima ação de A no caso X (eventos, original, pergunta) é recusada e o caso some da lista.');
-
-    await contaNaLista(admin, contas.b.nome).getByRole('button', {name: 'Desativar'}).click();
-    await admin.locator('#acesso-mensagem').filter({hasText: 'Conta desativada'}).waitFor();
-    const bDepois = await chamar(b, 'codex-listar', {caso: 'beta'});
-    assert.ok([401, 403].includes(bDepois.status), JSON.stringify(bDepois));
-    assert.equal(await sessao(b), 401);
-    marcar('papeis', `Admin desativa B pela interface; a próxima requisição de B recebe ${bDepois.status} e /api/sessao 401.`);
-
-    await contaNaLista(admin, contas.a.nome).getByRole('button', {name: 'Recuperar acesso'}).click();
-    await admin.locator('#acesso-link-caixa:not([hidden])').waitFor();
-    await admin.click('#acesso-link-fechar');  // the activation link is never captured nor recorded
-    assert.equal(await admin.locator('#acesso-link').inputValue(), '');
-    assert.equal(await sessao(a), 401);
-    assert.equal(await sessao(cel), 401);
-    await a.reload();
-    await a.waitForURL(url => url.pathname === '/entrar');
-    marcar('papeis', 'Recuperar acesso de A encerra as sessões abertas (desktop e celular: 401) e o recarregamento leva A para /entrar.');
-    await admin.screenshot({path: path.join(shots, 'contas-admin.png')});
+    // A tela "Contas de acesso" e as chamadas contas-* saíram (P30; Tranca 1be9d53, Lume 599e9e2). Os passos que dependiam
+    // dela (retirar o caso X de A, desativar B, recuperar o acesso de A e ver as sessões caírem) voltam pela Equipe e pelo
+    // Convidar do Vitral quando entrarem; até lá a homologação cobre só o lado de quem recebe o acesso (A e B acima).
+    // As sessões de A, B e do celular terminam sem passo de encerramento: cada contexto se fecha com o navegador.
 
     assert.deepEqual(erros, []);
     Object.assign(resultado, {estado: 'aprovado', caso_reportagem: caso, verificacoes, erros_js: erros});
