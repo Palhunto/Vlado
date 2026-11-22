@@ -171,6 +171,14 @@ class ImagemBuildTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr[-800:])
         self.assertIn('FALHAS []', r.stdout)
 
+    def test_o_custo_carrega_a_tabela_de_precos_da_imagem(self):
+        """Sem precos_modelos.json na raiz que a Mesa lê, nenhuma pergunta é feita: confere no contêiner endurecido."""
+        codigo = ('import sys; sys.path.insert(0, "/app/scripts"); import custo; from pathlib import Path; '
+                  't = custo.tabela_precos(Path("/app")); print("PRECOS", sorted(t["modelos"]), t["cambio"]["brl_por_usd"] > 0)')
+        r = self.executar(self.app, 'python', '-c', codigo, opcoes=ENDURECIDO)
+        self.assertEqual(r.returncode, 0, r.stderr[-800:])
+        self.assertRegex(r.stdout, r'PRECOS \[.*\] True')
+
     def test_dependencias_consistentes_e_ocr_instalado(self):
         r = self.executar(self.app, 'pip', 'check')
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)

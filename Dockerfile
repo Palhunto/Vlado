@@ -81,6 +81,7 @@ COPY scripts/acesso.py \
      scripts/codex_apuracao.py \
      scripts/comparador.py \
      scripts/comum.py \
+     scripts/custo.py \
      scripts/conferencia_redacao.py \
      scripts/continuidade.py \
      scripts/criar_caso.py \
@@ -127,13 +128,15 @@ COPY scripts/acesso.py \
      scripts/segredos.py \
      scripts/semear_ambiente.py \
      scripts/tabelas_apuracao.py \
+     scripts/tetos_extracao.py \
      scripts/trabalhador_extracao.py \
      scripts/trava_cadastro.py \
      ./scripts/
 COPY interface/ ./interface/
 COPY prompts/ ./prompts/
 COPY modelos/ ./modelos/
-COPY configuracao.json AGENTS.md README.md ./
+# precos_modelos.json: tabela de preços que scripts/custo.py lê de ROOT (/app) a cada pergunta; sem ela a Mesa não pergunta.
+COPY configuracao.json AGENTS.md README.md precos_modelos.json ./
 COPY casos/README.md casos/catalogo.json ./casos/
 COPY entrada/README.md ./entrada/
 
