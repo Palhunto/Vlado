@@ -23,7 +23,7 @@ for (const desktop of [true, false]) {
     assert.equal(mesa.$('mesa-continuar').hidden, true);
     assert.equal(mesa.$('mesa-primeiro-titulo').textContent, TITULO);
     assert.equal(mesa.$('mesa-primeiro-texto').textContent, PROXIMO);
-    const visiveis = mesa.$('area-inicio').querySelectorAll('button').filter(botao => !botao.closest('[hidden]'));
+    const visiveis = [...mesa.$('area-inicio').querySelectorAll('button')].filter(botao => !botao.closest('[hidden]'));
     assert.deepEqual(visiveis.map(botao => botao.id), ['inicio-nova'], 'uma única ação');
     assert.equal(mesa.$('inicio-nova').classList.contains('secondary'), false);
     mesa.$('inicio-nova').click();

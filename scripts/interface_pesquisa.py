@@ -47,6 +47,7 @@ import fila_extracao
 from codex_apuracao import Conversas
 import acesso
 import proxies_confiaveis
+import apagamento
 import registro_acesso
 import lixeira
 import trava_cadastro
@@ -57,9 +58,11 @@ from rotas_contas import (RotasContas, CONTAS_OPERACOES, OPERACOES_CONVIDADO, OP
                           OPERACOES_PUBLICAS, AMBIENTES, SEM_SESSAO, OPERACOES_COM_COTA, ATIVOS_CONVERSA,
                           COOKIE_PILOTO)
 from rotas_conversa import RotasConversa, RESPONDIDO, CAMPOS_INTERNOS_CONVERSA, _sem_internos  # noqa: F401
+import rotas_documentos
 from rotas_documentos import MAX_UPLOAD, catalogo, receber_documentos  # noqa: F401
 from rotas_downloads import RotasDownloads
-from rotas_estaticas import ASSETS, RotasEstaticas
+import rotas_estaticas
+from rotas_estaticas import ASSETS, RotasEstaticas  # noqa: F401
 from rotas_gestao import IA_OPERACOES, RotasGestao
 
 # local: single operator without sign-in; local-contas: accounts over plain HTTP on 127.0.0.1
@@ -84,6 +87,26 @@ MAXIMO_RECUSAS = 128
 # Seconds, in all, for a request line and its headers, a kept-alive connection waiting for the next
 # request included: a client sending a byte at a time, or nothing, holds its thread this long at most.
 PRAZO_CABECALHOS = 10.0
+# A request body must keep coming (CONF-03): PRAZO_CORPO seconds, plus one more for each
+# TAXA_MINIMA_CORPO bytes received (a minimum rate); a body sent a byte at a time no longer holds
+# its thread, and a large upload has the time its size needs at that rate. 8 KiB/s is about
+# 64 kbit/s: a reporter on weak 3G or EDGE still sends (32 KiB/s cut below about 256 kbit/s). A
+# client that keeps that rate holds its slot as long as its size needs (50 MB: under 2 hours), and
+# pays the bandwidth; MAXIMO_POR_IP keeps it from holding many.
+PRAZO_CORPO = 10.0
+TAXA_MINIMA_CORPO = 8 * 1024
+# A refused streamed upload: what already arrived is read for at most this long after the answer,
+# then the connection closes (the slot is not held for the rest of the body).
+PRAZO_DRENO = 0.5
+# Requests in course from one client address at a time, in pilot mode (CONF-03): past it, 429 at
+# once, without reading the body, so one client cannot take all MAXIMO_CONEXOES. The address is the
+# one the trusted proxies of SEG-05 give (VLADO_PROXIES_CONFIAVEIS): the TCP peer whenever it is not a
+# trusted proxy, with or without X-Forwarded-For (a header the client writes never chooses its
+# bucket; the old VLADO_CONFIAR_PROXY trusts anyone, so it does not count here). Behind a proxy not on
+# the list every request counts for the proxy: list it (deploy/MONITORAMENTO.md). Half the connections
+# by default: a newsroom behind one NAT shares an address. Only VLADO_MAXIMO_POR_IP=0 turns it off.
+MAXIMO_POR_IP = int(os.environ.get('VLADO_MAXIMO_POR_IP') or max(1, MAXIMO_CONEXOES // 2))
+MENSAGEM_POR_IP = 'Muitas requisições ao mesmo tempo deste endereço. Aguarde alguns segundos e tente de novo.'
 # Case data answered by ``executar`` (frozen analyses, intake, search index).
 CONSULTA_OPERACOES = ('analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario', 'preparar-pdfs')
 # Answered by the extraction queue in do_POST, outside cadastro_lock (executar still serves direct calls).
@@ -321,6 +344,7 @@ class Servidor(ThreadingHTTPServer):
         self._vagas = threading.BoundedSemaphore(max(1, MAXIMO_CONEXOES))
         self._recusas = queue.Queue()
         self._recusas_vagas = threading.BoundedSemaphore(max(1, MAXIMO_RECUSAS))
+        self._por_ip, self._por_ip_trava = {}, threading.Lock()  # requests in course per client address
         self._recusas_trava = threading.Lock()
         self._recusadora = None
         # Extraction and OCR of uploads (CONF-02): 'processos' runs them in separate processes
@@ -414,10 +438,12 @@ class _LeituraComPrazo(socket.SocketIO):
     prazo = None
     espera = None  # the per-operation timeout of the handler, the most a read waits
     recebido = 0
+    corpo_desde = None  # while the body is read: when it began (after the headers)
+    corpo_lido = 0
 
     def readinto(self, b):
         if self.prazo is None:
-            return super().readinto(b)
+            return super().readinto(b) if self.corpo_desde is None else self._ler_corpo(b)
         resta = self.prazo - time.monotonic()
         try:
             if resta <= 0:
@@ -429,6 +455,19 @@ class _LeituraComPrazo(socket.SocketIO):
                 raise
             return 0
         self.recebido += lido or 0
+        return lido
+
+    def _ler_corpo(self, b):
+        """A body read: within PRAZO_CORPO plus the time its bytes so far need at TAXA_MINIMA_CORPO."""
+        resta = self.corpo_desde + PRAZO_CORPO + self.corpo_lido / TAXA_MINIMA_CORPO - time.monotonic()
+        if resta <= 0:
+            raise TimeoutError('corpo do pedido chegando abaixo da taxa mínima')
+        self._sock.settimeout(min(resta, self.espera) if self.espera else resta)
+        try:
+            lido = super().readinto(b)
+        finally:
+            self._sock.settimeout(self.espera)  # the answer keeps the per-operation timeout
+        self.corpo_lido += lido or 0
         return lido
 
 
@@ -446,16 +485,83 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         """Request line and headers within PRAZO_CABECALHOS in all (CONF-03); the body and the answer
         keep the per-operation timeout."""
         self._leitura.prazo, self._leitura.recebido = time.monotonic() + PRAZO_CABECALHOS, 0
+        self._leitura.corpo_desde = None
         try:
             super().handle_one_request()
         finally:
+            self._leitura.corpo_desde = None
             self._sem_prazo()
+            self._sair_do_teto_por_ip()
 
     def parse_request(self):
         try:
-            return super().parse_request()  # reads the headers
+            aceito = super().parse_request()  # reads the headers
         finally:
             self._sem_prazo()
+            self._leitura.corpo_desde, self._leitura.corpo_lido = time.monotonic(), 0  # the body's minimum rate
+        return aceito and self._dentro_do_teto_por_ip()
+
+    def _dentro_do_teto_por_ip(self):
+        """Count this request for its client address (pilot mode), or answer 429 past MAXIMO_POR_IP."""
+        self._ip_contado = None
+        if self.server.modo != 'piloto' or MAXIMO_POR_IP <= 0:
+            return True
+        par, redes = self.client_address[0], proxies_confiaveis.do_ambiente()
+        ip = (proxies_confiaveis.ip_do_cliente(par, ','.join(self.headers.get_all('X-Forwarded-For') or []), redes)
+              if redes else par)
+        with self.server._por_ip_trava:
+            em_curso = self.server._por_ip.get(ip, 0)
+            if em_curso < MAXIMO_POR_IP:
+                self.server._por_ip[ip], self._ip_contado = em_curso + 1, ip
+                return True
+        self._auditar_pedido_recusado(ip)
+        self.close_connection = True
+        self._descartar_corpo_pequeno()
+        self._send(429, json.dumps({'erro': MENSAGEM_POR_IP}, ensure_ascii=False).encode('utf-8'),
+                   extra={'Retry-After': '2'})
+        return False
+
+    def _auditar_pedido_recusado(self, ip):
+        """SEG-02: the 429 goes to the audit log as ONE line per address and minute with the count (anonymous class: an
+        address that floods never costs the log its sign-in or administration events). Never raises."""
+        registro_acesso.iniciar_requisicao(raiz=self.server.root)  # the audit folder follows the data root
+        try:
+            registro_acesso.registrar_limite_ip('pedido_recusado', ip, acesso._rede(ip))
+        finally:
+            registro_acesso.encerrar_requisicao()
+
+    def _sair_do_teto_por_ip(self):
+        ip = self.__dict__.pop('_ip_contado', None)
+        if ip is not None:
+            with self.server._por_ip_trava:
+                restam = self.server._por_ip.get(ip, 1) - 1
+                if restam > 0:
+                    self.server._por_ip[ip] = restam
+                else:
+                    self.server._por_ip.pop(ip, None)
+
+    def finish(self):
+        """An upload refused before its files were read: the answer is sent, the end of it goes (SHUT_WR),
+        and what already arrived is dropped for at most PRAZO_DRENO, then the connection closes: closing
+        with unread bytes is a reset on Windows that could destroy the answer, but the slot is not held
+        for the rest of the body."""
+        fluxo = self.__dict__.get('_fluxo')
+        if fluxo is not None and fluxo.restante > 0:
+            fim = time.monotonic() + PRAZO_DRENO
+            self._leitura.corpo_desde = None
+            try:
+                self.wfile.flush()
+                self.connection.shutdown(socket.SHUT_WR)
+                lidos = 0
+                while lidos < rotas_documentos.LIMITE_DRENO and (resta := fim - time.monotonic()) > 0:
+                    self.connection.settimeout(resta)
+                    lido = self.connection.recv(65536)
+                    if not lido:
+                        break
+                    lidos += len(lido)
+            except OSError:
+                pass
+        super().finish()
 
     def _sem_prazo(self):
         if self._leitura.prazo is not None:
@@ -464,6 +570,13 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 self.connection.settimeout(self.timeout)
             except OSError:
                 pass
+
+    def send_response(self, code, message=None):
+        # SEG-06: like the base class, but without the `Server` header (it carried "BaseHTTP/0.6 Python/3.x"). Error
+        # pages from send_error go through here too, so no answer names the software or its version.
+        self.log_request(code)
+        self.send_response_only(code, message)
+        self.send_header('Date', self.date_time_string())
 
     def _send(self, status, content, content_type='application/json; charset=utf-8', extra=None, cache='no-store'):
         self.send_response(status)
@@ -474,7 +587,8 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'self' blob:; img-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         self.send_header('Referrer-Policy', 'no-referrer')
         if self.server.modo == 'piloto':
-            self.send_header('Strict-Transport-Security', 'max-age=31536000')
+            # One year, subdomains included; no `preload` (hard to undo: see deploy/MONITORAMENTO.md).
+            self.send_header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
         for key, value in (extra or {}).items():
             self.send_header(key, value)
         baixando = status == 200 and str((extra or {}).get('Content-Disposition', '')).startswith('attachment')
@@ -562,7 +676,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 return
             primeiro = path in ('/', '/entrar', '/primeiro-acesso') and self._primeiro_acesso()
             if path == '/primeiro-acesso' and primeiro:
-                self._send(200, (ASSETS / 'entrar.html').read_bytes(), 'text/html; charset=utf-8')
+                self._send(200, rotas_estaticas.conteudo('entrar.html'), 'text/html; charset=utf-8')
                 return
             if path == '/primeiro-acesso' or (primeiro and path in ('/', '/entrar')):
                 self._send(303, b'', 'text/plain; charset=utf-8',
@@ -574,7 +688,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 return
             if path == '/entrar' or re.fullmatch(r'/ativar(/[A-Za-z0-9_-]{1,100})?', path):
                 # Static page without case data; the token stays in the path, read by entrar.js.
-                self._send(200, (ASSETS / 'entrar.html').read_bytes(), 'text/html; charset=utf-8')
+                self._send(200, rotas_estaticas.conteudo('entrar.html'), 'text/html; charset=utf-8')
                 return
             if path in ('/', '/api/catalogo', '/api/integracao', '/api/fila', '/api/cota') and self._principal() is None:
                 self._sem_principal(api=path != '/')
@@ -621,6 +735,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
     def _atender_post(self):
         self.__dict__.pop('_principal_requisicao', None)
         self.__dict__.pop('_download_registrado', None)
+        self.__dict__.pop('_fluxo', None)
         if self.server.com_contas:
             # Never read (up to 72 MB of) a body for anonymous or foreign-host requests.
             if not self._allowed(descartar=True):
@@ -641,8 +756,11 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 raise ValueError('Requisição vazia ou muito grande.') from exc
             operation = urlsplit(self.path).path.removeprefix('/api/')
             principal = self._principal()
+            # A batch streamed to disk (CONF-03): the manifest line now, the files' bytes by the route.
+            em_fluxo = operation in rotas_documentos.EM_FLUXO and self.headers.get_content_type() == rotas_documentos.TIPO_LOTE
             # Guests only call small JSON operations: never read a large body before the role check.
             maximum = (32768 if principal is not None and principal['papel'] != 'admin'
+                       else MAX_UPLOAD + rotas_documentos.LIMITE_MANIFESTO if em_fluxo
                        else 72 * 1024 * 1024 if operation in ('cadastrar', 'codex-documentos-cadastrar')
                        else 2 * 1024 * 1024 if operation in (*apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS,
                                                              *rotas_tabelas.SALVAR, *rascunhos.SALVAR)
@@ -651,7 +769,13 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                                                      *rotas_evidencia.SALVAR, *rotas_redacao.SALVAR) else 32768)
             if not 0 < length <= maximum:
                 raise ValueError('Requisição vazia ou muito grande.')
-            body = self.rfile.read(length)
+            if em_fluxo:
+                self.close_connection = True  # one upload per connection: what is left is never read as a request
+                self._fluxo = rotas_documentos.Fluxo(self.rfile, length)
+                body = rotas_documentos.ler_manifesto(self.rfile, length)
+                self._fluxo.restante -= len(body)
+            else:
+                body = self.rfile.read(length)
         except ValueError as exc:
             self._json(400, {'erro': str(exc)})
             return
@@ -666,7 +790,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         origem = self.headers.get('Origin', None if self.server.com_contas else self.server.origin)
         if (origem != self.server.origin
                 or not secrets.compare_digest(self.headers.get('X-Session-Token', '').encode('utf-8'), principal['csrf'].encode('ascii'))
-                or self.headers.get_content_type() != 'application/json'):
+                or self.headers.get_content_type() != (rotas_documentos.TIPO_LOTE if em_fluxo else 'application/json')):
             self._json(403, {'erro': 'Origem ou sessão não autorizada. Recarregue a página.'})
             return
         operation = urlsplit(self.path).path.removeprefix('/api/')
@@ -750,7 +874,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
     def _cadastro_na_fila(self, operation, data):
         """Upload or PDF preparation through `server.fila`: the receipt, or the queue state if asynchronous."""
         if operation == 'cadastrar':
-            return receber_documentos(self.server.root, data, fila=self.server.fila)
+            return receber_documentos(self.server.root, data, fila=self.server.fila, fluxo=self.__dict__.get('_fluxo'))
         if not diagnostico()['extracao_pdf']['disponivel']:
             raise ValueError('O extrator de PDF não está disponível nesta instância. Encerre a Mesa e abra pelo iniciador atualizado.')
         if type(data.get('assincrono', False)) is not bool:
@@ -761,18 +885,40 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         return self.server.fila.aguardar(lote)
 
     def _estado_da_fila(self):
-        """`GET /api/fila?lote=<id>` or `?caso=<id>`: state of the extraction queue (administrators).
+        """`GET /api/fila?lote=<id>` or `?caso=<id>`: state of the extraction queue.
 
-        Read only, no case content; the contract of each batch is in `fila_extracao`.
+        Read only, no case content; the contract of each batch is in `fila_extracao`. Administrators
+        see every batch. Whoever else sees a case (a guest, in the cases released to it, re-read at each
+        request) sees that case's batches, for the progress of an upload (UX-05): ``?caso=`` of one of
+        them, or ``?lote=`` of a batch of one of them; another case's batch reads as not found (its
+        existence is not told), and the receipt goes without its file path.
         """
         principal = self._principal()
-        if principal is None or principal['papel'] != 'admin':
+        if principal is None:
             self._proibido()
             return
         consulta = parse_qs(urlsplit(self.path).query)
         lote, caso = (consulta.get(k, [None])[0] for k in ('lote', 'caso'))
         try:
-            self._json(200, self.server.fila.consultar(lote=lote, caso=caso))
+            if principal['papel'] == 'admin':
+                self._json(200, self.server.fila.consultar(lote=lote, caso=caso))
+                return
+            liberados = principal.get('casos') or []
+            if lote is not None:
+                resposta = self.server.fila.consultar(lote=lote)
+                if resposta['lote'].get('caso') not in liberados:
+                    raise ValueError('Lote não encontrado na fila.')
+                lotes = [resposta['lote']]
+            elif isinstance(caso, str) and caso in liberados:
+                resposta = self.server.fila.consultar(caso=caso)
+                lotes = resposta['lotes']
+            else:
+                self._proibido()
+                return
+            for item in lotes:
+                if isinstance(item.get('recibo'), dict):
+                    item['recibo'] = {k: v for k, v in item['recibo'].items() if k != 'arquivo_recibo'}
+            self._json(200, resposta)
         except ValueError as exc:
             self._json(400, {'erro': str(exc)})
 
@@ -795,6 +941,13 @@ def servir(server, prazo=PRAZO_ENCERRAMENTO):
         resumo = {}
     if resumo.get('abandonada') or resumo.get('antiga_removida') or resumo.get('preparo_removido'):
         print('Partida: trava de cadastro recuperada de uma execução interrompida.', flush=True)
+    try:  # a permanent deletion cut by a crash: back to the trash, whole, or concluded (in the background)
+        apagados = apagamento.retomar(server.root, segundo_plano=True)
+    except OSError as exc:
+        print(f'Partida: apagamento definitivo interrompido não retomado ({exc.strerror or exc}).', file=sys.stderr, flush=True)
+    else:
+        if apagados['desfeitos'] or apagados['concluidos']:
+            print('Partida: apagamento definitivo interrompido retomado.', flush=True)
     anteriores = {}
     if threading.current_thread() is threading.main_thread():
         for nome in ('SIGTERM', 'SIGBREAK'):

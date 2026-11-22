@@ -258,7 +258,8 @@
   // Disposição do mapa (componentes.md#mapa, "Rótulo não cobre nó nem outra ligação"): a entidade mais ligada vai ao centro e as demais ao anel; a
   // ordem no anel e o ponto de cada rótulo na sua ligação são escolhidos para que nenhuma pílula cubra um nó nem outra ligação, e as ligações
   // se cruzem o mínimo. Determinística (mesma entrada, mesmo desenho), de modo que o teste confere o custo.
-  const NO_L = 200, NO_A = 80, PILULA_A = 28, GRANDE_MAPA = 8;
+  const NO_L = 200, NO_A = 80, PILULA_A = 28, GRANDE_MAPA = 8, ORCAMENTO_MS = 150, PARTE_RAPIDA = 0.45;
+  const agora = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
   const larguraPilula = texto => Math.round(34 + cortar(texto, 22).length * 7.8);
   const retNo = ([x, y]) => [x - NO_L / 2, y - NO_A / 2, x + NO_L / 2, y + NO_A / 2];
   // Segmento (a→b) contra retângulo [x0,y0,x1,y1]: método de Liang–Barsky.
@@ -276,7 +277,7 @@
     return o(a, b, c) !== o(a, b, d) && o(c, d, a) !== o(c, d, b);
   };
   const sobrepoe = (r1, r2) => r1[0] < r2[2] && r2[0] < r1[2] && r1[1] < r2[3] && r2[1] < r1[3];
-  function dispor(mapa) {
+  function dispor(mapa, opcoes = {}) {
     const n = mapa.entidades.length, grau = {};
     for (const r of mapa.relacoes) { grau[r.origem] = (grau[r.origem] || 0) + 1; grau[r.destino] = (grau[r.destino] || 0) + 1; }
     const centro = n >= 3 ? [...mapa.entidades].sort((a, b) => (grau[b.id] || 0) - (grau[a.id] || 0))[0] : null;
@@ -292,36 +293,41 @@
       const k = contagem[j], dx = k === 1 ? 0 : k === 2 ? (rank ? 1 : -1) * 210 : (rank - 1) * (NO_L + 40);
       lugares.push([cx + dx, cy + (j % 2 ? 1 : -1) * (D1 + Math.floor(j / 2) * D2)]);
     }
-    const fracoes = [0.5, 0.62, 0.38, 0.72, 0.28, 0.8, 0.2, 0.88, 0.12, 0.56, 0.44, 0.68, 0.32];
+    const fracoes = [0.5, 0.62, 0.38, 0.72, 0.28, 0.8, 0.2, 0.88, 0.12, 0.56, 0.44, 0.68, 0.32, 0.52, 0.48, 0.58, 0.42, 0.66, 0.34, 0.76, 0.24, 0.84, 0.16, 0.92, 0.08];
+    const rels = mapa.relacoes, larguras = rels.map(r => larguraPilula(r.tipo));
     const avaliar = pos => {
-      let custo = 0; const pilulas = {};
-      const seg = Object.fromEntries(mapa.relacoes.map(r => [r.id, [pos[r.origem] || [cx, cy], pos[r.destino] || [cx, cy]]]));
-      const nos = mapa.entidades.map(e => [e.id, retNo(pos[e.id])]);
-      for (const [i, e] of mapa.entidades.entries()) for (const [id2, ret2] of nos.slice(i + 1)) if (sobrepoe(retNo(pos[e.id]), ret2) && id2) custo += 100000;
-      for (const r of mapa.relacoes) {
-        const [p, q] = seg[r.id];
-        for (const [id, ret] of nos) if (id !== r.origem && id !== r.destino && cortaRet(p, q, ret)) custo += 400;   // a linha atravessa um nó que não é dela
-        for (const o of mapa.relacoes) if (o.id > r.id && o.origem !== r.origem && o.origem !== r.destino && o.destino !== r.origem && o.destino !== r.destino && cruza(p, q, ...seg[o.id])) custo += 60;
+      let custo = 0;
+      const seg = rels.map(r => [pos[r.origem] || [cx, cy], pos[r.destino] || [cx, cy]]);
+      const nos = mapa.entidades.map(e => retNo(pos[e.id]));
+      for (let i = 0; i < nos.length; i += 1) for (let j = i + 1; j < nos.length; j += 1) if (sobrepoe(nos[i], nos[j])) custo += 100000;
+      for (const [k, r] of rels.entries()) {
+        const [p, q] = seg[k];
+        for (const [i, e] of mapa.entidades.entries()) if (e.id !== r.origem && e.id !== r.destino && cortaRet(p, q, nos[i])) custo += 400;   // a linha atravessa um nó que não é dela
+        for (let o = k + 1; o < rels.length; o += 1) {
+          const outra = rels[o];
+          if (outra.origem !== r.origem && outra.origem !== r.destino && outra.destino !== r.origem && outra.destino !== r.destino && cruza(p, q, seg[o][0], seg[o][1])) custo += 60;
+        }
       }
-      const largura = Object.fromEntries(mapa.relacoes.map(r => [r.id, larguraPilula(r.tipo)]));
       // Cada rótulo escolhe o ponto da própria ligação que não cobre nó, outra ligação nem outro rótulo; duas passadas, a segunda já sabendo
       // onde ficaram todos os outros.
-      const escolher = r => {
-        const [p, q] = seg[r.id], doCentro = centro && r.destino === centro.id ? [q, p] : [p, q];
+      const pilulas = {}, postas = [];
+      const escolher = (r, k) => {
+        const [p, q] = seg[k], doCentro = centro && r.destino === centro.id ? [q, p] : [p, q], meia = larguras[k] / 2 + 2;
         let melhor = null;
-        for (const [k, f] of fracoes.entries()) {
-          const mx = Math.round(doCentro[0][0] + (doCentro[1][0] - doCentro[0][0]) * f), my = Math.round(doCentro[0][1] + (doCentro[1][1] - doCentro[0][1]) * f);
-          const ret = [mx - largura[r.id] / 2 - 2, my - PILULA_A / 2 - 2, mx + largura[r.id] / 2 + 2, my + PILULA_A / 2 + 2];
-          let c = k;   // desempate: a primeira fração (mais perto do meio ou do ponto preferido)
-          for (const [, rn] of nos) if (sobrepoe(ret, rn)) c += 5000;
-          for (const o of mapa.relacoes) if (o.id !== r.id && cortaRet(...seg[o.id], ret)) c += 3000;
-          for (const [id, outra] of Object.entries(pilulas)) if (id !== r.id && sobrepoe(ret, outra.ret)) c += 5000;
+        for (const [f, fr] of fracoes.entries()) {
+          if (melhor && melhor.c <= f) break;   // o custo de uma fração é no mínimo o seu índice: as seguintes não vencem
+          const mx = Math.round(doCentro[0][0] + (doCentro[1][0] - doCentro[0][0]) * fr), my = Math.round(doCentro[0][1] + (doCentro[1][1] - doCentro[0][1]) * fr);
+          const ret = [mx - meia, my - PILULA_A / 2 - 2, mx + meia, my + PILULA_A / 2 + 2];
+          let c = f;   // desempate: a primeira fração (mais perto do meio ou do ponto preferido)
+          for (const rn of nos) if (sobrepoe(ret, rn)) c += 5000;
+          for (let o = 0; o < rels.length; o += 1) if (o !== k && cortaRet(seg[o][0], seg[o][1], ret)) c += 3000;
+          for (let o = 0; o < rels.length; o += 1) if (o !== k && postas[o] && sobrepoe(ret, postas[o].ret)) c += 5000;
           if (!melhor || c < melhor.c) melhor = {c, mx, my, ret};
         }
-        pilulas[r.id] = {x: melhor.mx, y: melhor.my, largura: largura[r.id], ret: melhor.ret, c: melhor.c};
+        postas[k] = pilulas[r.id] = {x: melhor.mx, y: melhor.my, largura: larguras[k], ret: melhor.ret, c: melhor.c};
       };
-      for (let passada = 0; passada < 2; passada += 1) for (const r of mapa.relacoes) escolher(r);
-      for (const r of mapa.relacoes) custo += pilulas[r.id].c;
+      for (let passada = 0; passada < 2; passada += 1) for (const [k, r] of rels.entries()) escolher(r, k);
+      for (const r of rels) custo += pilulas[r.id].c;
       return {custo, pilulas};
     };
     const montar = ordem => {
@@ -329,19 +335,106 @@
       ordem.forEach((e, i) => { pos[e.id] = lugares[i].map(Math.round); });
       return pos;
     };
-    let melhor = null;
-    // Teto de trabalho: a busca por trocas custa muito com o número de entidades (28 entidades e 40 ligações levavam 50 s). Até GRANDE_MAPA entidades
-    // ela roda inteira (e o teste prova a regra do rótulo); acima disso a disposição é uma só, ordenada pelo grau, sem trocas.
+    // Orçamento de tempo: a busca por trocas custa muito com o número de entidades (28 entidades e 40 ligações levavam 50 s com a avaliação inteira
+    // a cada troca). Ela roda em qualquer tamanho, mas para ao estourar o orçamento e fica com a melhor disposição até ali. Até GRANDE_MAPA entidades
+    // a avaliação inteira cabe no orçamento; acima disso a busca usa a avaliação rápida (só o que muda com a troca) e a inteira vale para o resultado.
+    // Com `completa` não há orçamento: é a referência do teste, a busca que o orçamento aproxima.
+    const prazo = opcoes.completa ? Infinity : (opcoes.orcamento ?? ORCAMENTO_MS), inicioBusca = agora();
+    const estourou = (parte = 1) => agora() - inicioBusca > prazo * parte;
     const porGrau = [...anel].sort((a, b) => (grau[b.id] || 0) - (grau[a.id] || 0));
-    const busca = n <= GRANDE_MAPA;
-    for (const inicio of busca ? [anel, [...anel].reverse(), porGrau] : [porGrau]) {
+    let melhor = null;
+    const ordemRapida = () => {
+      const idx = new Map(mapa.entidades.map((e, i) => [e.id, i])), R = mapa.relacoes.length, extra = mapa.entidades.length;
+      const U = mapa.relacoes.map(r => idx.get(r.origem) ?? extra), V = mapa.relacoes.map(r => idx.get(r.destino) ?? extra);
+      const ci = centro ? idx.get(centro.id) : -1;
+      const px = new Array(extra + 1).fill(cx), py = new Array(extra + 1).fill(cy), meia = larguraPilula;
+      const largura = mapa.relacoes.map(r => meia(r.tipo));
+      const incide = Array.from({length: extra + 1}, () => []);
+      for (let r = 0; r < R; r += 1) { incide[U[r]].push(r); if (V[r] !== U[r]) incide[V[r]].push(r); }
+      const colocar = ordem => ordem.forEach((e, i) => { const k = idx.get(e.id); px[k] = Math.round(lugares[i][0]); py[k] = Math.round(lugares[i][1]); });
+      // Um rótulo vale a primeira fração livre de nó (as frações seguem a ordem de preferência); cada nó coberto custa 5000.
+      const rotulo = r => {
+        const [p, q] = ci >= 0 && V[r] === ci ? [V[r], U[r]] : [U[r], V[r]], dx = largura[r] / 2 + 102;
+        let melhorC = Infinity;
+        for (let k = 0; k < fracoes.length && melhorC > k; k += 1) {
+          const mx = Math.round(px[p] + (px[q] - px[p]) * fracoes[k]), my = Math.round(py[p] + (py[q] - py[p]) * fracoes[k]);
+          let c = k;
+          for (let e = 0; e < extra; e += 1) if (Math.abs(mx - px[e]) < dx && Math.abs(my - py[e]) < 56) c += 5000;
+          if (c < melhorC) melhorC = c;
+        }
+        return melhorC;
+      };
+      const noCortado = r => {
+        let c = 0; const a = [px[U[r]], py[U[r]]], b = [px[V[r]], py[V[r]]];
+        for (let e = 0; e < extra; e += 1) if (e !== U[r] && e !== V[r] && cortaRet(a, b, [px[e] - NO_L / 2, py[e] - NO_A / 2, px[e] + NO_L / 2, py[e] + NO_A / 2])) c += 400;
+        return c;
+      };
+      const marca = new Uint8Array(R);
+      // Custo do conjunto S de ligações com as posições atuais: rótulo, nó atravessado e cruzamento com qualquer outra (um par de S conta uma vez).
+      const custo = S => {
+        let c = 0; for (const r of S) marca[r] = 1;
+        for (const r of S) {
+          c += rotulo(r) + noCortado(r);
+          const a = [px[U[r]], py[U[r]]], b = [px[V[r]], py[V[r]]];
+          for (let o = 0; o < R; o += 1) {
+            if (o === r || (marca[o] && o < r) || U[o] === U[r] || U[o] === V[r] || V[o] === U[r] || V[o] === V[r]) continue;
+            if (cruza(a, b, [px[U[o]], py[U[o]]], [px[V[o]], py[V[o]]])) c += 60;
+          }
+        }
+        for (const r of S) marca[r] = 0;
+        return c;
+      };
+      const todas = Array.from({length: R}, (_, r) => r);
+      let melhorOrdem = null, melhorCusto = Infinity;
+      // Sobe por trocas (a primeira que melhora fica) até não haver troca que melhore ou acabar o prazo da busca rápida.
+      const subir = ordem => {
+        colocar(ordem);
+        for (let volta = 0; volta < 30 && m > 1 && !estourou(PARTE_RAPIDA); volta += 1) {
+          let mudou = false;
+          for (let i = 0; i < m && !estourou(PARTE_RAPIDA); i += 1) for (let j = i + 1; j < m; j += 1) {
+            const a = idx.get(ordem[i].id), b = idx.get(ordem[j].id), S = [...new Set([...incide[a], ...incide[b]])], antes = custo(S);
+            [px[a], px[b]] = [px[b], px[a]]; [py[a], py[b]] = [py[b], py[a]];
+            if (custo(S) < antes) { [ordem[i], ordem[j]] = [ordem[j], ordem[i]]; mudou = true; } else { [px[a], px[b]] = [px[b], px[a]]; [py[a], py[b]] = [py[b], py[a]]; }
+            if (estourou(PARTE_RAPIDA)) break;
+          }
+          if (!mudou) break;
+        }
+        const total = custo(todas);
+        if (total < melhorCusto) { melhorCusto = total; melhorOrdem = [...ordem]; }
+      };
+      const larguraDe = e => Math.max(0, ...mapa.relacoes.filter(r => r.origem === e.id || r.destino === e.id).map(r => larguraPilula(r.tipo)));
+      const porRotulo = [...anel].sort((a, b) => larguraDe(a) - larguraDe(b));   // rótulo curto nos lugares perto do centro, onde a ligação é curta
+      for (const inicio of [porGrau, porRotulo, anel, [...anel].reverse()]) if (!melhorOrdem || !estourou(PARTE_RAPIDA)) subir([...inicio]);
+      // Sobrou prazo e ainda há rótulo sobre nó (custo de 5000 ou mais): recomeça do melhor com três trocas ao acaso (sequência fixa, o resultado se repete).
+      let semente = 20251122;
+      const acaso = limite => { semente = (semente * 1103515245 + 12345) % 2147483648; return semente % limite; };
+      while (m > 2 && melhorCusto >= 5000 && !estourou(PARTE_RAPIDA)) {
+        const ordem = [...melhorOrdem];
+        for (let k = 0; k < 3; k += 1) { const i = acaso(m), j = acaso(m); [ordem[i], ordem[j]] = [ordem[j], ordem[i]]; }
+        subir(ordem);
+      }
+      return melhorOrdem;
+    };
+    // Mapa pequeno (ou `completa`): a avaliação inteira a cada troca, de três pontos de partida. Mapa grande: a busca rápida escolhe a ordem e a avaliação inteira a refina no que sobrar do orçamento.
+    const rapida = n > GRANDE_MAPA && !opcoes.completa;
+    // Pares de lugares a trocar: todos, ou (mapa grande) só os que mexem com uma entidade de ligação cujo rótulo ainda não achou lugar livre.
+    const pares = (ordem, atual) => {
+      const lista = [];
+      const quentes = new Set();
+      if (rapida) for (const r of mapa.relacoes) if (atual.pilulas[r.id].c >= 3000) for (const id of [r.origem, r.destino]) { const k = ordem.findIndex(e => e.id === id); if (k >= 0) quentes.add(k); }
+      for (let i = 0; i < m; i += 1) for (let j = i + 1; j < m; j += 1) if (!rapida || quentes.has(i) || quentes.has(j)) lista.push([i, j]);
+      return lista;
+    };
+    for (const inicio of rapida ? [ordemRapida()] : [anel, [...anel].reverse(), porGrau]) {
+      if (melhor && estourou()) break;
       let ordem = [...inicio], atual = avaliar(montar(ordem));
-      for (let volta = 0; busca && volta < 12 && m > 1; volta += 1) {
+      for (let volta = 0; volta < (rapida ? 60 : 12) && m > 1 && !estourou(); volta += 1) {
         let mudou = false;
-        for (let i = 0; i < m; i += 1) for (let j = i + 1; j < m; j += 1) {
+        for (const [i, j] of pares(ordem, atual)) {
           const troca = [...ordem]; [troca[i], troca[j]] = [troca[j], troca[i]];
           const c = avaliar(montar(troca));
-          if (c.custo < atual.custo) { ordem = troca; atual = c; mudou = true; }
+          if (c.custo < atual.custo) { ordem = troca; atual = c; mudou = true; if (rapida) break; }
+          if (estourou()) break;
         }
         if (!mudou) break;
       }

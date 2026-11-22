@@ -90,7 +90,9 @@ def alcance(root, identificador):
     return alcance_publico(root, identificador)
 
 
-def apagar_definitivamente(root, identificador, confirmacao, *, quem, gerenciador=None, ativa=None):
-    """Apaga de vez um item da lixeira, com confirmação derivada do alcance."""
+def apagar_definitivamente(root, identificador, confirmacao, *, quem, gerenciador=None, ativa=None,
+                           segundo_plano=False):
+    """Apaga de vez um item da lixeira, com confirmação derivada do alcance (quarentena em apagamento.py)."""
     from apagamento import apagar
-    return apagar(root, identificador, confirmacao, quem=quem, gerenciador=gerenciador, ativa=ativa)
+    return apagar(root, identificador, confirmacao, quem=quem, gerenciador=gerenciador, ativa=ativa,
+                  segundo_plano=segundo_plano)

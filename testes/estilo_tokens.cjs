@@ -10,12 +10,31 @@ const path = require('node:path');
 const {raiz, ler, semComentarios, tokens, blocos, propriedades, claro, escuro, cor, contraste} = require('./tokens_tema.cjs');
 
 const css = ler('style.css');
-// Sheets whose rules paint the Mesa: none may hold a colour value of its own.
-const FOLHAS = ['style.css', 'caderno.css', 'entrar.css', 'redacao.css'];
+// Sheets whose rules paint the Mesa: none may hold a colour value of its own. São TODAS as .css de interface/, em
+// qualquer subpasta nova (folha nova entra no contrato sozinha, sem lista por nome a esquecer). Exceções explícitas:
+// tokens.css, o lugar onde as cores moram (checado por testes próprios abaixo), e vendor/, que é código de terceiros.
+const FOLHAS_FORA_DO_CONTRATO = ['tokens.css'];
+const PASTAS_FORA_DO_CONTRATO = ['vendor'];
+function folhasEm(pasta, prefixo = '') {
+  return fs.readdirSync(pasta, {withFileTypes: true}).flatMap(entrada => {
+    const relativo = prefixo + entrada.name;
+    if (entrada.isDirectory()) return PASTAS_FORA_DO_CONTRATO.includes(entrada.name) ? [] : folhasEm(path.join(pasta, entrada.name), relativo + '/');
+    return entrada.name.endsWith('.css') && !FOLHAS_FORA_DO_CONTRATO.includes(relativo) ? [relativo] : [];
+  });
+}
+const FOLHAS = folhasEm(raiz).sort();
+
+test('a lista de folhas vem do disco e não encolhe em silêncio', () => {
+  for (const nome of ['style.css', 'caderno.css', 'entrar.css', 'redacao.css']) assert.ok(FOLHAS.includes(nome), `${nome} fora do contrato`);
+  assert.ok(!FOLHAS.includes('tokens.css'));
+  assert.ok(!FOLHAS.some(nome => nome.startsWith('vendor/')), 'vendor/ fora do contrato');
+  for (const nome of FOLHAS_FORA_DO_CONTRATO) assert.ok(fs.existsSync(path.join(raiz, nome)), `exceção ${nome} não existe mais`);
+  for (const pasta of PASTAS_FORA_DO_CONTRATO) assert.ok(fs.existsSync(path.join(raiz, pasta)), `exceção ${pasta}/ não existe mais`);
+});
 
 test('tokens.css é carregado antes das folhas da Mesa e da página de entrada', () => {
   for (const pagina of ['index.html', 'entrar.html']) {
-    const html = ler(pagina), base = html.indexOf('href="/tokens.css"'), estilo = html.indexOf('href="/style.css"');
+    const html = ler(pagina), base = html.indexOf('href="/tokens.css'), estilo = html.indexOf('href="/style.css');
     assert.ok(base > 0, `${pagina}: link para /tokens.css`);
     assert.ok(base < estilo, `${pagina}: tokens.css antes de style.css`);
   }

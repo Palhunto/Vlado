@@ -69,7 +69,7 @@ async function aba(m, id) { m.$('ver-quadros').click(); await m.esperar(8); m.$(
 
 test('as abas do comparador, das tabelas e do mapa entram na mesma lista de abas', async () => {
   const m = mesa(); m.$('ver-quadros').click(); await m.esperar(8);
-  assert.deepEqual(m.$('quadros-abas').querySelectorAll('[role=tab]').map(b => b.id),
+  assert.deepEqual([...m.$('quadros-abas').querySelectorAll('[role=tab]')].map(b => b.id),
     ['quadros-aba-hipoteses', 'quadros-aba-tempo', 'quadros-aba-comparador', 'quadros-aba-tabelas', 'quadros-aba-mapa']);
 });
 
@@ -109,7 +109,7 @@ test('tabela conferível: fonte da célula no foco, célula corrigida marcada e 
   assert.equal(celulas[2].querySelector('[translate=no]').textContent, '2024-02', 'datas ficam como registradas');
   assert.match(painel.textContent, /3 com fonte · 1 corrigida · 2 pendentes/, 'singular e plural');
   assert.match(fonte.textContent, /Dígitos trocados/);
-  assert.deepEqual(fonte.querySelectorAll('[translate=no]').map(n => n.textContent).filter(x => ['Ana', '1.154,50'].includes(x)), ['Ana', '1.154,50'],
+  assert.deepEqual([...fonte.querySelectorAll('[translate=no]')].map(n => n.textContent).filter(x => ['Ana', '1.154,50'].includes(x)), ['Ana', '1.154,50'],
     'autor e valor anterior são dados, fora da tradução');
   assert.match(celulas[4].textContent, /pendente/);
   let anuncios = 0; celulas[2].addEventListener('focus', () => anuncios++);
@@ -129,13 +129,13 @@ test('painel de cálculo mostra operação, células usadas e resultado, e desta
   assert.match(calc.textContent, /L0002 · Valor: 1\.145,50/);
   assert.equal(calc.querySelectorAll('.tabela-usadas li').length, 2);
   calc.querySelector('button').click();
-  const usadas = painel.querySelectorAll('td.is-usada').map(td => `${td.dataset.linha}|${td.dataset.coluna}`);
+  const usadas = [...painel.querySelectorAll('td.is-usada')].map(td => `${td.dataset.linha}|${td.dataset.coluna}`);
   assert.deepEqual(usadas, ['L0001|valor', 'L0002|valor']);
 });
 
 test('notação brasileira só nos valores da conta: IDs, contagens e divisores ficam como registrados (N6)', async () => {
   const m = mesa(); const painel = await aba(m, 'tabelas');
-  const contas = painel.querySelectorAll('.tabela-expressao').map(p => p.textContent);
+  const contas = [...painel.querySelectorAll('.tabela-expressao')].map(p => p.textContent);
   assert.equal(contas[1], '(-1.200,50) - 10.000 = -11.200,50 BRL', 'termo negativo entre parênteses, como no Core');
   assert.equal(contas[2], '1234 de 2000 célula(s) com valor = 1234 células com valor', 'contagem não vira valor monetário');
   assert.match(contas[3], /^E1234 \+ 1200\.00 = /, 'sem os valores das células, a expressão do Core aparece como está');
@@ -195,7 +195,7 @@ test('mapa em lista acessível e lista lateral de homônimos, sem fundir entidad
   assert.match(hom.textContent, /Motivo: Nome igual/);
   assert.match(hom.textContent, /Conferência pendente/);
   assert.match(hom.textContent, /Nada é fundido/);
-  assert.ok(hom.querySelectorAll('[translate=no]').some(n => n.textContent === 'matricula'), 'identificadores divergentes fora da tradução');
+  assert.ok([...hom.querySelectorAll('[translate=no]')].some(n => n.textContent === 'matricula'), 'identificadores divergentes fora da tradução');
 });
 
 test('tabelas ficam atrás da verificação de disponibilidade da rota', async () => {
@@ -257,6 +257,36 @@ test('disposição do mapa: nenhum rótulo cobre nó nem outra ligação, de 2 a
     }
     assert.ok(d.pos.E0 && d.L >= 760);
   }
+});
+
+test('disposição do mapa grande: busca por trocas dentro do orçamento de tempo, com poucos rótulos sobre nó (central ligada a todas)', () => {
+  const m = mesa();
+  const sobrepoe = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  // Máximo de rótulos sobre nó por tamanho. Referências medidas: a busca inteira de antes (13 frações, sem orçamento) deixava 2, 4, 6 e 12;
+  // a busca inteira com as 25 frações de hoje (sem orçamento: 1, 3, 10 e 44 s) deixa 0 nos quatro. Com 150 ms de orçamento o resultado varia um pouco
+  // com a máquina, então o limite tem uma unidade de folga sobre o que se mede aqui (0, 0, 1 e 1); o que sobra é limitação documentada.
+  for (const [n, limite] of [[12, 1], [14, 1], [20, 2], [28, 2]]) {
+    const entidades = Array.from({length: n}, (_, i) => ({id: `E${i}`, tipo: i % 2 ? 'pessoa' : 'organizacao', nome: `Entidade ${i}`}));
+    const relacoes = entidades.slice(1).map((e, i) => ({id: `L${String(i).padStart(2, '0')}`, origem: 'E0', destino: e.id, tipo: ['Sócio', 'Irmãos? A confirmar', 'Contrato 041/2025', 'Servidora até 2023'][i % 4], situacao: 'documentada'}));
+    const inicio = Date.now();
+    const d = m.janela.Quadros.dispor({entidades, relacoes});
+    const ms = Date.now() - inicio;
+    assert.ok(ms < 400, `n=${n}: a disposição levou ${ms} ms (orçamento de 150 ms; limite folgado: 400)`);
+    const nos = entidades.map(e => [d.pos[e.id][0] - 100, d.pos[e.id][1] - 40, d.pos[e.id][0] + 100, d.pos[e.id][1] + 40]);
+    for (let i = 0; i < nos.length; i += 1) for (let j = i + 1; j < nos.length; j += 1) assert.ok(!sobrepoe(nos[i], nos[j]), `n=${n}: os nós ${i} e ${j} não se sobrepõem`);
+    const sobreNo = relacoes.filter(r => nos.some(no => sobrepoe(d.pilulas[r.id].ret, no))).length;
+    assert.ok(sobreNo <= limite, `n=${n}: ${sobreNo} de ${relacoes.length} rótulos sobre nó (limite ${limite})`);
+    for (const r of relacoes) for (const o of relacoes) if (o.id < r.id) assert.ok(!sobrepoe(d.pilulas[r.id].ret, d.pilulas[o.id].ret), `n=${n}: os rótulos de ${o.id} e ${r.id} não se tocam`);
+  }
+});
+
+test('disposição do mapa: com orçamento zero ainda devolve uma posição para cada entidade e um rótulo para cada ligação', () => {
+  const m = mesa();
+  const entidades = Array.from({length: 12}, (_, i) => ({id: `E${i}`, tipo: 'pessoa', nome: `Entidade ${i}`}));
+  const relacoes = entidades.slice(1).map((e, i) => ({id: `L${i}`, origem: 'E0', destino: e.id, tipo: 'Sócio', situacao: 'documentada'}));
+  const d = m.janela.Quadros.dispor({entidades, relacoes}, {orcamento: 0});
+  assert.equal(Object.keys(d.pos).length, 12, 'com orçamento zero ainda há uma posição para cada entidade');
+  assert.equal(Object.keys(d.pilulas).length, relacoes.length);
 });
 
 test('disposição do mapa: 28 entidades e 40 ligações custam pouco (teto de trabalho) e o desenho não é calculado com ele oculto', async () => {

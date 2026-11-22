@@ -35,7 +35,9 @@ function seletores(texto) {
 }
 
 test('caderno.css é carregado pelo index.html depois de style.css', () => {
-  const estilo = html.indexOf('href="/style.css"'), caderno = html.indexOf('href="/caderno.css"');
+  // O href leva ?v=__V:nome__ (cache por hash, parte C): procura-se o prefixo, sem a aspa de fechamento.
+  const estilo = html.indexOf('href="/style.css'), caderno = html.indexOf('href="/caderno.css');
+  assert.ok(estilo >= 0, 'link para /style.css');
   assert.ok(caderno > 0, 'link para /caderno.css');
   assert.ok(caderno > estilo, 'depois de style.css');
 });

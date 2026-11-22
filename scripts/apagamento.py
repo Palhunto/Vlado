@@ -5,6 +5,17 @@ bytes por categoria) e uma confirmação derivada desse alcance. `apagar` exige 
 recusa execuções ativas e remove somente dentro da raiz do projeto, sem seguir links simbólicos
 ou junções. O registro de apagamento (lixeira/apagamentos.jsonl, somente acréscimo) guarda
 identificadores, contagens e bytes; nunca conteúdo de documentos nem títulos.
+
+**Quarentena** (a Mesa segue respondendo durante um apagamento grande). Sob as travas (a de cadastro
+e a das conversas) só o que é rápido: conferir o item e o alcance e renomear cada raiz para
+``<casos|conversas|execucoes>/.apagando/<item>/<n>``, no mesmo volume (no Compose cada pasta é um
+volume, e renomear entre volumes falharia). Depois disso o item já não aparece em lugar nenhum; a
+remoção dos arquivos corre fora das travas, em segundo plano na Mesa. Um manifesto em
+``lixeira/.apagando/<item>.json`` guarda a fase: em ``renomeando`` (antes do ponto sem volta), uma
+queda desfaz as renomeações e o item fica inteiro na lixeira; em ``removendo``, o apagamento é
+concluído (catálogo, lixeira e registro, sem repetir; depois os arquivos). ``retomar`` faz isso na
+partida da Mesa. Nada fica meio apagado à vista: ou o item está inteiro na lixeira, ou não está em
+lugar nenhum. As pastas ``.apagando`` não entram no backup (é dado que a pessoa mandou apagar).
 """
 from __future__ import annotations
 
@@ -12,16 +23,24 @@ from datetime import datetime, timezone
 import hashlib
 import hmac
 import json
+import logging
 import os
 from pathlib import Path
 import re
 import stat
+import threading
 import time
 
 from comum import dentro, ler_json
 import lixeira
 
 REGISTRO_APAGAMENTOS = 'lixeira/apagamentos.jsonl'
+QUARENTENA = '.apagando'  # <volume>/.apagando/<item>/<n>: roots being removed
+MANIFESTOS = 'lixeira/.apagando'  # <item>.json: the phase and the roots of each deletion in course
+VOLUMES = ('casos', 'conversas', 'execucoes')
+log = logging.getLogger('vlado.apagamento')
+_remocoes: dict = {}  # (root, item) -> thread removing its quarantine
+_remocoes_trava = threading.Lock()
 TENTATIVAS = 12
 ESPERA_S = 0.05
 ESTADOS_ATIVOS = ('preparando', 'executando', 'cancelando', 'publicando')
@@ -64,7 +83,8 @@ def _categoria(partes: tuple[str, ...]) -> str:
 
 
 def _varrer(root: Path, relativo: str, entradas: dict, pastas: list) -> None:
-    """Acumula arquivos (rel -> (categoria, bytes)) sem seguir links."""
+    """Acumula arquivos (rel -> (categoria, bytes)) sem seguir links. Lê o diretório com scandir: o
+    tamanho vem da própria entrada (no Windows, sem outra chamada ao sistema por arquivo)."""
     base = _alvo(root, relativo)
     if not os.path.lexists(base):
         return
@@ -72,21 +92,19 @@ def _varrer(root: Path, relativo: str, entradas: dict, pastas: list) -> None:
         entradas[relativo] = (_categoria(Path(relativo).parts), 0 if _eh_link(base) else base.stat().st_size)
         return
     pastas.append(relativo)
-    for atual, nomes, arquivos in os.walk(base, followlinks=False):
-        rel_atual = Path(atual).relative_to(root.resolve()).as_posix()
-        for nome in list(nomes):
-            caminho = Path(atual) / nome
-            if _eh_link(caminho):
-                nomes.remove(nome)
-                rel = f'{rel_atual}/{nome}'
-                entradas[rel] = (_categoria(Path(rel).parts), 0)
-            else:
-                pastas.append(f'{rel_atual}/{nome}')
-        for nome in arquivos:
-            caminho = Path(atual) / nome
-            rel = f'{rel_atual}/{nome}'
-            tamanho = 0 if _eh_link(caminho) else caminho.stat().st_size
-            entradas[rel] = (_categoria(Path(rel).parts), tamanho)
+    pendentes = [(str(base), relativo)]
+    while pendentes:
+        atual, rel_atual = pendentes.pop()
+        with os.scandir(atual) as itens:
+            for entrada in itens:
+                rel = f'{rel_atual}/{entrada.name}'
+                if entrada.is_symlink() or getattr(entrada, 'is_junction', lambda: False)():
+                    entradas[rel] = (_categoria(Path(rel).parts), 0)
+                elif entrada.is_dir(follow_symlinks=False):
+                    pastas.append(rel)
+                    pendentes.append((entrada.path, rel))
+                else:
+                    entradas[rel] = (_categoria(Path(rel).parts), entrada.stat(follow_symlinks=False).st_size)
 
 
 def _item(root: Path, identificador: str) -> dict:
@@ -255,11 +273,185 @@ def _registrar(root: Path, item: dict, quem: str, resumo: dict) -> dict:
     return registro
 
 
-def apagar(root, identificador: str, confirmacao: str, *, quem: str, gerenciador=None, ativa=None) -> dict:
+def nome_para_confirmar(root, identificador: str) -> str:
+    """O nome que a pessoa digita para confirmar, sem varrer os arquivos do item."""
+    item = _item(Path(root).resolve(), identificador)
+    return item.get('titulo') or item['caso']
+
+
+def _manifesto(root: Path, item_id: str) -> Path:
+    return dentro(root, f'{MANIFESTOS}/{item_id}.json')
+
+
+def _gravar_manifesto(root: Path, manifesto: dict) -> None:
+    from cadastrar_documentos import _atomico, _bytes
+    caminho = _manifesto(root, manifesto['item']['id'])
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    _atomico(caminho, _bytes(manifesto))
+
+
+def _renomear(root: Path, origem: str, destino: str) -> None:
+    alvo = _alvo(root, destino)
+    alvo.parent.mkdir(parents=True, exist_ok=True)
+    _tentar(lambda caminho: os.rename(caminho, alvo), _alvo(root, origem))
+
+
+def _desfazer(root: Path, raizes) -> None:
+    """Back from the quarantine to where they were, the last renamed first (an OSError leaves the rest)."""
+    for origem, destino in reversed(list(raizes)):
+        if os.path.lexists(_alvo(root, destino)) and not os.path.lexists(_alvo(root, origem)):
+            _renomear(root, destino, origem)
+
+
+def _limpar_quarentena_vazia(root: Path, item_id: str) -> None:
+    for volume in VOLUMES:
+        pasta = dentro(root, f'{volume}/{QUARENTENA}/{item_id}')
+        for vazia in (pasta, pasta.parent):
+            try:
+                vazia.rmdir()
+            except OSError:
+                break
+
+
+def _registrado(root: Path, item_id: str, confirmacao: str) -> bool:
+    caminho = dentro(root, REGISTRO_APAGAMENTOS)
+    try:
+        linhas = caminho.read_text(encoding='utf-8').splitlines()
+    except FileNotFoundError:
+        return False
+    for linha in linhas:
+        try:
+            registro = json.loads(linha)
+        except ValueError:
+            continue
+        if registro.get('item_id') == item_id and registro.get('confirmacao') == confirmacao:
+            return True
+    return False
+
+
+def _concluir_registros(root: Path, manifesto: dict) -> None:
+    """Catalog, trash and the deletion record, after the point of no return; idempotent."""
+    item, resumo = manifesto['item'], manifesto['resumo']
+    _atualizar_registros(root, item)
+    if not _registrado(root, item['id'], resumo['confirmacao']):
+        _registrar(root, item, manifesto['quem'], resumo)
+
+
+def _remover_quarentena(root: Path, manifesto: dict) -> bool:
+    """Remove the item's quarantine and then its manifest. An OSError (a file in use) leaves both for
+    the next start; nothing of it is visible meanwhile."""
+    item_id = manifesto['item']['id']
+    try:
+        for _, destino in manifesto['raizes']:
+            entradas: dict[str, tuple[str, int]] = {}
+            pastas: list[str] = []
+            _varrer(root, destino, entradas, pastas)
+            _remover(root, sorted(entradas), pastas)
+        _limpar_quarentena_vazia(root, item_id)
+        _manifesto(root, item_id).unlink(missing_ok=True)
+        return True
+    except OSError as exc:
+        log.warning('Apagamento definitivo %s: arquivos ainda não removidos (%s); a próxima partida conclui.',
+                    item_id, exc.strerror or exc)
+        return False
+
+
+def _em_segundo_plano(root: Path, manifesto: dict) -> None:
+    chave = (str(root), manifesto['item']['id'])
+
+    def remover():
+        try:
+            _remover_quarentena(root, manifesto)
+        except Exception:  # noqa: BLE001 - the next start concludes; the Mesa goes on
+            log.exception('Apagamento definitivo %s: falha ao remover a quarentena.', chave[1])
+        finally:
+            with _remocoes_trava:
+                _remocoes.pop(chave, None)
+    with _remocoes_trava:
+        if chave in _remocoes:
+            return
+        thread = threading.Thread(target=remover, daemon=True, name='vlado_apagamento')
+        _remocoes[chave] = thread
+    thread.start()
+
+
+def aguardar(prazo: float | None = None) -> bool:
+    """Wait for the background removals of this process (tests, orderly shutdown)."""
+    limite = None if prazo is None else time.monotonic() + prazo
+    while True:
+        with _remocoes_trava:
+            threads = list(_remocoes.values())
+        if not threads:
+            return True
+        resta = None if limite is None else limite - time.monotonic()
+        if resta is not None and resta <= 0:
+            return False
+        threads[0].join(resta)
+
+
+def retomar(root, *, segundo_plano: bool = False) -> dict:
+    """At the Mesa's start: finish what a crash left. Phase ``renomeando``: the roots go back and the
+    item stays whole in the trash. Phase ``removendo``: catalog, trash and record (without repeating),
+    then the removal. A quarantine with no manifest (only this module writes there) is removed."""
+    from cadastrar_documentos import _trava
+    root = Path(root).resolve()
+    resumo, pendentes = {'desfeitos': 0, 'concluidos': 0, 'orfas': 0}, []
+    with _trava(root):
+        pasta = dentro(root, MANIFESTOS)
+        conhecidos = set()
+        for caminho in sorted(pasta.glob('*.json')) if pasta.is_dir() else []:
+            try:
+                manifesto = ler_json(caminho)
+                item_id, fase = manifesto['item']['id'], manifesto['fase']
+            except (OSError, ValueError, KeyError, TypeError):
+                log.warning('Apagamento definitivo: manifesto ilegível %s; ficou como está.', caminho.name)
+                conhecidos.add(caminho.stem)
+                continue
+            conhecidos.add(item_id)
+            if fase == 'renomeando':
+                try:
+                    _desfazer(root, manifesto['raizes'])
+                except OSError as exc:
+                    log.warning('Apagamento definitivo %s: renomeação não desfeita (%s); a próxima partida tenta de novo.',
+                                item_id, exc.strerror or exc)
+                    continue
+                _limpar_quarentena_vazia(root, item_id)
+                caminho.unlink(missing_ok=True)
+                resumo['desfeitos'] += 1
+            else:
+                _concluir_registros(root, manifesto)
+                pendentes.append(manifesto)
+                resumo['concluidos'] += 1
+        for volume in VOLUMES:
+            quarentena = dentro(root, f'{volume}/{QUARENTENA}')
+            for orfa in sorted(quarentena.iterdir()) if quarentena.is_dir() else []:
+                if orfa.name in conhecidos or not re.fullmatch(lixeira.ID_CONVERSA, orfa.name):
+                    continue
+                rel = f'{volume}/{QUARENTENA}/{orfa.name}'
+                entradas: dict[str, tuple[str, int]] = {}
+                pastas: list[str] = []
+                try:
+                    _varrer(root, rel, entradas, pastas)
+                    _remover(root, sorted(entradas), pastas)
+                    resumo['orfas'] += 1
+                except OSError as exc:
+                    log.warning('Apagamento definitivo: quarentena %s não removida (%s).', orfa.name, exc.strerror or exc)
+    for manifesto in pendentes:
+        if segundo_plano:
+            _em_segundo_plano(root, manifesto)
+        else:
+            _remover_quarentena(root, manifesto)
+    return resumo
+
+
+def apagar(root, identificador: str, confirmacao: str, *, quem: str, gerenciador=None, ativa=None,
+           segundo_plano: bool = False) -> dict:
     """Apaga definitivamente um item da lixeira, se `confirmacao` ainda corresponder ao alcance atual.
 
     `gerenciador` é o objeto Conversas (usa seu lock e seus contextos); `ativa(caso, conversa)` é
-    um callback opcional que devolve True quando há execução ativa para o item.
+    um callback opcional que devolve True quando há execução ativa para o item. Sob as travas, só a
+    conferência e a quarentena; a remoção dos arquivos vem depois, fora delas (em segundo plano com
+    `segundo_plano`, como na Mesa).
     """
     root = Path(root).resolve()
     if not isinstance(quem, str) or not quem.strip():
@@ -278,16 +470,39 @@ def apagar(root, identificador: str, confirmacao: str, *, quem: str, gerenciador
         atual = alcance(root, identificador)
         if not hmac.compare_digest(atual['confirmacao'], confirmacao):
             raise ValueError('O conteúdo do item mudou desde a conferência. Revise o alcance e confirme novamente.')
+        raizes = [r for r in atual['raizes'] if os.path.lexists(_alvo(root, r))]
+        # Identities only, like the deletion record: never the title (the manifest stays until the files go).
+        manifesto = {'esquema': 1, 'item': {k: item.get(k) for k in ('id', 'tipo', 'caso', 'conversa', 'rodada')},
+                     'fase': 'renomeando', 'quem': quem.strip()[:120],
+                     'em_utc': datetime.now(timezone.utc).isoformat(),
+                     'raizes': [[r, f'{r.split("/")[0]}/{QUARENTENA}/{item["id"]}/{n}'] for n, r in enumerate(raizes)],
+                     'resumo': {k: atual[k] for k in ('conversas', 'rodadas', 'categorias', 'totais', 'confirmacao')}}
+        _gravar_manifesto(root, manifesto)
+        feitas = []
         try:
-            _remover(root, atual['_entradas'], atual['_pastas'])
+            for origem, destino in manifesto['raizes']:
+                _renomear(root, origem, destino)
+                feitas.append((origem, destino))
         except OSError as exc:
+            try:
+                _desfazer(root, feitas)
+            except OSError:
+                pass  # the manifest stays in "renomeando": the next start puts them back
+            else:
+                _limpar_quarentena_vazia(root, item['id'])
+                _manifesto(root, item['id']).unlink(missing_ok=True)
             raise ValueError('Não foi possível apagar tudo (arquivo em uso ou sem permissão). '
                              'O item continua na lixeira; feche programas que usem esses arquivos e tente de novo.') from exc
+        manifesto['fase'] = 'removendo'
+        _gravar_manifesto(root, manifesto)  # the point of no return: a crash from here on concludes
         for conversa in atual['conversas']:
             if gerenciador is not None:
                 gerenciador.contexts.pop(conversa, None)
                 gerenciador.loaded.discard(conversa)
-        _atualizar_registros(root, item)
-        _registrar(root, item, quem.strip()[:120], atual)
+        _concluir_registros(root, manifesto)
+    if segundo_plano:
+        _em_segundo_plano(root, manifesto)
+    else:
+        _remover_quarentena(root, manifesto)
     return {'estado': 'apagado', 'item': atual['item'], 'categorias': atual['categorias'],
             'totais': atual['totais'], 'aviso_backup': AVISO_BACKUP}

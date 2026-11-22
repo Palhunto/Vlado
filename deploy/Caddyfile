@@ -22,6 +22,14 @@
 	request_body {
 		max_size 80MB
 	}
+	# Cabeçalhos (SEG-06). `-Server` tira o "Server" da resposta: o do Caddy e o do upstream (que traria a versão do
+	# Python). Não repassamos versão nenhuma.
+	# HSTS por um ano, com includeSubDomains (a Mesa manda o mesmo valor; o Caddy também, para as respostas dele, como o 502).
+	# SEM preload, de propósito: ele entra em listas dos navegadores que levam meses para sair; ver deploy/MONITORAMENTO.md.
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
 	# Registro de acesso (uma linha JSON por requisição) em /var/log/caddy/acesso.log, volume caddy_logs.
 	# Conteúdo mínimo e sem segredo: o Caddy nunca registra o corpo da requisição; aqui também saem a URI
 	# inteira (a query pode levar nome de caso ou de documento), TODOS os cabeçalhos da requisição (Cookie,
@@ -48,5 +56,19 @@
 		}
 	}
 	# The original Host header is forwarded; the app checks it against https://{$VLADO_DOMINIO}.
-	reverse_proxy vlado:8765
+	# Conexão do Caddy para a Mesa: a Mesa fecha a conexão mantida ociosa aos 10 s (CONF-03). Se o Caddy a reutilizasse
+	# no instante em que ela fecha, o pedido sairia como 502. keepalive de 5 s: o Caddy descarta a conexão ociosa antes
+	# da Mesa (e `keepalive off` desligaria a reutilização por completo, se um dia 5 s não bastar).
+	reverse_proxy vlado:8765 {
+		transport http {
+			keepalive 5s
+		}
+	}
+	# Erros gerados pelo próprio Caddy (502 com a Mesa fora do ar, por exemplo) não passam pelo `header` acima: o Server
+	# e o HSTS são tratados aqui também, e o corpo é só o status.
+	handle_errors {
+		header -Server
+		header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		respond "{err.status_code} {err.status_text}"
+	}
 }

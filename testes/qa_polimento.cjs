@@ -1,4 +1,5 @@
 const {chromium} = require('playwright');
+const {irParaCadastro} = require('./qa_navegacao.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -23,7 +24,7 @@ const [origin, output, chrome] = process.argv.slice(2);
   }
   try {
     await page.goto(origin);
-    await page.click('#ver-cadastro');
+    await irParaCadastro(page);
     assert.equal(await page.locator('#cadastro-id').count(), 0);
     await page.fill('#cadastro-titulo-input', 'Minha apuração legível');
     await page.setInputFiles('#cadastro-arquivos', {name:'Documento sintético.txt', mimeType:'text/plain', buffer:Buffer.from('Cadastro de interface, sem pergunta editorial.')});

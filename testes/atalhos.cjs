@@ -37,7 +37,7 @@ function tecla(alvo, init) {
   return evento;
 }
 const perguntas = mesa => mesa.chamadas.filter(c => c.operacao === 'codex-perguntar').length;
-const selecionado = mesa => mesa.$('achados-resultados').querySelectorAll('.finding-open').findIndex(botao => botao.getAttribute('aria-pressed') === 'true');
+const selecionado = mesa => [...mesa.$('achados-resultados').querySelectorAll('.finding-open')].findIndex(botao => botao.getAttribute('aria-pressed') === 'true');
 
 test('Ctrl+Enter e Cmd+Enter enviam a pergunta e anunciam o envio', async () => {
   for (const modificador of ['ctrlKey', 'metaKey']) {

@@ -1,6 +1,7 @@
 // Homologação ponta a ponta em modo hospedado (login real), headless Chrome atrás do proxy TLS de teste.
 // Invocado por qa_homologacao.py; as senhas chegam só por VLADO_QA_CONTAS e nunca são gravadas.
 const {chromium, request} = require('playwright');
+const {irParaCadastro, irParaGerenciar} = require('./qa_navegacao.cjs');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
@@ -149,7 +150,7 @@ function contaNaLista(page, nome) {
 
     // ---------------------------------------------------------------- 2. Reportagem sintética (admin)
     await entrar(admin, contas.admin);
-    await admin.click('#ver-cadastro');
+    await irParaCadastro(admin);
     await admin.locator('#area-cadastro:not([hidden])').waitFor();
     await admin.selectOption('#cadastro-caso', '');
     await admin.selectOption('#cadastro-natureza', 'sinteticos');
@@ -241,7 +242,7 @@ function contaNaLista(page, nome) {
     await admin.screenshot({path: path.join(shots, 'caderno-nota-com-fonte.png')});
 
     await py({cmd: 'instantaneo', nome: 'r001', caso, rodada: 'R001'});
-    await admin.click('#ver-cadastro');
+    await irParaCadastro(admin);
     await admin.locator('#area-cadastro:not([hidden])').waitFor();
     assert.equal(await admin.locator('#cadastro-caso').inputValue(), caso, 'destino do envio = caso aberto');
     await admin.setInputFiles('#cadastro-arquivos', esperado.lotes.lote2.map(a => a.caminho));
@@ -329,7 +330,7 @@ function contaNaLista(page, nome) {
     await b.screenshot({path: path.join(shots, 'convidado-b.png')});
 
     atual = admin;
-    await admin.click('#ver-gerenciar');
+    await irParaGerenciar(admin);
     await admin.locator('#acesso-painel:not([hidden])').waitFor();
     const linhaA = contaNaLista(admin, contas.a.nome);
     await linhaA.getByRole('button', {name: 'Alterar apurações'}).click();
