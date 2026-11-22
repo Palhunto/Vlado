@@ -966,7 +966,7 @@ Ordem: à esquerda, Perfil, Entrada e segurança e Seus dados; à direita, Onde 
 | Cartão | Conteúdo e comportamento | Dados |
 |---|---|---|
 | **Perfil** | nome em 16/600; abaixo, o e-mail em 16, ou, na conta migrada sem e-mail, "login ana.lima" em 14 `--theme-muted`; papel e redação em 14 `--theme-muted` ("Repórter · Redação Serena", como o perfil da barra). "Mudar nome" (secundário) troca a linha do nome por um campo "Nome" (44, até 120 caracteres, já preenchido), com "Salvar" (principal) e "Cancelar" (secundário); em branco, "Falta o nome. Escreva o seu nome."; recusa do servidor abaixo do campo. Abaixo, duas caixas de seleção lado a lado, com rótulo acima (W08): **Idioma** (Português, English), que muda o idioma da Mesa, como o botão do cabeçalho, e grava o idioma da conta, com o apoio "Também é o idioma dos e-mails do Vlado."; **Tema** (Do sistema, Claro, Escuro), que fica só neste navegador, como o botão do cabeçalho, e não vai ao servidor (contrato, 2.3). "Do sistema" grava a escolha `sistema`, e com ela a Mesa segue `prefers-color-scheme`, sem piscar ao abrir. Sem nenhuma escolha guardada, a Mesa abre escura, como sempre abriu. A versão anterior deste texto, em que a Mesa sem escolha seguia o sistema, foi barrada pela Coruja (B1) e revertida em `aa2f1d5` por ordem do Maestro. O e-mail muda por "Trocar e-mail" ([abaixo](#minha-conta)) | `conta-ver`; `conta-atualizar` com `nome` ou `idioma` (`pt`, `en`) |
-| **Entrada e segurança** | linha "Senha", com "definida há 12 dias" em 14 `--theme-muted` (de `senha_definida_em`; "definida hoje" no dia), e "Trocar senha" (secundário) à direita. As linhas do segundo fator e da chave de acesso ficam fora ([exceções](#contas-excecoes)) | `conta-ver` |
+| **Entrada e segurança** | linha "Senha", com "definida há 12 dias" em 14 `--theme-muted` (de `senha_definida_em`; "definida hoje" no dia), e "Trocar senha" (secundário) à direita. Abaixo, a linha "Segundo fator" ([segundo fator](#segundo-fator)). A chave de acesso fica fora (decisão 4) | `conta-ver` |
 | **Onde sua conta está aberta** | uma linha por sessão. A sessão em uso vem primeiro, com "Esta sessão" em 14/600 `--theme-muted` à direita e sem botão: sai-se dela por "Sair". As outras seguem na ordem do servidor (uso mais recente primeiro), com "Encerrar" (secundário). Cada linha tem o aparelho em 16 ("Firefox · Linux", "Aplicativo Android": o texto do servidor, `translate="no"`) e, abaixo, em 14 `--theme-muted`, o último uso e o endereço ("ontem, 21h10 · 189.40.12.7"). Com duas sessões ou mais, "Encerrar todas as outras" (secundário) no pé, e o apoio "Encerrar vale na próxima ação daquele aparelho." (contrato, 8.3). Encerrar é imediato, sem diálogo (W08, regra 5); o botão fica "Encerrando…", a linha sai e a linha de estado diz "✓ Sessão encerrada: Edge · Windows." ou "✓ 2 sessões encerradas." Se o servidor responder "Sessão não encontrada.", a lista recarrega, sem erro | `conta-sessoes`; `conta-sessao-encerrar` com `sessao`; `conta-sessoes-encerrar-outras` |
 | **Seu uso neste mês** | "Gasto com IA" em 16 e o valor em 16/600 à direita ("R$ 18,40 de R$ 50": gasto sempre com centavos; teto sem centavos quando inteiro, como na barra); [medidor](#medidor) de 6 px com `aria-label` ("37% da cota usada"); apoio "O teto é definido pelo dono da redação." Esgotada, o cartão vira o aviso da cota esgotada da barra ("! Cota esgotada", cores de aviso). Sem a rota, o cartão some. Sempre em reais, nunca em tokens (W08, regra 7) | `GET /api/cota`, bloco `conta` |
 | **Seus dados** | texto 16: "Exportar seus dados e excluir sua conta ainda não estão na Mesa. Para pedir, fale com o dono da redação." Para o dono, "fale com quem administra o serviço". Sem botões ([exceções](#contas-excecoes)) | nenhum |
@@ -1007,6 +1007,98 @@ A resposta é sempre `{estado: "confirmacao_enviada"}`, para endereço livre e p
 - Sucesso: o cartão do Entrar com o título "E-mail confirmado", o texto "O e-mail da sua conta foi trocado. Use o novo e-mail para entrar." e o [link](#link) "Ir para a Mesa". A sessão aberta continua.
 - Link inválido, usado ou vencido: o estado "Este link não vale mais", com o texto do servidor ("Link inválido, usado ou vencido. Peça outro em Minha conta.") e o link "Ir para a entrada".
 - Textos aceitos em 22/11/2026 sobre `7c2345c` (Lume), no lugar dos que esta seção trazia.
+
+<a id="segundo-fator"></a>
+
+### Segundo fator (E4a)
+
+*(Derivado, 22/11/2026.)* Estrutura do W08 (linha "Código do autenticador ativo" e "Códigos de reserva") e dos passos 2 e 3 do W10. Dados da E4a de Contas (`lancamento/contas-o2` `85b900a`; contrato, 8.2 e 12): TOTP de 6 dígitos e dez códigos de reserva de uso único, no formato `ABCDE-FGHJK`. A chave de acesso segue fora (decisão 4). O fator é obrigatório para dono e editor no `piloto` pela [pendência](#pendencia-fator), que entra num commit próprio de Contas.
+
+**Na linha "Segundo fator" de Entrada e segurança** (Minha conta), conforme `conta-ver` → `segundo_fator`:
+
+| Estado | Linha | Ações |
+|---|---|---|
+| Desligado (`ativo: false`) | "○ Segundo fator desligado" e, em 14 `--theme-muted`, "Um código do aplicativo autenticador, além da senha, na entrada." Para dono e editor, também "Obrigatório para o seu papel." | "Cadastrar" (secundário) |
+| Ligado | "✓ Código do autenticador ativo" e, em 14 `--theme-muted`, "desde 12 de nov. · 8 códigos de reserva" (`ativado_em`, `codigos_restantes`) | "Gerar novos códigos" e "Trocar de aparelho" (secundários); "Remover" (destrutivo) só quando `GET /api/sessao` traz `conta-fator-remover` em `capacidades`, que nunca vem para dono e editor |
+| Ligado, com 3 códigos ou menos | igual ao anterior, mais a linha "! Restam 2 códigos de reserva. Gere novos." em 14/600 `--theme-warning` | as mesmas |
+
+**Cadastrar** abre o diálogo "Cadastrar o segundo fator", da família do [diálogo](#dialogo). A largura é 480, e no celular a tela cheia menos 16 px de cada lado. A rubrica marca o passo ("PASSO 1 DE 3"), como no W10.
+
+1. **Senha** (variante [com senha](#dialogo-senha)). Texto: "Confirme a sua senha para começar." Ação principal "Continuar" (`conta-fator-iniciar {senha}`).
+   - Em "Trocar de aparelho", o mesmo passo tem também o campo "Código do aparelho atual", que aceita o código do aplicativo atual ou um código de reserva, e o texto "O aparelho atual vale até o novo ser confirmado."
+2. **Ler o código.** O servidor manda `segredo` e `otpauth` uma vez só.
+   - **Texto:** "Abra o aplicativo autenticador do celular e leia o código abaixo. Se não puder ler, digite a chave."
+   - **Código QR:** um quadrado de 200 px, centrado, desenhado como descrito abaixo.
+   - **Chave em texto:** abaixo do QR, "Chave", com a chave em grupos de 4 caracteres separados por espaço. Usa 16/600, com espaçamento de letra de 1 px e algarismos tabulares, além de `translate="no"`, de `user-select: all` e de "Copiar chave" (secundário).
+   - **Campo:** "Código de 6 dígitos", com `inputmode="numeric"`, `autocomplete="one-time-code"` e até 6 caracteres. Recebe o foco.
+   - **Apoio:** "Este cadastro vale por 15 minutos. Depois, comece de novo."
+   - **Ação:** principal "Confirmar" (`conta-fator-confirmar {codigo}`).
+3. **Códigos de reserva** (`codigos_de_reserva`, mostrados uma vez).
+   - **Título:** "Guarde os códigos de reserva".
+   - **Texto:** "Cada código entra uma vez, se você perder o celular. Eles não aparecem de novo."
+   - **Bloco dos códigos:** borda 1 px tracejada `--theme-input-line`, raio 8, preenchimento 12 e grade de duas colunas (uma no celular). Cada código fica em 16/600, com espaçamento de letra de 1 px, algarismos tabulares e `translate="no"`.
+   - **Ações:** "Copiar" e "Baixar" (secundários, lado a lado, como no W10). "Baixar" gera no navegador um arquivo `vlado-codigos-de-reserva.txt`, sem rede. Depois vem "Já guardei" (principal).
+   - **Fechar:** neste passo Esc não fecha nem há "Cancelar"; só "Já guardei" fecha, porque os códigos não voltam. Ao fechar, a linha de estado diz "✓ Segundo fator ativado."
+
+| Resposta | O que a tela faz |
+|---|---|
+| 403 `codigo_invalido` | erro no campo do código: "Código incorreto. Confira no aplicativo e digite o código que aparece agora." |
+| 429 `bloqueado` | erro do diálogo: "Muitos códigos errados seguidos. Por 15 minutos, as ações que pedem o código ficam bloqueadas para a sua conta." A ação fica indisponível |
+| "Comece de novo o cadastro do segundo fator." | o cadastro passou de 15 minutos: o diálogo volta ao passo 1, com esse texto na linha de estado do diálogo |
+| senha | como na [variante com senha](#dialogo-senha) |
+
+**Gerar novos códigos** é a variante com senha com mais um campo, "Código do aplicativo" (aceita também um código de reserva). O título é "Gerar novos códigos de reserva?", o texto "Os códigos atuais param de valer." e a ação principal "Gerar códigos" (`conta-fator-codigos {senha, codigo}`). A resposta abre o passo 3 acima.
+
+**Remover** é a variante com senha destrutiva. O título é "Remover o segundo fator?", o texto "A entrada volta a pedir só a senha. Você pode cadastrar de novo quando quiser." e a ação "Remover segundo fator" (`conta-fator-remover {senha}`). Resultado: "✓ Segundo fator removido."
+
+**O código QR, sem biblioteca de fora.**
+
+- **Desenho:** SVG em linha, gerado no navegador a partir de `otpauth`. Um `<path>` só, com módulos quadrados de tamanho inteiro (`shape-rendering: crispEdges`) e zona de silêncio de 4 módulos.
+- **Cores:** módulos `#000000` sobre fundo `#ffffff` nos dois temas. O leitor do celular precisa de escuro sobre claro, e isto é exceção aos tokens, só para o QR.
+- **Acessibilidade:** `role="img"` e `aria-label` "Código QR para o aplicativo autenticador. Se não puder ler, use a chave em texto abaixo." A chave em texto é a alternativa, e sem ela o cadastro não se completa.
+- **Nada guardado:** o QR e a chave não vão para `localStorage`, histórico nem registro. Somem quando o diálogo fecha.
+- **O que o Frontend precisa** para gerar o QR no navegador: um codificador QR, porque a Mesa não tem um. Há dois caminhos.
+  - **Recomendado:** pôr em `interface/vendor/` um codificador de código aberto de arquivo único e sem dependências, servido pela própria Mesa, sem CDN, com a licença ao lado. Por exemplo, o "QR Code generator library" do Project Nayuki, licença MIT. Entrar código de terceiros pede o aval do Maestro.
+  - **Alternativa:** o Frontend escreve um codificador próprio, em modo byte, correção M, versões 1 a 10, com teste contra vetores conhecidos.
+
+  O endereço tem uns 150 caracteres, o que pede a versão 7 ou 8.
+
+<a id="entrar-fator"></a>
+
+**Entrar, passo 2.** Quando `entrar` responde `{estado: "segundo_fator"}`, o cartão do Entrar troca o formulário. O foco vai para o campo:
+
+- título "Confirme que é você";
+- texto "Digite o código de 6 dígitos do aplicativo autenticador.";
+- campo "Código do aplicativo" (48 px, `inputmode="numeric"`, `autocomplete="one-time-code"`);
+- abaixo do campo, o [link](#link) "Usar um código de reserva". Ele troca o rótulo para "Código de reserva" e o `inputmode` para `text`, aceita espaço, hífen e minúsculas, e passa a ler "Usar o código do aplicativo";
+- apoio em 14 `--theme-muted`: "Você tem 5 minutos para digitar o código.";
+- ação principal grande "Entrar" (`entrar-segundo-fator {codigo}`);
+- link "Entrar com outra conta", que volta ao formulário.
+
+Respostas:
+
+- 403 `codigo_invalido`: no campo, "Código incorreto. Confira no aplicativo e tente de novo."
+- 401 `entrada_expirada`: volta ao formulário de login com a caixa de aviso "A entrada expirou. Digite o login e a senha de novo." O cartão do segundo passo vence em 5 minutos ou com cinco códigos errados.
+- 429 `bloqueado`: caixa de aviso com o texto do servidor.
+- 200: vai a `destino`, como a entrada.
+
+**Redefinir a senha com segundo fator.** A página não sabe de antemão se a conta tem o fator. Ela envia `{token, senha}`. Se a resposta for 403 `codigo_invalido` sem código enviado, o campo de senha fica preenchido e aparece, abaixo dele, o campo "Código do aplicativo ou de reserva", com o texto "Esta conta tem segundo fator. Digite o código do aplicativo ou um código de reserva." O foco vai para o campo novo, e a ação reenvia `{token, senha, codigo}`. Com o código enviado, `codigo_invalido` põe "Código incorreto. Confira e tente de novo." no campo. O link de recuperação pedido por um dono retira o fator e não pede código (contrato, 12).
+
+<a id="pendencia-fator"></a>
+
+**Pendência: cadastro obrigatório.** Quando `GET /api/sessao` traz `segundo_fator` em `pendencias` (dono e editor no `piloto`, sem o fator), a Mesa não abre nenhuma área. A pendência vale ao entrar e ao aceitar um convite como dono ou editor, que vira o passo 2 do W10. Em vez das áreas, mostra uma página da família do Entrar: marca, cartão centrado de até 440 px e rodapé.
+
+- **Rubrica:** "ANTES DE CONTINUAR".
+- **Título:** "Proteja a conta com um segundo passo" (W10, passo 2).
+- **Texto:** "Para quem é dono ou editor, o Vlado pede, além da senha, um código do aplicativo autenticador. Cadastre agora para abrir a Mesa."
+- **Os três passos:** os mesmos do cadastro, no próprio cartão em vez de diálogo, com a rubrica "PASSO 1 DE 3".
+- **Fim:** depois de "Já guardei", a página vai a `destino`, com a ação "Abrir a Mesa".
+- **Sair:** o link "Sair", no pé do cartão, encerra a sessão.
+- **Celular:** os passos são telas em sequência (W10, regra 8).
+
+Qualquer outra operação responde 403 `pendencia_de_conta` (contrato, 4.3). Se uma chegar, a Mesa volta a esta página. A rota da página e o `destino` com a pendência se combinam com Contas no commit da pendência.
+
+Na atividade da Equipe: `fator_ativado` "Beltrano ativou o segundo fator"; `fator_removido` "Beltrano removeu o segundo fator"; `fator_codigos_gerados` "Beltrano gerou novos códigos de reserva".
 
 <a id="equipe"></a>
 
@@ -1263,17 +1355,14 @@ A conferência destas telas não barra por elas. Cada uma volta ao wireframe qua
 
 | O que o wireframe mostra | O que a tela mostra até lá | Volta quando |
 |---|---|---|
-| W08: código do autenticador e códigos de reserva | as linhas ficam fora | houver segundo fator (contrato, 8.2) |
+| Obrigação do segundo fator para dono e editor (pendência `segundo_fator`) | o cadastro é opcional para todos; a [página da pendência](#pendencia-fator) não aparece | o commit da pendência de Contas, integrado com a tela (contrato, 12) |
 | W08 e W10: chave de acesso | fora | não volta: decisão 4 do contrato (P27) |
 | W08: cidade aproximada da sessão | aparelho, último uso e endereço | não volta: decisão 5 do contrato (P27) |
 | W08: "14 perguntas" no uso do mês | só o valor em reais | `GET /api/cota` trazer a contagem |
 | W08: "Exportar meus dados" e "Excluir minha conta" | o cartão Seus dados, só com o caminho por pessoa | houver `conta-exportar` e `conta-excluir` (contrato, 8.4); "Excluir" vem com o diálogo com senha e o nome digitado |
 | W09: "Convidar pessoa", convites pendentes e "Reenviar" | nada no lugar do botão. Abaixo da tabela, em 14 `--theme-muted`: numa instalação com uma redação só, "Para incluir alguém, crie uma conta em Configurações, Contas de acesso.", com "Contas de acesso" como [link](#link) para a aba; com mais de uma redação, onde `contas-criar` já é recusada (`5e342fe`), "Para incluir alguém na redação, fale com quem administra o serviço." A Mesa não distingue os dois casos (as capacidades são fixas por papel e a recusa só vem na chamada), então mostra sempre o primeiro texto, com o link (aceito em 22/11/2026 sobre `84cdcef`) | volta com a E3 de Contas (`281a468`), já especificada em [convites](#convites). As `contas-*` e "Contas de acesso" saem na mesma integração (P30) |
-| W10: passo 2, "Proteja a conta com um segundo passo" (código QR, código de 6 dígitos; obrigatório para dono e editor) | o aceite termina no passo 1 e vai direto a `destino` | houver segundo fator (contrato, 8.2). Volta como passo seguinte ao aceite, com "Passo 1 de 3" nos três; no celular, telas em sequência (W10, regra 8) |
-| W10: passo 3, códigos de reserva com "Copiar" e "Baixar" | fora; o aviso "Antes de começar" do passo 3 sobe para o passo 1 | houver segundo fator |
 | W10: caixa de aceite dos termos | fora enquanto `termos_versao` vem nulo | houver termos (contrato, 8.4; texto da Documentação, D6) |
 | W10: "Abrir a apuração de exemplo" e o tour (regra 7) | o aceite vai a `destino`, o destino inicial do servidor | houver apuração de exemplo e tour |
-| Redefinir a senha: código do autenticador | fora | houver segundo fator |
 | "Esqueci a senha" com o transporte `tela` | o texto "Esqueceu a senha? Fale com quem administra o serviço." | não volta: decisão 12 do contrato; a produção usa `smtp` |
 | W09: cartão "Chave de IA da redação" | a chave continua em Configurações, como hoje, com a senha | houver chave por redação (contrato, 8.5, parte da Plataforma) |
 | W09: "aviso em 80%" e "redação convidada para o teste" | só o teto e a contagem de pessoas | o servidor informar o aviso e a situação do teste |
