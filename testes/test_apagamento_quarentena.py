@@ -265,10 +265,39 @@ class QuedaTest(Base):
         (orfa / 'sobra.txt').write_text('sobra sintética', encoding='utf-8')
         alheia = self.root / 'casos' / apagamento.QUARENTENA / 'nao-e-um-item'
         alheia.mkdir()
-        self.assertEqual(apagamento.retomar(self.root)['orfas'], 1)
+        with self.assertLogs('vlado.apagamento', 'WARNING'):
+            self.assertEqual(apagamento.retomar(self.root)['orfas'], 1)
         self.assertFalse(orfa.parent.exists())
         self.assertTrue(alheia.exists())  # not a name this module writes: left alone
         self.assertEqual(self.retrato(), self.antes)
+        self.assertEqual((self.manifestos(), self.registros()), ([], []))  # nothing to record
+
+    def test_remocao_de_quarentena_sem_manifesto_fica_fora_da_trava(self):
+        # The Coruja's second proof: a leftover with no manifest was removed inside the cadastro lock.
+        from cadastrar_documentos import _trava
+        sobra = self.root / 'conversas' / apagamento.QUARENTENA / ('e' * 32) / '0'
+        sobra.mkdir(parents=True)
+        for numero in range(70):
+            (sobra / f'sobra_{numero:02}.txt').write_text('sobra sintética', encoding='utf-8')
+        desfeito = os.unlink
+
+        def devagar(caminho, *args, **kwargs):  # 70 files at 50 ms: about 3.5 s of removal
+            if na_quarentena(caminho):
+                time.sleep(0.05)
+            return desfeito(caminho, *args, **kwargs)
+        self.addCleanup(apagamento.aguardar, 60)
+        with mock.patch('apagamento.os.unlink', side_effect=devagar), self.assertLogs('vlado.apagamento', 'WARNING'):
+            self.assertEqual(apagamento.retomar(self.root, segundo_plano=True)['orfas'], 1)
+            self.assertTrue(self.quarentena())  # still being removed
+            inicio = time.monotonic()
+            with _trava(self.root, espera=1.0):  # another taking of the lock gets it
+                pass
+            self.assertLess(time.monotonic() - inicio, 1.0)
+            self.assertTrue(self.quarentena(), 'a remoção terminou antes da conferência: o teste não mediu nada')
+            self.assertTrue(apagamento.aguardar(60))
+        self.assertFalse(sobra.parent.exists())
+        self.assertEqual((self.quarentena(), self.manifestos(), self.registros()), ([], [], []))
+        self.assertEqual(self.retrato(), self.antes)  # the item in the trash untouched
 
 
 class MesaRespondeTest(Base):

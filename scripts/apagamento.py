@@ -472,20 +472,32 @@ def retomar(root, *, segundo_plano: bool = False, espera: float | None = None) -
                 _concluir_registros(root, manifesto)
                 pendentes.append(manifesto)
                 resumo['concluidos'] += 1
+        # A quarantine with no manifest (what a half-undone rename left): under the lock only a readable
+        # manifest in "removendo" for it, with no record (there is no confirmed item to record); its files
+        # are removed outside the lock, like any other, and a crash during that concludes it next time.
+        orfas: dict[str, list] = {}
         for volume in VOLUMES:
             quarentena = dentro(root, f'{volume}/{QUARENTENA}')
             for orfa in sorted(quarentena.iterdir()) if quarentena.is_dir() else []:
                 if orfa.name in conhecidos or not re.fullmatch(lixeira.ID_CONVERSA, orfa.name):
                     continue
-                rel = f'{volume}/{QUARENTENA}/{orfa.name}'
-                entradas: dict[str, tuple[str, int]] = {}
-                pastas: list[str] = []
-                try:
-                    _varrer(root, rel, entradas, pastas)
-                    _remover(root, sorted(entradas), pastas)
-                    resumo['orfas'] += 1
-                except OSError as exc:
-                    log.warning('Apagamento definitivo: quarentena %s não removida (%s).', orfa.name, exc.strerror or exc)
+                orfas.setdefault(orfa.name, []).append([None, f'{volume}/{QUARENTENA}/{orfa.name}'])
+        for item_id, raizes in orfas.items():
+            log.warning('Apagamento definitivo: quarentena %s sem manifesto; removida fora da trava.', item_id)
+            manifesto = {'esquema': 1, 'item': {'id': item_id, 'tipo': None, 'caso': None, 'conversa': None, 'rodada': None},
+                         'fase': 'removendo', 'quem': 'partida da Mesa (quarentena sem manifesto)',
+                         'em_utc': datetime.now(timezone.utc).isoformat(), 'raizes': raizes,
+                         'resumo': {'conversas': [], 'rodadas': [], 'categorias': {}, 'totais': {},
+                                    'confirmacao': 'sem_manifesto'},
+                         'sem_registro': True}
+            try:
+                _gravar_manifesto(root, manifesto)
+            except OSError as exc:
+                log.warning('Apagamento definitivo: quarentena %s não registrada (%s); a próxima partida tenta de novo.',
+                            item_id, exc.strerror or exc)
+                continue
+            pendentes.append(manifesto)
+            resumo['orfas'] += 1
     for manifesto in pendentes:
         if segundo_plano:
             _em_segundo_plano(root, manifesto)
