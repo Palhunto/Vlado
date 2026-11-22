@@ -82,10 +82,20 @@
     } catch (error) { mensagem(error.message); }
   }
 
-  async function agir(botao, operacao, dados, sucesso) {
-    botao.disabled = true;
+  // As operações sensíveis (criar dono, recuperar, desativar dono...) pedem a senha de quem age: o servidor responde 403 senha_necessaria e o diálogo
+  // reenvia o mesmo pedido com `senha`. O botão só fica desabilitado enquanto um pedido está no ar, para o foco voltar a ele quando o diálogo fecha.
+  function comSenha(botao, operacao, dados, opcoes) {
+    const enviar = async (nome, corpo) => {
+      botao.disabled = true;
+      try { return await api(nome, corpo); } finally { botao.disabled = false; }
+    };
+    return Dialogo.comSenha({operacao, dados, gatilho: botao, enviar, ...opcoes});
+  }
+  async function agir(botao, operacao, dados, sucesso, senha) {
+    if (!senha) botao.disabled = true;
     try {
-      const resultado = await api(operacao, dados);
+      const resultado = senha ? await comSenha(botao, operacao, dados, senha) : await api(operacao, dados);
+      if (resultado === null) return;  // a pessoa cancelou o diálogo da senha: nada foi enviado
       if (resultado.link) mostrarLink(resultado.conta, resultado.link);
       mensagem(t(sucesso));
       await listar();
@@ -113,7 +123,8 @@
     formulario.addEventListener('submit', event => {
       event.preventDefault();
       agir(salvar, 'contas-atualizar', {id: conta.id, casos: [...lista.selectedOptions].map(o => o.value),
-        cota_diaria: Number(cota.value)}, 'Acesso alterado. Vale a partir da próxima ação da pessoa.');
+        cota_diaria: Number(cota.value)}, 'Acesso alterado. Vale a partir da próxima ação da pessoa.',
+      {pedirAntes: false, dialogo: {titulo: 'Confirme com a sua senha', texto: 'Esta ação pede a sua senha.', acao: 'Salvar alterações'}});
     });
     linha.append(formulario);
     lista.focus();
@@ -133,20 +144,19 @@
     const acoes = element('div', undefined, 'inline-actions');
     if (conta.ativa) {
       acoes.append(botao('Desativar', 'danger', async alvo => {
-        if (await Dialogo.confirmar({variante: 'destrutivo', titulo: 'Desativar {item}?', item: conta.login, texto: 'A pessoa sai na próxima ação.',
-          acao: 'Desativar conta', gatilho: alvo})) {
-          agir(alvo, 'contas-desativar', {id: conta.id}, 'Conta desativada.');
-        }
+        const texto = {titulo: 'Desativar {item}?', item: conta.login, texto: 'A pessoa sai na próxima ação.', acao: 'Desativar conta'};
+        // Desativar um dono pede a senha: o diálogo da senha já é a confirmação. As demais contas só confirmam (e, se o servidor pedir, o diálogo abre).
+        const dono = conta.papel === 'dono' || conta.papel === 'admin';
+        if (!dono && !(await Dialogo.confirmar({variante: 'destrutivo', ...texto, gatilho: alvo}))) return;
+        agir(alvo, 'contas-desativar', {id: conta.id}, 'Conta desativada.', {pedirAntes: dono, dialogo: {...texto, destrutiva: true}});
       }));
     } else {
       acoes.append(botao('Reativar', 'secondary', alvo => agir(alvo, 'contas-reativar', {id: conta.id}, 'Conta reativada.')));
     }
-    acoes.append(botao('Recuperar acesso', 'secondary', async alvo => {
-      if (await Dialogo.confirmar({titulo: 'Gerar novo link de ativação?', texto: 'A senha atual deixa de valer e as sessões abertas são encerradas.',
-        acao: 'Gerar novo link', gatilho: alvo})) {
-        agir(alvo, 'contas-recuperar', {id: conta.id}, 'Novo link de ativação gerado.');
-      }
-    }));
+    // Toda recuperação pede a senha de quem age: o diálogo da senha traz o mesmo texto da confirmação de antes e a substitui.
+    acoes.append(botao('Recuperar acesso', 'secondary', alvo => agir(alvo, 'contas-recuperar', {id: conta.id}, 'Novo link de ativação gerado.',
+      {pedirAntes: true, dialogo: {titulo: 'Gerar novo link de ativação?', texto: 'A senha atual deixa de valer e as sessões abertas são encerradas.',
+        acao: 'Gerar novo link'}})));
     if (conta.papel === 'convidado') acoes.append(botao('Alterar apurações', 'secondary', () => editorCasos(conta, linha)));
     linha.append(texto, acoes);
     return linha;
@@ -168,15 +178,17 @@
       dados.cota_diaria = Number($('acesso-cota').value);
     }
     const enviar = event.submitter || $('acesso-form').querySelector('button[type="submit"]');
-    if (enviar) enviar.disabled = true;
     try {
-      const resultado = await api('contas-criar', dados);
+      // Criar uma conta de administração (dono) pede a senha, mas o servidor pode recusar a criação por outro motivo (operacao_proibida): por isso o
+      // pedido segue primeiro e o diálogo só abre se o servidor pedir a senha.
+      const resultado = await comSenha(enviar, 'contas-criar', dados, {pedirAntes: false,
+        dialogo: {titulo: 'Confirme com a sua senha', texto: 'Esta ação pede a sua senha.', acao: 'Criar conta'}});
+      if (resultado === null) return;  // cancelou o diálogo da senha: nada foi criado
       mostrarLink(resultado.conta, resultado.link);
       $('acesso-nome').value = ''; $('acesso-login').value = '';
       mensagem(t('Conta criada. Envie o link de ativação.'));
       await listar();
     } catch (error) { mensagem(error.message); }
-    if (enviar) enviar.disabled = false;
   });
   casos().then(listar);
 })();

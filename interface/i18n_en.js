@@ -1395,6 +1395,8 @@ window.VLADO_I18N_EN = {
     "Um apagamento definitivo desta apuração ficou pela metade e só se resolve na próxima partida da Mesa. Até lá, não é possível restaurar nem apagar este item; feche os programas que usem esses arquivos e reinicie a Mesa.": "A permanent deletion in this investigation was left halfway and is only settled the next time the Mesa starts. Until then, this item cannot be restored or deleted; close the programs using those files and restart the Mesa.",
     // Minha conta e Equipe (conta.js, equipe.js) e o diálogo com senha (dialogo.js)
     "Sua senha": "Your password",
+    "Confirme com a sua senha": "Confirm with your password",
+    "Esta ação pede a sua senha.": "This action asks for your password.",
     "A senha com que você entra na Mesa.": "The password you use to sign in to the desk.",
     "Muitas senhas erradas seguidas. Por 15 minutos, as ações que pedem a senha ficam bloqueadas para a sua conta; o resto da Mesa continua.": "Too many wrong passwords in a row. For 15 minutes, actions that ask for your password are blocked for your account; the rest of the desk keeps working.",
     "Senha incorreta. Confira e tente de novo.": "Wrong password. Check it and try again.",
