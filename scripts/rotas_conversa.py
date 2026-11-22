@@ -4,8 +4,9 @@ Separado de ``interface_pesquisa``. Os nomes mantêm o prefixo histórico ``code
 inferência passa por ``codex_apuracao.Conversas`` e pelo adaptador da API. O servidor já
 conferiu sessão, CSRF, origem e papel (``rotas_contas._negado``) e já descontou a cota do
 convidado; aqui a cota é devolvida quando a pergunta é recusada, e o convidado nunca recebe o
-dono nem os identificadores internos do provedor. Só ``codex-documentos-cadastrar`` passa pela
-trava de cadastro da Mesa; ``Conversas.lock`` fica preso apenas na conferência da conversa.
+dono nem os identificadores internos do provedor. ``codex-documentos-cadastrar`` envia o lote
+pela fila de extração (``fila_extracao``), sem trava presa durante a leitura; ``Conversas.lock``
+fica preso apenas na conferência da conversa. Nada daqui passa por ``cadastro_lock``.
 """
 from __future__ import annotations
 
@@ -77,11 +78,12 @@ class RotasConversa:
         elif operation == 'codex-diligencias-previa':
             result = manager.caderno_previa(data, diligencias)
         elif operation == 'codex-documentos-cadastrar':
-            # Conversas.lock only for the check (reservar_para_documentos): the cadastro may take
-            # minutes and must not freeze the other conversations; new questions on this one wait.
-            with self.server.cadastro_lock, manager.reservar_para_documentos(data.get('caso'), data.get('conversa')):
+            # Conversas.lock only for the check (reservar_para_documentos); the batch goes through the
+            # extraction queue, with no lock held while it is read; new questions on this one wait.
+            with manager.reservar_para_documentos(data.get('caso'), data.get('conversa')):
                 result = receber_documentos(self.server.root, {'caso': data.get('caso'),
-                    'arquivos': data.get('arquivos'), 'natureza': data.get('natureza', 'nao_informada')})
+                    'arquivos': data.get('arquivos'), 'natureza': data.get('natureza', 'nao_informada')},
+                    fila=self.server.fila)
         elif operation == 'codex-eventos':
             result = manager.eventos(data.get('conversa'), data.get('cursor', 0), data.get('espera', 0), dono=dono,
                                      casos=casos_liberados)

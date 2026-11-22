@@ -111,6 +111,7 @@ def extrair_pdf(source: Path, identifier: str, target: Path, *, ocr_ativo: bool 
         except Exception as exc:
             native[number] = ''
             native_errors[number] = f'{type(exc).__name__}: {str(exc)[:1000]}'
+        ocr._avisar('texto', number, count)  # progress for the extraction queue (ocr.execucao); no-op outside it
     candidates = [n for n in range(1, count + 1)
                   if _alfanumericos(native[n]) < MINIMO_ALFANUMERICOS_NATIVO]
     recognized = _tentar_ocr(source, candidates, result) if candidates and ocr_ativo else {}
