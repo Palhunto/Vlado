@@ -10,6 +10,7 @@ cadastrado, a fila e a Mesa seguem, e o arquivo seguinte é lido normalmente. Se
 import json
 import os
 from pathlib import Path
+import platform
 import socket
 import struct
 import subprocess
@@ -33,6 +34,28 @@ from test_extracao_cadastro_pdf import HAS_PYPDF, pdf_sintetico  # noqa: E402
 import test_fila_extracao as base_fila  # noqa: E402
 
 LINUX = sys.platform.startswith('linux')
+X86_64 = LINUX and platform.machine().lower() in ('x86_64', 'amd64')
+# A socket opened through the 32-bit interface (int 0x80) of an x86_64 process, by machine code in a
+# page below 4 GB (the 32-bit calls only see 32-bit addresses): i386 socket (359) and connect (362).
+SOCKET_32_BITS = '''
+import ctypes, mmap, socket, struct, sys
+pagina = mmap.mmap(-1, 4096, flags=mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS | 0x40,  # MAP_32BIT
+                   prot=mmap.PROT_READ | mmap.PROT_WRITE | mmap.PROT_EXEC)
+# push rbx; mov eax,edi; mov ebx,esi; mov r8d,ecx; mov ecx,edx; mov edx,r8d; int 0x80; pop rbx; ret
+pagina.write(bytes([0x53, 0x89, 0xF8, 0x89, 0xF3, 0x41, 0x89, 0xC8, 0x89, 0xD1, 0x44, 0x89, 0xC2,
+                    0xCD, 0x80, 0x5B, 0xC3]))
+base = ctypes.addressof(ctypes.c_char.from_buffer(pagina))
+if base >= 1 << 32:
+    print('sem memoria de 32 bits', flush=True); sys.exit(0)
+chamar = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_long, ctypes.c_long, ctypes.c_long, ctypes.c_long)(base)
+ctypes.memmove(base + 256, struct.pack('<HH4s8x', 2, socket.htons(int(sys.argv[-1])), bytes([127, 0, 0, 1])), 16)
+fd = chamar(359, 2, 1, 0)
+if fd == -38:
+    print('sem int 0x80', flush=True); sys.exit(0)
+if fd < 0:
+    print('socket32 recusado', fd, flush=True); sys.exit(0)
+print('socket32 conectou' if chamar(362, fd, base + 256, 16) == 0 else 'socket32 abriu sem conectar', flush=True)
+'''
 LADO_BOMBA = 20000  # 400 megapixels of gray: about 400 MB decoded, a few hundred KB compressed
 
 
@@ -366,6 +389,42 @@ class ProcessoIsoladoTest(unittest.TestCase):
         self.assertEqual(codigo, 0, erro)
         self.assertIn('Permission', saida)  # EACCES from the kernel filter, not from Python
         self.assertEqual(escuta.conexoes, 0)
+
+    @unittest.skipUnless(X86_64, 'A interface de 32 bits (int 0x80) só existe em processos x86_64 no Linux')
+    def test_socket_pela_interface_de_32_bits_tambem_recusado(self):
+        escuta = Escuta(self)
+        codigo, saida, erro = em_processo(SOCKET_32_BITS, str(escuta.porta))
+        if codigo != 0 or 'sem ' in saida:
+            self.skipTest(f'sem interface de 32 bits neste kernel: {saida.strip() or erro.strip()[-200:]}')
+        self.assertIn('socket32 conectou', saida)  # control: without the filter it reaches the server
+        base_fila.esperar(lambda: escuta.conexoes == 1, 5)
+        codigo, saida, erro = em_processo(self.APLICAR + SOCKET_32_BITS, str(escuta.porta))
+        self.assertEqual(codigo, 0, erro)
+        self.assertIn('socket32 recusado -13', saida)  # EACCES from the filter: another ABI is refused
+        time.sleep(0.3)
+        self.assertEqual(escuta.conexoes, 1)
+
+    @unittest.skipUnless(LINUX, 'seccomp só no Linux')
+    def test_netlink_recusado_e_unix_permitido_no_linux(self):
+        codigo, saida, erro = em_processo(self.APLICAR + (
+            'import socket\n'
+            'try:\n'
+            '    socket.socket(socket.AF_NETLINK, socket.SOCK_RAW, 0); print("netlink abriu")\n'
+            'except OSError as exc:\n'
+            '    print("netlink recusado", exc.errno)\n'
+            'a, b = socket.socketpair(socket.AF_UNIX); a.sendall(b"x"); print("unix", b.recv(1))\n'))
+        self.assertEqual(codigo, 0, erro)
+        self.assertIn('netlink recusado 13', saida)
+        self.assertIn("unix b'x'", saida)
+
+    @unittest.skipUnless(LINUX, 'seccomp só no Linux')
+    def test_filtro_que_nao_instala_vira_aviso(self):
+        codigo, saida, erro = em_processo('import json, trabalhador_extracao as t; t._seccomp_sem_rede = lambda: None; '
+                                          'print(json.dumps(t.aplicar_limites(), ensure_ascii=False))')
+        self.assertEqual(codigo, 0, erro)
+        aplicado = json.loads(saida.splitlines()[-1])
+        self.assertIn('seccomp não instalado', aplicado['falha_rede'])
+        self.assertEqual(aplicado['rede'], ['Python: módulos socket e _socket sem rede'])
 
     def test_filhos_morrem_com_o_processo_de_extracao(self):
         neto = ('import subprocess\n'

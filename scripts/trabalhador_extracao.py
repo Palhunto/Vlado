@@ -26,8 +26,10 @@ saída padrão (avisos de bibliotecas) vai para a saída de erro.
   OCRmyPDF, o Tesseract e o Ghostscript não abrem conexão.
 - Linux: ``RLIMIT_AS`` (memória por processo, herdada por cada filho), ``RLIMIT_CPU`` (reserva do
   vigia), sem core dump, afinidade sem o núcleo 0, ``nice`` 10 e um filtro seccomp que recusa
-  sockets de rede (IPv4, IPv6, pacote) e io_uring, herdado pelos filhos. Teto de memória do
-  conjunto e da Mesa, ``read_only``, ``cap_drop`` e rede do contêiner dependem do Compose.
+  sockets de rede (IPv4, IPv6, pacote, netlink), io_uring e qualquer chamada pela interface de
+  outra arquitetura (no x86_64, a de 32 bits), herdado pelos filhos; sockets Unix ficam
+  permitidos. Sem o filtro, a fila registra o aviso. Teto de memória do conjunto e da Mesa,
+  ``read_only``, ``cap_drop`` e rede do contêiner dependem do Compose.
 - Nos dois: a rede é recusada também no módulo ``socket`` do Python, e um vigia de CPU encerra o
   processo, com motivo claro, quando o arquivo passa do teto de segundos de CPU (deste processo e
   dos filhos que já terminaram). O tempo de relógio é da fila.
@@ -170,7 +172,11 @@ def _limites_posix(config):
 def _seccomp_sem_rede():
     """Linux: a seccomp filter refusing network sockets and io_uring, for this process and its children.
 
-    Returns a description, or None when it cannot be installed (other architectures, old kernel).
+    Refused: sockets of IPv4, IPv6, packet and netlink families; io_uring (it creates sockets without
+    the socket call); x32 calls; and every call through another architecture's interface (on x86_64,
+    the 32-bit ``int 0x80`` one, whose socket calls have other numbers). Unix sockets stay allowed
+    (OCRmyPDF's worker pool). Returns a description, or None when it cannot be installed (other
+    architectures, old kernel).
     """
     import ctypes
     import platform
@@ -185,11 +191,12 @@ def _seccomp_sem_rede():
     ld, jeq, jge, ret = 0x20, 0x15, 0x35, 0x06
     # (operation, constant, jump if true, jump if false), jumps by label; resolved below.
     programa = [
-        ('arch', ld, 4, None, None), (None, jeq, arquitetura, 'nr', 'permite'),
+        ('arch', ld, 4, None, None), (None, jeq, arquitetura, 'nr', 'recusa'),  # another ABI: refused (S1)
         ('nr', ld, 0, None, None), (None, jge, 0x40000000, 'recusa', None),  # x32 syscalls
         (None, jeq, io_uring_setup, 'recusa', None), (None, jeq, socket_nr, 'familia', 'permite'),
         ('familia', ld, 16, None, None), (None, jeq, 2, 'recusa', None),  # AF_INET
-        (None, jeq, 10, 'recusa', None), (None, jeq, 17, 'recusa', 'permite'),  # AF_INET6, AF_PACKET
+        (None, jeq, 10, 'recusa', None), (None, jeq, 16, 'recusa', None),  # AF_INET6, AF_NETLINK
+        (None, jeq, 17, 'recusa', 'permite'),  # AF_PACKET
         ('permite', ret, permite, None, None), ('recusa', ret, recusa, None, None)]
     rotulos = {r[0]: i for i, r in enumerate(programa) if r[0]}
     codigo = b''
@@ -208,7 +215,8 @@ def _seccomp_sem_rede():
     prog = Programa(len(programa), ctypes.cast(filtro, ctypes.c_void_p))
     if libc.prctl(22, 2, ctypes.addressof(prog), 0, 0) != 0:  # PR_SET_SECCOMP, SECCOMP_MODE_FILTER
         return None
-    return 'seccomp: sockets IPv4, IPv6 e de pacote e io_uring recusados (também nos filhos)'
+    return ('seccomp: sockets IPv4, IPv6, de pacote e netlink, io_uring e chamadas de outra arquitetura '
+            'recusados, também nos filhos; sockets Unix permitidos')
 
 
 def _bloquear_socket_python():
@@ -222,7 +230,9 @@ def _bloquear_socket_python():
             def __init__(self, family=-1, type=-1, proto=-1, fileno=None):
                 if fileno is None and (socket.AF_INET if family == -1 else family) in redes:
                     raise PermissionError(errno.EACCES, MENSAGEM_REDE)
-                super().__init__(family, type, proto, fileno)
+                # The base by name, not super(): socket.socket calls _socket.socket.__init__(self, ...)
+                # on its own instances, which are not of this subclass (Unix sockets stay usable).
+                base.__init__(self, family, type, proto, fileno)
         return SocketSemRede
 
     def recusar(*_args, **_kwargs):
@@ -253,6 +263,9 @@ def aplicar_limites(config=None) -> dict:
             aplicado['falha_rede'] = f'seccomp: {exc}'
         if sistema:
             rede.insert(0, sistema)
+        else:  # the queue logs it: the network is then refused only to Python code (S3)
+            aplicado.setdefault('falha_rede', 'seccomp não instalado (arquitetura ou kernel sem suporte); '
+                                              'a rede fica recusada só no Python deste processo')
     aplicado['rede'] = rede
     aplicado['tetos'] = config
     return aplicado
