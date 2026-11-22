@@ -45,6 +45,18 @@ def daemon_disponivel() -> bool:
         return False
 
 
+def argumentos_de_cache(alvo) -> list:
+    """Cache de camadas opcional, para o CI. Com `VLADO_BUILD_CACHE=<pasta>` o build usa o BuildKit (buildx) com cache
+    local em `<pasta>/<estágio>` e carrega a imagem no daemon (`--load`, que um builder docker-container exige); sem a
+    variável, é o `docker build` simples de sempre. O cache novo vai para `<estágio>-novo` (o workflow troca no fim):
+    escrever sobre a própria origem só acumularia camadas velhas no cache salvo."""
+    pasta = os.environ.get('VLADO_BUILD_CACHE')
+    if not pasta:
+        return []
+    cache = f'{pasta}/{alvo or "app"}'
+    return ['--load', '--cache-from', f'type=local,src={cache}', '--cache-to', f'type=local,dest={cache}-novo,mode=max']
+
+
 def versoes_fixadas() -> dict:
     """age e rclone como o Dockerfile (estágio backup) os fixa: {'age': '1.1.1', 'rclone': '1.60.1'}."""
     texto = (RAIZ / 'Dockerfile').read_text(encoding='utf-8')
@@ -59,6 +71,35 @@ def scripts_copiados_pelo_dockerfile() -> set:
     return set(re.findall(r'scripts/([a-z_]+)\.py', ' '.join(l for l in texto.splitlines() if not l.lstrip().startswith('#'))))
 
 
+class ArgumentosDeCacheTest(unittest.TestCase):
+    """O gancho de cache do CI: inerte sem a variável; com ela, cache por estágio e imagem carregada no daemon."""
+
+    def test_sem_variavel_nao_muda_o_build(self):
+        antes = os.environ.pop('VLADO_BUILD_CACHE', None)
+        try:
+            self.assertEqual(argumentos_de_cache(None), [])
+            self.assertEqual(argumentos_de_cache('backup'), [])
+        finally:
+            if antes is not None:
+                os.environ['VLADO_BUILD_CACHE'] = antes
+
+    def test_com_variavel_cache_por_estagio_e_load(self):
+        antes = os.environ.get('VLADO_BUILD_CACHE')
+        os.environ['VLADO_BUILD_CACHE'] = '/tmp/.buildx-cache'
+        try:
+            app, backup = argumentos_de_cache(None), argumentos_de_cache('backup')
+        finally:
+            if antes is None:
+                del os.environ['VLADO_BUILD_CACHE']
+            else:
+                os.environ['VLADO_BUILD_CACHE'] = antes
+        self.assertIn('--load', app)
+        self.assertIn('type=local,src=/tmp/.buildx-cache/app', app)
+        self.assertIn('type=local,dest=/tmp/.buildx-cache/app-novo,mode=max', app)
+        self.assertIn('type=local,src=/tmp/.buildx-cache/backup', backup)
+        self.assertIn('type=local,dest=/tmp/.buildx-cache/backup-novo,mode=max', backup)
+
+
 @unittest.skipUnless(HABILITADO, 'teste lento de build: defina VLADO_TESTE_IMAGEM=1 para rodar')
 class ImagemBuildTest(unittest.TestCase):
     @classmethod
@@ -70,7 +111,7 @@ class ImagemBuildTest(unittest.TestCase):
         cls.contenedores = []
         cls.addClassCleanup(cls._limpar)
         for alvo, tag in (('backup', cls.backup), (None, cls.app)):  # sem --target: o estágio padrão, o do app
-            comando = ['build', '-q', '-t', tag] + (['--target', alvo] if alvo else []) + ['.']
+            comando = ['build', '-q', '-t', tag] + (['--target', alvo] if alvo else []) + argumentos_de_cache(alvo) + ['.']
             resultado = docker(*comando, timeout=1800)
             if resultado.returncode != 0:
                 raise AssertionError(f'docker build ({alvo or "app"}) falhou:\n{resultado.stderr[-2000:]}')
