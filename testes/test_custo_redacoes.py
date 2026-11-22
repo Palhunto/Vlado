@@ -9,6 +9,7 @@ barra da cota sem o total da instalação. Os tetos são gravados direto no banc
 operações que os definem (``equipe-teto``, ``redacao-cota``) ainda não existem.
 """
 from decimal import Decimal
+import json
 import os
 from pathlib import Path
 import sqlite3
@@ -26,6 +27,9 @@ from comum import escrever_json, ler_json  # noqa: E402
 import custo  # noqa: E402
 import erros  # noqa: E402
 import test_codex_integracao as integracao  # noqa: E402
+import test_custo  # noqa: E402
+from codex_apuracao import ACTIVE  # noqa: E402
+from agente_fluxo_fixture import aguardar_fim, esperar  # noqa: E402
 
 SONNET = 'claude-sonnet-5-5'
 
@@ -165,10 +169,11 @@ class CotaPorRedacaoTest(Redacoes, unittest.TestCase):
     def test_estouro_no_meio_da_pergunta_pelos_tres_tetos(self):
         self.no_banco('UPDATE organizacoes SET cota_mensal_brl = ?, teto_por_pessoa_brl = ? WHERE id = ?',
                       '20.00', '15.00', self.outra)
-        self.assertEqual(custo.estouro(self.root, self.gastar(self.bia, 15), conta=self.bia)[0], 'limite_cota_conta')
-        causa, mensagem = custo.estouro(self.root, self.gastar(self.dona, 6), conta=self.dona, ve_redacao=False)
+        causa, mensagem = custo.estouro(self.root, self.gastar(self.bia, 15), conta=self.bia)
+        self.assertEqual((causa, mensagem), ('limite_cota_conta', custo.mensagem_cota_pessoa()))
+        causa, mensagem = custo.estouro(self.root, self.gastar(self.dona, 6), conta=self.dona)
         self.assertEqual(causa, 'limite_cota_organizacao')
-        self.assertNotRegex(mensagem, r'\d')
+        self.assertNotRegex(mensagem, r'\d')  # not even for the dono: the conversation is read by colleagues (B1)
         self.orcamento(mensal_instalacao_brl=22)
         self.assertEqual(custo.estouro(self.root, self.gastar(self.ana, 1), conta=self.ana)[0], 'limite_cota_instalacao')
 
@@ -214,8 +219,46 @@ class PerguntaNaRedacaoTest(Redacoes, unittest.TestCase):
         identificador = self.manager.perguntar(self.pergunta(), conta=self.bia)['conversa']
         ctx = self.manager.contexts[identificador]
         self.assertEqual(ctx['orcamento'], {'conta': self.bia, 'organizacao': self.outra})
-        self.assertFalse(ctx['ve_gasto_da_redacao'])
         self.manager.cancelar(identificador)
+
+    def estourar(self, conta):
+        # A short question's estimate is small here, so the question starts; then one call crosses the ceiling.
+        self.orcamento(estimativa_minima_tokens={'entrada': 1000, 'saida': 100})
+        identificador = self.manager.perguntar(self.pergunta(), conta=conta, ve_gasto_da_redacao=True)['conversa']
+        meta = lambda: self.manager.contexts[identificador]['meta']  # noqa: E731
+        esperar(lambda: meta().get('turn_id') or meta()['estado'] not in ACTIVE)  # as integracao.start
+        self.assertEqual(meta()['estado'], 'executando', meta().get('situacao'))
+        uso = test_custo.uso_anthropic()  # R$ 0,6435 at Sonnet 5.5
+        self.manager.rpc.emit('item/usage', {'turnId': 'turn-1', 'modelo': SONNET, 'uso': uso})
+        aguardar_fim(self.manager, identificador)
+        return identificador
+
+    def colega_le_sem_numero(self, identificador, causa):
+        lido = self.manager.eventos(identificador)  # the team's reading (no guest filter): any colleague of the case
+        self.assertEqual(lido['conversa']['situacao']['causa'], causa)
+        textos = [json.dumps(e['dados'], ensure_ascii=False) for e in lido['eventos'] if e['tipo'] in ('erro', 'aviso')]
+        self.assertTrue(textos)
+        for texto in [*textos, lido['conversa']['situacao']['mensagem']]:
+            self.assertNotRegex(texto, r'\d', texto)
+
+    def test_colega_nao_le_o_gasto_da_pessoa_na_conversa(self):
+        self.no_banco('UPDATE contas SET teto_mensal_brl = ? WHERE id = ?', '1.00', self.dona)
+        self.gastar(self.dona, 0.5)
+        self.colega_le_sem_numero(self.estourar(self.dona), 'limite_cota_conta')
+        with self.assertRaisesRegex(ValueError, r'Você usou R\$ 1,14 de R\$ 1,00'):  # the direct refusal: her own
+            self.manager.perguntar(self.pergunta(), conta=self.dona, ve_gasto_da_redacao=True)
+
+    def test_colega_nao_le_o_gasto_da_redacao_na_conversa(self):
+        self.no_banco('UPDATE organizacoes SET cota_mensal_brl = ? WHERE id = ?', '10.00', self.outra)
+        self.gastar(self.bia, 9.5)
+        self.colega_le_sem_numero(self.estourar(self.dona), 'limite_cota_organizacao')
+        with self.assertRaisesRegex(ValueError, r'R\$ 10,14 de R\$ 10,00'):  # the dono's direct refusal
+            self.manager.perguntar(self.pergunta(), conta=self.dona, ve_gasto_da_redacao=True)
+
+    def test_colega_nao_le_o_limite_diario_da_redacao_na_conversa(self):
+        config = ler_json(self.root / 'configuracao.json')
+        escrever_json(self.root / 'configuracao.json', {**config, 'limites': {'tokens_por_dia_por_organizacao': 1000}})
+        self.colega_le_sem_numero(self.estourar(self.dona), 'limite_dia')
 
 
 class RotaPassaABandeiraTest(cenario.DuasRedacoes):

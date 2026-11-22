@@ -26,6 +26,14 @@ milionésimos de real, na conta e na redação; o da instalação é a soma das 
 calendário em UTC. Uma pergunta é recusada antes de começar quando o saldo não cobre a estimativa
 mínima, e interrompida quando o gasto passa de um teto. Quem vê número: a pessoa, o próprio gasto
 sempre; o da redação, só quem a rota diz que vê (``ve_redacao``, o dono); o da instalação, ninguém.
+A frase de um teto atingido no meio da pergunta vai para a conversa, que os colegas da apuração leem:
+nunca leva número (``estouro``); os números ficam na barra e na recusa direta.
+
+**Gasto sem redação própria.** O gasto sem conta (modo local, ou uma chamada sem conta) e o gasto já
+gravado antes desta versão ficam na chave ``instalacao``, a da redação inicial: contam para o teto e a
+barra dela e para a soma da instalação, e nunca são redistribuídos. No mês da atualização, se outra
+redação já tiver gastado antes dela (só se as contas tiverem rodado sem esta versão), esse gasto fica
+somado ao da redação inicial até o mês virar, e o dono da redação inicial o vê na barra dela.
 
 **Registro.** Cada gravação do gasto também atualiza uma cópia anterior
 (``gasto_mensal.anterior.json``). Registro ilegível, ou com um mês danificado (campo ausente ou de
@@ -574,6 +582,12 @@ def mensagem_cota_conta(usado, teto) -> str:
             'Documentos, conferência e caderno seguem funcionando.')
 
 
+def mensagem_cota_pessoa() -> str:
+    """The person's ceiling reached in the middle of a question: it goes to the conversation's events, which the
+    colleagues of the case read, so it never carries a number (the asker sees them in the quota bar)."""
+    return 'A cota do mês de quem fez a pergunta acabou. Documentos, conferência e caderno seguem funcionando.'
+
+
 def mensagem_cota_organizacao(usado=None, teto=None, *, redacao=False) -> str:
     valores = f' Foram usados R$ {reais(usado)} de R$ {reais(teto)}.' if usado is not None else ''
     if redacao:
@@ -617,15 +631,16 @@ def situacao(root, conta, *, administrador=False) -> dict:
     return resposta
 
 
-def _teto_batido(root, conta, totais, estimativa, *, convidado, ve_redacao):
-    """(cause, message) of the first ceiling ``totais`` (+ ``estimativa``) reaches: person, newsroom, installation."""
-    limite, numeros = tetos(root, conta), _numeros_da_redacao(convidado, ve_redacao)
+def _teto_batido(root, conta, totais, estimativa, *, convidado, ve_redacao, publico=False):
+    """(cause, message) of the first ceiling ``totais`` (+ ``estimativa``) reaches: person, newsroom, installation.
+    ``publico``: the message goes where others read it (the conversation), so it carries no number at all."""
+    limite, numeros = tetos(root, conta), not publico and _numeros_da_redacao(convidado, ve_redacao)
     usado = {k: Decimal(totais[k]) / MICRO for k in ('conta', 'organizacao', 'instalacao')}
     # The person's own number never carries the newsroom's ceiling to who does not see it: past the own
     # ceiling as set, the newsroom's refusal (without number) follows.
     teto_conta = limite['conta' if numeros else 'pessoa']
     if usado['conta'] >= teto_conta or usado['conta'] + estimativa > teto_conta:
-        return 'limite_cota_conta', mensagem_cota_conta(usado['conta'], teto_conta)
+        return 'limite_cota_conta', (mensagem_cota_pessoa() if publico else mensagem_cota_conta(usado['conta'], teto_conta))
     if usado['organizacao'] >= limite['organizacao'] or usado['organizacao'] + estimativa > limite['organizacao']:
         return 'limite_cota_organizacao', mensagem_cota_organizacao(
             usado['organizacao'] if numeros else None, limite['organizacao'] if numeros else None,
@@ -650,6 +665,8 @@ def conferir_antes(root, conta, modelo, *, convidado=False, ve_redacao=None):
         raise CotaEsgotada(batido[1])
 
 
-def estouro(root, totais, *, convidado=False, conta=None, ve_redacao=None):
-    """(cause, message) when this month's totals (``somar_gasto``) reached a ceiling, else None."""
-    return _teto_batido(root, conta, totais, Decimal(0), convidado=convidado, ve_redacao=ve_redacao)
+def estouro(root, totais, *, conta=None):
+    """(cause, message) when this month's totals (``somar_gasto``) reached a ceiling in the middle of a question,
+    else None. The message is recorded in the conversation, which the colleagues of the case read: it never carries
+    a number, whoever asked (B1 of P1). Who asked sees the numbers in the quota bar and in the direct refusal."""
+    return _teto_batido(root, conta, totais, Decimal(0), convidado=True, ve_redacao=False, publico=True)

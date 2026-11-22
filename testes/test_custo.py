@@ -457,9 +457,16 @@ class PerguntaTest(unittest.TestCase):
         self.assertFalse(ctx.get('cancel'))
         rpc.emit('item/usage', {'turnId': 'turn-1', 'modelo': SONNET, 'uso': uso})  # R$ 1,287 > R$ 1,00
         aguardar_fim(self.manager, identificador)
-        eventos = self.manager.eventos(identificador)['eventos']
+        lido = self.manager.eventos(identificador)
+        eventos = lido['eventos']
+        # The conversation is read by the colleagues of the case: what the ceiling says there has no number (B1 of P1).
         self.assertTrue(any(e['tipo'] == 'erro' and e['dados']['mensagem'].startswith(
-            'Sua cota do mês acabou. Você usou R$ 1,29 de R$ 1,00.') for e in eventos))
+            'A cota do mês de quem fez a pergunta acabou.') for e in eventos))
+        for e in eventos:
+            if e['tipo'] in ('erro', 'aviso'):
+                self.assertNotRegex(json.dumps(e['dados'], ensure_ascii=False), r'\d', e)
+        self.assertNotRegex(lido['conversa']['situacao']['mensagem'], r'\d')
+        self.assertEqual(erros.codigo_de(lido['conversa']['situacao']['mensagem'])[0], 'cota_mensal_pessoa')
         self.assertTrue(any(method == 'turn/interrupt' for method, _ in rpc.calls))
         self.assertEqual(ctx['meta']['situacao']['causa'], 'limite_cota_conta')
         self.assertEqual(custo.gasto(self.root, None)['conta'], 1_287_000)

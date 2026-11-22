@@ -1346,6 +1346,7 @@ window.VLADO_I18N_EN = {
     convite_invalido: "Invalid, expired or revoked invitation.",
     cota_diaria_esgotada: "Daily limit of {cota} question(s) reached. Try again tomorrow.",
     cota_mensal_conta: "Your monthly quota is used up. You used R$ {usado} of R$ {teto}. Documents, review and the notebook keep working.",
+    cota_mensal_pessoa: "The monthly quota of the person who asked is used up. Documents, review and the notebook keep working.",
     cota_mensal_organizacao: "The installation's monthly quota is used up. Documents, review and the notebook keep working; the installation owner can raise the quota.",
     cota_mensal_redacao: "The newsroom's monthly quota is used up. Documents, review and the notebook keep working; the newsroom owner can ask the operator for a larger quota.",
     cota_mensal_instalacao: "The installation's monthly quota is used up. Documents, review and the notebook keep working; the operator can raise the quota.",

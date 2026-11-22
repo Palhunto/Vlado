@@ -613,8 +613,9 @@ class Conversas:
     def perguntar(self, data, dono=None, conta=None, ve_gasto_da_redacao=False):
         """``dono``: the guest account (None for administrators); ``conta``: the account that asks,
         administrators included (None in the local mode): it spends the month's quota of the person and
-        of the newsroom. ``ve_gasto_da_redacao``: ``autorizacao.ve_redacao(principal)`` from the route;
-        only then do refusals carry the newsroom's spend and token numbers (accounts contract, 4.5)."""
+        of the newsroom. ``ve_gasto_da_redacao``: ``autorizacao.gasto_da_redacao`` from the route; only then does
+        the direct refusal carry the newsroom's numbers (accounts contract, 4.5). What a ceiling reached in the middle
+        says goes to the conversation and never carries a number."""
         question, case = data.get('pergunta'), data.get('caso')
         if not isinstance(question, str) or not 1 <= len(question.strip()) <= 16000:
             raise ValueError('Informe uma pergunta de até 16000 caracteres.')
@@ -694,7 +695,7 @@ class Conversas:
             ctx['busy'] = True
             ctx['cancel'] = False
             ctx['meta']['conta'] = conta  # whose quota this execution spends (CUS-01)
-            ctx['orcamento'], ctx['ve_gasto_da_redacao'] = chaves, bool(ve_gasto_da_redacao)
+            ctx['orcamento'] = chaves
             ctx['modelo_cobrado'] = estado.get('modelo')
             ctx['observacoes_humanas'] = feedback['conteudo'] if feedback else None
             ctx['meta']['observacoes_humanas'] = None
@@ -1167,7 +1168,6 @@ class Conversas:
         month's quota in reais of its account or of the organization."""
         ctx = self.contexts[identifier]
         meta = ctx['meta']
-        ve_redacao = ctx.get('ve_gasto_da_redacao', False)
         totais, sem_registro = None, None
         try:
             chaves = ctx.get('orcamento') or custo.chaves_orcamento(meta.get('conta'), self.root)
@@ -1199,18 +1199,15 @@ class Conversas:
             motivo = f'Limite de tokens por consulta atingido ({consulta} de {valores["tokens_por_consulta"]}).'
             causa = 'limite_consulta'
         elif teto_organizacao is not None and dia_organizacao > teto_organizacao:
-            # The newsroom first (it then learns nothing of the others). Its usage and ceiling go only to
-            # whoever sees the newsroom (the dono: accounts contract 4.5); the others get no number.
-            causa, motivo = 'limite_dia', ((f'Limite diário de tokens da redação atingido ({dia_organizacao} de '
-                                            f'{teto_organizacao}). Tente novamente amanhã (UTC).') if ve_redacao else
-                                           'Limite diário de uso da redação atingido. Tente novamente amanhã (UTC).')
+            # The newsroom first (it then learns nothing of the others). What is said here goes to the conversation,
+            # which the colleagues of the case read: never the newsroom's usage or ceiling (accounts contract 4.5).
+            causa, motivo = 'limite_dia', 'Limite diário de uso da redação atingido. Tente novamente amanhã (UTC).'
         elif valores['tokens_por_dia'] is not None and dia > valores['tokens_por_dia']:
             # Nobody learns the installation-wide usage: it adds up every newsroom (accounts contract, 4.5).
             causa, motivo = 'limite_dia', 'Limite diário de uso da instalação atingido. Tente novamente amanhã (UTC).'
         elif totais is not None:
             try:
-                estourou = custo.estouro(self.root, totais, convidado=meta.get('dono') is not None,
-                                         conta=meta.get('conta'), ve_redacao=ve_redacao)
+                estourou = custo.estouro(self.root, totais, conta=meta.get('conta'))  # never a number (B1)
             except ValueError:
                 estourou = None
             if estourou:
@@ -1414,7 +1411,7 @@ class Conversas:
                 raise ValueError('Já há uma pergunta em andamento para este convite. Aguarde a resposta ou cancele.')
             self._conferir_simultaneas(conta, restrito=dono is not None)
             meta['conta'] = conta
-            ctx['orcamento'], ctx['ve_gasto_da_redacao'] = chaves, bool(ve_gasto_da_redacao)
+            ctx['orcamento'] = chaves
             ctx['modelo_cobrado'] = estado.get('modelo')
             run, question, pipeline = self._reconstruir(identifier)
             pendentes = [e for e in pipeline.etapas if e not in pipeline.accepted]
