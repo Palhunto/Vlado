@@ -171,17 +171,27 @@ test('linha do tempo filtrada sem resultado: texto do Design e "Mostrar tudo" re
   m.$('ver-quadros').click(); await m.esperar(8);
   m.$('quadros-aba-tempo').click(); await m.esperar(8);
   assert.equal(m.$('quadros-tempo').querySelectorAll('.tempo-evento').length, 2);
-  const caixas = m.$('quadros-tempo').querySelectorAll('.tempo-filtro input');
-  caixas[0].checked = false; caixas[1].checked = false;
-  caixas[1].dispatchEvent(new Evento('change', {bubbles: true})); await m.esperar(8);
+  const tudo = () => m.$('quadros-tempo').querySelector('.tempo-tudo');
+  const caixas = () => [...m.$('quadros-tempo').querySelectorAll('.tempo-filtro input')];
+  assert.equal(tudo().getAttribute('aria-pressed'), 'true', 'sem filtro, "Tudo" está ligado');
+  assert.ok(caixas().every(c => !c.checked), 'e os tipos estão desligados');
+  const dois = caixas().slice(0, 2).map(c => c.value);
+  caixas()[0].checked = true; caixas()[1].checked = true;   // "Tudo" é o estado sem tipo ligado: escolher dois tipos filtra
+  caixas()[1].dispatchEvent(new Evento('change', {bubbles: true})); await m.esperar(8);
+  // Transição 1: ligar tipos desliga "Tudo", e a consulta leva só esses tipos.
+  assert.equal(tudo().getAttribute('aria-pressed'), 'false', 'ligar um tipo desliga "Tudo"');
+  assert.deepEqual(m.chamadas.at(-1).dados.tipos, dois, 'a lista filtra só os tipos ligados');
   const vazio = m.$('quadros-tempo').querySelector('[data-estado="vazio"]');
   assert.ok(vazio, 'estado vazio no lugar da lista');
   assert.match(vazio.textContent, /Nenhum acontecimento tem os tipos de data escolhidos\./);
   const acao = vazio.querySelector('button');
   assert.equal(acao.textContent, 'Mostrar tudo');
   acao.click(); await m.esperar(8);
+  // Transição 2: "Mostrar tudo" liga "Tudo", desliga os tipos e mostra todos os eventos de novo.
   assert.equal(m.chamadas.at(-1).dados.tipos, undefined, 'a consulta volta sem filtro');
-  assert.equal(m.$('quadros-tempo').querySelectorAll('.tempo-evento').length, 2);
+  assert.equal(tudo().getAttribute('aria-pressed'), 'true', '"Tudo" ligado');
+  assert.ok(caixas().every(c => !c.checked), 'tipos desligados');
+  assert.equal(m.$('quadros-tempo').querySelectorAll('.tempo-evento').length, 2, 'todos os eventos de novo');
 });
 
 test('quadro sem dados: bloco vazio com o que é a coisa e uma ação que existe; erro do servidor vira bloco de erro (título e texto)', async () => {
