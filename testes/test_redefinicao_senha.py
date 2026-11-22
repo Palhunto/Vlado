@@ -8,6 +8,7 @@ com o transporte ``simulado``, de onde o teste lê o link). Sem modelo e sem red
 import json
 from pathlib import Path
 import sys
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -206,6 +207,29 @@ class ServidorTest(cenario.DuasRedacoes):
         invalido = self.publico('senha-redefinir', {'token': 'x' * 43, 'senha': NOVA})[1]
         self.assertEqual((invalido['codigo'], invalido['erro']),
                          ('link_invalido', 'Link inválido, usado ou vencido. Peça outro em Esqueci a senha.'))
+
+    def test_a_resposta_nao_espera_o_envio_exista_a_conta_ou_nao(self):
+        # If the request waited for the delivery, its time would tell whether the address has an account: only then
+        # is there a message to send. The delivery is held here until the answer is back; a request that waited for
+        # it would only return after the delivery ended.
+        liberar, comecou, terminou = threading.Event(), threading.Event(), threading.Event()
+
+        def entrega_presa(*_):
+            comecou.set()
+            liberar.wait(20)
+            terminou.set()
+        with correio.usar('smtp'), patch.object(correio, '_smtp', side_effect=entrega_presa) as envio:
+            try:
+                com_conta = self.publico('senha-esqueci', {'email': self.email})
+                self.assertFalse(terminou.is_set(), 'a resposta esperou o envio do e-mail')
+                self.assertTrue(comecou.wait(10))  # the message is on its way, in its own thread
+                sem_conta = self.publico('senha-esqueci', {'email': f'ninguem.{self.numero}@exemplo.test'})
+                self.assertFalse(terminou.is_set())
+            finally:
+                liberar.set()
+                correio.aguardar()
+        self.assertEqual(envio.call_count, 1)  # one message: only the address with an account gets one
+        self.assertEqual((com_conta[0], com_conta[2]), (200, sem_conta[2]))
 
     def test_falha_de_envio_nao_muda_a_resposta(self):
         with correio.usar('smtp'), patch.object(correio, '_smtp', side_effect=OSError('sem rede')) as envio, \
