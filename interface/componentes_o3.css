@@ -3,6 +3,7 @@
 /* === Diálogo de confirmação (componentes.md#dialogo; dialogo.js) === */
 .dialogo{
   width:min(480px,calc(100% - 2 * var(--espaco-4)));
+  max-width:none;
   max-height:calc(100% - 2 * var(--espaco-4));
   padding:var(--espaco-6);
   border:1px solid var(--theme-line);
@@ -13,7 +14,7 @@
   overflow:auto;
 }
 .dialogo[open]{display:flex;flex-direction:column;gap:var(--espaco-4)}
-.dialogo::backdrop{background:var(--theme-backdrop)}
+.dialogo::backdrop{background:var(--theme-backdrop);backdrop-filter:none}
 .dialogo :is(h2,p){margin:0;overflow-wrap:anywhere}
 .dialogo-rubrica{font-size:var(--text-md);font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--theme-muted)}
 .dialogo-titulo{font:600 var(--text-xl)/1.25 var(--fonte-titulo);color:var(--theme-text)}
