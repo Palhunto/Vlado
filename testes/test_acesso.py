@@ -673,7 +673,8 @@ class EsquemaTest(DuasRedacoes):
     def para_a_versao_1(self):
         con = sqlite3.connect(acesso.caminho_bd(self.root))
         try:
-            con.execute('DROP INDEX eventos_por_organizacao')
+            con.execute('DROP TABLE convites')  # version 3
+            con.execute('DROP INDEX eventos_por_organizacao')  # version 2, as the columns below
             for tabela, coluna in (('contas', 'idioma'), ('contas', 'excluida_em'), ('sessoes', 'aparelho'),
                                    ('sessoes', 'ip_criacao'), ('sessoes', 'ip_ultimo')):
                 con.execute(f'ALTER TABLE {tabela} DROP COLUMN {coluna}')
@@ -700,7 +701,8 @@ class EsquemaTest(DuasRedacoes):
         antes = acesso.listar(self.root)
         self.para_a_versao_1()
         self.assertEqual(acesso.listar(self.root), antes)
-        self.assertEqual(self.linhas('PRAGMA user_version')[0]['user_version'], 2)
+        self.assertEqual(self.linhas('PRAGMA user_version')[0]['user_version'], acesso.ESQUEMA)  # 1 to 2, then 2 to 3
+        self.assertEqual(acesso.equipe(self.root, self.a)['convites'], [])
         self.assertEqual(acesso.sessao(self.root, sid)['conta'], self.dono_a)  # the session of before goes on
         self.assertEqual(acesso.sessoes_da_conta(self.root, self.dono_a)[0]['aparelho'], None)
         self.assertEqual(acesso.alcance(self.root, self.rep_a), (frozenset({'caso_a'}), frozenset({'caso_a'})))

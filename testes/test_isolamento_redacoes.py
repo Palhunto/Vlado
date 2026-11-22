@@ -355,7 +355,7 @@ class TravessiaTest(cenario.DuasRedacoes):
 
     def test_operacao_que_nao_esta_na_matriz_nao_existe(self):
         self.assertEqual(self.post('dono', 'acesso-listar', {})[0], 404)
-        self.assertEqual(self.post('dono', 'equipe-convidar', {})[0], 404)  # defined by the contract, not delivered yet
+        self.assertEqual(self.post('dono', 'equipe-recuperar', {})[0], 404)  # defined by the contract, not delivered yet
         with self.assertRaises(autorizacao.Recusa) as recusa:
             autorizacao.conferir(self.root, 'piloto', acesso.sessao(self.root, self.sessoes['dono'][0].split('=', 1)[1]),
                                  'operacao-nova-sem-linha', {})
