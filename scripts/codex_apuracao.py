@@ -15,6 +15,7 @@ import uuid
 
 from comum import dentro, escrever_json, ler_json, sha256
 from cadastrar_documentos import _atomico, _bytes, _trava, inventario
+import fila_extracao
 import trava_cadastro
 from inferencia_api import CHAVES, ErroIA, ServidorAPI, seguro
 from fontes_web import documentos_e_capturas
@@ -136,6 +137,10 @@ TOOLS = [dict(type='function', name='consultar_acervo', description=(
 
 def agora():
     return datetime.now(timezone.utc).isoformat()
+
+
+class _LoteNaFila(Exception):
+    """A batch of the case reached the extraction queue while the freeze took the cadastro lock."""
 
 
 class Conversas:
@@ -451,7 +456,15 @@ class Conversas:
                 ctx = self._conferir_dono(identifier, dono)
                 if ctx['meta']['caso'] != case:
                     raise ValueError('Conversa pertence a outro caso; abra uma nova conversa.')
+                primeira = not ctx['meta']['rodadas'] and not ctx['meta'].get('rodada_base')
             else:
+                primeira = not feedback
+            if primeira and fila_extracao.pendentes(self.root, case):
+                # A first question freezes the corpus as it is now; documents still being read would
+                # change it before the freeze (and the round would be refused). Ask once they are in.
+                raise ValueError('Há documentos desta apuração em processamento. Envie a pergunta quando o '
+                                 'cadastro terminar.')
+            if not identifier:
                 inventory = {'corpus_id': feedback['corpus_id']} if feedback else inventario(self.root, case)
                 identifier = uuid.uuid4().hex
                 path = self._path(identifier)
@@ -523,6 +536,35 @@ class Conversas:
                 self._event(identifier, kind, data)
 
     def _freeze(self, identifier, question):
+        """Freeze the question's round once no batch of its case is in the extraction queue.
+
+        Pending documents stop the round until they are registered (AGENTS.md): the wait runs
+        outside every lock, up to ESPERA_CONGELAMENTO, and ends on cancel or shutdown; a batch
+        queued while the cadastro lock was being taken is checked again under it.
+        """
+        ctx = self.contexts[identifier]
+        case = ctx['meta']['caso']
+        limite = time.monotonic() + ESPERA_CONGELAMENTO
+        avisado = False
+        while True:
+            while fila_extracao.pendentes(self.root, case):
+                if self.stopping or ctx.get('cancel'):
+                    raise trava_cadastro.TravaInterrompida('Pergunta interrompida enquanto esperava o processamento '
+                                                           'dos documentos desta apuração.')
+                if time.monotonic() >= limite:
+                    raise ValueError('Há documentos desta apuração em processamento; envie a pergunta de novo '
+                                     'quando o cadastro terminar.')
+                if not avisado:
+                    avisado = True
+                    self._event(identifier, 'aviso', {'mensagem': 'Aguardando o processamento dos documentos '
+                                                                  'enviados a esta apuração para congelar a pergunta.'})
+                time.sleep(0.5)
+            try:
+                return self._congelar(identifier, question, limite)
+            except _LoteNaFila:
+                continue
+
+    def _congelar(self, identifier, question, limite):
         ctx = self.contexts[identifier]
         meta = ctx['meta']
         case = meta['caso']
@@ -533,8 +575,10 @@ class Conversas:
         # trash hold it while they wait for the cadastro lock). This freeze's events and the
         # conversation save therefore go out right after the cadastro lock is released.
         with self._eventos_adiados(identifier) as evento, _trava(
-                self.root, espera=ESPERA_CONGELAMENTO, operacao='congelamento',
+                self.root, espera=max(0.0, limite - time.monotonic()), operacao='congelamento',
                 cancelar=lambda: self.stopping or bool(ctx.get('cancel'))):
+            if fila_extracao.pendentes(self.root, case):
+                raise _LoteNaFila()  # queued while the lock was being taken: wait for it outside the lock
             parent = dentro(self.root, f'execucoes/{case}')
             numbers = [int(p.name[1:]) for p in parent.iterdir()
                        if re.fullmatch(r'R[0-9]{3,6}', p.name)] if parent.exists() else []

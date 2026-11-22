@@ -217,11 +217,13 @@ def _ocupada(caminho: Path, dono=None, motivo=None):
 # --- trava -------------------------------------------------------------------------------------
 
 @contextmanager
-def trava(root, *, espera=None, operacao=None, cancelar=None):
+def trava(root, *, espera=None, operacao=None, cancelar=None, avisar=True):
     """Hold the project's cadastro lock; wait up to ``espera`` seconds (default ``ESPERA``).
 
     ``cancelar``: optional callable checked while waiting; when it returns true the wait stops
-    with ``TravaInterrompida``. Yields the owner record written to the lock file.
+    with ``TravaInterrompida``. ``avisar=False``: no log line when the wait runs out (a caller
+    that simply tries again, as the extraction queue). Yields the owner record written to the
+    lock file.
     """
     espera = ESPERA if espera is None else max(0.0, float(espera))
     prazo = time.monotonic() + espera
@@ -232,11 +234,11 @@ def trava(root, *, espera=None, operacao=None, cancelar=None):
     eu = threading.get_ident()
     if estado.dono == eu:
         raise _ocupada(caminho, motivo='mesma_thread')
-    _esperar_threads(estado, caminho, prazo, cancelar)
+    _esperar_threads(estado, caminho, prazo, cancelar, avisar)
     try:
         fd = _abrir(caminho, prazo)
         try:
-            anterior = _esperar_sistema(fd, estado, caminho, prazo, cancelar)
+            anterior = _esperar_sistema(fd, estado, caminho, prazo, cancelar, avisar)
             try:
                 if (pasta / ANTIGA).exists():
                     # Old-format lock: nobody to check, so neither waited for nor removed here.
@@ -266,7 +268,7 @@ def trava(root, *, espera=None, operacao=None, cancelar=None):
             estado.mudou.notify_all()
 
 
-def _esperar_threads(estado, caminho, prazo, cancelar):
+def _esperar_threads(estado, caminho, prazo, cancelar, avisar=True):
     while True:
         if estado.encerrando:
             raise _ocupada(caminho, ler_dono(caminho.parent.parent), 'encerrando')
@@ -277,7 +279,8 @@ def _esperar_threads(estado, caminho, prazo, cancelar):
             if estado.threads.acquire(blocking=False):
                 return
             dono = ler_dono(caminho.parent.parent)
-            log.warning('Trava de cadastro ocupada além do prazo por outra operação deste processo: %s', dono)
+            if avisar:
+                log.warning('Trava de cadastro ocupada além do prazo por outra operação deste processo: %s', dono)
             raise _ocupada(caminho, dono)
         if estado.threads.acquire(timeout=min(0.2, restante)):
             if estado.encerrando:  # shutdown began while this thread was queued
@@ -286,7 +289,7 @@ def _esperar_threads(estado, caminho, prazo, cancelar):
             return
 
 
-def _esperar_sistema(fd, estado, caminho, prazo, cancelar):
+def _esperar_sistema(fd, estado, caminho, prazo, cancelar, avisar=True):
     pausa = 0.02
     while True:
         if _tentar(fd):
@@ -296,7 +299,8 @@ def _esperar_sistema(fd, estado, caminho, prazo, cancelar):
         agora = time.monotonic()
         if agora >= prazo:
             dono = _ler(fd)
-            log.warning('Trava de cadastro ocupada além do prazo por outro processo: %s', dono)
+            if avisar:
+                log.warning('Trava de cadastro ocupada além do prazo por outro processo: %s', dono)
             raise _ocupada(caminho, dono)
         time.sleep(min(pausa, prazo - agora))
         pausa = min(pausa * 2, 0.25)
@@ -428,3 +432,41 @@ def aguardar_livre(root, prazo) -> bool:
 
 def em_uso_neste_processo(root) -> bool:
     return _estado(_pasta(root)).dono is not None
+
+
+class TravaExclusiva:
+    """The same system lock on another file, without waiting (the extraction queue's coordinator).
+
+    ``tentar()`` returns True when this process now holds it; ``soltar()`` releases it. The system
+    releases it when the process ends; the file is never deleted.
+    """
+
+    def __init__(self, caminho):
+        self.caminho = Path(caminho)
+        self._fd = None
+
+    def tentar(self) -> bool:
+        if self._fd is not None:
+            return True
+        fd = _abrir(self.caminho, time.monotonic() + 1)
+        try:
+            if _tentar(fd):
+                self._fd = fd
+                return True
+        except OSError:
+            os.close(fd)
+            raise
+        os.close(fd)
+        return False
+
+    @property
+    def segura(self) -> bool:
+        return self._fd is not None
+
+    def soltar(self):
+        fd, self._fd = self._fd, None
+        if fd is not None:
+            try:
+                _soltar(fd)
+            finally:
+                os.close(fd)

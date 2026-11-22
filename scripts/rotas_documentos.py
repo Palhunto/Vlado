@@ -1,12 +1,15 @@
 """Recepção de lotes enviados pela Mesa e catálogo das apurações.
 
-Separado de ``interface_pesquisa`` sem mudar comportamento. ``receber_documentos`` grava o
-lote numa pasta temporária e entrega os caminhos a ``cadastrar_documentos.cadastrar``; o
-cliente nunca envia caminhos; o servidor sempre a chama dentro da trava de cadastro
-(``cadastrar`` e ``codex-documentos-cadastrar``). ``catalogo`` lê só metadados e nomes de
-pastas, sem abrir documentos de casos inativos. Ela corre dentro da trava em ``analises`` e
-``gerenciar-listar``, e fora dela em ``GET /api/catalogo`` e na gestão de contas
-(``contas-criar`` e ``contas-atualizar`` conferem os casos escolhidos).
+``receber_documentos`` grava o lote recebido e o cadastra; o cliente nunca envia caminhos.
+Com a fila da Mesa (``fila``), os arquivos vão para ``casos/.fila`` e a extração e o OCR correm
+em processos separados, fora de ``cadastro_lock`` e da trava de cadastro; só a publicação pega a
+trava (``fila_extracao``). Sem fila (chamada direta), o lote vai para uma pasta temporária e
+para ``cadastrar_documentos.cadastrar``, que extrai no próprio processo, também fora da trava.
+Por padrão a resposta é o recibo, como sempre; com ``"assincrono": true`` volta na hora com o
+estado do lote na fila (``fila_extracao.consultar``), para acompanhar por ``GET /api/fila``.
+``catalogo`` lê só metadados e nomes de pastas, sem abrir documentos de casos inativos. Ela corre
+dentro da trava em ``analises`` e ``gerenciar-listar``, e fora dela em ``GET /api/catalogo`` e na
+gestão de contas (``contas-criar`` e ``contas-atualizar`` conferem os casos escolhidos).
 """
 from __future__ import annotations
 
@@ -25,13 +28,16 @@ from indice_sqlite import ID_CASO, ID_RODADA, ID_GERACAO
 MAX_UPLOAD = 50 * 1024 * 1024
 
 
-def receber_documentos(root, data):
+def receber_documentos(root, data, fila=None):
     files = data.get('arquivos')
     if not isinstance(files, list) or not 1 <= len(files) <= 100:
         raise ValueError('Envie de 1 a 100 arquivos por lote, até 50 MB no total.')
     if type(data.get('novo', False)) is not bool:
         raise ValueError('Indicação de novo caso inválida.')
-    with tempfile.TemporaryDirectory(prefix='envio_documental_') as folder:
+    if type(data.get('assincrono', False)) is not bool:
+        raise ValueError('Indicação de envio assíncrono inválida.')
+
+    def gravar(folder):
         sources, total = [], 0
         for number, item in enumerate(files):
             if not isinstance(item, dict):
@@ -50,15 +56,24 @@ def receber_documentos(root, data):
             if total > MAX_UPLOAD:
                 raise ValueError('O lote excede 50 MB; nenhum arquivo cadastrado.')
             source = Path(folder) / str(number) / name
-            source.parent.mkdir()
+            source.parent.mkdir(parents=True)
             source.write_bytes(content)
             sources.append(source)
-        case = data.get('caso')
-        if data.get('novo') and not case:
-            case = 'apuracao_' + uuid.uuid4().hex
-        return cadastrar(root, case, sources, titulo=data.get('titulo'),
-                         natureza=data.get('natureza', 'nao_informada'), novo=data.get('novo', False),
-                         modo_fontes=data.get('modo_fontes'), dominio_permitido=data.get('dominio_permitido'))
+        return sources
+
+    case = data.get('caso')
+    if data.get('novo') and not case:
+        case = 'apuracao_' + uuid.uuid4().hex
+    opcoes = {'titulo': data.get('titulo'), 'natureza': data.get('natureza', 'nao_informada'),
+              'novo': data.get('novo', False), 'modo_fontes': data.get('modo_fontes'),
+              'dominio_permitido': data.get('dominio_permitido')}
+    if fila is None:
+        with tempfile.TemporaryDirectory(prefix='envio_documental_') as folder:
+            return cadastrar(root, case, gravar(folder), **opcoes)
+    lote = fila.receber(case, gravar, **opcoes)
+    if data.get('assincrono'):
+        return {'estado': 'enfileirado', **fila.consultar(lote=lote)}
+    return fila.aguardar(lote)
 
 
 def catalogo(root):

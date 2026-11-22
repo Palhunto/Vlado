@@ -609,7 +609,25 @@ function areaHeading() {
 }
 window.addEventListener('mesa-contexto-alterado', areaHeading);
 window.addEventListener('catalogo-carregado', areaHeading);
-function showArea(area) {
+// A única função de troca de área. Os módulos que precisam reagir a ela não a reatribuem: registram
+// ganchos, na ordem em que as camadas se empilhavam antes (o último a registrar fica por fora).
+//   antes(nome) -> nome: ajusta o nome pedido; o último registrado roda primeiro.
+//   forcar(nome) -> nome: troca só a tela que o núcleo mostra; os ganchos de depois seguem com o nome pedido.
+//   depois(nome): roda depois do núcleo, na ordem de registro.
+const ganchosArea = {antes: [], forcar: null, depois: []};
+function registrarGanchoArea({antes, forcar, depois}) {
+  if (antes) ganchosArea.antes.unshift(antes);
+  if (forcar) ganchosArea.forcar = forcar;
+  if (depois) ganchosArea.depois.push(depois);
+}
+function showArea(pedida) {
+  let nome = pedida;
+  for (const gancho of ganchosArea.antes) nome = gancho(nome);
+  mostrarAreaBase(ganchosArea.forcar ? ganchosArea.forcar(nome) : nome);
+  for (const gancho of ganchosArea.depois) gancho(nome);
+}
+// Núcleo: mostra a área, atualiza título e avisa o módulo dela. Quem não precisa dos ganchos pode chamá-lo direto.
+function mostrarAreaBase(area) {
   for (const name of Object.keys(areaNames)) {
     $('area-' + name).hidden = area !== name;
     $('ver-' + name).setAttribute('aria-pressed', String(area === name));

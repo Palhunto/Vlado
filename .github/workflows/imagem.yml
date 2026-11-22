@@ -1,0 +1,62 @@
+name: imagem
+
+# Teste de build das imagens (I7): constrói o Dockerfile de verdade (estágios `backup` e `vlado`) e confere o que os
+# testes de texto não alcançam. Lento (4 a 8 min a frio), por isso fica fora do `testes.yml`: roda toda noite e sob
+# demanda (Actions > imagem > Run workflow). Sem segredo, sem push de imagem, sem deploy: as tags são efêmeras
+# (`vlado-teste-imagem-*`) e o teste as remove no fim.
+
+on:
+  schedule:
+    - cron: '17 4 * * *'   # 04:17 UTC, todo dia (o horário foge da hora cheia, que costuma atrasar)
+  workflow_dispatch:
+
+concurrency:
+  group: imagem
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUTF8: '1'
+  VLADO_TESTE_IMAGEM: '1'                # liga o teste lento (sem isso todos saem como pulados)
+  VLADO_BUILD_CACHE: /tmp/.buildx-cache  # cache de camadas por estágio (ver argumentos_de_cache no teste)
+
+jobs:
+  build:
+    name: Build e conferência das imagens
+    # Só no repositório principal, no agendado e no manual: um fork não gasta runner nem cache com um build que
+    # ninguém lê, e o job nunca roda em outro lugar por engano.
+    if: github.repository == 'Palhunto/Vlado'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.12'
+      - name: BuildKit (builder docker-container, necessário para o cache local de camadas)
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Cache de camadas
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /tmp/.buildx-cache
+          # Chave nova a cada execução (salva o cache atualizado); restore-keys traz o mais recente do mesmo Dockerfile
+          # e, sem ele, o mais recente de qualquer um (camadas de apt e pip que não mudaram continuam valendo).
+          key: buildx-${{ runner.os }}-${{ hashFiles('Dockerfile', 'deploy/requirements.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            buildx-${{ runner.os }}-${{ hashFiles('Dockerfile', 'deploy/requirements.lock') }}-
+            buildx-${{ runner.os }}-
+      - name: Teste de build das imagens
+        run: python -m unittest testes.test_imagem_build -v
+      - name: Troca o cache pelo novo (sem acumular camadas velhas)
+        if: always()
+        run: |
+          for estagio in app backup; do
+            if [ -d "/tmp/.buildx-cache/${estagio}-novo" ]; then
+              rm -rf "/tmp/.buildx-cache/${estagio}"
+              mv "/tmp/.buildx-cache/${estagio}-novo" "/tmp/.buildx-cache/${estagio}"
+            fi
+          done
