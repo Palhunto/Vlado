@@ -1332,7 +1332,8 @@ window.VLADO_I18N_EN = {
     "Nenhum acontecimento tem os tipos de data escolhidos.": "No event has the chosen date types.",
     "Mostrar tudo": "Show all",
     "O mapa mostra as pessoas e organizações que os documentos citam e como elas se ligam.": "The map shows the people and organizations the documents mention and how they are linked.",
-    "Falta a pergunta. Escreva o que quer saber dos documentos.": "The question is missing. Write what you want to know from the documents."
+    "Falta a pergunta. Escreva o que quer saber dos documentos.": "The question is missing. Write what you want to know from the documents.",
+    "Lida por OCR: confira números": "Read with OCR: check the numbers"
   },
   padroes: [
     // Cota do mês na barra lateral
