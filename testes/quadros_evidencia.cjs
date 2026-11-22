@@ -95,33 +95,72 @@ test('linha do tempo: filtro por tipo de data e distinção entre data exata e p
   assert.equal(eventos().length, 2);
   const [parcial, exata] = eventos();
   assert.ok(parcial.classList.contains('marco-parcial'));
-  assert.match(parcial.textContent, /2021 · Data parcial: ano/);
+  // Parte E (componentes.md#linha-do-tempo): dia e mês na coluna da data, o ano no cabeçalho do grupo, e o qualificador diz o que não se sabe.
+  assert.match(parcial.textContent, /2021mês e dia não informados/);
+  assert.ok(parcial.querySelector('.tempo-qualificador.is-parcial'), 'o qualificador de data parcial tem o destaque de aviso, além do texto');
   assert.ok(exata.classList.contains('marco-exato'));
-  assert.match(exata.textContent, /12\/03\/2021 · Data exata/);
+  assert.match(exata.textContent, /12 mardata exata/);
   assert.equal(exata.querySelector('time').getAttribute('datetime'), '2021-03-12');
+  assert.equal(exata.querySelector('time').getAttribute('title'), '12/03/2021', 'a data completa fica no title');
+  // Marco com o ícone do tipo de data (assinatura = contrato, fato = calendário) e o ano como cabeçalho do grupo, com a contagem.
+  assert.ok(parcial.querySelector('.tempo-marco svg.tempo-marco-icone path'));
+  assert.equal(m.$('quadros-tempo').querySelectorAll('.tempo-ano-titulo').length, 1);
+  assert.equal(m.$('quadros-tempo').querySelector('.tempo-ano-titulo').textContent, '2021');
+  assert.equal(m.$('quadros-tempo').querySelector('.tempo-ano-conta').textContent, '2 acontecimentos · 2 com documento');
+  // O selo da fonte é o primeiro botão do cartão e abre o original; a evidência inteira fica recolhida em "Evidência da data".
+  assert.ok(exata.querySelector('button.tempo-selo'));
+  assert.ok(exata.querySelector('details.tempo-evidencia'));
+  assert.equal(m.$('quadros-tempo').querySelector('.tempo-tudo').getAttribute('aria-pressed'), 'true', '"Tudo" aparece ligado quando nada foi filtrado');
   const caixas = [...m.$('quadros-tempo').querySelectorAll('.tempo-filtro input')];
   assert.deepEqual(caixas.map(c => c.value), ['fato', 'assinatura', 'publicacao']);
-  caixas[1].checked = false; caixas[1].dispatchEvent(new Evento('change', {bubbles: true})); await m.esperar(8);
+  assert.ok(caixas.every(c => !c.checked), 'com "Tudo" ligado os tipos ficam desligados (a caixa marcada que parece desligada leria "marcado")');
+  caixas[0].checked = true; caixas[2].checked = true; caixas[2].dispatchEvent(new Evento('change', {bubbles: true})); await m.esperar(8);
   assert.deepEqual(m.chamadas.at(-1), {operacao: 'linha-tempo-listar', dados: {caso: 'alpha', tipos: ['fato', 'publicacao']}});
   assert.equal(eventos().length, 1);
-  assert.equal(m.$('quadros-tempo').querySelector('#tempo-tipo-assinatura').checked, false, 'a escolha continua marcada');
+  assert.equal(m.$('quadros-tempo').querySelector('#tempo-tipo-fato').checked, true, 'a escolha continua marcada');
+  assert.equal(m.$('quadros-tempo').querySelector('#tempo-tipo-assinatura').checked, false);
+  assert.equal(m.$('quadros-tempo').querySelector('.tempo-tudo').getAttribute('aria-pressed'), 'false', 'ligar um tipo desliga "Tudo"');
+  assert.equal(m.$('quadros-tempo').querySelectorAll('.tempo-evento').length, 1, 'a lista filtra só os tipos ligados');
+  // Desligar o último tipo volta a "Tudo", sem filtro na consulta.
+  for (const id of ['fato', 'publicacao']) { const c = m.$('quadros-tempo').querySelector(`#tempo-tipo-${id}`); c.checked = false; c.dispatchEvent(new Evento('change', {bubbles: true})); await m.esperar(8); }
+  assert.equal(m.chamadas.at(-1).dados.tipos, undefined);
+  assert.equal(m.$('quadros-tempo').querySelector('.tempo-tudo').getAttribute('aria-pressed'), 'true');
+  const marcado = m.$('quadros-tempo').querySelector('#tempo-tipo-fato'); marcado.checked = true; marcado.dispatchEvent(new Evento('change', {bubbles: true})); await m.esperar(8);
+  m.$('quadros-tempo').querySelector('.tempo-tudo').click(); await m.esperar(8);
+  // "Tudo" liga Tudo, desliga os tipos e mostra todos os eventos de novo.
+  assert.equal(m.chamadas.at(-1).dados.tipos, undefined, '"Tudo" limpa a escolha');
+  assert.equal(m.$('quadros-tempo').querySelector('.tempo-tudo').getAttribute('aria-pressed'), 'true');
+  assert.ok([...m.$('quadros-tempo').querySelectorAll('.tempo-filtro input')].every(c => !c.checked), 'tipos desligados');
+  assert.equal(m.$('quadros-tempo').querySelectorAll('.tempo-evento').length, 2, 'todos os eventos de novo');
   eventos()[0].querySelector('button').click(); await m.esperar();
   assert.equal(m.chamadas.at(-1).operacao, 'achados-original', 'cada evento abre a evidência da sua data');
 });
 
-test('filtro de tipos de data: aberto no desktop, recolhido no celular, resumo com a escolha', async () => {
-  const largo = await mesa(); await abrir(largo);
-  largo.$('quadros-aba-tempo').click(); await largo.esperar(8);
-  const gaveta = () => largo.$('quadros-tempo').querySelector('details.tempo-filtro-caixa');
-  assert.equal(gaveta().open, true);
-  assert.equal(gaveta().querySelector('summary').textContent, 'Tipos de data: todos (3)');
-  const caixa = largo.$('quadros-tempo').querySelector('#tempo-tipo-fato');
-  caixa.checked = false; caixa.dispatchEvent(new Evento('change', {bubbles: true})); await largo.esperar(8);
-  assert.equal(gaveta().querySelector('summary').textContent, 'Tipos de data: 2 de 3');
-  const celular = await mesa({desktop: false}); await abrir(celular);
-  celular.$('quadros-aba-tempo').click(); await celular.esperar(8);
-  assert.equal(celular.$('quadros-tempo').querySelector('details.tempo-filtro-caixa').open, false, 'no celular o filtro não empurra os eventos');
-  assert.ok(celular.$('quadros-tempo').querySelector('.tempo-evento'));
+test('filtro de tipos de data: pílulas sempre à vista (sem gaveta, nem no celular) e "Como ler" com as duas marcas', async () => {
+  for (const desktop of [true, false]) {
+    const m = await mesa({desktop}); await abrir(m);
+    m.$('quadros-aba-tempo').click(); await m.esperar(8);
+    const painel = m.$('quadros-tempo');
+    assert.equal(painel.querySelector('details.tempo-filtro-caixa'), null, 'não há gaveta recolhendo o filtro');
+    assert.equal(painel.querySelectorAll('.tempo-filtro input').length, 3);
+    const comoLer = painel.querySelector('.tempo-como-ler');
+    assert.ok(comoLer, '"Como ler" fica junto do filtro, acima da lista');
+    assert.match(comoLer.textContent, /Como ler/);
+    assert.match(comoLer.textContent, /Data exata no documento/);
+    assert.match(comoLer.textContent, /Data parcial: só mês ou ano/);
+    assert.ok(comoLer.querySelector('.tempo-marca.exato') && comoLer.querySelector('.tempo-marca.parcial'));
+    assert.ok(painel.querySelector('.tempo-evento'));
+    // Celular: a data e a qualificação entram no cartão, acima do acontecimento (a coluna da data some por CSS).
+    const noCartao = painel.querySelector('.tempo-evento .tempo-cartao .tempo-data-cartao');
+    assert.ok(noCartao, 'a data entra no cartão');
+    assert.equal(noCartao.getAttribute('aria-hidden'), null, 'a cópia do cartão é a que o leitor de tela lê no celular (a coluna some com display:none)');
+    assert.match(noCartao.textContent, /mar|jun|ago|out|nov|20\d\d/, 'com o dia, o mês ou o ano');
+    assert.match(noCartao.textContent, /data exata|dia não informado|mês e dia não informados/, 'e o qualificador');
+    // Nenhum dos dois pode ser lido junto com o outro: um tamanho de tela mostra a coluna, o outro a cópia, e o que fica oculto é display:none.
+    const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'interface', 'style.css'), 'utf8');
+    assert.match(css, /\.tempo-data-cartao\{display:none\}/, 'a cópia fica fora da árvore no desktop');
+    assert.match(css, /@media \(max-width:719px\) \{[^@]*\.tempo-data\{display:none\}/, 'e a coluna sai da árvore no celular');
+  }
 });
 
 test('evento retirado mostra o motivo como dado, fora da tradução', async () => {

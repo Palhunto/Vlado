@@ -132,16 +132,18 @@
     }
     const acoes = element('div', undefined, 'inline-actions');
     if (conta.ativa) {
-      acoes.append(botao('Desativar', 'danger', alvo => {
-        if (window.confirm(t('Desativar esta conta? A pessoa sai na próxima ação.'))) {
+      acoes.append(botao('Desativar', 'danger', async alvo => {
+        if (await Dialogo.confirmar({variante: 'destrutivo', titulo: 'Desativar {item}?', item: conta.login, texto: 'A pessoa sai na próxima ação.',
+          acao: 'Desativar conta', gatilho: alvo})) {
           agir(alvo, 'contas-desativar', {id: conta.id}, 'Conta desativada.');
         }
       }));
     } else {
       acoes.append(botao('Reativar', 'secondary', alvo => agir(alvo, 'contas-reativar', {id: conta.id}, 'Conta reativada.')));
     }
-    acoes.append(botao('Recuperar acesso', 'secondary', alvo => {
-      if (window.confirm(t('Gerar novo link de ativação? A senha atual deixa de valer e as sessões abertas são encerradas.'))) {
+    acoes.append(botao('Recuperar acesso', 'secondary', async alvo => {
+      if (await Dialogo.confirmar({titulo: 'Gerar novo link de ativação?', texto: 'A senha atual deixa de valer e as sessões abertas são encerradas.',
+        acao: 'Gerar novo link', gatilho: alvo})) {
         agir(alvo, 'contas-recuperar', {id: conta.id}, 'Novo link de ativação gerado.');
       }
     }));

@@ -45,7 +45,7 @@ async function abrir({salvar, notaServidor = nota(), outras = [], sessao = {}, m
     if (op === 'codex-listar') return {conversas: []};
     return {};
   };
-  const mesa = criarMesa({modo, papel, catalogo, scripts: PILHA.filter(nome => nome !== 'editor_notas.js'),
+  const mesa = criarMesa({modo, papel, catalogo, scripts: PILHA.filter(nome => !['editor_notas.js', 'dialogo.js'].includes(nome)),
     url: 'http://127.0.0.1:8765/?area=apuracao&caso=alfa',
     preparar: janela => {
       janela.sessionStorage = armazenamento;
@@ -59,7 +59,7 @@ async function abrir({salvar, notaServidor = nota(), outras = [], sessao = {}, m
       janela.crypto = {randomUUID: () => `00000000-0000-4000-8000-${String(++uuid).padStart(12, '0')}`};
       janela.getSelection = () => null;
       janela.confirmar = true; janela.confirmacoes = 0;
-      janela.confirm = () => { janela.confirmacoes++; return janela.confirmar; };
+      janela.Dialogo = {confirmar: async () => { janela.confirmacoes++; return janela.confirmar; }};
       janela.navigator = {clipboard: {writeText: async () => {}}};
       janela.fetch = async (rota, opcoes = {}) => {
         if (String(rota) === '/api/catalogo') return {ok: true, json: async () => ({casos: catalogo})};

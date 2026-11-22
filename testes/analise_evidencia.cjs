@@ -47,8 +47,9 @@ const MAPA = {caso: 'alpha', divergentes: [], aviso: 'Ligações registradas por
   homonimos: [{entidades: ['P2', 'P1'], nomes: ['Lucia  PRATES', 'Lúcia Prates'], motivo: 'nome_igual', identificadores_comuns: [], identificadores_divergentes: ['matricula'],
     conferencias: [], situacao: 'pendente', aviso: 'Sugestão para conferência humana; as entidades não foram fundidas.'}]};
 
-function mesa({integracao = {quadros_evidencia: true, tabelas_apuracao: true}} = {}) {
+function mesa({integracao = {quadros_evidencia: true, tabelas_apuracao: true}, desktop = true} = {}) {
   const m = criarMesa({
+    desktop,
     scripts: [...PILHA, 'quadros.js', 'analise.js'],
     catalogo: [{id: 'alpha', titulo: 'Alfa', rodadas: [{id: 'R001', geracoes: ['g1']}]}],
     api: (operacao, dados) => ({
@@ -145,8 +146,14 @@ test('mapa: SVG sem biblioteca, forma por tipo, traço por situação e evidênc
   const m = mesa(); const painel = await aba(m, 'mapa');
   const desenho = painel.querySelector('svg.mapa-svg');
   assert.ok(desenho);
-  assert.equal(desenho.querySelectorAll('.mapa-no.pessoa circle').length, 2);
-  assert.equal(desenho.querySelectorAll('.mapa-no.organizacao rect').length, 1);
+  // Parte E: cada nó leva o ícone do tipo na forma do tipo (círculo para pessoa, quadrado para organização), com o nome e o tipo por escrito.
+  assert.equal(desenho.querySelectorAll('.mapa-no.pessoa .mapa-ico svg.mapa-ico-svg').length, 2);
+  assert.equal(desenho.querySelectorAll('.mapa-no.organizacao .mapa-ico svg.mapa-ico-svg').length, 1);
+  assert.equal(desenho.querySelectorAll('.mapa-no .mapa-sub').length, 3, 'o tipo vem escrito em cada nó (Pessoa ou Organização)');
+  // Cada ligação tem o rótulo em pílula, com o ícone do tipo de relação e o texto do tipo (nunca só o ícone).
+  const pilulas = desenho.querySelectorAll('.mapa-pilula');
+  assert.equal(pilulas.length, 2);
+  for (const pilula of pilulas) { assert.ok(pilula.querySelector('.mapa-pilula-icone path')); assert.ok(pilula.querySelector('.mapa-pilula-texto').textContent.length > 0); }
   const [documentada, inferida] = desenho.querySelectorAll('.mapa-ligacao');
   assert.ok(documentada.classList.contains('traco-solido'));
   assert.ok(inferida.classList.contains('traco-tracejado'));
@@ -163,7 +170,11 @@ test('mapa: SVG sem biblioteca, forma por tipo, traço por situação e evidênc
   assert.match(detalhe.textContent, /Lúcia Prates, fiscal do contrato\./);
   detalhe.querySelector('button').click(); await m.esperar();
   assert.equal(m.chamadas.at(-1).operacao, 'achados-original');
-  assert.match(painel.querySelector('.mapa-legenda').textContent, /Pessoa \(círculo\)/);
+  // Legenda no pé do mapa (depois do desenho), com os textos do Design; "Suporte parcial ou não revisado" só aparece se houver ligação pontilhada.
+  const legenda = painel.querySelector('.mapa-legenda');
+  assert.match(legenda.textContent, /PessoaOrganizaçãoLigação com documentoA confirmar, sem documento$/);
+  const visual = [...painel.querySelector('.mapa-visual').children];
+  assert.ok(visual.indexOf(legenda) > visual.indexOf(painel.querySelector('.mapa-svg')), 'a legenda vem depois do mapa');
   assert.doesNotMatch(painel.textContent, /fraude|culpado/i);
 });
 
@@ -197,8 +208,103 @@ test('textos das telas de análise têm tradução para o inglês', () => {
   const m = mesa();
   const textos = m.janela.VLADO_I18N_EN.textos;
   for (const chave of ['Comparador', 'Tabelas', 'Mapa de relações', 'Diferença de valor', 'Comparar', 'Documento A', 'Documento B', 'Cálculos declarados',
-    'Possíveis homônimos para conferência', 'Pessoa (círculo)', 'Organização (quadrado)', 'Ver evidências', 'Conferência pendente', 'Destacar células usadas',
+    'Possíveis homônimos para conferência', 'Ligação com documento', 'A confirmar, sem documento', 'Suporte parcial ou não revisado', 'Ver evidências', 'Conferência pendente', 'Destacar células usadas',
     'Leve o foco a uma célula para ver a fonte, o estado e a última correção.', 'Lista de pessoas e organizações']) {
     assert.ok(textos[chave], `tradução de “${chave}”`);
   }
+});
+
+test('ícone da relação pelo texto do tipo: sócio, parentesco, cargo, pagamento, contrato; o resto, vínculo', async () => {
+  const m = mesa(); await aba(m, 'mapa');
+  const icone = m.janela.Quadros.iconeRelacao;
+  assert.equal(icone('Sócio'), 'relacao-socio');
+  assert.equal(icone('Sócia'), 'relacao-socio');
+  assert.equal(icone('Irmãos? A confirmar'), 'relacao-parentesco');
+  assert.equal(icone('Servidora até 2023'), 'relacao-cargo');
+  assert.equal(icone('pagou'), 'pagamento');
+  assert.equal(icone('Contrato 041/2025'), 'contrato');
+  assert.equal(icone('Subcontrato'), 'contrato');
+  assert.equal(icone('Vinculada'), 'relacao-vinculo');
+  assert.equal(icone('fiscal de contrato com'), 'contrato');
+  assert.equal(icone(''), 'relacao-vinculo');
+});
+
+test('disposição do mapa: nenhum rótulo cobre nó nem outra ligação, de 2 a 8 entidades', () => {
+  const m = mesa();
+  const dispor = m.janela.Quadros.dispor;
+  const sobrepoe = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  const corta = (p, q, [x0, y0, x1, y1]) => {
+    let t0 = 0, t1 = 1; const dx = q[0] - p[0], dy = q[1] - p[1];
+    for (const [d, r] of [[-dx, p[0] - x0], [dx, x1 - p[0]], [-dy, p[1] - y0], [dy, y1 - p[1]]]) {
+      if (d === 0) { if (r < 0) return false; continue; }
+      const k = r / d; if (d < 0) { if (k > t1) return false; if (k > t0) t0 = k; } else { if (k < t0) return false; if (k < t1) t1 = k; }
+    }
+    return true;
+  };
+  for (let n = 2; n <= 8; n += 1) {
+    const entidades = Array.from({length: n}, (_, i) => ({id: `E${i}`, tipo: i % 2 ? 'pessoa' : 'organizacao', nome: `Entidade ${i}`}));
+    // Uma entidade central ligada a todas, mais algumas ligações entre as do anel (o caso do canvas: Carlos–João atravessava outra ligação).
+    const relacoes = entidades.slice(1).map((e, i) => ({id: `L${i}`, origem: 'E0', destino: e.id, tipo: ['Sócio', 'Irmãos? A confirmar', 'Contrato 041/2025', 'Servidora até 2023'][i % 4], situacao: i % 3 === 1 ? 'inferida' : 'documentada'}));
+    if (n >= 4) relacoes.push({id: 'LX', origem: 'E1', destino: 'E2', tipo: 'Irmãos? A confirmar', situacao: 'inferida'});
+    const d = dispor({entidades, relacoes});
+    const nos = entidades.map(e => [d.pos[e.id][0] - 100, d.pos[e.id][1] - 40, d.pos[e.id][0] + 100, d.pos[e.id][1] + 40]);
+    for (let i = 0; i < nos.length; i += 1) for (let j = i + 1; j < nos.length; j += 1) assert.ok(!sobrepoe(nos[i], nos[j]), `n=${n}: os nós ${i} e ${j} não se sobrepõem`);
+    for (const r of relacoes) {
+      const ret = d.pilulas[r.id].ret;
+      nos.forEach((no, i) => assert.ok(!sobrepoe(ret, no), `n=${n}: o rótulo de ${r.id} não cobre o nó ${i}`));
+      for (const o of relacoes) if (o.id !== r.id) assert.ok(!corta(d.pos[o.origem], d.pos[o.destino], ret), `n=${n}: o rótulo de ${r.id} não cobre a ligação ${o.id}`);
+      for (const o of relacoes) if (o.id < r.id) assert.ok(!sobrepoe(ret, d.pilulas[o.id].ret), `n=${n}: os rótulos de ${o.id} e ${r.id} não se tocam`);
+    }
+    assert.ok(d.pos.E0 && d.L >= 760);
+  }
+});
+
+test('disposição do mapa grande: busca por trocas dentro do orçamento de tempo, com poucos rótulos sobre nó (central ligada a todas)', () => {
+  const m = mesa();
+  const sobrepoe = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  // Máximo de rótulos sobre nó por tamanho. Referências medidas: a busca inteira de antes (13 frações, sem orçamento) deixava 2, 4, 6 e 12;
+  // a busca inteira com as 25 frações de hoje (sem orçamento: 1, 3, 10 e 44 s) deixa 0 nos quatro. Com 150 ms de orçamento o resultado varia um pouco
+  // com a máquina, então o limite tem uma unidade de folga sobre o que se mede aqui (0, 0, 1 e 1); o que sobra é limitação documentada.
+  for (const [n, limite] of [[12, 1], [14, 1], [20, 2], [28, 2]]) {
+    const entidades = Array.from({length: n}, (_, i) => ({id: `E${i}`, tipo: i % 2 ? 'pessoa' : 'organizacao', nome: `Entidade ${i}`}));
+    const relacoes = entidades.slice(1).map((e, i) => ({id: `L${String(i).padStart(2, '0')}`, origem: 'E0', destino: e.id, tipo: ['Sócio', 'Irmãos? A confirmar', 'Contrato 041/2025', 'Servidora até 2023'][i % 4], situacao: 'documentada'}));
+    const inicio = Date.now();
+    const d = m.janela.Quadros.dispor({entidades, relacoes});
+    const ms = Date.now() - inicio;
+    assert.ok(ms < 400, `n=${n}: a disposição levou ${ms} ms (orçamento de 150 ms; limite folgado: 400)`);
+    const nos = entidades.map(e => [d.pos[e.id][0] - 100, d.pos[e.id][1] - 40, d.pos[e.id][0] + 100, d.pos[e.id][1] + 40]);
+    for (let i = 0; i < nos.length; i += 1) for (let j = i + 1; j < nos.length; j += 1) assert.ok(!sobrepoe(nos[i], nos[j]), `n=${n}: os nós ${i} e ${j} não se sobrepõem`);
+    const sobreNo = relacoes.filter(r => nos.some(no => sobrepoe(d.pilulas[r.id].ret, no))).length;
+    assert.ok(sobreNo <= limite, `n=${n}: ${sobreNo} de ${relacoes.length} rótulos sobre nó (limite ${limite})`);
+    for (const r of relacoes) for (const o of relacoes) if (o.id < r.id) assert.ok(!sobrepoe(d.pilulas[r.id].ret, d.pilulas[o.id].ret), `n=${n}: os rótulos de ${o.id} e ${r.id} não se tocam`);
+  }
+});
+
+test('disposição do mapa: com orçamento zero ainda devolve uma posição para cada entidade e um rótulo para cada ligação', () => {
+  const m = mesa();
+  const entidades = Array.from({length: 12}, (_, i) => ({id: `E${i}`, tipo: 'pessoa', nome: `Entidade ${i}`}));
+  const relacoes = entidades.slice(1).map((e, i) => ({id: `L${i}`, origem: 'E0', destino: e.id, tipo: 'Sócio', situacao: 'documentada'}));
+  const d = m.janela.Quadros.dispor({entidades, relacoes}, {orcamento: 0});
+  assert.equal(Object.keys(d.pos).length, 12, 'com orçamento zero ainda há uma posição para cada entidade');
+  assert.equal(Object.keys(d.pilulas).length, relacoes.length);
+});
+
+test('disposição do mapa: 28 entidades e 40 ligações custam pouco (teto de trabalho) e o desenho não é calculado com ele oculto', async () => {
+  const m = mesa();
+  const entidades = Array.from({length: 28}, (_, i) => ({id: `E${i}`, tipo: i % 2 ? 'pessoa' : 'organizacao', nome: `Entidade ${i}`}));
+  const relacoes = Array.from({length: 40}, (_, i) => ({id: `L${String(i).padStart(2, '0')}`, origem: `E${i % 28}`, destino: `E${(i * 7 + 3) % 28}`, tipo: 'Contrato 041/2025', situacao: 'documentada'}))
+    .filter(r => r.origem !== r.destino);
+  const inicio = Date.now();
+  const d = m.janela.Quadros.dispor({entidades, relacoes});
+  assert.ok(Date.now() - inicio < 300, `a disposição de 28 entidades levou ${Date.now() - inicio} ms (limite folgado: 300)`);
+  assert.equal(Object.keys(d.pos).length, 28);
+  // Abaixo de 1024 px o mapa se lê como a lista: o desenho nem é montado, e dispor não é chamado.
+  const estreito = mesa({desktop: false});
+  let chamadas = 0; const original = estreito.janela.Quadros.dispor;
+  estreito.janela.Quadros.dispor = (...argumentos) => { chamadas += 1; return original(...argumentos); };
+  estreito.$('ver-quadros').click(); await estreito.esperar(8);
+  estreito.$('quadros-aba-mapa').click(); await estreito.esperar(8);
+  assert.ok(estreito.$('quadros-mapa').querySelector('.mapa-lista'), 'a lista continua lá');
+  assert.equal(estreito.$('quadros-mapa').querySelector('.mapa-svg'), null, 'sem desenho abaixo de 1024 px');
+  assert.equal(chamadas, 0, 'dispor não é chamado com o desenho oculto');
 });
