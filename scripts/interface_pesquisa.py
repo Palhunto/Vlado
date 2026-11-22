@@ -17,6 +17,7 @@ import re
 import secrets
 import signal
 import sqlite3
+import queue
 import socket
 import sys
 import threading
@@ -65,6 +66,11 @@ MAXIMO_SESSOES_ORIGINAIS = 5000
 # executions to stop and for operations holding the cadastro lock to finish.
 PRAZO_ENCERRAMENTO = 8.0
 PRAZO_FECHAR_FILA = 5.0  # server_close without encerrar(): the extraction queue's coordinator stops
+# Connections answered at the same time (CONF-03): one thread each; past it, 503 at once (no thread).
+# Long polls of the events hold one for up to 20 s: room for some tens of open pages.
+MAXIMO_CONEXOES = int(os.environ.get('VLADO_MAXIMO_CONEXOES') or 96)
+RESPOSTA_503 = (b'HTTP/1.1 503 Service Unavailable' + bytes([13, 10]) + b'Retry-After: 2' + bytes([13, 10])
+                + b'Content-Length: 0' + bytes([13, 10]) + b'Connection: close' + bytes([13, 10]) * 2)
 # Case data answered by ``executar`` (frozen analyses, intake, search index).
 CONSULTA_OPERACOES = ('analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario', 'preparar-pdfs')
 # Answered by the extraction queue in do_POST, outside cadastro_lock (executar still serves direct calls).
@@ -188,6 +194,51 @@ class Servidor(ThreadingHTTPServer):
     request_queue_size = 64
     allow_reuse_address = False
 
+    def process_request(self, request, client_address):
+        """A thread per connection, up to MAXIMO_CONEXOES (CONF-03); past it, a 503 from one thread."""
+        if not self._vagas.acquire(blocking=False):
+            self._recusar(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._vagas.release()
+            raise
+
+    def _recusar(self, request):
+        """Hand a connection over the ceiling to the single refusing thread; its queue full, close now."""
+        with self._recusas_trava:
+            if self._recusadora is None:
+                self._recusadora = threading.Thread(target=self._laco_de_recusas, daemon=True, name='vlado_503')
+                self._recusadora.start()
+        try:
+            self._recusas.put_nowait(request)
+        except queue.Full:
+            self.shutdown_request(request)
+
+    def _laco_de_recusas(self):
+        """Answer 503 after reading what the client sent (closing with unread bytes is a reset on Windows)."""
+        while True:
+            request = self._recusas.get()
+            try:
+                request.settimeout(0.5)
+                try:
+                    request.recv(65536)
+                    request.sendall(RESPOSTA_503)
+                    request.shutdown(socket.SHUT_WR)
+                    while request.recv(65536):
+                        pass
+                except OSError:
+                    pass
+            finally:
+                self.shutdown_request(request)
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._vagas.release()
+
     def server_bind(self):
         # SO_REUSEADDR permits multiple independent Windows servers on one port.
         # Each browser request could then hit a different backend version.
@@ -213,6 +264,10 @@ class Servidor(ThreadingHTTPServer):
         self._originais = OrderedDict()
         self._originais_lock = threading.Lock()
         self.requisicoes = _EmCurso()
+        self._vagas = threading.BoundedSemaphore(max(1, MAXIMO_CONEXOES))
+        self._recusas = queue.Queue(maxsize=128)
+        self._recusas_trava = threading.Lock()
+        self._recusadora = None
         # Extraction and OCR of uploads (CONF-02): 'processos' runs them in separate processes
         # (main); 'local' in threads of this process (tests, the frozen Windows desk).
         self.fila = fila_extracao.Fila(self.root, modo=extracao or 'local')
