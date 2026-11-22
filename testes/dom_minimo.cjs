@@ -112,7 +112,7 @@ class Comentario extends No {
 
 class Fragmento extends No {
   constructor(doc) { super(11, doc); }
-  querySelectorAll(seletor) { return consultar(this, seletor); }
+  querySelectorAll(seletor) { return consultarTodos(this, seletor); }
   querySelector(seletor) { return consultar(this, seletor, true)[0] || null; }
 }
 
@@ -202,6 +202,39 @@ function consultar(raiz, seletor, primeiro = false) {
   return lista;
 }
 
+// querySelectorAll devolve um NodeList de verdade: length, item(), índices, forEach, entries/keys/values e iterador,
+// e NADA de filter/map/some/find/includes/indexOf (um Array escondia o TypeError que o Chromium lança). Código que
+// precisa dessas operações converte: [...lista] ou Array.from(lista).
+class ListaDeNos {
+  constructor(nos) {
+    nos.forEach((no, i) => { this[i] = no; });
+    Object.defineProperty(this, 'length', {value: nos.length});
+    Object.defineProperty(this, '_nos', {value: nos});
+  }
+  item(i) { return this._nos[i] ?? null; }
+  forEach(f, esse) { this._nos.forEach((no, i) => f.call(esse, no, i, this)); }
+  entries() { return this._nos.entries(); }
+  keys() { return this._nos.keys(); }
+  values() { return this._nos.values(); }
+  [Symbol.iterator]() { return this._nos.values(); }
+  get [Symbol.toStringTag]() { return 'NodeList'; }
+}
+const consultarTodos = (raiz, seletor) => new ListaDeNos(consultar(raiz, seletor));
+
+// getElementsByTagName devolve um HTMLCollection: length, item(), namedItem(), índices e iterador; sem forEach (que o
+// NodeList tem e o HTMLCollection não) e sem os métodos de Array.
+class ColecaoDeElementos {
+  constructor(els) {
+    els.forEach((el, i) => { this[i] = el; });
+    Object.defineProperty(this, 'length', {value: els.length});
+    Object.defineProperty(this, '_els', {value: els});
+  }
+  item(i) { return this._els[i] ?? null; }
+  namedItem(nome) { return this._els.find(el => el.getAttribute('id') === nome || el.getAttribute('name') === nome) ?? null; }
+  [Symbol.iterator]() { return this._els.values(); }
+  get [Symbol.toStringTag]() { return 'HTMLCollection'; }
+}
+
 class Elemento extends No {
   constructor(nome, doc) {
     super(1, doc); this.localName = nome.toLowerCase(); this.tagName = nome.toUpperCase();
@@ -263,9 +296,9 @@ class Elemento extends No {
   }
   closest(seletor) { for (let no = this; no && no.nodeType === 1; no = no.parentNode) if (casa(no, seletor, no)) return no; return null; }
   matches(seletor) { return casa(this, seletor, this); }
-  querySelectorAll(seletor) { return consultar(this, seletor); }
+  querySelectorAll(seletor) { return consultarTodos(this, seletor); }
   querySelector(seletor) { return consultar(this, seletor, true)[0] || null; }
-  getElementsByTagName(nome) { return consultar(this, nome); }
+  getElementsByTagName(nome) { return new ColecaoDeElementos(consultar(this, nome)); }
   focus() { this.ownerDocument.activeElement = this; }
   blur() { if (this.ownerDocument.activeElement === this) this.ownerDocument.activeElement = this.ownerDocument.body; }
   click() { if (this.disabled) return; this.dispatchEvent(new Evento('click', {bubbles: true, cancelable: true, button: 0, detail: 1})); }
@@ -313,7 +346,8 @@ class Documento extends No {
   get head() { return this.documentElement?.querySelector('head') || null; }
   get body() { return this.documentElement?.querySelector('body') || null; }
   getElementById(id) { return consultar(this, `#${id}`, true)[0] || null; }
-  querySelectorAll(seletor) { return consultar(this, seletor); }
+  querySelectorAll(seletor) { return consultarTodos(this, seletor); }
+  getElementsByTagName(nome) { return new ColecaoDeElementos(consultar(this, nome)); }
   querySelector(seletor) { return consultar(this, seletor, true)[0] || null; }
   createTreeWalker(raiz, mostrar = 0xffffffff) {
     const lista = [];

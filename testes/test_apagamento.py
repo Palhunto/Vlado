@@ -225,14 +225,17 @@ class ApagamentoTest(unittest.TestCase):
         self.assertEqual((alvo / 'precioso.txt').read_text(encoding='utf-8'), 'fora da raiz')
 
     def test_falha_de_permissao_persistente_mantem_item_na_lixeira(self):
+        # With the quarantine, a file in use blocks the rename of its folder (Windows): nothing changes.
         item = self.lixo('rodada', caso='beta', rodada='R001')
         token = lixeira.alcance(self.root, item['id'])['confirmacao']
         from unittest.mock import patch
-        with patch('apagamento.ESPERA_S', 0), patch('apagamento.os.unlink', side_effect=PermissionError('uso')):
+        with patch('apagamento.ESPERA_S', 0), patch('apagamento.os.rename', side_effect=PermissionError('uso')):
             with self.assertRaisesRegex(ValueError, 'continua na lixeira'):
                 apagamento.apagar(self.root, item['id'], token, quem='admin')
         self.assertEqual(len(lixeira.ativos(self.root)), 1)
         self.assertFalse((self.root / apagamento.REGISTRO_APAGAMENTOS).exists())
+        self.assertTrue((self.root / 'execucoes/beta/R001').is_dir())
+        self.assertEqual(list((self.root / apagamento.MANIFESTOS).glob('*.json')), [])
 
     def test_tentativa_transitoria_de_permissao_e_repetida(self):
         item = self.lixo('rodada', caso='beta', rodada='R001')
@@ -242,13 +245,17 @@ class ApagamentoTest(unittest.TestCase):
         chamadas = {'n': 0}
 
         def instavel(caminho):
-            chamadas['n'] += 1
-            if chamadas['n'] == 1:
-                raise PermissionError('antivírus')
+            partes = Path(caminho).parts  # the item's files in quarantine (an antivirus holds one a moment)
+            if apagamento.QUARENTENA in partes and 'lixeira' not in partes:
+                chamadas['n'] += 1
+                if chamadas['n'] == 1:
+                    raise PermissionError('antivírus')
             return real(caminho)
         with patch('apagamento.ESPERA_S', 0), patch('apagamento.os.unlink', side_effect=instavel):
             apagamento.apagar(self.root, item['id'], token, quem='admin')
         self.assertFalse((self.root / 'execucoes/beta/R001').exists())
+        self.assertGreater(chamadas['n'], 1)
+        self.assertFalse((self.root / 'execucoes' / apagamento.QUARENTENA).exists())
 
 
 class ApagamentoHttpTest(unittest.TestCase):

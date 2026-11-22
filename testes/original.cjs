@@ -39,7 +39,7 @@ function abrir(respostas = {}) {
     return {};
   }});
 }
-const botoes = raiz => raiz.querySelectorAll('button');
+const botoes = raiz => [...raiz.querySelectorAll('button')];
 
 test('citação da resposta mostra a página e abre o original nela, com um clique', async () => {
   const mesa = abrir();

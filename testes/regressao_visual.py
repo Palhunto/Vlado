@@ -55,7 +55,7 @@ FOCOS = {'foco_entrar_campo': ('entrar', '#entrar-login', (375, 1440)),
          'foco_entrar_botao': ('entrar', '#entrar-enviar', (375, 1440)),
          'foco_mesa_botao': ('cadastro', '#enviar-documentos', (375, 1440)),
          'foco_mesa_campo': ('cadastro', '#cadastro-natureza', (375, 1440)),
-         'foco_mesa_barra': ('cadastro', '#ver-cadastro', (1440,))}   # a barra lateral só existe em tela larga
+         'foco_mesa_barra': ('cadastro', '#ver-codex', (1440,))}   # a barra lateral só existe em tela larga
 TODAS = TELAS + tuple(VARIANTES) + (TELA_ENTRAR,) + tuple(FOCOS)
 CASO = 'vila_serena_sintetico'
 CONVERSA = 'c' * 32   # conversa sintética de regressao_visual_rodada.py, aberta em ?codex-conversa=

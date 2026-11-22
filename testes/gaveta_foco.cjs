@@ -21,7 +21,7 @@ async function abrir() {
 const atras = mesa => [mesa.$('conteudo'), mesa.doc.querySelector('.app-header'), mesa.doc.querySelector('.skip-link')];
 const itens = mesa => mesa.doc.querySelector('.areas').children.filter(no => ['A', 'BUTTON'].includes(no.tagName) && !no.hidden);
 // Todo controle focável e visível da gaveta, na ordem do documento (a mesma regra do desktop.js).
-const focaveis = mesa => mesa.$('mesa-sidebar').querySelectorAll('a[href],button,input,select,textarea,summary,[tabindex]')
+const focaveis = mesa => [...mesa.$('mesa-sidebar').querySelectorAll('a[href],button,input,select,textarea,summary,[tabindex]')]
   .filter(no => !no.disabled && no.getAttribute('tabindex') !== '-1' && !no.closest('[hidden]'));
 const tecla = (mesa, alvo, key, extra = {}) => {
   const evento = new mesa.janela.Event('keydown', {key, bubbles: true, cancelable: true, ...extra});

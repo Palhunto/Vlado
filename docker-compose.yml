@@ -58,12 +58,14 @@ services:
       # Set only when the client-visible HTTPS origin includes a nonstandard port.
       VLADO_ORIGEM: ${VLADO_ORIGEM:-}
       VLADO_AMBIENTE: ${VLADO_AMBIENTE:?defina VLADO_AMBIENTE (homologacao, editorial ou demonstracao)}
-      # The app sits behind this Caddy only: trust the last X-Forwarded-For hop for login rate limits.
-      VLADO_CONFIAR_PROXY: "1"
-      # SEG-05: lista de proxies confiáveis (IPs ou redes, separados por vírgula). Vazia: comportamento acima (último salto
-      # do X-Forwarded-For). Com a lista, o IP do cliente é o primeiro salto NÃO confiável, da direita para a esquerda, e o
-      # X-Forwarded-For só vale se o par TCP (o Caddy) estiver nela: inclua a rede do Compose e, atrás de CDN, as faixas dela.
-      VLADO_PROXIES_CONFIAVEIS: ${VLADO_PROXIES_CONFIAVEIS:-}
+      # IP do cliente atrás do Caddy (SEG-05, CONF-03): o par TCP da Mesa é sempre o Caddy, e o limite de tentativas, o teto de
+      # pedidos por endereço e a auditoria precisam do IP do cliente que o Caddy escreve no X-Forwarded-For. Sem lista de
+      # proxies confiáveis o Caddy seria o "cliente" de todos (um teto só para o site inteiro). Por isso a lista SEMPRE leva a
+      # sub-rede fixa da rede deste Compose (VLADO_REDE_SUBNET, abaixo), que só tem o Caddy, a Mesa e o backup; o que o operador
+      # puser em VLADO_PROXIES_CONFIAVEIS no .env (faixas de uma CDN ou WAF) é ACRESCENTADO a ela, nunca a substitui.
+      # Com a lista, o IP do cliente é o primeiro salto NÃO confiável, da direita para a esquerda, e o X-Forwarded-For só vale
+      # se o par TCP estiver nela. Não depende mais de VLADO_CONFIAR_PROXY.
+      VLADO_PROXIES_CONFIAVEIS: ${VLADO_REDE_SUBNET:-172.29.99.0/24}${VLADO_PROXIES_CONFIAVEIS:+,${VLADO_PROXIES_CONFIAVEIS}}
       # Rede que cobre quase toda a internet (0.0.0.0/0...) é recusada; só VLADO_PROXIES_CONFIAVEIS_AMPLAS=1 a confirma.
       VLADO_PROXIES_CONFIAVEIS_AMPLAS: ${VLADO_PROXIES_CONFIAVEIS_AMPLAS:-}
       # Extração e OCR em processos separados (CONF-02) e os tetos do documento recebido (SEG-01). Vazio = o padrão do código;
@@ -77,6 +79,9 @@ services:
       VLADO_EXTRACAO_TETO_MEMORIA_MB: ${VLADO_EXTRACAO_TETO_MEMORIA_MB:-}
       VLADO_EXTRACAO_TETO_CPU_S: ${VLADO_EXTRACAO_TETO_CPU_S:-}
       VLADO_EXTRACAO_NUCLEOS: ${VLADO_EXTRACAO_NUCLEOS:-}
+      # Teto do registro bruto das consultas ao índice, por rodada (SEG-06). Vazio: 2000 arquivos e 256 MB.
+      VLADO_CONSULTAS_MAX_ARQUIVOS: ${VLADO_CONSULTAS_MAX_ARQUIVOS:-}
+      VLADO_CONSULTAS_MAX_MB: ${VLADO_CONSULTAS_MAX_MB:-}
       # SEG-02: registro de auditoria (autenticação, administração, downloads), uma linha JSON por evento, sem conteúdo, no
       # volume `registro` (o serviço de backup NÃO o monta: fora do backup, de propósito; ver deploy/BACKUP.md).
       VLADO_REGISTRO: /app/registro
@@ -266,3 +271,12 @@ volumes:
   caddy_logs:
   backup_trabalho:
   tmp_vlado:
+
+# Rede deste ambiente, com sub-rede FIXA: a Mesa confia no X-Forwarded-For só de quem fala por ela (VLADO_PROXIES_CONFIAVEIS acima).
+# Cada ambiente que divide uma máquina precisa de uma sub-rede diferente (os exemplos de ambiente trazem uma para cada); se a sua
+# colidir com outra rede ou com uma VPN ("Pool overlaps"), troque VLADO_REDE_SUBNET no .env por uma faixa privada livre.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${VLADO_REDE_SUBNET:-172.29.99.0/24}

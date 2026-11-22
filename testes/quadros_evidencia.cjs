@@ -58,7 +58,7 @@ test('hipóteses em três colunas, com localizador e selo de suporte em texto', 
   assert.equal(m.$('area-quadros').hidden, false);
   const cartao = m.doc.querySelector('.quadro-hipotese');
   assert.ok(cartao, 'cartão da hipótese');
-  const colunas = cartao.querySelectorAll('.quadro-coluna');
+  const colunas = [...cartao.querySelectorAll('.quadro-coluna')];
   assert.deepEqual(colunas.map(c => c.querySelector('h4').textContent), ['Sustenta', 'Contraria', 'Falta']);
   assert.match(colunas[0].textContent, /D001 · p\. 4/);
   assert.match(colunas[0].textContent, /A fonte declara valor 12\./);
@@ -91,7 +91,7 @@ test('evidência abre o original pela rota da sua origem, na página citada', as
 test('linha do tempo: filtro por tipo de data e distinção entre data exata e parcial', async () => {
   const m = await mesa(); await abrir(m);
   m.$('quadros-aba-tempo').click(); await m.esperar(8);
-  const eventos = () => m.$('quadros-tempo').querySelectorAll('.tempo-evento');
+  const eventos = () => [...m.$('quadros-tempo').querySelectorAll('.tempo-evento')];
   assert.equal(eventos().length, 2);
   const [parcial, exata] = eventos();
   assert.ok(parcial.classList.contains('marco-parcial'));
