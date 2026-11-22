@@ -1107,7 +1107,7 @@ A atividade não leva o e-mail, que é dado de quem ainda não é da redação.
 
 ### Aceitar convite (W10) e redefinir a senha
 
-*(Derivado, 22/11/2026.)* São seções novas da página do Entrar (`entrar.html`), irmãs de "Definir sua senha" e "Criar administrador". Usam o mesmo [formulário de entrada](#entrar), com a mesma página, cartão, campos de 48 px, botão grande e rodapé. No desktop, que o canvas não desenha, o cartão fica centrado, com até 440 px de largura. O token vem do caminho da página e é lido pelo script. A página não carrega nada de fora (W10 e contrato, 5.2).
+*(Derivado, 22/11/2026.)* São seções novas da página do Entrar (`entrar.html`), irmãs de "Definir sua senha" e "Criar administrador". Usam o mesmo [formulário de entrada](#entrar), com a mesma página, cartão, campos de 48 px, botão grande e rodapé. No desktop, que o canvas não desenha, o cartão fica centrado, com até 440 px de largura. O token vem do caminho da página e é lido pelo script; tem 43 caracteres (letras, números, `_` e `-`). A página não carrega nada de fora (W10 e contrato, 5.2). Combinado com Contas em 22/11/2026: `GET /aceitar/<token>` e `GET /redefinir/<token>` servem o mesmo `entrar.html` de `/entrar` e `/ativar/<token>`, com `Referrer-Policy: no-referrer` e `Cache-Control: no-store`; o script abre a seção pelo caminho.
 
 **Aceitar convite** (`/aceitar/<token>`). Ao abrir, a página chama `convite-consultar` com o token. Enquanto espera, o cartão mostra o esqueleto curto. O idioma da página é o do convite (`idioma`); "English" ou "Português" no rodapé troca.
 
@@ -1131,7 +1131,8 @@ Respostas:
 |---|---|
 | 200 do aceite (`conta`, `csrf`, `destino`) | a sessão já está aberta; vai para `destino` |
 | 400 `convite_invalido`, na consulta ou no aceite | o cartão dá lugar ao estado "Convite sem efeito": título "Este convite não vale mais"; texto do servidor ("Convite inválido, cancelado ou vencido. Peça um novo a quem convidou."); [link](#link) "Ir para a entrada". É uma resposta só para todo link que não cria conta: a página não tenta adivinhar a causa (contrato, 8.1) |
-| 400 com o nome ou a senha | o texto do servidor abaixo do campo a que se refere; sem saber qual, na caixa de aviso do formulário |
+| 400 `senha_invalida` | o texto do servidor abaixo do campo da senha |
+| 400 `requisicao_invalida` e outros 400 | o texto do servidor; quando fala do nome, abaixo do campo do nome; sem saber o campo, na caixa de aviso do formulário |
 | 429 `bloqueado` | caixa de aviso do formulário com o texto do servidor ("Muitas tentativas. Aguarde alguns minutos e tente de novo.") |
 | 503 | caixa de aviso: "Registro de acesso indisponível. Avise a administração.", como no Entrar |
 
@@ -1143,7 +1144,9 @@ Respostas:
 
 A resposta é sempre a mesma (`senha-esqueci`, contrato, 5.3): o cartão mostra "Se houver uma conta com esse e-mail, enviamos um link para criar uma senha nova. Ele vale por 1 hora e uma única vez. Confira também a caixa de spam." e "Voltar para a entrada". Abaixo, em 14 `--theme-muted`: "Entra com um login antigo, sem e-mail? Fale com quem administra o serviço."
 
-Com o transporte `tela` não há a quem mandar o link, e "Esqueci a senha" fica desligado (contrato, 8.1). Nesse caso, no lugar do link, fica o texto de hoje: "Esqueceu a senha? Fale com quem administra o serviço." Como a página sabe se o e-mail está ligado se combina com Contas.
+Com o transporte `tela` não há a quem mandar o link, e "Esqueci a senha" fica desligado (contrato, 8.1). Nesse caso, no lugar do link, fica o texto de hoje: "Esqueceu a senha? Fale com quem administra o serviço." Combinado com Contas em 22/11/2026: a página lê `GET /api/entrada`, pública e sem sessão, que devolve `{esqueci_senha: true|false}` (`true` só com transporte diferente de `tela`). Com `false`, ou se a leitura falhar, a página mostra o texto e não chama `senha-esqueci`; se chamar mesmo assim, recebe 400 `transporte_indisponivel` e mostra o mesmo texto.
+
+A resposta de `senha-esqueci` é sempre 200 `{estado: "enviado", mensagem}`, igual para e-mail com conta, sem conta e malformado. O servidor manda no máximo uma mensagem a cada 5 minutos por endereço, sem mudar a resposta: pedir de novo mostra o mesmo cartão. A tela usa o próprio texto, acima, que diz também o prazo de 1 hora; não precisa validar a forma do e-mail além de ele não estar em branco ("Falta o e-mail. Escreva o e-mail da sua conta.").
 
 **Redefinir a senha** (`/redefinir/<token>`). Cartão com o título "Crie uma senha nova" e os campos:
 
@@ -1152,11 +1155,12 @@ Com o transporte `tela` não há a quem mandar o link, e "Esqueci a senha" fica 
 
 A ação é a principal grande "Salvar a senha nova" ("Salvando…"). Respostas:
 
-- sucesso: o cartão mostra "Senha nova salva. Entre com ela." e a ação principal "Entrar", que leva ao Entrar;
-- link inválido, usado ou vencido: o estado "Este link não vale mais", com o texto do servidor e o link "Pedir outro link", que abre "Esqueci a senha";
+- sucesso (200 `{estado: "senha_redefinida"}`): o cartão mostra "Senha nova salva. As sessões abertas desta conta foram encerradas. Entre com a senha nova." e a ação principal "Entrar", que leva ao Entrar;
+- link desconhecido, usado ou vencido (400 `link_invalido`, uma resposta só): o estado "Este link não vale mais", com o texto do servidor ("Link inválido, usado ou vencido. Peça outro em Esqueci a senha.") e o link "Pedir outro link", que abre "Esqueci a senha";
+- 400 `senha_invalida`: o texto abaixo do campo; 400 `requisicao_invalida`: caixa de aviso;
 - senha fora do tamanho, 429 e 503: como no aceite.
 
-A forma exata da resposta de `senha-redefinir` (se abre sessão e quantas encerra) se confere com Contas quando a rota existir. Se ela abrir sessão, a página vai a `destino`, como no aceite.
+Combinado com Contas em 22/11/2026: `senha-redefinir` recebe `{token, senha}`, **não abre sessão** e encerra todas as sessões da conta; a pessoa entra depois pelo Entrar, o que mantém o aviso de aparelho novo e, quando existir, o segundo passo. O campo `codigo` é aceito e ignorado até o segundo fator. Depois de redefinir ou trocar a senha, a pessoa recebe um aviso no e-mail da conta; a tela não precisa dizer isso.
 
 <a id="contas-excecoes"></a>
 
@@ -1193,8 +1197,8 @@ A conferência destas telas não barra por elas. Cada uma volta ao wireframe qua
 | As caixas "Idioma" e "Tema" usam o mesmo estado dos botões "English" e "Modo escuro" do cabeçalho. Mudar num lugar muda no outro | Lume e Vitral |
 | O estado "Redação suspensa" ([estados](#estados)) vale para a Mesa inteira, a partir de qualquer resposta 403 `redacao_suspensa` | Lume |
 | O campo de senha no "Apagar definitivamente" (`gerenciar.js`) e em Configurações (`configuracao_ia.js`) entra na mesma integração em que o servidor passa a pedi-la | Vitral, com Contas |
-| As rotas `GET /aceitar/<token>` e `GET /redefinir/<token>` servem a página do Entrar, que abre a seção certa pelo caminho | Contas (rota) e Vitral (seções) |
-| Como o Entrar sabe se "Esqueci a senha" está ligado (transporte diferente de `tela`) | Contas e Vitral |
+| As rotas `GET /aceitar/<token>` e `GET /redefinir/<token>` servem a página do Entrar, que abre a seção certa pelo caminho (combinado em 22/11/2026; entram no commit da redefinição de Contas) | Contas (rota) e Vitral (seções) |
+| `GET /api/entrada` diz ao Entrar se "Esqueci a senha" está ligado (combinado em 22/11/2026; mesmo commit) | Contas (rota) e Vitral (Entrar) |
 
 ---
 
