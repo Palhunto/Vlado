@@ -7,9 +7,12 @@ sobre um transporte HTTP falso, e o próprio SDK escolhe a exceção e refaz o p
 
 - chave inválida (401): para com a causa de autenticação, sem nova tentativa, sem gasto e sem a
   chave em nenhum evento ou arquivo;
-- cobrança: 402 ``billing_error`` e o teto de gasto da conta (429 ``enforced_spend_limit_reached``)
-  na Anthropic, cota esgotada (429 ``insufficient_quota``) na OpenAI: causa própria, que não manda
-  tentar de novo mais tarde; o gasto das chamadas feitas fica; retomar segue da etapa certa;
+- chave recusada que o provedor ecoa mascarada (a OpenAI mostra o começo e os 4 últimos
+  caracteres): nenhum trecho dela, mascarado ou não, em evento ou arquivo;
+- cobrança: 402 ``billing_error``, o 400 de saldo baixo e o teto de gasto da conta (429
+  ``enforced_spend_limit_reached``) na Anthropic; cota esgotada (429 ``insufficient_quota``) e conta
+  inativa (403 ``billing_not_active``) na OpenAI: causa própria, que não manda tentar de novo mais
+  tarde; o gasto das chamadas feitas fica; retomar segue da etapa certa;
 - limite de uso (429): causa de limite, depois das novas tentativas do SDK;
 - tempo esgotado: causa de conexão, depois das novas tentativas do SDK;
 - queda no meio da etapa: o processo da Mesa é morto de verdade; outra Mesa na mesma pasta marca a
@@ -38,7 +41,12 @@ import test_codex_integracao as integracao  # noqa: E402
 
 AUXILIAR = TESTES / 'apoio_falhas_provedor.py'
 ETAPAS = ['inventario', 'plano', 'busca', 'geracao_inicial', 'revisao', 'sintese']
-CHAVES = {'ANTHROPIC_API_KEY': 'sk-ant-sintetica', 'OPENAI_API_KEY': 'sk-sintetica'}
+CHAVES = {'ANTHROPIC_API_KEY': 'sk-ant-sintetica-XK4P', 'OPENAI_API_KEY': 'sk-sintetica-QZ7W'}
+# The keys as a provider echoes them, masked: OpenAI does it when it refuses a key (its message keeps a
+# prefix and the last 4 characters); the Anthropic case checks the same cleaning on the other adapter.
+ECO = {'anthropic': 'invalid x-api-key: sk-ant-' + '*' * 12 + 'XK4P',
+       'openai': 'Incorrect API key provided: sk-sint' + '*' * 20 + 'QZ7W. You can find your API key at '
+                 'https://platform.openai.com/account/api-keys.'}
 
 
 def erro_anthropic(tipo, mensagem, codigo=None):
@@ -103,15 +111,29 @@ class Base:
         self.assertEqual(self.gasto(), agente.respondidas * self.custo_por_chamada())
 
     def test_chave_invalida_para_com_a_causa_sem_nova_tentativa_sem_gasto_e_sem_a_chave(self):
-        agente, manager, conversa, final, pedidos = self.falhar('inventario', status=401, corpo=self.CHAVE_INVALIDA)
+        corpo = json.loads(json.dumps(self.CHAVE_INVALIDA).replace('ECO_DA_CHAVE', ECO[self.provedor]))
+        agente, manager, conversa, final, pedidos = self.falhar('inventario', status=401, corpo=corpo)
         self.assertEqual(self.situacao(final), ('erro', 'erro', 'autenticacao'))
         self.assertEqual(len(pedidos), 1)  # the SDK does not retry a refused key
         self.assertEqual(self.gasto(), 0)
         textos = [json.dumps(manager.eventos(conversa), ensure_ascii=False)]
         textos += [p.read_text(encoding='utf-8', errors='replace') for p in self.root.rglob('*')
                    if p.is_file() and p.suffix in ('.json', '.jsonl', '.md', '.txt', '.log')]
-        for chave in CHAVES.values():
-            self.assertFalse(any(chave in texto for texto in textos), 'a chave apareceu num evento ou arquivo')
+        self.assertTrue(any('eventos.jsonl' == p.name for p in self.root.rglob('*')))
+        self.assertIn('credencial omitida', textos[0])  # the echo reached the event, cleaned
+        for trecho in [*CHAVES.values(), *(chave[-4:] for chave in CHAVES.values()), '*' * 5]:
+            with self.subTest(trecho=trecho):  # neither the key nor a piece of it, masked or not
+                self.assertFalse(any(trecho in texto for texto in textos), 'trecho de chave num evento ou arquivo')
+
+    def test_trechos_de_chave_mascarada_saem_e_o_texto_comum_fica(self):
+        from inferencia_api import seguro
+        for eco, resto in (('chave sk-proj-****wxyz.', 'chave [credencial omitida].'),
+                           ('chave sk-abc...wxyz recusada', 'chave [credencial omitida] recusada'),
+                           ('chave ********wxyz recusada', 'chave [credencial omitida] recusada'),
+                           ('chave sk-ant-api03-\u2022\u2022\u2022\u2022wxyz', 'chave [credencial omitida]')):
+            with self.subTest(eco=eco):
+                self.assertEqual(seguro(eco), resto)
+        self.assertEqual(seguro('Pergunta... sintética, **destaque** e 3 * 4.'), 'Pergunta... sintética, **destaque** e 3 * 4.')
 
     def test_cobranca_tem_causa_propria_guarda_o_gasto_feito_e_retoma_da_etapa(self):
         for vez, (nome, (status, corpo)) in enumerate(self.COBRANCAS.items()):
@@ -149,9 +171,12 @@ class Base:
 
 class FalhasAnthropicTest(Base, unittest.TestCase):
     provedor = 'anthropic'
-    CHAVE_INVALIDA = erro_anthropic('authentication_error', 'invalid x-api-key')
+    CHAVE_INVALIDA = erro_anthropic('authentication_error', 'ECO_DA_CHAVE')
     COBRANCAS = {
         '402 billing_error': (402, erro_anthropic('billing_error', 'Your credit balance is too low.')),
+        '400 saldo baixo': (400, erro_anthropic('invalid_request_error', 'Your credit balance is too low to access '
+                                                'the Anthropic API. Please go to Plans & Billing to upgrade or '
+                                                'purchase credits.')),
         '429 teto de gasto': (429, erro_anthropic('rate_limit_error', 'You have reached your monthly spend limit.',
                                                   'enforced_spend_limit_reached')),
     }
@@ -190,10 +215,13 @@ class FalhasAnthropicTest(Base, unittest.TestCase):
 
 class FalhasOpenAITest(Base, unittest.TestCase):
     provedor = 'openai'
-    CHAVE_INVALIDA = erro_openai('invalid_request_error', 'Incorrect API key provided.', 'invalid_api_key')
+    CHAVE_INVALIDA = erro_openai('invalid_request_error', 'ECO_DA_CHAVE', 'invalid_api_key')
     COBRANCAS = {
         '429 insufficient_quota': (429, erro_openai('insufficient_quota', 'You exceeded your current quota.',
                                                     'insufficient_quota')),
+        '403 billing_not_active': (403, erro_openai('billing_not_active', 'Your account is not active, please '
+                                                    'check your billing details on our website.',
+                                                    'billing_not_active')),
     }
     LIMITE = (429, erro_openai('requests', 'Rate limit reached for requests.', 'rate_limit_exceeded'))
 

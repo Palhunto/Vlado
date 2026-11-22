@@ -41,9 +41,12 @@ def seguro(value) -> str:
         if len(segredo) >= 8:
             text = text.replace(segredo, '[credencial omitida]')
     text = re.sub(r'(?i)((?:bearer|basic)\s+)[\w.\-+/=]+', r'\1[credencial omitida]', text)
-    text = re.sub(r'(?<![A-Za-z0-9])sk-[\w\-]+', '[credencial omitida]', text)
+    # A key the provider echoes masked (OpenAI: 'Incorrect API key provided: sk-proj-****wxyz'): its
+    # visible ends are pieces of the key too, and go with the mask; a sentence's final period stays.
+    text = re.sub(r'(?<![A-Za-z0-9])sk-[\w\-*\u2022\u2026]*(?:\.{2,}[\w\-*\u2022\u2026]+)*', '[credencial omitida]', text)
+    text = re.sub(r'[\w\-]*(?:\*{3,}|\u2022{3,})[\w\-]*', '[credencial omitida]', text)
     text = re.sub(r'eyJ[\w-]+\.[\w-]+\.[\w-]+', '[token omitido]', text)
-    text = re.sub(r'(?i)((?:access_token|refresh_token|id_token|api[_-]?key|x-api-key)["\s:=]+)[^\s",}]+',
+    text = re.sub(r'(?i)((?:access_token|refresh_token|id_token|api[_-]?key|x-api-key)["\s:=]+)[^\s",}\[]+',
                   r'\1[omitido]', text)
     return text[:4000]
 
@@ -68,15 +71,24 @@ _CODIGOS_SDK = (
 
 
 # Billing, not capacity (CONF-04): retrying does not help until the provider account is settled.
-# Anthropic: 402 billing_error, and 429 enforced_spend_limit_reached (the account's monthly spend
-# cap, in error.details.error_code); OpenAI: 429 insufficient_quota (in error.code and error.type).
-CODIGOS_COBRANCA = ('billing_error', 'enforced_spend_limit_reached', 'insufficient_quota')
+# Anthropic: 402 billing_error, 429 enforced_spend_limit_reached (the account's monthly spend cap, in
+# error.details.error_code) and the 400 whose message says the credit balance is too low (the message
+# is in the claude-api skill, shared/api-sign-in.md; the 400 has no class of its own in the SDK);
+# OpenAI: 429 insufficient_quota and 403 billing_not_active (in error.code and error.type).
+# Accepted (CONF-04): the SDK retries a 429 by itself (max_retries=2 in the adapters), so a billing 429
+# is asked three times, in about 1.5 s, before the Mesa sees it; refused requests cost nothing, and the
+# SDK's retry loop is not rewritten for this.
+CODIGOS_COBRANCA = ('billing_error', 'enforced_spend_limit_reached', 'insufficient_quota', 'billing_not_active')
+SALDO_BAIXO = 'credit balance is too low'
 MENSAGEM_COBRANCA = ('A conta do provedor da IA está sem crédito ou chegou ao teto de gasto dela; tentar de novo '
                      'não resolve até a cobrança ser regularizada na conta do provedor.')
 
 
 def _cobranca(exc, nomes) -> bool:
-    if 'EnforcedSpendLimitReachedError' in nomes or getattr(exc, 'status_code', None) == 402:
+    status = getattr(exc, 'status_code', None)
+    if 'EnforcedSpendLimitReachedError' in nomes or status == 402:
+        return True
+    if status == 400 and SALDO_BAIXO in str(exc).lower():
         return True
     return any(getattr(exc, campo, None) in CODIGOS_COBRANCA for campo in ('type', 'code', 'error_code'))
 
