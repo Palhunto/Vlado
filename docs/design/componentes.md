@@ -870,6 +870,8 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 
 **Mais dois estados de leitura** *(derivado, 22/11/2026)*, além dos três da prancha, sempre com sinal e texto (W02, regra 5): PDF com parte das páginas sem texto, "Lida em parte: confira as páginas sem texto" com o ícone `sinal-parcial` em `--theme-warning` 600; erro de leitura ou PDF protegido, "Não foi lido. O original ficou guardado." com o ícone `sinal-sem-suporte` em `--theme-danger` 600. Os dois têm "Abrir original".
 
+**PDF sem nenhuma página com texto** *(derivado, 22/11/2026, na aceitação das capturas sobre `74fc0ab`)*: "○ Sem texto lido" em `--theme-muted`, com "Abrir original" (e "Ler com OCR" quando houver a rota). "○ Imagem sem leitura" vale só para arquivo de imagem; um PDF digitalizado sem texto não é imagem para quem lê a lista. É o mesmo texto do resultado no envio ("Sem texto lido. O original ficou guardado.").
+
 **O que a tela tem além da prancha** *(derivado, 22/11/2026, fase 1)*:
 
 - Abas "Acervo cadastrado" e "Pesquisar no conteúdo" acima do topo, enquanto vale a exceção da busca; no celular, pílulas de 44 (P20b).
