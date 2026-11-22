@@ -423,11 +423,21 @@ def _somar(root, chaves, quando, micro_brl):
         conteudo = (json.dumps(dados, ensure_ascii=False, indent=1) + '\n').encode('utf-8')
         _arquivo(root).parent.mkdir(parents=True, exist_ok=True)
         _atomico(_arquivo(root), conteudo)
-        _atomico(_reserva(root), conteudo)  # the copy an unreadable ledger is read from
-        for chave in guardados:  # recorded now
+        for chave in guardados:  # recorded in the ledger now, whatever happens to its copy
             _PENDENTES.pop(chave, None)
         if guardados:
             log.warning('Gasto do mês: %s chamada(s) que não tinham sido gravadas foram somadas agora.', len(guardados))
+        try:
+            _atomico(_reserva(root), conteudo)  # the copy an unreadable ledger is read from
+        except OSError as exc:
+            # The spend is in the ledger: only the copy is stale. A stale copy must not stand in for
+            # the ledger later (it would count less), so it goes; without it, an unreadable ledger
+            # makes the quota exhausted.
+            log.warning('Cópia anterior do gasto do mês não gravada (%s); removida para não valer no lugar do registro.', exc)
+            try:
+                _reserva(root).unlink(missing_ok=True)
+            except OSError:
+                pass
         return {'conta': atual['contas'][chaves['conta']], 'organizacao': atual['organizacoes'][chaves['organizacao']]}
 
 

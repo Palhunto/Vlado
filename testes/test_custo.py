@@ -243,6 +243,27 @@ class CotaTest(Base):
         self.assertEqual(custo.gasto(self.root, 'a'), {'conta': 643500, 'organizacao': 643500})
         self.assertEqual(custo.somar_gasto(self.root, 'a', 1)['conta'], 643501)  # added once
 
+    def test_copia_que_nao_grava_nao_conta_de_novo(self):
+        original = custo._atomico
+
+        def sem_copia(caminho, conteudo):
+            if Path(caminho).name == 'gasto_mensal.anterior.json':
+                raise OSError(28, 'No space left on device')
+            return original(caminho, conteudo)
+        self.gastar('a', 1)  # a good copy exists before
+        with mock.patch.object(custo, '_atomico', side_effect=OSError(28, 'No space left on device')), \
+                self.assertLogs('vlado.custo', 'WARNING'):
+            with self.assertRaises(custo.GastoSemRegistro):
+                self.gastar('a', 0.64)  # kept in memory
+        with mock.patch.object(custo, '_atomico', side_effect=sem_copia), self.assertLogs('vlado.custo', 'WARNING'):
+            for _ in range(3):  # the ledger writes, its copy does not
+                totais = self.gastar('a', 0)
+        self.assertEqual(totais['conta'], 1_640_000)  # 1 + 0.64, once: never counted again
+        self.assertEqual(custo.gasto(self.root, 'a')['conta'], 1_640_000)
+        self.assertFalse((self.root / 'ajustes/gasto_mensal.anterior.json').exists())  # a stale copy never stands in
+        self.assertEqual(self.gastar('a', 0)['conta'], 1_640_000)  # writable again: same total, copy back
+        self.assertTrue((self.root / 'ajustes/gasto_mensal.anterior.json').exists())
+
     def test_registro_ilegivel_lido_da_copia_anterior(self):
         self.gastar('a', 40)
         (self.root / 'ajustes/gasto_mensal.json').write_text('{corrompido', encoding='utf-8')
