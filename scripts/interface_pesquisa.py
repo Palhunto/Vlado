@@ -465,6 +465,13 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             except OSError:
                 pass
 
+    def send_response(self, code, message=None):
+        # SEG-06: like the base class, but without the `Server` header (it carried "BaseHTTP/0.6 Python/3.x"). Error
+        # pages from send_error go through here too, so no answer names the software or its version.
+        self.log_request(code)
+        self.send_response_only(code, message)
+        self.send_header('Date', self.date_time_string())
+
     def _send(self, status, content, content_type='application/json; charset=utf-8', extra=None, cache='no-store'):
         self.send_response(status)
         self.send_header('Content-Type', content_type)
@@ -474,7 +481,8 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'self' blob:; img-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         self.send_header('Referrer-Policy', 'no-referrer')
         if self.server.modo == 'piloto':
-            self.send_header('Strict-Transport-Security', 'max-age=31536000')
+            # One year, subdomains included; no `preload` (hard to undo: see deploy/MONITORAMENTO.md).
+            self.send_header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
         for key, value in (extra or {}).items():
             self.send_header(key, value)
         baixando = status == 200 and str((extra or {}).get('Content-Disposition', '')).startswith('attachment')

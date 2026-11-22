@@ -175,6 +175,35 @@ VLADO_PROXIES_CONFIAVEIS=172.18.0.0/16, 203.0.113.0/24      # a rede do Compose 
 - Sem a lista o comportamento é o de antes (`VLADO_CONFIAR_PROXY=1` no Compose: último salto). Com a lista, ela vale no lugar
   dessa regra.
 
+## Cabeçalhos e conexões (SEG-06)
+
+- **Cabeçalho `Server`:** nenhuma resposta o leva. A Mesa não o envia (nem nas páginas de erro do próprio servidor HTTP, que antes
+  diziam `BaseHTTP/0.6 Python/3.x`) e o Caddy o remove (`header -Server`, no site e no `handle_errors`, que cobre o 502 gerado por
+  ele quando a Mesa está fora do ar). Não repassamos versão de nada.
+- **HSTS:** `Strict-Transport-Security: max-age=31536000; includeSubDomains` na Mesa (modo piloto) e no `deploy/Caddyfile`
+  público (o Caddy manda o mesmo valor; ele substitui, não duplica). **`preload` não entra, por ora**: ele põe o domínio nas listas
+  dos navegadores, que levam meses para tirá-lo, e só vale para um domínio definitivo cujos subdomínios todos falem HTTPS.
+  Reavalie quando o domínio final do dono estiver estável há alguns meses. **Cuidado com `includeSubDomains`:** durante um ano, todo
+  subdomínio do domínio da Mesa passa a exigir HTTPS nos navegadores que já a visitaram; não publique um subdomínio só em HTTP.
+  O `Caddyfile.interno` (CA local) não fixa HSTS em nome de teste.
+- **Conexão do Caddy para a Mesa:** a Mesa fecha a conexão mantida ociosa aos 10 s (CONF-03). Se o Caddy a reutilizasse no
+  instante em que ela fecha, o pedido sairia como 502. Os dois Caddyfiles usam `transport http { keepalive 5s }`: o Caddy descarta a
+  conexão ociosa aos 5 s, antes da Mesa. (`keepalive off` desliga a reutilização por completo, se um dia 5 s não bastar.) Ensaiado
+  com um upstream que fecha aos 10 s: 1 conexão mantida aos 2 s e nenhuma aos 8 s.
+- **Detalhe das falhas de conversa:** o texto cru de uma exceção (caminho do servidor, nome de arquivo, corpo do provedor) não chega
+  a um convidado, nem pelos eventos nem pela situação da conversa. O convidado lê o texto em português do código de erro conhecido
+  ou um **texto fixo** ("A execução falhou por um erro interno..."), mais uma referência curta, `(ref. 1a2b3c4d)`. O administrador vê o
+  detalhe completo nos eventos e o servidor o grava no log (`vlado.conversas`, `docker compose logs vlado | grep "ref 1a2b3c4d"`),
+  com a mesma referência: peça-a ao convidado. Conversas gravadas antes desta versão não são reescritas.
+- **Registro bruto das consultas ao índice:** cada busca, leitura de contexto e cobertura grava um JSON em
+  `execucoes/<caso>/<rodada>/saidas/consultas_sqlite/` (é o registro editorial das consultas, que o AGENTS.md manda preservar).
+  Ele **continua guardando o texto da busca e as passagens devolvidas**: mora dentro da pasta da rodada, com o mesmo acesso, o mesmo
+  backup e o mesmo ciclo de vida do caso (sai quando o caso é apagado), e nunca vai para um registro global (o registro de auditoria
+  da Mesa não vê a busca). Apagar ou amostrar os mais antigos quebraria a garantia de que cada resultado tem seu registro bruto; por
+  isso o desenho é um **teto por rodada**: `VLADO_CONSULTAS_MAX_ARQUIVOS` (2000) ou `VLADO_CONSULTAS_MAX_MB` (256). Passado o teto, a
+  consulta é recusada com a mensagem "Teto do registro de consultas desta rodada atingido... Abra uma nova rodada", nada é apagado e
+  o registro já feito fica preservado. Uma rodada normal não chega perto.
+
 ## Pendências que dependem de pessoa
 
 | | Quem |
