@@ -552,7 +552,7 @@ Razões:
 
 Custos, com o que os cobre:
 
-- **Backup.** Copiar um banco em uso pode pegar um estado incompleto. `acesso.py` oferece uma cópia consistente (API de backup do SQLite) e o `backup.py` da Infra passa a usá-la. A restauração chama uma função de `acesso.py` que encerra todas as sessões, no lugar da edição do JSON que faz hoje.
+- **Backup.** Copiar um banco em uso pode pegar um estado incompleto. O `backup.py` tira uma cópia consistente pela API de backup do SQLite, deixa de fora o diário de escrita e o índice dele, e na restauração esvazia as sessões do banco restaurado, no lugar da edição do JSON que fazia. Faz isso com a biblioteca padrão, sem importar `acesso.py`, porque a imagem de backup leva só esse script. `acesso.copia_consistente` e `acesso.encerrar_todas_as_sessoes` fazem o mesmo para quem roda na imagem da Mesa, e `testes/test_backup.py` prende os nomes usados pelo `backup.py` aos de `acesso.py`.
 - **Não é legível num editor.** `acesso.py listar` e `migrar --simular` mostram o conteúdo sem segredos.
 - **Arquivos que leem `acesso.json` direto:** `scripts/backup.py`, `scripts/registro_acesso.py` (só o texto de ajuda), dez arquivos de teste e quatro documentos (`deploy/INCIDENTE.md`, `deploy/MONITORAMENTO.md`, `docs/CONTRATOS_ENTREGA.md`, `docs/INSTALADOR_WINDOWS.md`). A lista vai para os donos de cada um (seção 10).
 
@@ -746,8 +746,7 @@ Nenhuma das duas muda uma célula da matriz.
 - `pendencias` sai sempre vazia: segundo fator e termos entram com a seção 8.
 - Tentativas de entrada: vale o bloqueio por identificador e endereço de hoje. O teto por identificador, o modo protegido e o aparelho conhecido (seção 8.2) entram com a entrada em dois passos.
 - Chave de IA: numa instalação `piloto` com mais de uma redação, `ia-config-salvar` é recusada a todos e `ia-config` não mostra os quatro últimos caracteres da chave do serviço, até a chave própria de cada redação existir (seção 8.5).
-- O registro de auditoria descarta os códigos, motivos, papéis e eventos novos até as listas fechadas de `registro_acesso.py` os receberem (pedido à Plataforma, seção 10). A recusa do portão é gravada como `operacao_negada`, o evento que o registro já conhece, e não como `acesso_negado` (seção 4.3): a linha sai, mas sem o motivo e sem os códigos novos. O nome do evento se acerta com a Plataforma junto com as listas.
-- Backup: `acesso.copia_consistente` e `acesso.encerrar_todas_as_sessoes` existem, e o `backup.py` ainda não as usa (pedido à Infra, seção 10). Enquanto não usar, uma restauração traz de volta as sessões que estavam no banco copiado.
+- O registro de auditoria descarta os códigos, motivos, papéis e eventos novos até as listas fechadas de `registro_acesso.py` os receberem (pedido à Plataforma, seção 10, em andamento). O portão já grava a recusa como `acesso_negado`, com código, motivo e o id da redação (seção 4.3); enquanto a lista da Plataforma não tiver esse evento, a linha não sai. As duas mudanças precisam entrar juntas na integração.
 
 Chegam com as próximas entregas: `-p test_convites.py`, `-p test_segundo_fator.py`, `-p test_sessoes_conta.py`, `-p test_ciclo_conta.py`, `-p test_correio.py` (seção 8).
 
