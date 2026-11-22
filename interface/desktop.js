@@ -348,6 +348,25 @@
       window.barraMesa.definir('diligencias',n?(n===1?'1 vence':`${n} vencem`):'','aviso');
     }catch(_){if(ticket===deadlineTicket)window.barraMesa.definir('diligencias','','aviso');}
   }
+  // Month's quota card (GET /api/cota, in reais): this account's spend against its ceiling. Without the endpoint or a session there is no card.
+  let quotaAt=0;
+  async function loadQuota(force=false){
+    if(!force&&Date.now()-quotaAt<30000)return;quotaAt=Date.now();
+    const card=$('mesa-cota');
+    try{
+      const res=await window.fetch?.('/api/cota');if(!res?.ok)throw new Error('sem cota');
+      const block=(await res.json())?.conta;if(!block)throw new Error('sem cota');
+      const used=Number(block.gasto_brl),cap=Number(block.teto_brl);if(!Number.isFinite(used)||!Number.isFinite(cap)||cap<=0)throw new Error('sem cota');
+      const money=(value,full)=>new Intl.NumberFormat('pt-BR',{minimumFractionDigits:full?2:0,maximumFractionDigits:2}).format(value);
+      const pct=Math.min(100,Math.round(used/cap*100));
+      $('mesa-cota-valor').textContent=`R$ ${money(used,true)} de R$ ${money(cap,!Number.isInteger(cap))}`;
+      $('mesa-cota-medidor').style.setProperty('--uso',pct+'%');
+      $('mesa-cota-medidor').setAttribute('aria-label',`${pct}% da cota usada`);
+      card.dataset.esgotada=String(Boolean(block.esgotada));card.hidden=false;
+    }catch(_){card.hidden=true;}
+  }
+  loadQuota(true);
+  window.addEventListener('focus',()=>loadQuota());
   // Profile in the sidebar footer: name and role from the session; it opens Configurações (shown only when piloto.js allows it).
   const ROLES={admin:'Administrador',convidado:'Convidado'};
   Promise.resolve(window.fetch?.('/api/sessao')).then(res=>res?.ok?res.json():null).then(data=>{
@@ -364,7 +383,7 @@
     // Guests only ask questions; every other step is closed to them.
     $('mesa-etapas').hidden=stage===undefined||document.body.dataset.papel==='convidado';
     if(stage!==undefined&&$('mesa-etapas').dataset.stage!==String(stage)){$('mesa-etapas').dataset.stage=String(stage);$('mesa-etapas').replaceChildren(...stages.map(([name,label],i)=>{const a=element('a');a.href=window.enderecoAreaMesa(name);a.dataset.mesaArea=name;a.append(element('span',String(i+1)),document.createTextNode(label));if(i===stage)a.setAttribute('aria-current','step');return a;}));}
-    closeMenu(true);loadInventory();countDeadlines();
+    closeMenu(true);loadInventory();countDeadlines();loadQuota();
   }
   $('mesa-menu').replaceChildren(svg('menu'));
   $('mesa-menu').addEventListener('click',()=>{if(document.body.classList.contains('mesa-menu-open'))closeMenu();else openMenu();});

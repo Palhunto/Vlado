@@ -19,6 +19,7 @@ window.VLADO_I18N_EN = {
     "Quadros": "Boards",
     "Pedidos e prazos": "Requests and deadlines",
     "Trocar de apuração": "Switch investigation",
+    "Cota do mês": "Monthly quota",
     "Administrador": "Administrator",
     "1 vence": "1 due",
     "Áreas de trabalho": "Work areas",
@@ -1242,6 +1243,9 @@ window.VLADO_I18N_EN = {
     "O que já foi feito e o que falta nesta apuração": "What is done and what is left in this investigation"
   },
   padroes: [
+    // Cota do mês na barra lateral
+    ["^R\\$ ([\\d.,]+) de R\\$ ([\\d.,]+)$", "R$ $1 of R$ $2"],
+    ["^(\\d+)% da cota usada$", "$1% of the quota used"],
     // Contador de prazos na barra lateral
     ["^(\\d+) vencem$", "$1 due"],
     // Frente C — Mesa móvel (visualizador de PDF)
