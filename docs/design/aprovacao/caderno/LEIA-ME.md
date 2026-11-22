@@ -8,6 +8,8 @@
 | `proposta-{claro,escuro}-{1440,390}.png` | a proposta, com o conteúdo do W04 desenhado na prancha |
 | `comparativo-{claro,escuro}-{1440,390}.png` | as duas lado a lado |
 
+**Correção de 21/11/2026, depois da aprovação:** as frases do modo "Conferir afirmações" saíam em verde. A cor vinha de uma regra de link genérica das pranchas (`.pr a:not(.bt)`), não de decisão de desenho. Agora estão na cor do texto (`--theme-text`), como pede a especificação: o sinal fica no sublinhado e no rótulo ao lado. O layout aprovado não muda. Se o dono preferir o verde, a correção é desfeita.
+
 ## O que muda
 
 - Uma tela só para escrever e conferir: notas à esquerda, texto no centro, afirmação selecionada à direita (W04). Somem a barra de etapas (Documentos, Pergunta, Conferência, Caderno) e as abas "Notas e redação" e "Trechos com fonte e contribuições".

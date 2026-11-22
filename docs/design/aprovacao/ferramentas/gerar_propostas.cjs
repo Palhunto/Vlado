@@ -21,6 +21,7 @@ const FAIXA = '<div class="faixa-derivado" style="background:#1e4d3e">Derivado Â
 const pagina = (tema, corpo) => `<!doctype html><html lang="pt-BR" data-theme="${tema}"><head><meta charset="utf-8"><style>@font-face{font-family:"Source Serif 4";src:url('${FD}/SourceSerif4-Roman.ttf') format('truetype');font-weight:200 900}
 @font-face{font-family:"Source Sans 3";src:url('${FD}/SourceSans3-Upright.otf') format('opentype');font-weight:200 900}
 .af{text-decoration:none;color:inherit;padding:1px 0;text-underline-offset:6px;text-decoration-thickness:2px;text-decoration-line:underline}
+.pr a.af:not(.bt){color:var(--theme-text)}
 .af-ok{text-decoration-color:var(--theme-accent)}.af-ex{text-decoration-style:dashed;text-decoration-color:var(--theme-warning)}.af-sf{text-decoration-style:dotted;text-decoration-color:var(--theme-input-line)}
 .af-sel{outline:2px solid var(--theme-accent);outline-offset:3px;border-radius:4px;background:var(--theme-warning-bg)}
 .marca-af{font:600 14px/1 var(--sans);white-space:nowrap;margin-left:6px;display:inline-flex;align-items:center;gap:4px;vertical-align:2px}

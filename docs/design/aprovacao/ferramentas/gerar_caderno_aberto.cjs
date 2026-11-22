@@ -18,6 +18,7 @@ const svg = (d, tam, traco = 2) => `<svg aria-hidden="true" width="${tam}" heigh
 const CHECK = 'M5 12l5 5L20 7', MENU = 'M4 7h16M4 12h16M4 17h16';
 const FAIXA = '<div class="faixa-derivado" style="background:#1e4d3e">Derivado · aprovado pelo dono em 21/11/2026</div>';
 const CSS = `.af{text-decoration:none;color:inherit;padding:1px 0;text-underline-offset:6px;text-decoration-thickness:2px;text-decoration-line:underline}
+.pr a.af:not(.bt){color:var(--theme-text)}
 .af-ok{text-decoration-color:var(--theme-accent)}.af-ex{text-decoration-style:dashed;text-decoration-color:var(--theme-warning)}.af-sf{text-decoration-style:dotted;text-decoration-color:var(--theme-input-line)}
 .af-rev{text-decoration-style:double;text-decoration-color:var(--theme-accent);text-decoration-thickness:1.5px}
 .marca-af{font:600 14px/1 var(--sans);white-space:nowrap;margin-left:6px;display:inline-flex;align-items:center;gap:4px;vertical-align:2px}
