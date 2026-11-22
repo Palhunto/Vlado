@@ -124,6 +124,7 @@ COPY scripts/acesso.py \
      scripts/segredos.py \
      scripts/semear_ambiente.py \
      scripts/tabelas_apuracao.py \
+     scripts/trava_cadastro.py \
      ./scripts/
 COPY interface/ ./interface/
 COPY prompts/ ./prompts/
