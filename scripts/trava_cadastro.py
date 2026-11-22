@@ -347,10 +347,11 @@ def _liberar_somente_leitura(funcao, caminho, _exc):
 
 # --- partida e encerramento ------------------------------------------------------------------
 
-def recuperar(root):
-    """At service start: clean what a dead process left, only if the lock can be taken now.
+def recuperar(root, espera=2.0):
+    """At service start: clean what a dead process left, only if the lock can be taken.
 
-    Never waits and never takes a live lock. Returns a summary for logs and tests:
+    Waits at most ``espera`` seconds (Windows releases a dead process's byte-range lock a moment
+    after it ends) and never takes a live lock. Returns a summary for logs and tests:
     ``{'estado': 'livre'|'em_uso'|'sem_casos', 'abandonada': record|None, 'antiga_removida': bool,
     'preparo_removido': [...], 'dono': record}``.
     """
@@ -365,9 +366,14 @@ def recuperar(root):
         resumo.update(estado='em_uso', dono=ler_dono(root))
         return resumo
     try:
-        fd = _abrir(pasta / ARQUIVO, time.monotonic() + 1)
+        limite = time.monotonic() + max(0.0, espera)
+        fd = _abrir(pasta / ARQUIVO, max(limite, time.monotonic() + 1))
         try:
-            if not _tentar(fd):
+            obtida = _tentar(fd)
+            while not obtida and time.monotonic() < limite:
+                time.sleep(0.05)
+                obtida = _tentar(fd)
+            if not obtida:
                 resumo.update(estado='em_uso', dono=_ler(fd))
                 log.warning('Partida: trava de cadastro em uso por outro processo (%s); nada foi limpo.', resumo['dono'])
                 return resumo
