@@ -125,16 +125,25 @@ class ContratoTest(unittest.TestCase):
         for regra in autorizacao.TRANSITORIAS.values():
             self.assertEqual(regra.celulas, {'dono': 'sim', 'editor': '—', 'reporter': '—', 'leitor': '—', 'convidado': '—'})
 
-    def test_coluna_do_convidado_e_o_que_o_convidado_ja_alcancava(self):
+    def test_coluna_do_convidado_e_o_que_o_convidado_ja_alcancava_mais_a_propria_conta(self):
+        # The legacy profile keeps what the guest could call; the only addition is the own account (section 5.4):
+        # nothing of any case.
         alcanca = {c.split('#')[0] for c, regra in autorizacao.MATRIZ.items()
                    if not c.startswith('GET:') and regra.celulas['convidado'] != autorizacao.NEGADO}
-        self.assertEqual(alcanca, set(interface_pesquisa.OPERACOES_CONVIDADO))
+        self.assertEqual(alcanca, set(interface_pesquisa.OPERACOES_CONVIDADO) | set(interface_pesquisa.CONTA_PROPRIA))
+        self.assertTrue(all(o.startswith('conta-') for o in interface_pesquisa.CONTA_PROPRIA))
+        for operacao in interface_pesquisa.CONTA_PROPRIA:
+            self.assertEqual(autorizacao.MATRIZ[operacao].resolvedor, frozenset({'nenhum'}))
 
     def test_capacidades_saem_da_matriz(self):
         self.assertIn('redacao-revisar', autorizacao.capacidades({'papel': 'editor'}))
         self.assertNotIn('redacao-revisar', autorizacao.capacidades({'papel': 'reporter'}))
         self.assertNotIn('cadastrar', autorizacao.capacidades({'papel': 'editor'}))
-        self.assertEqual(set(autorizacao.capacidades({'papel': 'convidado'})), set(interface_pesquisa.OPERACOES_CONVIDADO))
+        self.assertEqual(set(autorizacao.capacidades({'papel': 'convidado'})),
+                         set(interface_pesquisa.OPERACOES_CONVIDADO) | set(interface_pesquisa.CONTA_PROPRIA))
+        self.assertIn('equipe-papel', autorizacao.capacidades({'papel': 'dono'}))
+        for papel in ('editor', 'reporter', 'leitor', 'convidado'):
+            self.assertFalse([o for o in autorizacao.capacidades({'papel': papel}) if o.startswith('equipe-')], papel)
 
 
 class Pedido:
