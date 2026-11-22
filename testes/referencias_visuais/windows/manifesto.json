@@ -1,5 +1,6 @@
 {
   "navegador": "chromium 159.0.8154.6",
+  "reinicios_do_navegador": 0,
   "playwright": "?",
   "plataforma": "windows",
   "python": "3.12.14",
@@ -21,15 +22,29 @@
   ],
   "mascaras": [
     "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})?",
-    "\\d{2}/\\d{2}/\\d{4}(?:,?\\s+\\d{2}:\\d{2}(?::\\d{2})?)?",
-    "(?<=às )\\d{2}:\\d{2}(?::\\d{2})?"
+    "\\d{2}/\\d{2}/\\d{4},?\\s+\\d{2}:\\d{2}(?::\\d{2})?",
+    "(?<=às )\\d{2}:\\d{2}(?::\\d{2})?",
+    "(?<=R\\d{3} · )\\d{2}/\\d{2}",
+    "data de hoje e de ontem (dd/mm/aaaa)"
   ],
   "erros_do_navegador": {
     "apuracao__375__claro": [
       "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
     ],
+    "foco_entrar_campo__375__claro": [
+      "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    ],
+    "foco_entrar_botao__375__claro": [
+      "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    ],
     "apuracao__375__escuro": [
       "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+    ],
+    "foco_entrar_campo__375__escuro": [
+      "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    ],
+    "foco_entrar_botao__375__escuro": [
+      "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
     ],
     "apuracao__768__claro": [
       "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
@@ -46,26 +61,14 @@
     "apuracao__1440__claro": [
       "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
     ],
-    "apuracao__1440__escuro": [
-      "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
-    ],
-    "foco_entrar_campo__375__claro": [
-      "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
-    ],
-    "foco_entrar_botao__375__claro": [
-      "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
-    ],
-    "foco_entrar_campo__375__escuro": [
-      "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
-    ],
-    "foco_entrar_botao__375__escuro": [
-      "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
-    ],
     "foco_entrar_campo__1440__claro": [
       "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
     ],
     "foco_entrar_botao__1440__claro": [
       "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    ],
+    "apuracao__1440__escuro": [
+      "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
     ],
     "foco_entrar_campo__1440__escuro": [
       "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
@@ -74,60 +77,60 @@
       "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
     ]
   },
-  "gerado_em_utc": "2026-11-21T22:03:47Z",
+  "gerado_em_utc": "2026-11-22T01:10:41Z",
   "tolerancia": {
     "canal": 4,
     "pixels": 8
   },
-  "total_bytes": 12212389,
+  "total_bytes": 18504926,
   "capturas": {
     "achados__1024__claro": {
       "largura": 1024,
-      "altura": 1627,
-      "bytes": 161361,
-      "sha256": "2e49c299b10906350367b2b529647ba2a803b9b4b41bd3a2481069b027cc8569"
+      "altura": 3114,
+      "bytes": 301872,
+      "sha256": "04d25f7a77b3c52c2f1d71217249c9e877a70fc5fb6171b3237eb2216a577e41"
     },
     "achados__1024__escuro": {
       "largura": 1024,
-      "altura": 1627,
-      "bytes": 160766,
-      "sha256": "de83c656f40973473b7f1425d5fc50120359a7dbd9683641b7524d9503fc332c"
+      "altura": 3114,
+      "bytes": 301740,
+      "sha256": "3726896ce10e6b57d7b90390fe35d81f1cdbca38f9e9bf795855e955d2522dc8"
     },
     "achados__1440__claro": {
       "largura": 1440,
-      "altura": 1205,
-      "bytes": 145147,
-      "sha256": "21c0c1a7bbd55d9a43aa67638d13621afb5ccfd63124a2f61ac7eb64dc15f9dd"
+      "altura": 1971,
+      "bytes": 281074,
+      "sha256": "64775cc01258b112b82635d32d7482f1a458478e1a70b6c7dbd6a120257e347f"
     },
     "achados__1440__escuro": {
       "largura": 1440,
-      "altura": 1205,
-      "bytes": 144180,
-      "sha256": "d915afb350ed5981a5943d1f4b51b1ad0164b54efa95ecf3abdff4fda137530f"
+      "altura": 1971,
+      "bytes": 280412,
+      "sha256": "971adeb0c4b84890b22bee9bbc90bb4bff1df4740c2bddf06f49798fd13e91db"
     },
     "achados__375__claro": {
       "largura": 375,
-      "altura": 2165,
-      "bytes": 127354,
-      "sha256": "5e323851c55d520f940a5455f8fc591ac0c56201f518c4965fc4848637e4c2d6"
+      "altura": 2667,
+      "bytes": 153330,
+      "sha256": "36b1d70b07134904622553c96752f48788f24ce3c182269fb7314dfe8c2c1242"
     },
     "achados__375__escuro": {
       "largura": 375,
-      "altura": 2165,
-      "bytes": 126397,
-      "sha256": "18b374e6c3f95ceec785cffd1db6689bcb4da5d20c6d719dbf476dfe0501cec4"
+      "altura": 2667,
+      "bytes": 153220,
+      "sha256": "4fb459ae50f6498519f2a63ebffa1f9e8525bb407cfcbe46345e4af16bcae9e1"
     },
     "achados__768__claro": {
       "largura": 768,
-      "altura": 1742,
-      "bytes": 167766,
-      "sha256": "1ffe8718d7a803377bbb2ba9547bda1a4361efa412417d1fe8508bb9df9749db"
+      "altura": 2200,
+      "bytes": 200829,
+      "sha256": "57ed69c7a59edf54fa8da0bc1ec31fcf7191d40e90d0b858a21ae322922510b6"
     },
     "achados__768__escuro": {
       "largura": 768,
-      "altura": 1742,
-      "bytes": 167191,
-      "sha256": "131ee0c609fa83f924a270d69b8a1ba07b5f9277b59d20fdecb98b60c5032ebf"
+      "altura": 2200,
+      "bytes": 200281,
+      "sha256": "3063877bc40b4d481bf0ecd7047e90f433641c52a46678d43167f2a3d1ffc737"
     },
     "apuracao__1024__claro": {
       "largura": 1024,
@@ -174,20 +177,20 @@
     "apuracao__768__escuro": {
       "largura": 768,
       "altura": 1445,
-      "bytes": 138339,
-      "sha256": "97eb007810afb41b930780c29d8d066e2ef91535201dab3143aca461ad374824"
+      "bytes": 138334,
+      "sha256": "7ef07fea14f95f455e2bea8f9c3842d84ad14d359bad511f77b38ff903397438"
     },
     "cadastro__1024__claro": {
       "largura": 1024,
       "altura": 891,
-      "bytes": 106080,
-      "sha256": "2ed8a05b999333a42860aa9f01ee247b1a4e17adb1636b742495c52181c4ba78"
+      "bytes": 106088,
+      "sha256": "f77fbf3ca4290fb002a1a6994acf5f20e13b934553cd7a1e4c1f0ff2387072b8"
     },
     "cadastro__1024__escuro": {
       "largura": 1024,
       "altura": 899,
-      "bytes": 106573,
-      "sha256": "0b841816ac055f507a8ca222aee745502e956584f1a3c8069fb3b0f338aac084"
+      "bytes": 106567,
+      "sha256": "37f6f63890b98eb5a904f22cac13986ff2ad44336089fe55f4820a8937cbca63"
     },
     "cadastro__1440__claro": {
       "largura": 1440,
@@ -222,8 +225,8 @@
     "cadastro__768__escuro": {
       "largura": 768,
       "altura": 1024,
-      "bytes": 111155,
-      "sha256": "4b96d0082384a075302e656306f00e495a70d5c15204b5df6015955441a188f5"
+      "bytes": 111157,
+      "sha256": "152bd8b5eeb253ee4a84452c09a5708bbe6d25a5ec7465696c00b6bf283fc1e4"
     },
     "caderno__1024__claro": {
       "largura": 1024,
@@ -275,51 +278,51 @@
     },
     "codex__1024__claro": {
       "largura": 1024,
-      "altura": 2237,
-      "bytes": 197668,
-      "sha256": "1dbe9c634409ba68e05b56591d81972aba884b759e8e48c23fd3c31d1d3236e8"
+      "altura": 2194,
+      "bytes": 201763,
+      "sha256": "2c076ecaf381c6762a91887a8aa968deaf8ab856bb3cd3b63a8a2d266b871415"
     },
     "codex__1024__escuro": {
       "largura": 1024,
-      "altura": 2237,
-      "bytes": 196477,
-      "sha256": "4be86d0afe9b688e8b7ca8e6b52d9d5d560227ba2131b53c91569459c94a408b"
+      "altura": 2194,
+      "bytes": 201398,
+      "sha256": "83c8996cd5e6ffdf2f4cd662bfba50fdad88ac3ae75c9152de04e7fe69f781b2"
     },
     "codex__1440__claro": {
       "largura": 1440,
-      "altura": 2170,
-      "bytes": 210040,
-      "sha256": "035f5c3d25a8cc10b36d4e66989511f8b9b728837e221407b2bcf02e89795d37"
+      "altura": 2103,
+      "bytes": 220972,
+      "sha256": "602a2ffa9460c9c1c6f0de06e734c632aa2a1c19782ee32b25abfa11c8402a90"
     },
     "codex__1440__escuro": {
       "largura": 1440,
-      "altura": 2170,
-      "bytes": 208863,
-      "sha256": "107b96f8fbddc5fd3126c4d6aaf62074d13b9279288bb4aa05054975117816a1"
+      "altura": 2103,
+      "bytes": 220562,
+      "sha256": "d959f3a3307bbbba0c43f9de2db7ae71251afb8a591901745ca8f441673f69ce"
     },
     "codex__375__claro": {
       "largura": 375,
-      "altura": 2557,
-      "bytes": 155456,
-      "sha256": "a7dc480a6b8a0b9e12432511d2bd0c9db313eababbb2677b8a6d318a467e0986"
+      "altura": 2565,
+      "bytes": 160731,
+      "sha256": "e2809bd99dc53020c732ec3d2b425af58e001a94a063da8afa535b773524ac65"
     },
     "codex__375__escuro": {
       "largura": 375,
-      "altura": 2557,
-      "bytes": 154333,
-      "sha256": "aaa1fc3300e8e2ab93242490ea075d1bc551636b67619739aa1e2a4e8586478a"
+      "altura": 2565,
+      "bytes": 160446,
+      "sha256": "91c20dbc91414348edf108cc9910453aec1a51c0619f8a6f3b45f29e738ac205"
     },
     "codex__768__claro": {
       "largura": 768,
-      "altura": 2339,
-      "bytes": 202007,
-      "sha256": "e46aa06ee3b3a3c1de3b9fb017e4a3d11a5d9d2ed6499343fa5cec0a652e2a01"
+      "altura": 2342,
+      "bytes": 209383,
+      "sha256": "ee538f00185c29ea00e9c0dd7e8473482215ec97920c04460a49ab087a51be66"
     },
     "codex__768__escuro": {
       "largura": 768,
-      "altura": 2339,
-      "bytes": 201221,
-      "sha256": "2e6b52c221ebbe3ccd0c3d48e0d65eef6dc057f09289c9e7bde96e62edea2a3b"
+      "altura": 2342,
+      "bytes": 209111,
+      "sha256": "b39b56d6c2e7bcefb7e25ea59cdc1f31beb0f09e2b7a6803f6f66d3159d08941"
     },
     "configuracoes__1024__claro": {
       "largura": 1024,
@@ -330,8 +333,8 @@
     "configuracoes__1024__escuro": {
       "largura": 1024,
       "altura": 768,
-      "bytes": 65357,
-      "sha256": "9d3829fa6b6c79b32705f6742cc264653ae573da3327c24fa64d5c7ca6c7d4f2"
+      "bytes": 65354,
+      "sha256": "32d4f0a5c324489ac19a0fbceaae33c3e9758985e16f0da26b98dc90a26388d5"
     },
     "configuracoes__1440__claro": {
       "largura": 1440,
@@ -371,57 +374,57 @@
     },
     "diligencias__1024__claro": {
       "largura": 1024,
-      "altura": 987,
-      "bytes": 105278,
-      "sha256": "98645cb83424e526885fad4e86feb65911ddd21a4f76ce768c54638bb4ded409"
+      "altura": 1774,
+      "bytes": 173730,
+      "sha256": "75e955b339874f75012f722a1efc83a1a0e3631d850cc6fdf88d82cd4cc1696a"
     },
     "diligencias__1024__escuro": {
       "largura": 1024,
-      "altura": 987,
-      "bytes": 104903,
-      "sha256": "e99da7f27253a224877e4b8b08013b767bbc609ea4c4e7022eaab3e7d56170a0"
+      "altura": 1774,
+      "bytes": 173541,
+      "sha256": "28f841281282880ab88c891479bbe270c5e658b0fe1bacbc7a16b9df0131740c"
     },
     "diligencias__1440__claro": {
       "largura": 1440,
-      "altura": 900,
-      "bytes": 104119,
-      "sha256": "331f1f30d0fdb96d68c6da4fb68b32ccd180f921ff9b06645b4b8e5104a2c712"
+      "altura": 1314,
+      "bytes": 180042,
+      "sha256": "1742c9ae0e3ac0284a13586e860f2154e8119650893f4bf31e9ae1b8e1d04dfa"
     },
     "diligencias__1440__escuro": {
       "largura": 1440,
-      "altura": 900,
-      "bytes": 103525,
-      "sha256": "e42fe66247eb45ec1c4dbb05539e20c2870a39a21e8b71ebcc2ff0dfa6a1bc0b"
+      "altura": 1314,
+      "bytes": 179163,
+      "sha256": "0410202005211529c9d1cac265cd133c677ddedd708ba1fb4642ab3cb287a417"
     },
     "diligencias__375__claro": {
       "largura": 375,
-      "altura": 1156,
-      "bytes": 70536,
-      "sha256": "c61200b0609c18aa5df1fe7385813a85093980299a8b87c2803e64b1bc802c99"
+      "altura": 2236,
+      "bytes": 141270,
+      "sha256": "d06838837520d6202b2f94f0478511eab4f3606b4b9158b591543cd70c56eaa6"
     },
     "diligencias__375__escuro": {
       "largura": 375,
-      "altura": 1156,
-      "bytes": 69969,
-      "sha256": "91106b20a68b883735759efd4d87076919bb79e1ee41712afad15d758f871acc"
+      "altura": 2236,
+      "bytes": 141617,
+      "sha256": "9093fd06c92f742d8d29a8491f917bafc2ed0a6b9dced2f31c52ddb27bf353a4"
     },
     "diligencias__768__claro": {
       "largura": 768,
-      "altura": 1050,
-      "bytes": 111961,
-      "sha256": "bd05099060ae7b009a27ac3895c40fc1a89c2d1d509d599e6616172f4a566364"
+      "altura": 1883,
+      "bytes": 181933,
+      "sha256": "c6798cf44d67a5422672884fbf1065a40a915cdaf1cbd5554e32a3499036e4d4"
     },
     "diligencias__768__escuro": {
       "largura": 768,
-      "altura": 1050,
-      "bytes": 111428,
-      "sha256": "d7ce9cf75e2aaeee7908b05b26c0c8559c49ab0b4e225ec93c4d0fe3dc143d64"
+      "altura": 1883,
+      "bytes": 181774,
+      "sha256": "354c958843d212300395c5c2935739be13913bdc466e1d95bba9c686873158c2"
     },
     "documentos__1024__claro": {
       "largura": 1024,
       "altura": 1019,
-      "bytes": 136371,
-      "sha256": "9d798bb4ec3a11e8111c29ee070046332ed1f607b6354523e4eacbe275ba3971"
+      "bytes": 136378,
+      "sha256": "95ef97b86f5c0ec892f588d6fe05fdcb6dc396f9d8cbf33348fd8c2d04df8c1a"
     },
     "documentos__1024__escuro": {
       "largura": 1024,
@@ -462,8 +465,8 @@
     "documentos__768__escuro": {
       "largura": 768,
       "altura": 1131,
-      "bytes": 143429,
-      "sha256": "d672cd42c00054c445df4876f9ad551e2699dce95970d6551a8b32486f7ce936"
+      "bytes": 143432,
+      "sha256": "57c9bf87b63a177c0547823d1fdd64abeb3e59867960c9c0eb7b5581beec37c6"
     },
     "entrar__1024__claro": {
       "largura": 1024,
@@ -517,13 +520,13 @@
       "largura": 1440,
       "altura": 900,
       "bytes": 30503,
-      "sha256": "e26ce2061be14f9d0e9dbf1f57293ce02fb78a0eea6a5093c0dac365a1a46bf5"
+      "sha256": "8e7b5472cdae68a171fedd7328f3ba9fb8426ff7f03fec6ec1f2889b81168562"
     },
     "foco_entrar_botao__1440__escuro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 30260,
-      "sha256": "7de5785be1e3689b634459ce70bdb43a5d228adeefaef718af29c40181f35852"
+      "bytes": 30257,
+      "sha256": "e7458ff7eb4eb76a15b802346ecebfe0709d9b25a3430e7ad3dbffba4d79a6bd"
     },
     "foco_entrar_botao__375__claro": {
       "largura": 375,
@@ -546,8 +549,8 @@
     "foco_entrar_campo__1440__escuro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 30240,
-      "sha256": "702172188eac3af78d95f399cea18234bc3c7b7590358af6f164e84e98c35d4a"
+      "bytes": 30233,
+      "sha256": "2ce89ad712e53c46c781545edc0cb719e62ae34820772e46a1c7f2dee3875e17"
     },
     "foco_entrar_campo__375__claro": {
       "largura": 375,
@@ -564,8 +567,8 @@
     "foco_mesa_barra__1440__claro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 119585,
-      "sha256": "3562290c66007dbde8d37ea8b32a29927708a1f611f4c933bfdd254f0277893d"
+      "bytes": 119617,
+      "sha256": "2364b961835fda201c1ade41fe64ebb993675924bdd02a1a31478c35635842c0"
     },
     "foco_mesa_barra__1440__escuro": {
       "largura": 1440,
@@ -576,8 +579,8 @@
     "foco_mesa_botao__1440__claro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 119558,
-      "sha256": "d7a42271957021bef63924eaae38477c5dc02d5897de04dc1eb2d8a4f6cdc278"
+      "bytes": 119560,
+      "sha256": "0ffc737ad3f26098eb61a7e42eeaf23eca91b2840ca8f120bdd989774a41cca8"
     },
     "foco_mesa_botao__1440__escuro": {
       "largura": 1440,
@@ -588,8 +591,8 @@
     "foco_mesa_botao__375__claro": {
       "largura": 375,
       "altura": 1092,
-      "bytes": 65980,
-      "sha256": "3857cacc8fead6dbd119283d286d5e1c226c26939d4e6b8ace50db5e315e0644"
+      "bytes": 65993,
+      "sha256": "4171955c050d9a5d75093c1bd4a2d987609ecef351579fd0113da52e478b0f96"
     },
     "foco_mesa_botao__375__escuro": {
       "largura": 375,
@@ -600,8 +603,8 @@
     "foco_mesa_campo__1440__claro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 119530,
-      "sha256": "435129f8f330fed0e94c9439a033338f876852ff0046eb9fd8084a8d217c1f0c"
+      "bytes": 119532,
+      "sha256": "b4f642b1feea29b783920ea7bb5f7b0238468475f6d71b5ba15a019702830881"
     },
     "foco_mesa_campo__1440__escuro": {
       "largura": 1440,
@@ -618,152 +621,248 @@
     "foco_mesa_campo__375__escuro": {
       "largura": 375,
       "altura": 1098,
-      "bytes": 72038,
-      "sha256": "a8c344dd21fbfb0444ba6bbb5e8ee7325f4fd2eb7d252fd937b617490a8bbf38"
+      "bytes": 72040,
+      "sha256": "bd911e5d82f1d5beacfcc8a2fbd70db6b002c264c4140df54655c223c2fbd224"
     },
     "gerenciar__1024__claro": {
       "largura": 1024,
-      "altura": 1247,
-      "bytes": 130275,
-      "sha256": "9e57afce430213ed47802cbc64532db2494f98e098cdbde77bff8ba12bbd8a23"
+      "altura": 1308,
+      "bytes": 132996,
+      "sha256": "946ec0bdc099dcee9680e40cd936d73f5a8bb3df10bd4d0bb65445b2a48c34ed"
     },
     "gerenciar__1024__escuro": {
       "largura": 1024,
-      "altura": 1247,
-      "bytes": 130664,
-      "sha256": "baef0a838d5960db1ac768684de3ffc3d4d3ab8ba0cae930cae3c6836fd1df24"
+      "altura": 1308,
+      "bytes": 133150,
+      "sha256": "98853c8531f6c68f4835c6f487bc46720f9922b53f5338a9c4f919716ffabde8"
     },
     "gerenciar__1440__claro": {
       "largura": 1440,
-      "altura": 1229,
-      "bytes": 135501,
-      "sha256": "02309eac2f09a7b1559693241ace57b2fe20232375f3f4ce9142c5ee691a65f3"
+      "altura": 1290,
+      "bytes": 139478,
+      "sha256": "7ad606c2a468bdabf74ff80c1ecaa60bd761d3994f5ff061d19e9d38240d7945"
     },
     "gerenciar__1440__escuro": {
       "largura": 1440,
-      "altura": 1229,
-      "bytes": 134771,
-      "sha256": "73f5aec288e6ea8c3df1532b47d45dd3ee05d7e208d48e5bebfc6cadfb450df0"
+      "altura": 1290,
+      "bytes": 138516,
+      "sha256": "b6ad15a749919573e228814e31d0b8bf76eb6e591e603a60cae4a5d6d325b1eb"
     },
     "gerenciar__375__claro": {
       "largura": 375,
-      "altura": 1561,
-      "bytes": 93103,
-      "sha256": "6eb049a18fa05a88b2f8baabe026098a80bb4e3fb1b85c3dc7ec5afdfdd25d18"
+      "altura": 1682,
+      "bytes": 96245,
+      "sha256": "a8fa0e020466b22e1547bff915473a57ec3d0c11c829fcf8ff9a385b27c18f33"
     },
     "gerenciar__375__escuro": {
       "largura": 375,
-      "altura": 1561,
-      "bytes": 92657,
-      "sha256": "7f952ada189dbd400bd7be06c8706f417ca832d35a7212697593f5e7749698e7"
+      "altura": 1682,
+      "bytes": 95848,
+      "sha256": "3773cb4553fd1faafe5d57bc8d51ea9bca561b2c955175cf4c4f4721d3fe9ef5"
     },
     "gerenciar__768__claro": {
       "largura": 768,
-      "altura": 1331,
-      "bytes": 139336,
-      "sha256": "3a2600eae1a670532901aeaeb7113c3df6d0ae934698ee959f6d5f1de3668896"
+      "altura": 1393,
+      "bytes": 141511,
+      "sha256": "6e0254282b6110ce2322aaf77af019a051dec439a2096eae6678484559e9b30b"
     },
     "gerenciar__768__escuro": {
       "largura": 768,
-      "altura": 1331,
-      "bytes": 138818,
-      "sha256": "0a8b0bb8d0c3bc0462829ec8eaeeb878d26d0ed2da75b17b7d086bb873c1efb6"
+      "altura": 1393,
+      "bytes": 140947,
+      "sha256": "35114acac457c6d7ccc659e3d3b65b72d5e5e2afe5bef626383fbbe91fdc8b13"
     },
     "inicio__1024__claro": {
       "largura": 1061,
-      "altura": 1123,
-      "bytes": 146497,
-      "sha256": "592fe129dcf73a83699aa751d3bff4733f0cf8be75b5c24e86446dcde5c39965"
+      "altura": 1255,
+      "bytes": 155767,
+      "sha256": "28137e2a8115821e1a83ea36606470e6b6bb132bce5cbfb5f3331763eddac3c0"
     },
     "inicio__1024__escuro": {
       "largura": 1061,
-      "altura": 1123,
-      "bytes": 145928,
-      "sha256": "9c4327126939b3c0af540f0bbaaaf7758f80861d9804479e3905550422756144"
+      "altura": 1255,
+      "bytes": 155184,
+      "sha256": "81ea06e0f5d627205cda56ae450e9beea2508d4f50724cee2a1a9e0576847581"
     },
     "inicio__1440__claro": {
       "largura": 1440,
-      "altura": 1030,
-      "bytes": 154210,
-      "sha256": "e2cd18cc1262f71186acb0fe0664953a3e49483e0bca29af4b5223b348f7177f"
+      "altura": 1109,
+      "bytes": 163056,
+      "sha256": "03172c390835f804c3ead6e524d42d0f01e8599e95c47265347d4bfb368752ea"
     },
     "inicio__1440__escuro": {
       "largura": 1440,
-      "altura": 1030,
-      "bytes": 153518,
-      "sha256": "bf5e2bb8163d43251ad45f753067233cba21200dfbd2c85c6d75c263b6168c9a"
+      "altura": 1109,
+      "bytes": 162376,
+      "sha256": "5d60d9c4f5dc4ca393ff950cf4604477f831e37de7e97aa2d9406351e3f79a35"
     },
     "inicio__375__claro": {
       "largura": 375,
-      "altura": 1560,
-      "bytes": 106319,
-      "sha256": "7ecde5c42471a8cf10fedb636b0573e8851007d15b55ff5ebb034f44bfbc43c3"
+      "altura": 1666,
+      "bytes": 114984,
+      "sha256": "81006597eef51ea89c4c14c1745824c4d0ec434d817ef1b2c8a2733b902ae12d"
     },
     "inicio__375__escuro": {
       "largura": 375,
-      "altura": 1560,
-      "bytes": 106069,
-      "sha256": "8005782afe05f6b1c7bef6e7a68d8ece7fa004d7d4b82a5daf1a0ab6b5d65f95"
+      "altura": 1666,
+      "bytes": 114733,
+      "sha256": "e5f276448a8d01d75b48d59c1336d606c2a6d302528b50f1e3b868aeebe6a3e1"
     },
     "inicio__768__claro": {
       "largura": 890,
-      "altura": 1407,
-      "bytes": 158366,
-      "sha256": "f1c363853fbf5505a5f9a19d3763ce9099528ba06caa4e93999efe92a331fd5a"
+      "altura": 1724,
+      "bytes": 169636,
+      "sha256": "ab5347243dd8a9ac62f372397c2d3b98e2bab95f53faa63c2c4f63e724e8ea59"
     },
     "inicio__768__escuro": {
       "largura": 890,
-      "altura": 1407,
-      "bytes": 157903,
-      "sha256": "8dd89f74c67e43986847da951a5f13eb978c021106cdefa27a5c503ded76d95d"
+      "altura": 1724,
+      "bytes": 169422,
+      "sha256": "fe570adbeabdccff3a14f1b98b8b888918842b8fbf5a3dc1ffc65b48793dc97b"
     },
     "quadros__1024__claro": {
       "largura": 1024,
-      "altura": 768,
-      "bytes": 90693,
-      "sha256": "fb78116c2994c4739eb9f30a4864a7febf5d9619d57f1865a97647407d6da37d"
+      "altura": 2946,
+      "bytes": 286699,
+      "sha256": "2cf5049bd0e3f30779a292bf016002a92c1c3f2d7645d5b3d01bc6231101dbb2"
     },
     "quadros__1024__escuro": {
       "largura": 1024,
-      "altura": 768,
-      "bytes": 90222,
-      "sha256": "fe0708c38545f508fbf45e17b70f0ed99b409ec9bb0456d68098e0d94d52b60b"
+      "altura": 2946,
+      "bytes": 285171,
+      "sha256": "a3a821b6ab3777c2df6f094379e4836787e0ded75d4c4f28866722eebc2ac735"
     },
     "quadros__1440__claro": {
       "largura": 1440,
-      "altura": 900,
-      "bytes": 97231,
-      "sha256": "460a4caea40bd1a300c4abd4cebf6ee59344288e0c34be36f1e21a18c932ba34"
+      "altura": 2505,
+      "bytes": 291664,
+      "sha256": "212c6c03a721a987aca9695b62c23ee6d81efe4a9e7ba9c223530cdf3c7b8b78"
     },
     "quadros__1440__escuro": {
       "largura": 1440,
-      "altura": 900,
-      "bytes": 96797,
-      "sha256": "69b00eb237fd147c8620158addc8c060a448969a17368520159b1f687fbd6135"
+      "altura": 2505,
+      "bytes": 290886,
+      "sha256": "86e1276c60bdbfe4493f75913ae04e5f786691ef04460503c11af04761c127ea"
     },
     "quadros__375__claro": {
       "largura": 375,
-      "altura": 812,
-      "bytes": 50406,
-      "sha256": "ebf1f3055a9126ccdbbba96b6509157f7c5ee2f36de0dcae440949fa0a83128f"
+      "altura": 3936,
+      "bytes": 235124,
+      "sha256": "ee0237e850f0c18aaed267a19e1b297ff60d0c3f2ca2274e86f226b45689e9d4"
     },
     "quadros__375__escuro": {
       "largura": 375,
-      "altura": 812,
-      "bytes": 49546,
-      "sha256": "655d24c888a5dd8ffa43c9fe1f98d6ed0da1d150a70f2b342e4f9c9d4676cc84"
+      "altura": 3936,
+      "bytes": 233252,
+      "sha256": "58890d341aa4fec4ebacc4025bddac39584a30bf08e4629928dd370e31839c28"
     },
     "quadros__768__claro": {
       "largura": 768,
-      "altura": 1024,
-      "bytes": 98647,
-      "sha256": "a20d62a3d2b3c517ba2b5617afecd8a0b41a4de402c351fed1e278fa7b52b193"
+      "altura": 3375,
+      "bytes": 288889,
+      "sha256": "e266cb00fa0744ba555ef71e1cc122490a0da7d4975bf94e91169c22a814c935"
     },
     "quadros__768__escuro": {
       "largura": 768,
-      "altura": 1024,
-      "bytes": 98133,
-      "sha256": "6a5d1dcab40e09b0de53f77fa8ebc5b9541cc32ecd44fd3825c66b46ce9bb2b7"
+      "altura": 3375,
+      "bytes": 287832,
+      "sha256": "fc0fba98a8aa8a733990d40dcee82c49394ce4a596e653f7e8cd6e9bc888a0ec"
+    },
+    "quadros_linha__1024__claro": {
+      "largura": 1024,
+      "altura": 1975,
+      "bytes": 224955,
+      "sha256": "873672061a18c371b957f3688f3e55ea3624ef4ce28f279f874f31c61b30d8fd"
+    },
+    "quadros_linha__1024__escuro": {
+      "largura": 1024,
+      "altura": 1975,
+      "bytes": 223519,
+      "sha256": "fabf2178db2b5d465c616694e7e3fbce1f5d77347073ff98a9911c3e415d41f7"
+    },
+    "quadros_linha__1440__claro": {
+      "largura": 1440,
+      "altura": 1809,
+      "bytes": 228346,
+      "sha256": "a7f7486fe8d709d13dfe6ddf65375a20b880077c540bd665f43ae092cf0a1ff7"
+    },
+    "quadros_linha__1440__escuro": {
+      "largura": 1440,
+      "altura": 1809,
+      "bytes": 227217,
+      "sha256": "04fecbfd35e8edf7561f97457b85be64aba7f3f4ecf8a6ff0a95ea8a5082bc39"
+    },
+    "quadros_linha__375__claro": {
+      "largura": 375,
+      "altura": 2094,
+      "bytes": 156501,
+      "sha256": "df418e790c5a22a86726e93c10ed2f38277029ae78b7d8f9f3aae61d9a17c486"
+    },
+    "quadros_linha__375__escuro": {
+      "largura": 375,
+      "altura": 2094,
+      "bytes": 154669,
+      "sha256": "5c3415df10dbff8d031d050f1d51d3c8be20d4482dea926c4fcbca0bf89dec77"
+    },
+    "quadros_linha__768__claro": {
+      "largura": 768,
+      "altura": 2235,
+      "bytes": 234838,
+      "sha256": "8b105501eaf37f3b118b27977dfa7bd571fb22cc79b051d70c8ae5a1fbb9998b"
+    },
+    "quadros_linha__768__escuro": {
+      "largura": 768,
+      "altura": 2235,
+      "bytes": 233945,
+      "sha256": "e03f01733bbad5919a63f9242f28b901af3b1f7490592261cb8cbde79d7e50e5"
+    },
+    "quadros_mapa__1024__claro": {
+      "largura": 1024,
+      "altura": 1837,
+      "bytes": 225868,
+      "sha256": "685c82586cee3ef6372b42f3421fd2fe5be61a007ad01a40cfe392ba16c0d647"
+    },
+    "quadros_mapa__1024__escuro": {
+      "largura": 1024,
+      "altura": 1837,
+      "bytes": 225722,
+      "sha256": "384f4d2fe311fbbb2fbda2e0526c921b1a9f4e860e87d24ab50e9a6d4eac4ea4"
+    },
+    "quadros_mapa__1440__claro": {
+      "largura": 1440,
+      "altura": 1539,
+      "bytes": 232617,
+      "sha256": "9cbd3ba333b75668013bdb87ef3c338e8e18780552bdc800e7339eb1120e4ec9"
+    },
+    "quadros_mapa__1440__escuro": {
+      "largura": 1440,
+      "altura": 1539,
+      "bytes": 233126,
+      "sha256": "64e766164fa151562be15e72d8849fd59bb6450ec0408e6ccaa535e76609ac30"
+    },
+    "quadros_mapa__375__claro": {
+      "largura": 375,
+      "altura": 1927,
+      "bytes": 150208,
+      "sha256": "9c570645f326a3e37cb2dfad69cbc875de97b6df2f6ff8706f19f76f7c4cd7b3"
+    },
+    "quadros_mapa__375__escuro": {
+      "largura": 375,
+      "altura": 1927,
+      "bytes": 149788,
+      "sha256": "1b2b1af14b52fe750c15e5453f8bdcb6da212053d531ab9395fa2ca6236e0513"
+    },
+    "quadros_mapa__768__claro": {
+      "largura": 768,
+      "altura": 2137,
+      "bytes": 230405,
+      "sha256": "37461f74817123810fe75e113e54ccf379cef9231daf4352b8b601be2601d596"
+    },
+    "quadros_mapa__768__escuro": {
+      "largura": 768,
+      "altura": 2137,
+      "bytes": 230762,
+      "sha256": "d7bd78ffd480eb69ec30a8880642ebd49fd17b221f935165185cc5cf3884f34b"
     }
   }
 }
