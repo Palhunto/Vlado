@@ -1462,6 +1462,7 @@ window.VLADO_I18N_EN = {
     ia_limite: "API usage or capacity limit reached. Wait and try again.",
     ia_conexao: "The connection to the API failed or timed out. Check the network and try again.",
     ia_servidor: "Temporary error on the provider's server. Try again.",
+    fila_limite_envios: "Upload limit while files are being processed. {arquivos} file(s) are being read. The files already sent are saved; send the next ones when these finish. Documents, questions and the notebook keep working.",
     ia_max_tokens: "The output token limit cut the answer short.",
     ia_contexto: "The conversation went past the model's context window. Open a new conversation.",
     ia_recusa: "The model refused the request.",
