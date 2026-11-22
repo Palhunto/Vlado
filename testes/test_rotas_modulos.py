@@ -41,8 +41,7 @@ OPERACOES = {
     'cobertura', 'codex-caderno-previa', 'codex-cancelar', 'codex-corpus-previa', 'codex-desligar',
     'codex-diligencias-previa', 'codex-documentos-cadastrar', 'codex-eventos', 'codex-listar',
     'codex-observacoes', 'codex-original', 'codex-perguntar', 'codex-retomar', 'codex-status',
-    'comparar-documentos', 'comparar-evidencias', 'contas-atualizar', 'contas-criar', 'contas-desativar',
-    'contas-listar', 'contas-reativar', 'contas-recuperar', 'continuidade-resumo', 'diligencias-atualizar',
+    'comparar-documentos', 'comparar-evidencias', 'continuidade-resumo', 'diligencias-atualizar',
     'diligencias-criar', 'diligencias-listar', 'diligencias-original', 'diligencias-responder',
     'entrevistas-detalhe', 'entrevistas-editar', 'entrevistas-exportar', 'entrevistas-lacunas',
     'entrevistas-listar', 'entrevistas-preparar', 'entrevistas-responder', 'excluir', 'fontes-web-abrir',
@@ -60,10 +59,12 @@ OPERACOES = {
 
 
 class RotasModulosTest(unittest.TestCase):
-    def test_lista_branca_tem_as_137_operacoes(self):
-        # The 114 of before, the four `caso-*` (contrato de contas, 5.6), seven `conta-*` (5.4) and twelve `equipe-*` (5.5).
-        self.assertEqual(len(OPERACOES), 137)
-        self.assertEqual(len(interface_pesquisa.OPERACOES_API), 137, 'operação repetida na lista branca')
+    def test_lista_branca_tem_as_131_operacoes(self):
+        # The 114 of before without the six `contas-*`, withdrawn with the invitation by e-mail (P30), plus the four
+        # `caso-*` (contrato de contas, 5.6), seven `conta-*` (5.4) and twelve `equipe-*` (5.5).
+        self.assertEqual(len(OPERACOES), 131)
+        self.assertEqual(len(interface_pesquisa.OPERACOES_API), 131, 'operação repetida na lista branca')
+        self.assertFalse([o for o in interface_pesquisa.OPERACOES_API if o.startswith('contas-')])
         self.assertEqual(set(interface_pesquisa.OPERACOES_API), OPERACOES)
 
     def test_publicas_ficam_fora_da_lista_com_sessao(self):
@@ -73,7 +74,6 @@ class RotasModulosTest(unittest.TestCase):
         # Ramos de do_POST, na ordem do código; o que sobra vai para executar.
         ramos = {
             'sessao-sair': {'sessao-sair'},
-            'contas': set(interface_pesquisa.CONTAS_OPERACOES),
             'downloads': set(rotas_downloads.OPERACOES),
             'captura web': {fontes_web.CAPTURAR},
             'gestao': set(rotas_gestao.OPERACOES),

@@ -3,8 +3,8 @@
 Aqui ficam quem chama (a conta relida do armazenamento a cada requisição, com a redação e as
 apurações ao alcance), as operações públicas antes da sessão (entrar, ativar, primeiro
 administrador), as ``conta-*`` (cada pessoa sobre a própria conta: perfil, senha e sessões; o id
-de outra conta nunca é aceito) e a gestão de contas ``contas-*``, que só o dono alcança e só sobre
-a própria redação (operações em retirada: saem quando a tela Equipe entrar). O que cada papel alcança é
+de outra conta nunca é aceito). A gestão das outras contas da redação fica em ``rotas_equipe``; as
+antigas ``contas-*`` saíram com o convite por e-mail. O que cada papel alcança é
 decidido num lugar só, ``autorizacao.conferir``; este módulo não lê o papel para autorizar.
 Origem, CSRF e leitura do corpo continuam no servidor; este módulo nunca lê nem grava chaves de API.
 """
@@ -24,10 +24,8 @@ import rascunhos
 import registro_acesso
 import rotas_equipe
 
-# Account management in withdrawal (dono only, own newsroom) and what the legacy guest profile may call:
-# the guest column of the matrix (`autorizacao.MATRIZ`) is exactly OPERACOES_CONVIDADO.
-CONTAS_OPERACOES = ('contas-listar', 'contas-criar', 'contas-atualizar', 'contas-desativar', 'contas-reativar',
-                    'contas-recuperar')
+# What the legacy guest profile may call: the guest column of the matrix (`autorizacao.MATRIZ`) is exactly
+# OPERACOES_CONVIDADO plus the own account (`CONTA_PROPRIA`).
 OPERACOES_CONVIDADO = ('codex-status', 'codex-listar', 'codex-perguntar', 'codex-eventos', 'codex-cancelar',
                        'codex-retomar', 'codex-original', 'sessao-sair', *rascunhos.OPERACOES)
 # Guest operations on an existing conversation: the conversation's case is checked on every call.
@@ -110,11 +108,6 @@ def conta_propria(root, operation, data, principal, ip=None, origem=None):
         return {'encerradas': acesso.encerrar_outras_sessoes(root, conta, atual),
                 'sessoes': acesso.sessoes_da_conta(root, conta, atual)}
     return {'sessoes': acesso.sessoes_da_conta(root, conta, atual)}
-
-
-def _como_antes(registro):
-    """An account as the `contas-*` screen knows it: the dono under the old name `admin`."""
-    return {**registro, 'papel': 'admin' if registro.get('papel') == 'dono' else registro.get('papel')}
 
 
 class RotasContas:
@@ -269,60 +262,6 @@ class RotasContas:
                                       motivo=getattr(exc, 'motivo', 'validacao'), codigo=getattr(exc, 'codigo', None),
                                       alvo=data.get('conta') if isinstance(data.get('conta'), str) else None)
             raise
-
-    def _contas(self, operation, data, principal):
-        """Account management (admin only, hosted mode). A refused operation is audited (`admin_recusada`)."""
-        try:
-            return self._contas_executar(operation, data, principal)
-        except (acesso.SenhaIncorreta, acesso.Bloqueado):
-            raise  # already audited where the password is checked (`acesso.confirmar_senha`)
-        except (ValueError, OSError) as exc:
-            registro_acesso.registrar('admin_recusada', 'falha', principal.get('conta'),
-                                      motivo=getattr(exc, 'motivo', 'validacao'), codigo=getattr(exc, 'codigo', None),
-                                      alvo=data.get('id') if isinstance(data.get('id'), str) else None)
-            raise
-
-    def _contas_executar(self, operation, data, principal):
-        """Account management (dono only, own newsroom). Activation links are returned once, never stored.
-
-        Every account id is looked up inside the caller's newsroom: one of another newsroom reads as unknown.
-        The old interface still speaks `admin`: it is accepted on the way in and given back on the way out.
-
-        While these operations exist they ask the password of who does it (field `senha`) wherever the team's do
-        (contract, 5.15): creating a dono, promoting to dono, changing the role of a dono, deactivating a dono and
-        every recovery. The check is the same one (`acesso.confirmar_senha`): the name of the operation is not a
-        way around it. And they no longer give the legacy `convidado` profile to an account that is not one."""
-        root, por, redacao = self.server.root, principal['conta'], principal['organizacao']['id']
-        senha = {'confirmar': True, 'senha': data.get('senha'), 'ip': self._ip()}
-        if operation == 'contas-listar':
-            return {'contas': [_como_antes(c) for c in acesso.listar(root, redacao)],
-                    'eventos': acesso.eventos(root, 50, redacao)}
-        if operation in ('contas-criar', 'contas-atualizar') and data.get('casos') is not None:
-            casos = data.get('casos')
-            disponiveis = set(principal['casos'])  # the dono's reach: the cases of the own newsroom, and no other
-            if not isinstance(casos, list) or not all(isinstance(c, str) for c in casos) or not set(casos) <= disponiveis:
-                raise ValueError('Escolha apurações existentes para a conta.')
-        horas = data.get('horas', acesso.ATIVACAO_HORAS)
-        if operation == 'contas-criar':
-            papel = data.get('papel', 'convidado')
-            registro, token = acesso.criar_conta(root, data.get('nome'), data.get('login'), papel=papel,
-                                                 casos=data.get('casos') or [], cota_diaria=data.get('cota_diaria', 20),
-                                                 horas=horas, por=por, organizacao=redacao, **senha)
-            return {'conta': _como_antes(registro), 'link': f'{self.server.origin}/ativar/{token}'}
-        if operation == 'contas-recuperar':
-            registro, token = acesso.recuperar(root, data.get('id'), por=por, horas=horas, organizacao=redacao, **senha)
-            return {'conta': _como_antes(registro), 'link': f'{self.server.origin}/ativar/{token}'}
-        if operation == 'contas-desativar':
-            registro = acesso.desativar(root, data.get('id'), por=por, organizacao=redacao, **senha)
-            self._parar_execucoes(registro['id'], ())
-            return {'conta': _como_antes(registro)}
-        if operation == 'contas-reativar':
-            return {'conta': _como_antes(acesso.reativar(root, data.get('id'), por=por, organizacao=redacao))}
-        campos = {k: data[k] for k in ('nome', 'papel', 'casos', 'cota_diaria') if data.get(k) is not None}
-        registro = acesso.atualizar(root, data.get('id'), por=por, organizacao=redacao, **campos, **senha)
-        if registro.get('casos') is not None:  # not a dono: executions on cases it no longer reaches stop
-            self._parar_execucoes(registro['id'], registro.get('casos') or ())
-        return {'conta': _como_antes(registro)}
 
     def _parar_execucoes(self, conta_id, casos_mantidos):
         """A deactivated account, or a case taken away, must not keep spending the API in the background."""
