@@ -60,6 +60,7 @@
       <button id="ver-quadros" type="button" aria-pressed="false" aria-controls="area-quadros">Quadros</button>
       <button id="ver-apuracao" type="button" aria-pressed="false" aria-controls="area-apuracao">Caderno</button>
       <button id="ver-diligencias" type="button" aria-pressed="false" aria-controls="area-diligencias">Pedidos e prazos</button>
+      <button id="ver-nova" type="button" aria-pressed="false" aria-controls="area-nova" hidden>Nova apuração</button>
       <button id="ver-cadastro" type="button" aria-pressed="false" aria-controls="area-cadastro" hidden>Cadastrar documentos</button>
       <button id="ver-caderno" type="button" aria-pressed="false" aria-controls="area-caderno" hidden>Trechos com fonte</button>
       <button id="ver-gerenciar" type="button" aria-pressed="false" aria-controls="area-gerenciar" hidden>Apurações e lixeira</button>
@@ -191,6 +192,20 @@
       <p id="caderno-status" role="status" aria-live="polite">Selecione uma apuração.</p><p id="caderno-erro" role="alert" hidden></p><div id="caderno-resultados"></div>
       <nav class="pagination" aria-label="Páginas do caderno"><button id="caderno-anterior" type="button" class="secondary" disabled>Anterior</button><span id="caderno-intervalo"></span><button id="caderno-proximo" type="button" class="secondary" disabled>Próxima</button></nav>
     </section>
+    <section id="area-nova" aria-labelledby="area-titulo" hidden>
+      <nav id="nova-etapas-1" class="nova-etapas" aria-label="Etapas da nova apuração" hidden></nav>
+      <form id="nova-form" class="nova-cartao" novalidate>
+        <label>Nome da apuração<input id="nova-nome" maxlength="200" autocomplete="off" required aria-describedby="nova-nome-dica"><span id="nova-nome-dica" class="small">Ex.: Transporte escolar em Vila Serena</span></label>
+        <label>Natureza dos documentos<select id="nova-natureza"><option value="publicos">Documentos públicos</option><option value="sinteticos">Materiais sintéticos</option></select></label>
+        <fieldset class="nova-fontes">
+          <legend>De onde vêm as fontes?</legend>
+          <label class="nova-opcao"><input type="radio" name="nova-fontes" value="somente_documental" checked><span class="nova-opcao-texto">Só documentos<span class="small">Padrão. Nada é buscado na internet.</span></span></label>
+          <label class="nova-opcao"><input type="radio" name="nova-fontes" value="documentos_web"><span class="nova-opcao-texto">Documentos e um site<span class="small">Você indica o site; o Vlado só captura páginas dele, a seu pedido.</span></span></label>
+        </fieldset>
+        <label id="nova-site-campo" hidden>Endereço do site<input id="nova-site" maxlength="253" placeholder="prefeitura.sp.gov.br" translate="no" autocomplete="off" spellcheck="false" autocapitalize="none" aria-describedby="nova-site-dica"><span id="nova-site-dica" class="small">Só o domínio, exato. Escolhido só agora: depois de criada, a apuração não troca de site.</span></label>
+        <div class="actions nova-acoes"><button id="nova-cancelar" type="button" class="secondary">Cancelar</button><button id="nova-continuar" type="submit">Continuar para documentos</button></div>
+      </form>
+    </section>
     <section id="area-cadastro" aria-labelledby="cadastro-titulo" hidden>
     <div class="workflow" aria-label="Fluxo de entrada"><span class="current">1 · Cadastrar e conferir</span><span>2 · Perguntar à IA</span><span>3 · Conferir a resposta e as fontes</span></div>
     <div class="panel">
@@ -272,9 +287,10 @@
       <p class="small path" id="contexto-rodada">Nenhuma análise selecionada.</p>
     </section>
     <div id="area-documentos">
+    <nav id="nova-etapas-2" class="nova-etapas" aria-label="Etapas da nova apuração" hidden></nav>
     <select id="documentos-aba" hidden aria-label="Visualização dos documentos"><option value="acervo">Acervo cadastrado</option><option value="pesquisa">Pesquisar no conteúdo</option></select>
     <nav class="mesa-tabs" aria-label="Documentos"><button id="mesa-aba-acervo" type="button" aria-pressed="true">Acervo cadastrado</button><button id="mesa-aba-pesquisa" type="button" aria-pressed="false">Pesquisar no conteúdo</button></nav>
-    <section id="mesa-acervo" aria-label="Acervo cadastrado"><div class="docs-topo"><p id="docs-contagem" class="docs-contagem" role="status"></p><label class="docs-busca">Encontrar documento<input id="mesa-filtrar-documento" type="search" name="nome_documento" placeholder="Busque pelo nome…" autocomplete="off"></label></div><div id="documentos-zona" data-requer="cadastrar"></div><div id="documentos-envio"></div><div id="documentos-recibo" class="docs-recibo" tabindex="-1" hidden></div><div class="mesa-acervo-toolbar"><label>Leitura<select id="mesa-filtrar-leitura"><option value="todos">Todos os documentos</option><option value="limitacoes">Com limitações de extração</option></select></label><button id="mesa-atualizar-acervo" type="button" class="secondary">Atualizar acervo</button></div><p id="mesa-acervo-status" role="status" aria-live="polite"></p><p id="mesa-acervo-erro" role="alert" hidden></p><div id="mesa-acervo-lista"></div><div class="mesa-acervo-next"><p>Acervo conferido? Explore o que os documentos permitem afirmar.</p><button id="mesa-perguntar" type="button">Perguntar aos documentos →</button></div></section>
+    <section id="mesa-acervo" aria-label="Acervo cadastrado"><div class="docs-topo"><p id="docs-contagem" class="docs-contagem" role="status"></p><label class="docs-busca">Encontrar documento<input id="mesa-filtrar-documento" type="search" name="nome_documento" placeholder="Busque pelo nome…" autocomplete="off"></label></div><div id="nova-aviso" class="nova-aviso" hidden><p class="small">A apuração é criada no primeiro envio. Antes disso, nada fica guardado.</p><button id="nova-voltar" type="button" class="nova-voltar">‹ Nome e fontes</button></div><div id="documentos-zona" data-requer="cadastrar"></div><div id="documentos-envio"></div><div id="documentos-recibo" class="docs-recibo" tabindex="-1" hidden></div><div class="mesa-acervo-toolbar"><label>Leitura<select id="mesa-filtrar-leitura"><option value="todos">Todos os documentos</option><option value="limitacoes">Com limitações de extração</option></select></label><button id="mesa-atualizar-acervo" type="button" class="secondary">Atualizar acervo</button></div><p id="mesa-acervo-status" role="status" aria-live="polite"></p><p id="mesa-acervo-erro" role="alert" hidden></p><div id="mesa-acervo-lista"></div><div class="mesa-acervo-next"><p>Acervo conferido? Explore o que os documentos permitem afirmar.</p><button id="mesa-perguntar" type="button">Perguntar aos documentos →</button></div></section>
     <div id="mesa-pesquisa">
     <section class="panel" aria-label="Pesquisar documentos">
       <details id="busca-tecnica" open><summary>Versão da busca nestes documentos</summary><div class="index-selection"><label>Versão da busca documental<select id="geracao" disabled><option value="">Selecione a versão</option></select></label><p class="small">Cada versão pesquisa os documentos preservados da análise selecionada. A seleção continua explícita.</p></div></details>

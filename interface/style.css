@@ -2615,3 +2615,28 @@ ins.comparar-incluido,p.comparar-incluido{
 .estado-sinal-texto{flex:none;width:var(--espaco-4);text-align:center;font-weight:700}
 body[data-suspensa] #conteudo>:not(.estado-suspensa),body[data-suspensa] .sidebar,body[data-suspensa] #mesa-menu,
 body[data-suspensa] .persistent-context,body[data-suspensa] #mesa-configuracoes,body[data-suspensa] #mesa-versao{display:none!important}
+
+/* Nova apuração (docs/design/componentes.md#nova-apuracao): o passo 1 e a tela Documentos no modo "apuração por criar". Só tokens. */
+.nova-etapas{display:flex;flex-wrap:wrap;gap:var(--espaco-4);margin:0 0 var(--espaco-4);font-size:var(--text-md);color:var(--theme-muted)}
+.nova-etapa b{font-weight:600}
+.nova-etapa[aria-current=step]{color:var(--theme-text);font-weight:600}
+.nova-etapa-celular{display:none}
+.nova-cartao{display:flex;flex-direction:column;gap:var(--espaco-4);max-width:720px;padding:var(--espaco-6);background:var(--theme-surface);border:1px solid var(--theme-line);border-radius:var(--raio-cartao)}
+.nova-cartao fieldset{display:flex;flex-direction:column;gap:var(--espaco-2);margin:0;padding:0;border:0;min-width:0}
+.nova-cartao legend{padding:0;margin:0 0 var(--espaco-2);font-weight:600}
+.nova-opcao{flex-direction:row;align-items:flex-start;gap:var(--espaco-3);font-weight:400}
+.nova-opcao input{flex:none;width:var(--espaco-5);height:var(--espaco-5);min-height:0;margin-top:var(--espaco-1)}
+.nova-opcao-texto{display:flex;flex-direction:column;gap:var(--espaco-1)}
+.nova-acoes{display:flex;justify-content:flex-end;gap:var(--espaco-3)}
+.nova-aviso{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--espaco-2) var(--espaco-4);margin:0 0 var(--espaco-3);color:var(--theme-muted)}
+.nova-aviso p{margin:0}
+.nova-voltar{min-height:var(--espaco-6);padding:0;border:0;background:none;color:var(--theme-accent);font-size:var(--text-md);font-weight:600;text-decoration:underline}
+.nova-voltar:hover{background:none;color:var(--theme-primary-hover)}
+body[data-nova="passo2"] #area-documentos :is(.mesa-tabs,.docs-topo,.mesa-acervo-toolbar,#mesa-acervo-lista,.mesa-acervo-next,#mesa-acervo-status,#mesa-acervo-erro){display:none}
+@media (max-width:719px) {
+  .nova-etapas .nova-etapa{display:none}
+  .nova-etapa-celular{display:inline}
+  .nova-acoes{flex-direction:column-reverse}
+  .nova-acoes button{width:100%}
+  .nova-cartao{padding:var(--espaco-4)}
+}

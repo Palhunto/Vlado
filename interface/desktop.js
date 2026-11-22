@@ -410,6 +410,9 @@
   // Área de envio de Documentos (W02): envia para a apuração escolhida. Sem o envio em fluxo no servidor, o caminho é a tela de Nova apuração.
   if(document.body.dataset.papel==='convidado')$('documentos-zona').hidden=true;
   else window.Documentos.zona($('documentos-zona'),{aoEscolher:files=>{
+    // Passo 2 da Nova apuração: o primeiro envio cria a apuração (cadastrar com novo: true, sem caso) e a tela passa a ela.
+    if(window.NovaApuracao.ativa()){window.NovaApuracao.enviar(files,{aoConcluir:async()=>{await loadInventory(true);text('mesa-acervo-status','Documentos registrados. Aguardando sua pergunta.');},
+      depoisDeCriar:async()=>{await loadInventory(true);},aoIndisponivel:()=>{text('mesa-acervo-status','O envio por arquivo não está disponível neste servidor. Atualize a Mesa e tente de novo.');}});return;}
     if(!current()){$('contexto-caso').focus();text('mesa-acervo-status','Escolha uma apuração para enviar documentos.');return;}
     window.Documentos.enviar(files,{caso:current(),alvo:$('documentos-envio'),alvoRecibo:$('documentos-recibo'),
       aoConcluir:async()=>{await loadInventory(true);if(typeof loadCatalog==='function')await loadCatalog();text('mesa-acervo-status','Documentos registrados. Aguardando sua pergunta.');},
@@ -417,7 +420,7 @@
         // Sem o envio em fluxo no servidor, a escolha segue para a tela de Nova apuração (envio em JSON), sem perder os arquivos.
         try{const lote=new DataTransfer();for(const file of files)lote.items.add(file);$('cadastro-arquivos').files=lote.files;
           $('cadastro-arquivos').dispatchEvent(new Event('change'));}catch{/* o navegador não deixa: a pessoa escolhe de novo */}
-        $('inicio-adicionar').click();}});
+        showArea('cadastro');$('cadastro-arquivos').focus();}});
   }});
   $('mesa-perguntar').addEventListener('click',()=>{if(!current()){$('contexto-caso').focus();return;}navigate('codex');window.abrirComposicaoMesa?.();});
   $('mesa-aba-acervo').addEventListener('click',()=>chooseTab('acervo'));

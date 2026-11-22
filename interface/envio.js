@@ -161,7 +161,7 @@
       const texto = no('span');
       texto.append(`${t('Recibo do lote')}: `, forte, `${pendentes}. ${t('É conferido antes da primeira pergunta.')}`);
       const ver = no('a', 'envio-link', t('Ver recibo')); ver.href = '#cadastro-recibo';
-      ver.addEventListener('click', evento => { evento.preventDefault(); ctx.aoVerRecibo?.(); });
+      ver.addEventListener('click', evento => { evento.preventDefault(); ctx.aoVerRecibo?.(); window.dispatchEvent(new Event('envio-recibo-visto')); });
       recibo.replaceChildren(texto, ver);
     }
     function mostrarAcoes(lista_) {
@@ -224,7 +224,7 @@
     }
   }
 
-  async function enviar({escopo, arquivos, alvo, alvoRecibo}) {
+  async function enviar({escopo, arquivos, alvo, alvoRecibo, aoCriar}) {
     const ctx = {linhas: [], cancelado: false, cancelarEnvio: null, redesenhar: () => ui.desenhar(), aoVerRecibo: null};
     ctx.linhas = Array.from(arquivos).map(arquivo => ({arquivo, nome: arquivo.name, bytes: arquivo.size, estado: 'aguardando', fracao: 0}));
     for (const linha of ctx.linhas) {
@@ -264,7 +264,7 @@
           continue;
         }
         ctx.cancelarEnvio = null;
-        if (lote.caso) { resultado.caso_id = lote.caso; if (escopo.novo && !escopo.caso) casoAceito = lote.caso; }   // o identificador que o servidor escolheu
+        if (lote.caso) { resultado.caso_id = lote.caso; if (escopo.novo && !escopo.caso && !casoAceito) { casoAceito = lote.caso; try { await aoCriar?.(casoAceito); } catch { /* a tela que quer saber da criação não derruba o envio */ } } }   // o identificador que o servidor escolheu
         ui.mostrarAcoes([]);
         for (const linha of linhas) linha.fracao = 1;
         const dosArquivos = linhas;   // o índice do lote é a posição no manifesto
