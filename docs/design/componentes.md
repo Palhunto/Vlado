@@ -858,6 +858,14 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 - "Até 50 MB por arquivo" continua a ser o que a pessoa lê. A Mesa divide o envio em lotes de até 50 MB e 100 arquivos, e recusa no navegador o arquivo acima de 50 MB.
 - Textos do resultado: "✓ Pronto, 14 pág."; "Lida por OCR: confira números" quando o texto veio do OCR; "Lida em parte: confira as páginas sem texto no original." quando parte das páginas ficou sem texto (sinal parcial, `--theme-warning` 600 nos dois); "Sem texto lido. O original ficou guardado." para a imagem sem leitura, até existir a rota de "Ler com OCR".
 
+**Exceções declaradas, por falta de servidor** *(22/11/2026, a pedido do Maestro)*. A conferência da tela Documentos não barra por elas. Cada uma volta ao desenho aprovado quando o servidor existir, e a tela é conferida de novo nesse ponto.
+
+| O que a prancha mostra | O que a tela mostra até lá | Volta quando |
+|---|---|---|
+| Busca "Buscar no texto dos documentos" no topo, antes da primeira pergunta (W02, regra 4) | a busca fica como a segunda aba, "Pesquisar no conteúdo" | houver rota de busca no texto do acervo sem análise |
+| "12 de 60" ao lado do título (documentos usados e o limite da redação, PROD-05) | só a contagem ("12 documentos"), sem limite; o estado "Limite" da tabela acima não aparece | o servidor informar o limite de documentos da redação |
+| "Ler com OCR" (secundário) na imagem sem leitura | "○ Imagem sem leitura" sem ação; no envio, "Sem texto lido. O original ficou guardado." | houver rota para pedir OCR de um documento |
+
 ---
 
 ## Regras dos wireframes
