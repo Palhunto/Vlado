@@ -1,7 +1,10 @@
 """Recursos do servidor sob carga (CONF-03): teto de conexões e conversas ociosas fora da memória.
 
 - O servidor atende até ``MAXIMO_CONEXOES`` conexões ao mesmo tempo, uma thread cada; acima disso
-  responde 503 na hora, sem abrir thread, e a vaga volta quando uma conexão termina.
+  responde 503 na hora, sem abrir thread, e a vaga volta quando uma conexão termina. Um cliente lento
+  acima do teto não atrasa o 503 dos outros e é fechado no prazo ou no teto de bytes (B1).
+- A linha do pedido e os cabeçalhos têm prazo total, mesmo chegando um byte por vez; conexão parada
+  sai no mesmo prazo e devolve a vaga.
 - Conversa ociosa sai da memória (tempo sem uso, e a mais antiga quando passa do teto) e volta do
   disco no próximo uso, como depois de uma reinicialização; conversa em execução ou recebendo
   documentos nunca sai.
@@ -54,6 +57,78 @@ class TetoDeConexoesTest(unittest.TestCase):
             return resposta.status, resposta.getheader('Retry-After')
         finally:
             con.close()
+
+    def conectar(self):
+        conexao = socket.create_connection(('127.0.0.1', self.server.server_port), timeout=5)
+        self.addCleanup(conexao.close)
+        return conexao
+
+    @staticmethod
+    def gotejar_ate_fechar(conexao, intervalo, prazo):
+        """A byte every ``intervalo`` s (the headers never end) until the server closes the connection
+        (sending fails); the seconds it took, or None after ``prazo``."""
+        inicio = time.monotonic()
+        while time.monotonic() - inicio < prazo:
+            try:
+                conexao.send(b'a')
+            except OSError:
+                return time.monotonic() - inicio
+            time.sleep(intervalo)
+        return None
+
+    def em_paralelo(self, funcao, *args):
+        resultado = []
+        thread = threading.Thread(target=lambda: resultado.append(funcao(*args)), daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 15)
+        return thread, resultado
+
+    def test_cliente_lento_acima_do_teto_nao_atrasa_os_outros(self):
+        self.parada(), self.parada()
+        time.sleep(0.3)  # both slots taken
+        with mock.patch.object(interface_pesquisa, 'PRAZO_RECUSA', 1.5):
+            lenta = self.conectar()
+            lenta.send(b'G')
+            self.assertTrue(lenta.recv(1024).startswith(b'HTTP/1.1 503'))  # its 503 at once too
+            thread, fechada = self.em_paralelo(self.gotejar_ate_fechar, lenta, 0.3, 10)
+            time.sleep(0.3)
+            for _ in range(3):  # B1: these waited for the slow one to stop (6 s and more)
+                inicio = time.monotonic()
+                self.assertEqual(self.saude(), (503, '2'))
+                self.assertLess(time.monotonic() - inicio, 1)
+            thread.join(12)
+        self.assertIsNotNone(fechada[0], 'a conexão recusada e lenta não foi fechada')
+        self.assertLess(fechada[0], 4)  # 1.5 s to read it, then closed
+
+    def test_recusada_que_despeja_bytes_e_fechada_no_teto(self):
+        self.parada(), self.parada()
+        time.sleep(0.3)
+        with mock.patch.object(interface_pesquisa, 'TETO_BYTES_RECUSA', 64 * 1024), \
+                mock.patch.object(interface_pesquisa, 'PRAZO_RECUSA', 60):
+            despejo = self.conectar()
+            inicio = time.monotonic()
+            with self.assertRaises(OSError):  # closed by the server: sending fails
+                for _ in range(1000):  # 64 MB at most
+                    despejo.sendall(b'x' * 65536)
+            self.assertLess(time.monotonic() - inicio, 4)  # at the byte ceiling, long before the deadline
+            self.assertEqual(self.saude(), (503, '2'))
+
+    def test_cabecalhos_com_prazo_total_mesmo_gota_a_gota(self):
+        with mock.patch.object(interface_pesquisa, 'PRAZO_CABECALHOS', 1.0):
+            parada, gotejando = self.parada(), self.conectar()
+            thread, fechada = self.em_paralelo(self.gotejar_ate_fechar, gotejando, 0.2, 10)
+            time.sleep(0.4)
+            self.assertEqual(self.saude(), (503, '2'))  # both slots taken
+            thread.join(12)
+            parada.settimeout(5)
+            self.assertEqual(parada.recv(1), b'')  # the idle one: closed quietly, in the same deadline
+            limite = time.monotonic() + 3
+            while self.saude()[0] != 200:
+                self.assertLess(time.monotonic(), limite, 'as vagas não voltaram depois do prazo dos cabeçalhos')
+                time.sleep(0.1)
+        # A byte every 0.2 s never trips the 60 s of each read; the deadline is for the headers in all.
+        self.assertIsNotNone(fechada[0], 'a conexão que manda um byte por vez não foi fechada')
+        self.assertLess(fechada[0], 3)
 
     def test_acima_do_teto_503_na_hora_e_a_vaga_volta(self):
         self.assertEqual(self.saude()[0], 200)
@@ -114,8 +189,13 @@ class ConversasOciosasTest(unittest.TestCase):
         self.assertNotIn(ociosa, self.manager.contexts)
 
     def test_acima_do_teto_sai_a_menos_usada(self):
+        class Parado:  # T1: the Windows clock ties within 16 ms; the order of use decides, never the id
+            monotonic = staticmethod(lambda: 1000.0)
+
+            def __getattr__(self, nome):
+                return getattr(time, nome)
         segunda, terceira = self.copia(), self.copia()
-        with mock.patch.object(codex_apuracao, 'MAXIMO_CONTEXTOS', 2):
+        with mock.patch.object(codex_apuracao, 'time', Parado()), mock.patch.object(codex_apuracao, 'MAXIMO_CONTEXTOS', 2):
             self.manager.eventos(terceira)
             self.manager.eventos(segunda)
             self.manager.eventos(self.primeira)  # the least recently used goes first

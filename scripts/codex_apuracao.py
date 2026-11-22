@@ -5,6 +5,7 @@ import base64
 from contextlib import contextmanager
 import hashlib
 from datetime import datetime, timezone
+import itertools
 import json
 from pathlib import Path
 import re
@@ -164,6 +165,7 @@ class Conversas:
         self.lock = threading.RLock()
         self.condition = threading.Condition(self.lock)
         self.contexts = {}
+        self._usos = itertools.count(1)  # order of use: the clock ties within 16 ms on Windows
         self.loaded = set()
         self.stopping = False
         self.workers = []
@@ -239,7 +241,7 @@ class Conversas:
                     self._event(identifier, 'erro', {'mensagem': 'Backend reiniciado durante a execução; saída parcial preservada.'})
                     self._save(identifier)
             ctx = self.contexts[identifier]
-            ctx['usado_em'] = time.monotonic()
+            ctx['usado_em'], ctx['uso'] = time.monotonic(), next(self._usos)
             self._descartar_ociosos(identifier)
             lixeira.conferir_disponivel(self.root, ctx['meta']['caso'], conversa=identifier)
             return ctx
@@ -253,10 +255,10 @@ class Conversas:
         """Drop idle conversations from memory (CONF-03): unused for OCIOSO_CONTEXTO, and the least
         recently used past MAXIMO_CONTEXTOS. ``manter`` is the one being used now. Caller holds the lock."""
         agora_ = time.monotonic()
-        livres = sorted((ctx.get('usado_em', 0.0), ident) for ident, ctx in self.contexts.items()
-                        if ident != manter and self._descartavel(ctx))
+        livres = sorted((ctx.get('uso', 0), ctx.get('usado_em', 0.0), ident)
+                        for ident, ctx in self.contexts.items() if ident != manter and self._descartavel(ctx))
         excesso = len(self.contexts) - MAXIMO_CONTEXTOS
-        for usado_em, ident in livres:
+        for _, usado_em, ident in livres:
             if excesso > 0 or agora_ - usado_em > OCIOSO_CONTEXTO:
                 del self.contexts[ident]
                 excesso -= 1
@@ -534,7 +536,8 @@ class Conversas:
                        'corpus_id': inventory['corpus_id'], 'criada_em_utc': agora(),
                        'estado': 'pronto', 'thread_id': None, 'rodadas': [], 'turn_id': None,
                        'modelo': None, 'dono': dono, 'politica': 'read-only; on-request; sem web/conectores/shell'},
-                       'events': [], 'busy': False, 'usado_em': time.monotonic()}
+                       'events': [], 'busy': False, 'usado_em': time.monotonic(),
+                       'uso': next(self._usos)}
                 self.contexts[identifier] = ctx
                 if feedback:
                     ctx['meta']['rodada_base'] = feedback['conteudo']['rodada_origem']
