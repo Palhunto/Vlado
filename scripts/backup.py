@@ -66,6 +66,9 @@ MARCADOR_IDADE_MAX_S = 7200.0
 RETENCAO_PADRAO = 'diarios=7,semanais=4,mensais=6'
 PREFIXO = 'vlado'
 SUFIXO_CIFRADO = '.tar.gz.age'
+# Restauração pela entrada padrão (`restaurar -`): o fluxo é gravado em disco, em blocos, antes de conferir (a conferência
+# lê o arquivo duas vezes). Acima deste tamanho a restauração recusa, com mensagem, em vez de encher o disco.
+STDIN_MAX_GB_PADRAO = 10.0
 
 
 def _pastas(incluir_segredos: bool) -> tuple[str, ...]:
@@ -616,14 +619,57 @@ def restaurar(root: Path, arquivo, substituir: bool = False, outro_ambiente: boo
               identidade: Path | None = None, trabalho: Path | None = None) -> list[str]:
     root = Path(root)
     if arquivo == '-':
-        with tarfile.open(fileobj=io.BytesIO(sys.stdin.buffer.read()), mode='r:gz') as pacote:
-            return _restaurar_pacote(root, pacote, substituir, outro_ambiente)
+        # Em fluxo, nunca o arquivo inteiro na memória (I6/J9): vai para um arquivo privado em disco, em blocos de
+        # 1 MiB e com teto de tamanho; some ao terminar, com ou sem erro.
+        with _entrada_em_disco(sys.stdin.buffer, trabalho) as caminho:
+            with tarfile.open(caminho, 'r:gz') as pacote:
+                return _restaurar_pacote(root, pacote, substituir, outro_ambiente)
     arquivo = Path(arquivo)
     if arquivo.name.endswith('.age'):
         with _aberto_decifrado(arquivo, identidade, trabalho) as pacote:
             return _restaurar_pacote(root, pacote, substituir, outro_ambiente)
     with tarfile.open(arquivo, 'r:gz') as pacote:
         return _restaurar_pacote(root, pacote, substituir, outro_ambiente)
+
+
+def _limite_stdin_bytes() -> int:
+    try:
+        gigas = float(os.environ.get('VLADO_BACKUP_STDIN_MAX_GB', '') or STDIN_MAX_GB_PADRAO)
+    except ValueError:
+        raise ValueError('VLADO_BACKUP_STDIN_MAX_GB precisa ser um número (GB).') from None
+    return int(max(gigas, 0.001) * (1 << 30))
+
+
+class _entrada_em_disco:
+    """Context manager: copies a stream to a private temporary file (0600, in `trabalho`) in 1 MiB blocks and
+    refuses past the size cap (VLADO_BACKUP_STDIN_MAX_GB, default 10 GB). Memory stays flat; the file is removed on exit."""
+
+    def __init__(self, origem, trabalho: Path | None, limite: int | None = None):
+        self.origem, self.trabalho = origem, trabalho
+        self.limite = _limite_stdin_bytes() if limite is None else limite
+
+    def __enter__(self) -> Path:
+        if self.trabalho:
+            Path(self.trabalho).mkdir(parents=True, exist_ok=True)
+        descritor, nome = tempfile.mkstemp(prefix='entrada-', suffix='.tar.gz', dir=self.trabalho)
+        self.caminho = Path(nome)
+        try:
+            total = 0
+            with os.fdopen(descritor, 'wb') as saida:
+                for bloco in iter(lambda: self.origem.read(1 << 20), b''):
+                    total += len(bloco)
+                    if total > self.limite:
+                        raise ValueError(f'A entrada padrão passa de {self.limite / (1 << 30):g} GB, o limite para restaurar '
+                                         'por ela (VLADO_BACKUP_STDIN_MAX_GB). Nada foi restaurado. Para um backup deste '
+                                         'tamanho, informe o arquivo (ou --do-destino) em vez de "-".')
+                    saida.write(bloco)
+        except BaseException:
+            self.caminho.unlink(missing_ok=True)
+            raise
+        return self.caminho
+
+    def __exit__(self, *_):
+        self.caminho.unlink(missing_ok=True)
 
 
 class _aberto_decifrado:
@@ -640,10 +686,16 @@ class _aberto_decifrado:
         if self.trabalho:
             Path(self.trabalho).mkdir(parents=True, exist_ok=True)
         self.pasta = Path(tempfile.mkdtemp(prefix='vlado-restauracao-', dir=self.trabalho))
-        os.chmod(self.pasta, 0o700)
-        self.plano = self.pasta / 'dados.tar.gz'
-        _decifrar(self.arquivo, self.identidade, self.plano)
-        self.pacote = tarfile.open(self.plano, 'r:gz')
+        try:
+            os.chmod(self.pasta, 0o700)
+            self.plano = self.pasta / 'dados.tar.gz'
+            _decifrar(self.arquivo, self.identidade, self.plano)
+            self.pacote = tarfile.open(self.plano, 'r:gz')
+        except BaseException:
+            # Chave errada, arquivo corrompido ou interrupção: o __exit__ não roda quando o __enter__ falha (J7),
+            # então apaga aqui a pasta (e o que a decifragem tenha deixado nela) para não acumular pastas em /trabalho/tmp.
+            shutil.rmtree(self.pasta, ignore_errors=True)
+            raise
         return self.pacote
 
     def __exit__(self, *_):

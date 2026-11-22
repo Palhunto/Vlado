@@ -10,11 +10,17 @@
 FROM python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df AS backup
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
-# Versões de bookworm observadas em 21/11/2026: age 1.1.1, rclone 1.60.1. Atualizações de segurança do Debian
-# entram a cada build.
+# Versões fixadas (J4): age 1.1.1 e rclone 1.60.1, as de bookworm em 21/11/2026. O `=1.1.1-1*` fixa a versão
+# do projeto e a revisão do Debian, mas deixa passar o sufixo de recompilação (`+b3`, que muda por arquitetura) e as
+# correções de segurança do Debian na mesma versão (`+deb12uN`). O build FALHA, de propósito, se o Debian passar a
+# oferecer outra versão: nada muda sozinho. Para subir de versão, troque aqui e em testes/test_dockerfile_endurecido.py
+# depois de ler as notas de lançamento (rclone: https://rclone.org/changelog/; age: github.com/FiloSottile/age).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends age rclone ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends "age=1.1.1-1*" "rclone=1.60.1+dfsg-2*" ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && age --version | grep -q '^1\.1\.1' \
+    && rclone version | head -1 | grep -q 'v1\.60\.1'
+
 # Mesmo uid do app: lê os volumes de dados (contas ficam em 0600, só do dono). As pastas de dados existem aqui,
 # do mesmo dono, para que um volume NOVO montado primeiro por este serviço (restauração num servidor novo) nasça
 # gravável pelo uid 10001 e o app, depois, o encontre com as permissões certas.
@@ -59,7 +65,67 @@ RUN pip install --no-cache-dir --require-hashes -r deploy/requirements.lock
 # `COPY . .`; pastas de agente, testes, docs, instalador, Android e dados ficam de fora mesmo que
 # alguém afrouxe o .dockerignore. Arquivo novo que a aplicação precise ler em execução: acrescente aqui
 # (testes/test_dockerfile_endurecido.py confere a lista).
-COPY scripts/ ./scripts/
+# Scripts: lista de inclusão por arquivo (I5). Entram os módulos que a Mesa importa em execução (o fecho de imports
+# de interface_pesquisa.py, que testes/test_dockerfile_endurecido.py recalcula) e os dois que o operador roda dentro
+# do contêiner (semear_ambiente.py e o seu dados_sinteticos.py; acesso.py já faz parte do fecho). Ficam de fora as
+# ferramentas de desenvolvimento e do Windows: gerar_instalador, vlado_lancador, demo_evidencias, preparar_notebook,
+# empacotar_entrega, verificar_projeto, montar_fluxo, selecionar_caso, achados (CLI do agente de chat); e backup.py, que vive na imagem `backup`.
+# Módulo novo que a Mesa importe: o teste acusa, e basta acrescentá-lo aqui.
+COPY scripts/acesso.py \
+     scripts/ambiente.py \
+     scripts/apagamento.py \
+     scripts/apuracao.py \
+     scripts/banco.py \
+     scripts/cadastrar_documentos.py \
+     scripts/caderno.py \
+     scripts/codex_apuracao.py \
+     scripts/comparador.py \
+     scripts/comum.py \
+     scripts/conferencia_redacao.py \
+     scripts/continuidade.py \
+     scripts/criar_caso.py \
+     scripts/dados_sinteticos.py \
+     scripts/diligencias.py \
+     scripts/entrevistas.py \
+     scripts/erros.py \
+     scripts/evidencias.py \
+     scripts/exportar_apuracao.py \
+     scripts/extrair_office.py \
+     scripts/extrair_pdf.py \
+     scripts/fluxo_codex.py \
+     scripts/fontes_web.py \
+     scripts/hipoteses.py \
+     scripts/indice_achados.py \
+     scripts/indice_sqlite.py \
+     scripts/inferencia_api.py \
+     scripts/interface_pesquisa.py \
+     scripts/limites.py \
+     scripts/linha_tempo.py \
+     scripts/lixeira.py \
+     scripts/mapa_relacoes.py \
+     scripts/nova_rodada.py \
+     scripts/ocr.py \
+     scripts/provedor_anthropic.py \
+     scripts/provedor_openai.py \
+     scripts/rascunhos.py \
+     scripts/registros_achados.py \
+     scripts/revisao_humana.py \
+     scripts/rotas_achados.py \
+     scripts/rotas_caderno.py \
+     scripts/rotas_contas.py \
+     scripts/rotas_conversa.py \
+     scripts/rotas_documentos.py \
+     scripts/rotas_downloads.py \
+     scripts/rotas_estaticas.py \
+     scripts/rotas_evidencia.py \
+     scripts/rotas_gestao.py \
+     scripts/rotas_redacao.py \
+     scripts/rotas_tabelas.py \
+     scripts/segredos.py \
+     scripts/semear_ambiente.py \
+     scripts/tabelas_apuracao.py \
+     scripts/trava_cadastro.py \
+     ./scripts/
 COPY interface/ ./interface/
 COPY prompts/ ./prompts/
 COPY modelos/ ./modelos/

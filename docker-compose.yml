@@ -42,6 +42,10 @@ services:
     # cada partida (Dockerfile). O /tmp em memória fica pequeno, só para o que não é volumoso.
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=${VLADO_TMP_TAMANHO:-64m}
+      # HOME do usuário do app (I8): o sistema de arquivos é somente leitura, então caches de bibliotecas e ferramentas
+      # (fontes, Tesseract, Ghostscript) precisam de um lugar gravável. Pequeno, em memória, noexec e dono vlado (uid 10001).
+      # Some a cada reinício. /var/tmp NÃO é gravável de propósito: os temporários vão para o volume tmp_vlado (TMPDIR).
+      - /home/vlado:rw,noexec,nosuid,nodev,size=${VLADO_HOME_TAMANHO:-16m},uid=10001,gid=10001,mode=0700
     logging: &rotacao_de_logs
       driver: json-file
       options:
@@ -132,6 +136,8 @@ services:
     pids_limit: 256
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m
+      # HOME do usuário (rclone e age escrevem cache e configuração; I8): pequeno, em memória, dono vlado.
+      - /home/vlado:rw,noexec,nosuid,nodev,size=16m,uid=10001,gid=10001,mode=0700
     logging: *rotacao_de_logs
     environment:
       VLADO_AMBIENTE: ${VLADO_AMBIENTE:?defina VLADO_AMBIENTE (homologacao, editorial ou demonstracao)}
@@ -197,6 +203,8 @@ services:
     pids_limit: 256
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m
+      # HOME do usuário (rclone e age escrevem cache e configuração; I8): pequeno, em memória, dono vlado.
+      - /home/vlado:rw,noexec,nosuid,nodev,size=16m,uid=10001,gid=10001,mode=0700
     logging: *rotacao_de_logs
     environment:
       VLADO_AMBIENTE: ${VLADO_AMBIENTE:?defina VLADO_AMBIENTE (homologacao, editorial ou demonstracao)}
