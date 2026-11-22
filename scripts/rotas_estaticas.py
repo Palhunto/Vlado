@@ -7,13 +7,35 @@ rotas. Fora desta lista, ``do_GET`` serve ``entrar.html`` em ``/entrar`` e ``/at
 ``/api/*`` em JSON.
 ``index.html`` leva o token da sessão e por isso nunca vai para cache; os demais revalidam
 por ETag, e os pacotes de terceiros pedidos com versão (``?v=…``) ficam em cache imutável.
+
+**Cache imutável por hash, sem passo de build** (combinado com o Lume, parte C):
+
+- ``versao(nome)`` são os 12 primeiros hex do sha256 do arquivo como é servido. Um arquivo pedido
+  com ``?v=<versao>`` vai com ``public, max-age=31536000, immutable``; sem ``v``, ou com um ``v``
+  que não bate com o conteúdo atual, revalida por ETag (``no-cache``), como antes.
+- Nos arquivos ``.css`` e ``.html`` servidos (``index.html`` e ``entrar.html`` incluídos), o servidor
+  troca ``__V:<nome>__`` pela versão desse arquivo. ``<nome>`` é o nome em ``ARQUIVOS`` (o caminho
+  sem a barra inicial, ``fonts/SourceSerif4-latin.woff2``) ou só o nome do arquivo, quando ele é
+  único (``SourceSerif4-latin.woff2``). A versão de um CSS é a do conteúdo já trocado: as fontes
+  entram no hash do CSS, e o CSS no do ``index.html``. Um nome que não está na lista fica como está.
+- ``__VERSOES__`` (no ``index.html`` e no ``entrar.html``) vira o JSON ``{nome: versão}`` de todos os
+  arquivos listados que existem, para montar a URL do que se carrega sob demanda.
+- Arquivo listado que ainda não existe no disco responde 404.
+- Compressão: com ``Accept-Encoding`` que aceita gzip, texto, JavaScript, JSON, SVG e manifesto vão
+  com ``Content-Encoding: gzip`` e ``Vary: Accept-Encoding``, comprimidos uma vez por versão e
+  guardados em memória; fontes e imagens nunca. O ETag é o do conteúdo sem comprimir. As páginas com
+  o token da sessão (``index.html``) não são comprimidas.
 """
 from __future__ import annotations
 
+from collections import Counter
+import gzip
 import hashlib
+import json
 from pathlib import Path
 import re
 import sys
+import threading
 from urllib.parse import urlsplit
 
 # Inside the PyInstaller bundle the interface lives next to the frozen modules (sys._MEIPASS).
@@ -61,7 +83,128 @@ ARQUIVOS = {'/': ('index.html', 'text/html; charset=utf-8'),
             '/caderno.css': ('caderno.css', 'text/css; charset=utf-8'),
             '/quadros.js': ('quadros.js', 'text/javascript; charset=utf-8'),
             '/analise.js': ('analise.js', 'text/javascript; charset=utf-8'),
-            '/indicador_salvamento.js': ('indicador_salvamento.js', 'text/javascript; charset=utf-8')}
+            '/indicador_salvamento.js': ('indicador_salvamento.js', 'text/javascript; charset=utf-8'),
+            # Fonts cut to Latin (the Lume's part C) and the Vitral's files (Onda 3, parts B and D):
+            # listed before they land; until then, 404.
+            '/fonts/SourceSerif4-latin.woff2': ('fonts/SourceSerif4-latin.woff2', 'font/woff2'),
+            '/fonts/SourceSans3-latin.woff2': ('fonts/SourceSans3-latin.woff2', 'font/woff2'),
+            '/dialogo.js': ('dialogo.js', 'text/javascript; charset=utf-8'),
+            '/estados.js': ('estados.js', 'text/javascript; charset=utf-8'),
+            '/envio.js': ('envio.js', 'text/javascript; charset=utf-8'),
+            '/componentes_o3.css': ('componentes_o3.css', 'text/css; charset=utf-8')}
+
+MARCADOR = re.compile(rb'__V:([0-9A-Za-z_./-]{1,160})__')
+VERSOES = b'__VERSOES__'
+COMPRIMIVEIS = ('text/javascript', 'application/javascript', 'application/json', 'image/svg+xml',
+                'application/manifest+json')
+_trava = threading.Lock()
+_lidos = {}  # name -> ((mtime_ns, size), bytes, hash of the bytes)
+_comprimidos = {}  # name -> (version, gzip bytes)
+
+
+def _ler(nome):
+    """(bytes, sha256 hex) of an interface file, read again only when it changes on disk."""
+    caminho = ASSETS / nome
+    estado = caminho.stat()
+    chave = (estado.st_mtime_ns, estado.st_size)
+    with _trava:
+        guardado = _lidos.get(nome)
+    if guardado is not None and guardado[0] == chave:
+        return guardado[1], guardado[2]
+    dados = caminho.read_bytes()
+    resumo = hashlib.sha256(dados).hexdigest()
+    with _trava:
+        _lidos[nome] = (chave, dados, resumo)
+    return dados, resumo
+
+
+def _nomes():
+    """Marker name -> name in ARQUIVOS: the name itself, and its file name when that is unique."""
+    nomes = {nome: nome for nome, _ in ARQUIVOS.values()}
+    vezes = Counter(Path(nome).name for nome in nomes)
+    for nome in list(nomes):
+        if vezes[Path(nome).name] == 1:
+            nomes.setdefault(Path(nome).name, nome)
+    return nomes
+
+
+def _com_marcadores(nome):
+    return nome.endswith(('.css', '.html'))
+
+
+def conteudo(nome, _pilha=()):
+    """The file as served: in CSS and HTML, each __V:<nome>__ replaced by that file's version and
+    __VERSOES__ by the versions of all listed files. FileNotFoundError when it is not on disk."""
+    dados, _ = _ler(nome)
+    if not _com_marcadores(nome):
+        return dados
+    pilha, nomes = (*_pilha, nome), _nomes()
+
+    def trocar(achado):
+        alvo = nomes.get(achado.group(1).decode('ascii'))
+        if alvo is None or alvo in pilha:
+            return achado.group(0)
+        try:
+            return versao(alvo, pilha).encode('ascii')
+        except OSError:
+            return achado.group(0)
+    dados = MARCADOR.sub(trocar, dados)
+    if VERSOES in dados:
+        dados = dados.replace(VERSOES, json.dumps(versoes(pilha), separators=(',', ':'), sort_keys=True).encode('ascii'))
+    return dados
+
+
+def versao(nome, _pilha=()):
+    """12 hex of the sha256 of the file as served."""
+    if not _com_marcadores(nome):
+        return _ler(nome)[1][:12]
+    return hashlib.sha256(conteudo(nome, _pilha)).hexdigest()[:12]
+
+
+def versoes(_pilha=()):
+    """{name: version} of every listed file on disk (the pages with the session token apart)."""
+    resultado = {}
+    for nome, _ in ARQUIVOS.values():
+        if nome.endswith('.html') or nome in _pilha:
+            continue
+        try:
+            resultado[nome] = versao(nome, _pilha)
+        except OSError:
+            pass
+    return resultado
+
+
+def _comprimivel(tipo):
+    tipo = tipo.split(';')[0].strip().lower()
+    return tipo.startswith('text/') or tipo in COMPRIMIVEIS
+
+
+def _aceita_gzip(cabecalho):
+    for parte in (cabecalho or '').split(','):
+        token, *parametros = [p.strip() for p in parte.split(';')]
+        if token.lower() not in ('gzip', '*'):
+            continue
+        qualidade = 1.0
+        for parametro in parametros:
+            if parametro.lower().startswith('q='):
+                try:
+                    qualidade = float(parametro[2:])
+                except ValueError:
+                    qualidade = 0.0
+        if qualidade > 0:
+            return True
+    return False
+
+
+def _gzip(nome, versao_atual, dados):
+    with _trava:
+        guardado = _comprimidos.get(nome)
+    if guardado is not None and guardado[0] == versao_atual:
+        return guardado[1]
+    comprimido = gzip.compress(dados, compresslevel=6, mtime=0)
+    with _trava:
+        _comprimidos[nome] = (versao_atual, comprimido)
+    return comprimido
 
 
 class RotasEstaticas:
@@ -72,7 +215,11 @@ class RotasEstaticas:
             self._json(404, {'erro': 'Página não encontrada.'})
             return
         name, content_type = ARQUIVOS[path]
-        content = (ASSETS / name).read_bytes()
+        try:
+            content = conteudo(name)
+        except FileNotFoundError:
+            self._json(404, {'erro': 'Página não encontrada.'})
+            return
         if name == 'index.html':
             principal = self._principal()
             piloto = self.server.modo == 'piloto'
@@ -86,11 +233,22 @@ class RotasEstaticas:
         else:
             # Static files revalidate on every load (no stale code after an update) but skip the
             # download when unchanged; index.html stays no-store because it carries session tokens.
-            etag = '"' + hashlib.sha256(content).hexdigest()[:32] + '"'
-            # Third-party bundles requested with their version (?v=…) never change under that URL.
-            versionado = name.startswith('vendor/') and re.fullmatch(r'v=[0-9A-Za-z._-]{1,40}', urlsplit(self.path).query)
+            resumo = hashlib.sha256(content).hexdigest()
+            etag = '"' + resumo[:32] + '"'
+            consulta = urlsplit(self.path).query
+            # Third-party bundles requested with their version (?v=…), and any file requested with the
+            # hash of its content (?v=<versao>), never change under that URL.
+            versionado = ((name.startswith('vendor/') and re.fullmatch(r'v=[0-9A-Za-z._-]{1,40}', consulta))
+                          or consulta == 'v=' + resumo[:12])
             cache = 'public, max-age=31536000, immutable' if versionado else 'no-cache'
+            extra = {'ETag': etag}
+            comprimivel = _comprimivel(content_type)
+            if comprimivel:
+                extra['Vary'] = 'Accept-Encoding'
             if self.headers.get('If-None-Match') == etag:
-                self._send(304, b'', content_type, {'ETag': etag}, cache=cache)
+                self._send(304, b'', content_type, extra, cache=cache)
+            elif comprimivel and _aceita_gzip(self.headers.get('Accept-Encoding')):
+                self._send(200, _gzip(name, resumo, content), content_type, {**extra, 'Content-Encoding': 'gzip'},
+                           cache=cache)
             else:
-                self._send(200, content, content_type, {'ETag': etag}, cache=cache)
+                self._send(200, content, content_type, extra, cache=cache)

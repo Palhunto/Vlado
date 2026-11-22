@@ -60,7 +60,8 @@ from rotas_conversa import RotasConversa, RESPONDIDO, CAMPOS_INTERNOS_CONVERSA, 
 import rotas_documentos
 from rotas_documentos import MAX_UPLOAD, catalogo, receber_documentos  # noqa: F401
 from rotas_downloads import RotasDownloads
-from rotas_estaticas import ASSETS, RotasEstaticas
+import rotas_estaticas
+from rotas_estaticas import ASSETS, RotasEstaticas  # noqa: F401
 from rotas_gestao import IA_OPERACOES, RotasGestao
 
 # local: single operator without sign-in; local-contas: accounts over plain HTTP on 127.0.0.1
@@ -656,7 +657,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 return
             primeiro = path in ('/', '/entrar', '/primeiro-acesso') and self._primeiro_acesso()
             if path == '/primeiro-acesso' and primeiro:
-                self._send(200, (ASSETS / 'entrar.html').read_bytes(), 'text/html; charset=utf-8')
+                self._send(200, rotas_estaticas.conteudo('entrar.html'), 'text/html; charset=utf-8')
                 return
             if path == '/primeiro-acesso' or (primeiro and path in ('/', '/entrar')):
                 self._send(303, b'', 'text/plain; charset=utf-8',
@@ -668,7 +669,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 return
             if path == '/entrar' or re.fullmatch(r'/ativar(/[A-Za-z0-9_-]{1,100})?', path):
                 # Static page without case data; the token stays in the path, read by entrar.js.
-                self._send(200, (ASSETS / 'entrar.html').read_bytes(), 'text/html; charset=utf-8')
+                self._send(200, rotas_estaticas.conteudo('entrar.html'), 'text/html; charset=utf-8')
                 return
             if path in ('/', '/api/catalogo', '/api/integracao', '/api/fila', '/api/cota') and self._principal() is None:
                 self._sem_principal(api=path != '/')
