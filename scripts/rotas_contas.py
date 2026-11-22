@@ -1,10 +1,11 @@
 """Sessão, entrada, ativação e gestão de contas da Mesa (modos ``local-contas`` e ``piloto``).
 
-Separado de ``interface_pesquisa`` sem mudar comportamento. Aqui ficam quem chama (a conta
-relida do registro a cada requisição), o que cada papel alcança (``_negado``), as
-operações públicas antes da sessão (entrar, ativar, primeiro administrador) e a gestão de
-contas, que só o administrador alcança. Origem, CSRF e leitura do corpo continuam no
-servidor; este módulo nunca lê nem grava chaves de API.
+Aqui ficam quem chama (a conta relida do armazenamento a cada requisição, com a redação e as
+apurações ao alcance), as operações públicas antes da sessão (entrar, ativar, primeiro
+administrador) e a gestão de contas ``contas-*``, que só o dono alcança e só sobre a própria
+redação (operações em retirada: saem quando a tela Equipe entrar). O que cada papel alcança é
+decidido num lugar só, ``autorizacao.conferir``; este módulo não lê o papel para autorizar.
+Origem, CSRF e leitura do corpo continuam no servidor; este módulo nunca lê nem grava chaves de API.
 """
 from __future__ import annotations
 
@@ -12,15 +13,15 @@ from http.cookies import SimpleCookie
 import ipaddress
 import json
 import os
-from urllib.parse import quote
 
 import acesso
+import autorizacao
 import proxies_confiaveis
 import rascunhos
 import registro_acesso
-from rotas_documentos import catalogo
 
-# Hosted mode: account management (admin only) and what a guest account may call.
+# Account management in withdrawal (dono only, own newsroom) and what the legacy guest profile may call:
+# the guest column of the matrix (`autorizacao.MATRIZ`) is exactly OPERACOES_CONVIDADO.
 CONTAS_OPERACOES = ('contas-listar', 'contas-criar', 'contas-atualizar', 'contas-desativar', 'contas-reativar',
                     'contas-recuperar')
 OPERACOES_CONVIDADO = ('codex-status', 'codex-listar', 'codex-perguntar', 'codex-eventos', 'codex-cancelar',
@@ -35,6 +36,11 @@ SEM_SESSAO = 'Sessão expirada ou encerrada. Entre novamente.'
 OPERACOES_COM_COTA = ('codex-perguntar', 'codex-retomar')
 ATIVOS_CONVERSA = frozenset({'preparando', 'executando', 'publicando'})
 COOKIE_PILOTO ='vlado_sessao'
+
+
+def _como_antes(registro):
+    """An account as the `contas-*` screen knows it: the dono under the old name `admin`."""
+    return {**registro, 'papel': 'admin' if registro.get('papel') == 'dono' else registro.get('papel')}
 
 
 class RotasContas:
@@ -82,8 +88,9 @@ class RotasContas:
         Read once per request: the account is re-read from the store on every request, so deactivation,
         role and case changes apply to the next one."""
         if self.server.modo == 'local':
-            return {'papel': 'admin', 'conta': None, 'nome': None, 'login': None, 'casos': None,
-                    'csrf': self.server.token}
+            # No accounts, no newsroom, no ownership: the only caller for whom `casos` is None (every case).
+            return {'papel': 'dono', 'conta': None, 'nome': None, 'login': None, 'email': None, 'organizacao': None,
+                    'casos': None, 'responsavel_de': None, 'pendencias': [], 'csrf': self.server.token}
         if not hasattr(self, '_principal_requisicao'):
             self._principal_requisicao = self._sessao_piloto()[0]
         return self._principal_requisicao
@@ -140,33 +147,18 @@ class RotasContas:
         if principal is None:
             self._sem_principal(api=True)
             return
-        conta = {k: principal.get(k) for k in ('nome', 'login', 'papel', 'casos')}
-        conta['id'] = principal.get('conta')
-        self._json(200, {'conta': conta, 'csrf': principal['csrf'], 'ambiente': self._ambiente_publico(),
+        redacao = principal.get('organizacao')
+        self._json(200, {'conta': autorizacao.conta_publica(principal),
+                         'organizacao': {'id': redacao['id'], 'nome': redacao['nome']} if redacao else None,
+                         'pendencias': list(principal.get('pendencias') or []),
+                         'capacidades': autorizacao.capacidades(principal),
+                         'csrf': principal['csrf'], 'ambiente': self._ambiente_publico(),
                          'modo': self.server.modo, 'expira_em': principal.get('expira_em')})
 
     def _sair(self):
         acesso.encerrar(self.server.root, self._sessao_piloto()[1])
         self._send(200, b'{"estado": "encerrada"}', extra={
             'Set-Cookie': f'{COOKIE_PILOTO}=; {self.server.atributos_cookie()}; Max-Age=0'})
-
-    def _negado(self, operation, data, principal):
-        """Authorization by role, checked on every request. Returns (message, code) or None when allowed."""
-        if self.server.modo == 'piloto' and operation == 'codex-desligar':
-            return 'O serviço hospedado não pode ser encerrado pela interface.', 'servico_nao_encerravel'
-        if operation in CONTAS_OPERACOES and not self.server.com_contas:
-            return 'Contas só existem nos modos com login.', 'operacao_proibida'
-        if principal['papel'] == 'admin':
-            return None
-        if operation not in OPERACOES_CONVIDADO:
-            return 'Operação não permitida para esta conta.', 'operacao_proibida'
-        if operation in ('codex-listar', 'codex-perguntar') and data.get('caso') not in (principal['casos'] or []):
-            return 'Apuração não liberada para esta conta.', 'caso_nao_liberado'
-        if operation == 'codex-perguntar' and set(data) - {'caso', 'pergunta', 'conversa'}:
-            return 'Convidados enviam somente a pergunta e a conversa.', 'campos_nao_permitidos'
-        if operation == 'codex-retomar' and set(data) - {'conversa'}:
-            return 'Convidados enviam somente a conversa a retomar.', 'campos_nao_permitidos'
-        return None
 
     def _contas(self, operation, data, principal):
         """Account management (admin only, hosted mode). A refused operation is audited (`admin_recusada`)."""
@@ -178,13 +170,17 @@ class RotasContas:
             raise
 
     def _contas_executar(self, operation, data, principal):
-        """Account management (admin only, hosted mode). Activation links are returned once, never stored."""
-        root, por = self.server.root, principal['conta'] or 'cli'
+        """Account management (dono only, own newsroom). Activation links are returned once, never stored.
+
+        Every account id is looked up inside the caller's newsroom: one of another newsroom reads as unknown.
+        The old interface still speaks `admin`: it is accepted on the way in and given back on the way out."""
+        root, por, redacao = self.server.root, principal['conta'], principal['organizacao']['id']
         if operation == 'contas-listar':
-            return {'contas': acesso.listar(root), 'eventos': acesso.eventos(root, 50)}
+            return {'contas': [_como_antes(c) for c in acesso.listar(root, redacao)],
+                    'eventos': acesso.eventos(root, 50, redacao)}
         if operation in ('contas-criar', 'contas-atualizar') and data.get('casos') is not None:
             casos = data.get('casos')
-            disponiveis = {c['id'] for c in catalogo(root)['casos']}
+            disponiveis = set(principal['casos'])  # the dono's reach: the cases of the own newsroom, and no other
             if not isinstance(casos, list) or not all(isinstance(c, str) for c in casos) or not set(casos) <= disponiveis:
                 raise ValueError('Escolha apurações existentes para a conta.')
         horas = data.get('horas', acesso.ATIVACAO_HORAS)
@@ -192,22 +188,22 @@ class RotasContas:
             papel = data.get('papel', 'convidado')
             registro, token = acesso.criar_conta(root, data.get('nome'), data.get('login'), papel=papel,
                                                  casos=data.get('casos') or [], cota_diaria=data.get('cota_diaria', 20),
-                                                 horas=horas, por=por)
-            return {'conta': registro, 'link': f'{self.server.origin}/ativar/{token}'}
+                                                 horas=horas, por=por, organizacao=redacao)
+            return {'conta': _como_antes(registro), 'link': f'{self.server.origin}/ativar/{token}'}
         if operation == 'contas-recuperar':
-            registro, token = acesso.recuperar(root, data.get('id'), por=por, horas=horas)
-            return {'conta': registro, 'link': f'{self.server.origin}/ativar/{token}'}
+            registro, token = acesso.recuperar(root, data.get('id'), por=por, horas=horas, organizacao=redacao)
+            return {'conta': _como_antes(registro), 'link': f'{self.server.origin}/ativar/{token}'}
         if operation == 'contas-desativar':
-            registro = acesso.desativar(root, data.get('id'), por=por)
+            registro = acesso.desativar(root, data.get('id'), por=por, organizacao=redacao)
             self._parar_execucoes(registro['id'], ())
-            return {'conta': registro}
+            return {'conta': _como_antes(registro)}
         if operation == 'contas-reativar':
-            return {'conta': acesso.reativar(root, data.get('id'), por=por)}
+            return {'conta': _como_antes(acesso.reativar(root, data.get('id'), por=por, organizacao=redacao))}
         campos = {k: data[k] for k in ('nome', 'papel', 'casos', 'cota_diaria') if data.get(k) is not None}
-        registro = acesso.atualizar(root, data.get('id'), por=por, **campos)
-        if registro.get('papel') != 'admin':
+        registro = acesso.atualizar(root, data.get('id'), por=por, organizacao=redacao, **campos)
+        if registro.get('casos') is not None:  # not a dono: executions on cases it no longer reaches stop
             self._parar_execucoes(registro['id'], registro.get('casos') or ())
-        return {'conta': registro}
+        return {'conta': _como_antes(registro)}
 
     def _parar_execucoes(self, conta_id, casos_mantidos):
         """A deactivated account, or a case taken away, must not keep spending the API in the background."""
@@ -254,11 +250,8 @@ class RotasContas:
             if operation == 'entrar':
                 sid, csrf, conta = acesso.entrar(root, data.get('login'), data.get('senha'), ip=self._ip(),
                                                  cliente=data.get('cliente', 'web'))
-                casos = conta.get('casos') or []
-                destino = ('/' if conta['papel'] == 'admin'
-                           else '/?area=codex' + (f'&caso={quote(casos[0], safe="")}' if len(casos) == 1 else ''))
                 publica = {k: conta[k] for k in ('id', 'nome', 'login', 'papel', 'casos')}
-                self._send(200, json.dumps({'conta': publica, 'csrf': csrf, 'destino': destino},
+                self._send(200, json.dumps({'conta': publica, 'csrf': csrf, 'destino': autorizacao.destino_inicial(conta)},
                                            ensure_ascii=False).encode('utf-8'),
                            extra={'Set-Cookie': f'{COOKIE_PILOTO}={sid}; {self.server.atributos_cookie()}'})
             elif operation == 'ativacao-consultar':
