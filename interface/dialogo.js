@@ -227,7 +227,7 @@
       };
       function aoMudarIdioma() { rotularCampo(); opcoes.aoIdioma?.(ctx); }
       async function confirmar() {
-        if (estado !== 'aberto' || !nomeConfere() || !camposCompletos()) return;
+        if (estado !== 'aberto' || bloqueado || !nomeConfere() || !camposCompletos()) return;  // bloqueado: nem o Enter no campo envia mais um pedido
         limparErrosDeCampo();
         const recusas = opcoes.validar ? Object.entries(opcoes.validar(valores()) || {}) : [];
         if (recusas.length) {
@@ -251,6 +251,9 @@
           atualizar();
           // Recusa de um campo (senha incorreta): a mensagem vai junto ao campo, que é limpo e recebe o foco; as demais vão junto às ações.
           if (falha?.campo && entradas.has(falha.campo)) { erroCampo(falha.campo, falha.message || 'Não deu para concluir. Tente de novo.', {limpar: true}); return; }
+          // Qualquer outra recusa também leva a senha embora: ela não fica no campo entre uma tentativa e outra.
+          for (const {entrada} of entradas.values()) entrada.value = '';
+          atualizar();
           mostrarErro(falha?.message || 'Não deu para concluir. Tente de novo.');
           if (bloqueado) { botaoCancelar.focus(); return; }
           (campo && !campo.disabled ? campo : [...entradas.values()][0]?.entrada || botaoAcao).focus();
@@ -330,8 +333,10 @@
   async function comSenha({operacao, dados = {}, dialogo = {}, pedirAntes = true, gatilho, enviar} = {}) {
     const chamar = enviar || ((nome, corpo) => api(nome, corpo));
     const nomeDoCampo = dialogo.campo || 'senha';
+    // O pedido é copiado aqui: quem chamou pode mexer no objeto enquanto o diálogo está aberto, e o reenvio tem de ser o MESMO pedido.
+    const original = JSON.parse(JSON.stringify(dados));
     if (!pedirAntes) {
-      try { return await chamar(operacao, dados); }
+      try { return await chamar(operacao, JSON.parse(JSON.stringify(original))); }
       catch (falha) { if (falha?.result?.codigo !== 'senha_necessaria') throw falha; }
     }
     let resultado = null;
@@ -340,7 +345,7 @@
       acao: dialogo.acao, ocupado: dialogo.ocupado || 'Enviando…', gatilho,
       campos: [{id: nomeDoCampo, rotulo: 'Sua senha', apoio: 'A senha com que você entra na Mesa.', autocomplete: 'current-password', exigido: true}],
       async executar(ctx) {
-        try { resultado = await chamar(operacao, {...dados, [nomeDoCampo]: ctx.valores()[nomeDoCampo]}); }
+        try { resultado = await chamar(operacao, {...JSON.parse(JSON.stringify(original)), [nomeDoCampo]: ctx.valores()[nomeDoCampo]}); }
         catch (falha) { dialogo.aoRecusar?.(falha); throw recusaDaSenha(falha, {campo: nomeDoCampo}); }
       },
     });
