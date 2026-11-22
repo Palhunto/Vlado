@@ -65,7 +65,7 @@ test('lista: uma tabela com Documento, Páginas, Leitura e a ação; hash e iden
   await mesa.esperar(12);
   assert.equal(mesa.$('mesa-acervo').hidden, false);
   assert.equal(linhas(mesa).length, 6);
-  const cabecas = mesa.$('mesa-acervo-lista').querySelectorAll('thead th').map(th => th.textContent);
+  const cabecas = [...mesa.$('mesa-acervo-lista').querySelectorAll('thead th')].map(th => th.textContent);
   assert.equal(JSON.stringify(cabecas), JSON.stringify(['Documento', 'Páginas', 'Leitura', 'Ação']));
   const [contrato, medicao, foto] = linhas(mesa);
   assert.match(contrato.textContent, /contrato 041/);

@@ -1384,7 +1384,13 @@ window.VLADO_I18N_EN = {
     "novo": "new",
     "novos": "new",
     "Os documentos deste lote foram informados como públicos, diferente da apuração (sintéticos): a apuração passa a natureza não informada (mista).": "The documents in this batch were declared as public, unlike the investigation (synthetic): the investigation becomes nature not stated (mixed).",
-    "Os documentos deste lote foram informados como sintéticos, diferente da apuração (públicos): a apuração passa a natureza não informada (mista).": "The documents in this batch were declared as synthetic, unlike the investigation (public): the investigation becomes nature not stated (mixed)."
+    "Os documentos deste lote foram informados como sintéticos, diferente da apuração (públicos): a apuração passa a natureza não informada (mista).": "The documents in this batch were declared as synthetic, unlike the investigation (public): the investigation becomes nature not stated (mixed).",
+    "Mover {item} para a lixeira?": "Move {item} to the trash?",
+    "Movendo…": "Moving…",
+    "A apuração, suas conversas e rodadas sairão das listas.": "The investigation, its conversations and rounds will leave the lists.",
+    "A conversa, suas perguntas complementares e rodadas sairão das listas.": "The conversation, its follow-up questions and rounds will leave the lists.",
+    "Esta rodada e seus achados sairão das consultas.": "This round and its findings will leave the queries.",
+    "Há outra operação em andamento. Aguarde e tente de novo.": "Another operation is in progress. Wait and try again."
   },
   padroes: [
     // Cota do mês na barra lateral
