@@ -34,7 +34,18 @@ Passo a passo para o dono e para quem opera o servidor. O que é decisão ou ato
 | casos (originais, derivados, cadastros) **e a fila de extração `casos/.fila/`**, rodadas e índices, conversas, lixeira, entrada, **contas (`acesso/`, com hashes de senha)**, ajustes | `segredos/` (chaves de API coladas na Mesa) | Uma chave de API se cola de novo (ou fica na variável de ambiente do servidor); um backup é mais fácil de vazar que um volume. O volume `segredos` nem é montado no serviço de backup. |
 | | dados do Caddy (`caddy_data`: certificado e conta ACME) | O Caddy emite de novo sozinho. |
 | | `configuracao.json` e o código | Fazem parte da imagem (`VLADO_VERSAO`). |
+| | `casos/.apagando/`, `conversas/.apagando/` e `execucoes/.apagando/` (quarentena do que foi mandado apagar) | Dado que a pessoa mandou apagar: nunca entra no backup. |
 | | pastas de preparo (`.lote_*`, `.r_*`, `.novo_*`...), `casos/.cadastro.trava`, `casos/.fila/.coordenador` e os `*.lock` | Trabalho em andamento e arquivos de trava, não dados: a Mesa recria a trava no primeiro uso. |
+
+### Quarentena do apagamento (`.apagando/`): FORA do backup
+
+Quando a pessoa manda apagar um caso, uma conversa ou uma rodada, a Mesa move o dado para `<volume>/.apagando/<id>/`, na raiz de
+`casos/`, `conversas/` e `execucoes/`, e o remove em segundo plano. Enquanto isso o dado está em quarentena. **O backup exclui as três
+pastas `.apagando`**: é dado que a pessoa mandou apagar, e levá-lo para um backup retido por meses desfaria o apagamento. Diferente
+dos marcadores de operação (`.lote_*`, `.indice_*`...), a quarentena **não faz o backup esperar nem recusar**: a remoção pode demorar
+e nada ali volta a ser dado. A exclusão vale só na raiz de cada volume (o prefixo `.apagando`); uma pasta de mesmo nome mais fundo,
+dentro de um caso, é dado do caso. Uma restauração não traz a quarentena de volta. O que já estava em backups anteriores à
+ordem de apagar continua neles até a retenção vencer (como já diz o aviso da tela de apagamento).
 
 ### Registro de auditoria (`registro/`, SEG-02): FORA do backup, de propósito
 
