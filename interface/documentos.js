@@ -7,7 +7,8 @@
 //   Documentos.enviar(arquivos, contexto)          envio por arquivo para a apuração escolhida (envio.js)
 //
 // Três estados de leitura, sempre com sinal e texto (W02, regra 5): "✓ Texto do próprio arquivo", "Lida por OCR: confira números" e
-// "○ Imagem sem leitura". Dois a mais, aprovados pelo Design: "Lida em parte" (páginas sem texto) e "Não foi lido" (erro ou PDF protegido).
+// "○ Imagem sem leitura" (só arquivo de imagem). Três a mais, aprovados pelo Design: "Lida em parte" (páginas sem texto), "○ Sem texto lido" (PDF sem
+// nenhuma página com texto) e "Não foi lido" (erro ou PDF protegido).
 // Hash, identificador e versão ficam em "Detalhes técnicos" de cada documento, nunca na lista (regra 7).
 (() => {
   const t = (pt, vars) => (window.I18N ? window.I18N.t(pt, vars) : String(pt).replace(/\{(\w+)\}/g, (todo, nome) => vars?.[nome] ?? todo));
@@ -29,7 +30,11 @@
     const base = {paginas: total};
     if (info?.protegido || (info?.estado === 'erro' && !comErro)) return {...base, chave: 'erro', tom: 'erro', sinal: 'sem-suporte', texto: t('Não foi lido. O original ficou guardado.')};
     if (info) {
-      if (total && semTexto >= total) return {...base, chave: 'sem-leitura', tom: 'neutro', marca: '○', texto: t('Imagem sem leitura')};
+      if (total && semTexto >= total) {
+        // "Imagem sem leitura" vale só para arquivo de imagem; PDF digitalizado sem nenhuma página com texto é "Sem texto lido" (componentes.md).
+        if (IMAGEM.test(nome)) return {...base, chave: 'sem-leitura', tom: 'neutro', marca: '○', texto: t('Imagem sem leitura')};
+        return {...base, chave: 'sem-texto', tom: 'neutro', marca: '○', texto: t('Sem texto lido')};
+      }
       if (semTexto || comErro) return {...base, chave: 'parcial', tom: 'aviso', sinal: 'parcial', texto: t('Lida em parte: confira as páginas sem texto')};
       if (viaOcr) return {...base, chave: 'ocr', tom: 'aviso', sinal: 'parcial', texto: t('Lida por OCR: confira números')};
       return {...base, chave: 'texto', tom: 'ok', marca: '✓', texto: t('Texto do próprio arquivo')};
