@@ -113,6 +113,7 @@ MENSAGEM_POR_IP = 'Muitas requisições ao mesmo tempo deste endereço. Aguarde 
 CONSULTA_OPERACOES = ('analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario', 'preparar-pdfs')
 # Answered by the extraction queue in do_POST, outside cadastro_lock (executar still serves direct calls).
 CADASTRO_NA_FILA = ('cadastrar', 'preparar-pdfs')
+ROTAS_GET_COM_PARAMETROS = ('/api/catalogo', '/api/fila', '/api/cota')  # each one calls the gate where it is served
 # Every POST operation behind a session; anything else is 404 before the body is parsed.
 OPERACOES_API = (*rotas_conversa.OPERACOES, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES,
                  *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, *rotas_redacao.OPERACOES,
@@ -673,6 +674,14 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         if path == '/saude':
             self._json(200, {'ok': True})
             return
+        if 'GET:' + path in autorizacao.MATRIZ and path not in ROTAS_GET_COM_PARAMETROS and self._principal() is not None:
+            # The page, the session and the server's capabilities pass through the gate too: a suspended
+            # newsroom gets none of them (the three listings below ask the gate themselves, with their parameters).
+            try:
+                autorizacao.conferir(self.server.root, self.server.modo, self._principal(), 'GET:' + path, {})
+            except autorizacao.Recusa as recusa:
+                self._recusado(recusa, self._principal(), pagina=path == '/')
+                return
         if path == '/api/sessao':
             self._sessao_atual()
             return
@@ -894,13 +903,16 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                         if convidado and not isinstance(exc, ValueError) else str(exc))
             self._json(400, {'estado': 'erro', 'erro': mensagem}, exc)
 
-    def _recusado(self, recusa, principal):
+    def _recusado(self, recusa, principal, pagina=False):
         """Answer a refusal of the gate. The real reason goes to the audit log only (`acesso_negado`, with
         `motivo`), never to the browser."""
         registro_acesso.registrar('acesso_negado', 'negado', (principal or {}).get('conta'), codigo=recusa.codigo,
                                   motivo=recusa.motivo,
                                   organizacao=((principal or {}).get('organizacao') or {}).get('id'))
-        self._json(recusa.status, recusa.corpo)
+        if pagina:
+            self._pagina_recusada(recusa)
+        else:
+            self._json(recusa.status, recusa.corpo)
 
     def _cadastro_na_fila(self, operation, data):
         """Upload or PDF preparation through `server.fila`: the receipt, or the queue state if asynchronous."""

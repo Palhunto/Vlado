@@ -9,6 +9,7 @@ Origem, CSRF e leitura do corpo continuam no servidor; este módulo nunca lê ne
 """
 from __future__ import annotations
 
+import html
 from http.cookies import SimpleCookie
 import ipaddress
 import json
@@ -116,6 +117,16 @@ class RotasContas:
                          f'<meta name="viewport" content="width=device-width, initial-scale=1">'
                          f'<title>Vlado</title><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/style.css"><main class="panel">{texto}</main></html>'
                          ).encode('utf-8'), 'text/html; charset=utf-8')
+
+    def _pagina_recusada(self, recusa):
+        """The page asked by an account the gate refused (a suspended newsroom): a plain notice, no data of anybody."""
+        ingles = {'redacao_suspensa': "This account's newsroom is suspended. Talk to whoever runs the service."}
+        texto = (f'<p lang="pt-BR">{html.escape(str(recusa.corpo.get("erro") or "Indisponível para esta conta."))}</p>'
+                 f'<p lang="en">{html.escape(ingles.get(recusa.codigo, "Not available for this account."))}</p>')
+        self._send(recusa.status, (f'<!doctype html><html lang="pt-BR"><meta charset="utf-8">'
+                                   f'<meta name="viewport" content="width=device-width, initial-scale=1">'
+                                   f'<title>Vlado</title><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/style.css"><main class="panel">{texto}</main></html>'
+                                   ).encode('utf-8'), 'text/html; charset=utf-8')
 
     def _ambiente_publico(self):
         if self.server.modo != 'piloto':
