@@ -1,5 +1,6 @@
 """O que a pessoa mandou apagar fica em quarentena em `<volume>/.apagando/<id>/` (casos, conversas e execucoes) até a Mesa terminar de
-remover em segundo plano. É dado apagado: o backup nunca o leva, e não espera por ele. Fixture e dublês de test_backup_agendado."""
+remover em segundo plano, e o manifesto de cada apagamento em curso em `lixeira/.apagando/<item>.json`. É dado apagado: o backup nunca o
+leva, e não espera por ele. Fixture e dublês de test_backup_agendado."""
 import json
 from pathlib import Path
 import sys
@@ -12,7 +13,7 @@ import backup
 from test_backup_agendado import Base
 
 SEGREDO = 'conteudo que a pessoa mandou apagar'
-VOLUMES = ('casos', 'conversas', 'execucoes')
+VOLUMES = ('casos', 'conversas', 'execucoes', 'lixeira')  # a quarentena da Plataforma (apagamento.py, QUARENTENA)
 
 
 class ApagandoFicaForaDoBackupTest(Base):
@@ -23,6 +24,9 @@ class ApagandoFicaForaDoBackupTest(Base):
             (alvo / 'documento.txt').write_text(SEGREDO, encoding='utf-8')
             (alvo / 'manifesto.json').write_text('{"apagado": true}', encoding='utf-8')
             (self.root / volume / '.apagando' / 'leia-me.json').write_text('{}', encoding='utf-8')
+        manifesto = self.root / 'lixeira' / '.apagando' / 'item-123.json'
+        manifesto.write_text(json.dumps({'id': 'item-123', 'tipo': 'caso', 'caso': 'c1', 'fase': 'removendo',
+                                         'caminhos': ['casos/.apagando/a1b2c3d4/dado']}), encoding='utf-8')
 
     def nomes(self, arquivo):
         with tarfile.open(arquivo) as pacote:
@@ -44,8 +48,10 @@ class ApagandoFicaForaDoBackupTest(Base):
     def test_o_resto_dos_dados_continua_entrando(self):
         self.quarentena()
         nomes = self.nomes(backup.criar(self.root, self.base / 'copias'))
-        for esperado in ('casos/c1/originais/D001.txt', 'conversas/c1/conversa.json', 'execucoes/c1/R001/registro.json'):
+        for esperado in ('casos/c1/originais/D001.txt', 'conversas/c1/conversa.json', 'execucoes/c1/R001/registro.json',
+                         'lixeira/indice.json'):  # o índice dos itens que a pessoa ainda pode restaurar continua no backup
             self.assertIn(esperado, nomes)
+        self.assertFalse([n for n in nomes if n.startswith('lixeira/.apagando')], 'o manifesto do apagamento em curso fica fora')
 
     def test_nao_faz_o_backup_esperar_nem_recusar(self):
         """Diferente de um marcador (.lote_*, .indice_*...), a quarentena não é operação em curso: o backup não espera por ela."""
@@ -71,6 +77,24 @@ class ApagandoFicaForaDoBackupTest(Base):
         nomes = self.nomes(backup.criar(self.root, self.base / 'copias'))
         self.assertIn('casos/c1/.apagando/nota.txt', nomes)
 
+    def test_manifesto_do_apagamento_em_curso_na_lixeira_fica_fora_e_nao_faz_esperar(self):
+        self.quarentena()
+        nomes = self.nomes(backup.criar(self.root, self.base / 'copias'))
+        self.assertNotIn('lixeira/.apagando/item-123.json', nomes)
+        self.assertNotIn('lixeira/.apagando', nomes)
+        self.assertIn('lixeira', nomes)
+
+    def test_a_exclusao_vale_so_para_as_quatro_pastas_da_quarentena(self):
+        """entrada/, acesso/ e ajustes/ não têm quarentena: um `.apagando` ali (improvável) seria dado e continua entrando."""
+        self.assertEqual(backup.PASTAS_COM_QUARENTENA, ('casos', 'conversas', 'execucoes', 'lixeira'))
+        for pasta in ('entrada', 'ajustes'):
+            alvo = self.root / pasta / '.apagando'
+            alvo.mkdir()
+            (alvo / 'nota.txt').write_text('dado', encoding='utf-8')
+        nomes = self.nomes(backup.criar(self.root, self.base / 'copias'))
+        self.assertIn('entrada/.apagando/nota.txt', nomes)
+        self.assertIn('ajustes/.apagando/nota.txt', nomes)
+
     def test_acesso_e_ajustes_nao_tem_o_que_excluir_e_nada_muda_para_eles(self):
         self.assertEqual(backup.EXCLUIDOS_NA_RAIZ, ('.apagando',))
         nomes = self.nomes(backup.criar(self.root, self.base / 'copias'))
@@ -92,7 +116,8 @@ class ApagandoFicaForaDoBackupTest(Base):
 class DocumentacaoTest(unittest.TestCase):
     def test_backup_md_registra_a_exclusao(self):
         texto = (Path(__file__).resolve().parents[1] / 'deploy' / 'BACKUP.md').read_text(encoding='utf-8')
-        for trecho in ('.apagando', 'quarentena', 'casos/.apagando', 'conversas/.apagando', 'execucoes/.apagando', 'não faz o backup esperar'):
+        for trecho in ('.apagando', 'quarentena', 'casos/.apagando', 'conversas/.apagando', 'execucoes/.apagando', 'lixeira/.apagando',
+                       'apagamento.py', 'QUARENTENA', 'não serve sem os arquivos', 'não faz o backup esperar'):
             self.assertIn(trecho, texto, trecho)
 
 

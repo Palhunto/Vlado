@@ -60,10 +60,12 @@ PROIBIDOS = (chr(92), ':', chr(0))  # backslash (Windows separator), drive lette
 MARCADORES = ('.cadastro.lock', '.trava', '.lote_', '.web_', '.preparacao_', '.indice_', '.r_', '.publicacao_',
               '.restaurando-', '.antiga-', '.novo_')
 TRAVA_CADASTRO = '.cadastro.trava'
-# `.apagando/<id>/` na raiz de casos/, conversas/ e execucoes/: o que a pessoa mandou apagar, em quarentena até a Mesa terminar de
-# remover em segundo plano. É dado apagado: nunca entra no backup. Diferente de um marcador, não faz o backup esperar (a remoção
-# pode demorar e nada ali volta a ser dado).
+# Quarentena do apagamento (apagamento.py, QUARENTENA): `.apagando` na raiz de casos/, conversas/ e execucoes/ (`.apagando/<id>/`, o dado
+# que a pessoa mandou apagar, até a Mesa terminar de removê-lo em segundo plano) e de lixeira/ (`.apagando/<item>.json`, o manifesto de
+# cada apagamento em curso: descreve dado apagado e não serve sem os arquivos). É dado apagado: nunca entra no backup. Diferente de um
+# marcador, não faz o backup esperar (a remoção pode demorar e nada ali volta a ser dado). Só nestas pastas e só na raiz de cada uma.
 EXCLUIDOS_NA_RAIZ = ('.apagando',)
+PASTAS_COM_QUARENTENA = ('casos', 'conversas', 'execucoes', 'lixeira')
 # Lock files held with an operating-system lock that always exist: not data and never part of a backup.
 # `casos/.fila/.coordenador` is the extraction queue's single-coordinator lock (CONF-02). The queue itself,
 # `casos/.fila/<lote>/` (uploads not yet published: originals, plan, state), IS part of the backup, taken before the
@@ -200,7 +202,7 @@ def _entradas(root: Path, pastas: tuple[str, ...]):
                 relativo = Path(item.path).relative_to(root).as_posix()
                 if _marcador(item.name):
                     continue
-                if atual == base and item.name in EXCLUIDOS_NA_RAIZ:
+                if atual == base and pasta in PASTAS_COM_QUARENTENA and item.name in EXCLUIDOS_NA_RAIZ:
                     continue  # deleted data in quarantine (see EXCLUIDOS_NA_RAIZ)
                 if item.is_file(follow_symlinks=False) and (item.name in ARQUIVOS_DE_TRAVA or item.name.endswith('.lock')):
                     continue  # lock files are not data: a restored lock record would look like an abandoned lock
