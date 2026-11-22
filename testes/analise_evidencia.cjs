@@ -150,6 +150,12 @@ test('mapa: SVG sem biblioteca, forma por tipo, traço por situação e evidênc
   assert.equal(desenho.querySelectorAll('.mapa-no.pessoa .mapa-ico svg.mapa-ico-svg').length, 2);
   assert.equal(desenho.querySelectorAll('.mapa-no.organizacao .mapa-ico svg.mapa-ico-svg').length, 1);
   assert.equal(desenho.querySelectorAll('.mapa-no .mapa-sub').length, 3, 'o tipo vem escrito em cada nó (Pessoa ou Organização)');
+  // Ressalva do Traço: a reticência da 2ª linha é só visual (line-clamp). O leitor de tela recebe o nome inteiro, no texto do nó (fora de aria-hidden) e no <title>.
+  for (const [no, entidade] of [...desenho.querySelectorAll('.mapa-no')].map((no, i) => [no, MAPA.entidades[i]])) {
+    assert.equal(no.querySelector('.mapa-nome').textContent, entidade.nome, `o nome inteiro de ${entidade.id} está no texto do nó`);
+    assert.equal(no.querySelector('title').textContent, entidade.nome, `o <title> de ${entidade.id} traz o nome inteiro`);
+    assert.equal(no.querySelector('.mapa-nome').closest('[aria-hidden="true"]'), null, `o nome de ${entidade.id} não fica escondido do leitor de tela`);
+  }
   // Cada ligação tem o rótulo em pílula, com o ícone do tipo de relação e o texto do tipo (nunca só o ícone).
   const pilulas = desenho.querySelectorAll('.mapa-pilula');
   assert.equal(pilulas.length, 2);
