@@ -865,18 +865,40 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         return self.server.fila.aguardar(lote)
 
     def _estado_da_fila(self):
-        """`GET /api/fila?lote=<id>` or `?caso=<id>`: state of the extraction queue (administrators).
+        """`GET /api/fila?lote=<id>` or `?caso=<id>`: state of the extraction queue.
 
-        Read only, no case content; the contract of each batch is in `fila_extracao`.
+        Read only, no case content; the contract of each batch is in `fila_extracao`. Administrators
+        see every batch. Whoever else sees a case (a guest, in the cases released to it, re-read at each
+        request) sees that case's batches, for the progress of an upload (UX-05): ``?caso=`` of one of
+        them, or ``?lote=`` of a batch of one of them; another case's batch reads as not found (its
+        existence is not told), and the receipt goes without its file path.
         """
         principal = self._principal()
-        if principal is None or principal['papel'] != 'admin':
+        if principal is None:
             self._proibido()
             return
         consulta = parse_qs(urlsplit(self.path).query)
         lote, caso = (consulta.get(k, [None])[0] for k in ('lote', 'caso'))
         try:
-            self._json(200, self.server.fila.consultar(lote=lote, caso=caso))
+            if principal['papel'] == 'admin':
+                self._json(200, self.server.fila.consultar(lote=lote, caso=caso))
+                return
+            liberados = principal.get('casos') or []
+            if lote is not None:
+                resposta = self.server.fila.consultar(lote=lote)
+                if resposta['lote'].get('caso') not in liberados:
+                    raise ValueError('Lote não encontrado na fila.')
+                lotes = [resposta['lote']]
+            elif isinstance(caso, str) and caso in liberados:
+                resposta = self.server.fila.consultar(caso=caso)
+                lotes = resposta['lotes']
+            else:
+                self._proibido()
+                return
+            for item in lotes:
+                if isinstance(item.get('recibo'), dict):
+                    item['recibo'] = {k: v for k, v in item['recibo'].items() if k != 'arquivo_recibo'}
+            self._json(200, resposta)
         except ValueError as exc:
             self._json(400, {'erro': str(exc)})
 
