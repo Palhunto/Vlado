@@ -207,7 +207,10 @@ O papel vem antes da apuração. Assim, a recusa por papel depende só de quem p
 | Apuração inexistente, de outra redação, sem participação, sem posse registrada ou com id malformado | 404 | `{estado: "indisponivel", codigo: "caso_indisponivel", erro: "Apuração indisponível para esta conta."}` |
 | Conversa inexistente, de outro autor restrito ou de apuração fora do alcance | 400 | `codigo: "conversa_indisponivel"`, como hoje |
 | Item da lixeira ou lote fora do alcance | 400 | A mesma resposta do item ou lote inexistente, como hoje |
+| Operação sensível sem a senha de confirmação | 403 | `{estado: "proibido", codigo: "senha_necessaria"}`; não conta para o teto de tentativas |
 | Senha de confirmação errada numa operação sensível | 403 | `codigo: "senha_atual_incorreta"`; conta para o teto de tentativas |
+| Cinco senhas de confirmação erradas seguidas | 429 | `{estado: "bloqueado", codigo: "bloqueado"}` por 15 minutos, só nas operações sensíveis daquela conta; a sessão e a entrada seguem |
+| A redação ficaria sem dono ativo | 400 | `codigo: "ultimo_dono"` |
 
 As cinco causas de `caso_indisponivel` têm o mesmo corpo, byte a byte, e a mesma sequência de leituras no servidor. A causa verdadeira vai só para o registro de auditoria, no evento `acesso_negado` com `motivo` (`papel`, `sem_participacao`, `outra_redacao`, `inexistente`), para o operador enxergar tentativas de travessia. Esse evento não aparece em `equipe-atividade` nem em nenhuma resposta da Mesa: o motivo distingue "não existe" de "é de outra redação", e mostrá-lo ao dono de uma redação seria o mesmo vazamento por outro caminho. Só o operador o lê, no registro de auditoria. `caso_indisponivel` substitui `caso_nao_liberado`.
 
@@ -343,8 +346,8 @@ Resolvedor `nenhum`. Toda operação age só sobre a redação da sessão. O id 
 |---|---|---|---|---|---|---|---|
 | `equipe-listar`\* | L | sim | — | — | — | — | Pessoas, papéis, apurações de cada uma, gasto do mês, convites pendentes. |
 | `equipe-convidar`\*, `equipe-convite-reenviar`\*, `equipe-convite-cancelar`\* | A | sim | — | — | — | — | Seção 8.1. Convidar com o papel dono pede a senha. |
-| `equipe-papel`\* | A | sim | — | — | — | — | Recusa rebaixar o último dono ativo. Promover a dono pede a senha. Nunca atribui `convidado`. |
-| `equipe-desativar`\*, `equipe-reativar`\*, `equipe-remover`\* | A | sim | — | — | — | — | Recusam o último dono ativo. Desativar encerra as sessões e para as execuções em curso, como hoje. |
+| `equipe-papel`\* | A | sim | — | — | — | — | Recusa rebaixar o último dono ativo. Promover a dono e mudar o papel de um dono pedem a senha (seção 5.15). Nunca atribui `convidado`. |
+| `equipe-desativar`\*, `equipe-reativar`\*, `equipe-remover`\* | A | sim | — | — | — | — | Recusam o último dono ativo. Desativar encerra as sessões e para as execuções em curso, como hoje. Desativar um dono pede a senha; remover pede sempre (seção 5.15). A própria conta não é removida aqui. |
 | `equipe-recuperar`\*, `equipe-recuperar-confirmar`\* | A | sim | — | — | — | — | Seção 8.2. Nunca devolvem link no modo `piloto`. |
 | `equipe-teto`\* | A | sim | — | — | — | — | Teto mensal por pessoa, até o teto da redação. |
 | `equipe-atividade`\* | L | sim | — | — | — | — | Acessos e ações de administração da redação, sem conteúdo (W09, regra 8). Não inclui `acesso_negado` (seção 4.3). |
@@ -467,7 +470,7 @@ Resolvedor `caso` em todas. O rascunho é sempre da conta da sessão: ninguém l
 
 ### 5.15 Operações sensíveis pedem a senha de novo
 
-`conta-senha-trocar`, `conta-email-trocar`, `conta-fator-iniciar`, `conta-fator-codigos`, `conta-fator-remover`, `conta-excluir`, `equipe-convidar` (ao convidar como dono), `equipe-papel` (ao promover a dono), `equipe-remover`, `equipe-recuperar`, `ia-config-salvar` e `lixeira-apagar` levam a senha da conta no corpo. Uma sessão aberta num computador esquecido, ou um conteúdo malicioso exibido na Mesa (seção 9), não consegue executá-las.
+`conta-senha-trocar`, `conta-email-trocar`, `conta-fator-iniciar`, `conta-fator-codigos`, `conta-fator-remover`, `conta-excluir`, `equipe-convidar` (ao convidar como dono), `equipe-papel` (ao promover a dono e ao mudar o papel de quem é dono), `equipe-desativar` (quando o alvo é dono), `equipe-remover`, `equipe-recuperar`, `ia-config-salvar` e `lixeira-apagar` levam a senha da conta no corpo, no campo `senha` (`senha_atual` em `conta-senha-trocar`). A senha é sempre a de quem faz, nunca a do alvo. As duas condições sobre outro dono são a primeira ressalva de P28 (seção 11). O alvo é conferido antes da senha: uma conta que não existe, ou de outra redação, responde como inexistente com ou sem senha, e a tentativa não conta. Uma sessão aberta num computador esquecido, ou um conteúdo malicioso exibido na Mesa (seção 9), não consegue executá-las.
 
 ### 5.16 Operador do Vlado
 
@@ -678,7 +681,7 @@ O mesmo cuidado vale para todo texto que uma conta escreve e outra lê: nome de 
 
 ## 10. O que muda para os outros agentes
 
-**Arquivos de Contas** (escreve só neles): `scripts/acesso.py`, `scripts/rotas_contas.py`, os demais `scripts/rotas_*.py` e `scripts/interface_pesquisa.py` (nesta onda, pela tabela "Quem escreve onde"), e os módulos novos `scripts/autorizacao.py`, `scripts/correio.py`, `scripts/segundo_fator.py` e `scripts/rotas_equipe.py`. Testes em arquivos novos (`test_matriz_contas.py`, `test_isolamento_redacoes.py`, `test_migracao_contas.py`, `test_convites.py`, `test_segundo_fator.py`, `test_sessoes_conta.py`, `test_ciclo_conta.py`, `test_correio.py`), mais `test_acesso.py` e `test_autorizacao.py`, que são de autorização.
+**Arquivos de Contas** (escreve só neles): `scripts/acesso.py`, `scripts/rotas_contas.py`, os demais `scripts/rotas_*.py` e `scripts/interface_pesquisa.py` (nesta onda, pela tabela "Quem escreve onde"), e os módulos novos `scripts/autorizacao.py`, `scripts/correio.py`, `scripts/segundo_fator.py` e `scripts/rotas_equipe.py`. Testes em arquivos novos (`test_matriz_contas.py`, `test_isolamento_redacoes.py`, `test_migracao_contas.py`, `test_convites.py`, `test_segundo_fator.py`, `test_sessoes_conta.py`, `test_equipe.py`, `test_ciclo_conta.py`, `test_correio.py`), mais `test_acesso.py` e `test_autorizacao.py`, que são de autorização.
 
 **Pedidos, um por dono de arquivo. Nenhum é feito por Contas sem o aval do Maestro.**
 
@@ -739,21 +742,37 @@ Nenhuma das duas muda uma célula da matriz.
 - `python -m unittest discover -s testes -p test_migracao_contas.py -v`: não ampliação, autoria, reversão e repetição.
 - `testes/test_acesso.py` e `testes/test_autorizacao.py`, atualizados para o modelo novo.
 
-**O que a entrega 1 ainda não tem,** e onde o código difere do texto até lá:
+**Entrega 2, em código:** a própria conta (`conta-ver`, `conta-atualizar`, `conta-senha-trocar`, `conta-sessoes`, `conta-sessao-encerrar`, `conta-sessoes-encerrar-outras`, em `scripts/rotas_contas.py`) e a tela Equipe sem e-mail (`equipe-listar`, `equipe-papel`, `equipe-desativar`, `equipe-reativar`, `equipe-remover`, `equipe-teto`, `equipe-atividade`, em `scripts/rotas_equipe.py`), com a senha pedida de novo nas operações sensíveis que esta entrega traz (`conta-senha-trocar`, `equipe-papel`, `equipe-desativar`, `equipe-remover`; seção 5.15) e a primeira ressalva de P28. Rodam hoje:
 
-- As operações de `autorizacao.PENDENTES` (`conta-*`, `equipe-*`, convite, redefinição de senha e segundo fator) respondem 404. As seis `contas-*` continuam, só para o dono e só sobre a própria redação (`autorizacao.TRANSITORIAS`), e saem quando a tela Equipe entrar (seção 5.5).
+- `-p test_sessoes_conta.py`: perfil, troca de senha e sessões, pelo servidor.
+- `-p test_equipe.py`: papéis, desativação, remoção, tetos e atividade, pelo servidor.
+- `testes/test_acesso.py`: as mesmas regras no armazenamento, a senha de confirmação e a passagem do banco da versão 1 para a 2.
+
+Do que a entrega 2 decide, além do texto das seções acima:
+
+- Remover uma pessoa (`equipe-remover`) já deixa a conta na situação `excluida`, só com o id (seção 8.4). A troca do nome por "Conta excluída" nas saídas e a exclusão pela própria pessoa (`conta-excluir`) vêm com o ciclo de vida.
+- A lista de sessões mostra o aparelho como duas palavras tiradas de listas fechadas ("Firefox · Linux"), nunca o cabeçalho que o navegador mandou. A sessão em uso não é encerrada por `conta-sessao-encerrar`: sai-se dela.
+- `equipe-teto` com `conta` define o teto da pessoa; sem `conta`, o padrão por pessoa da redação. Onde a redação não tem teto próprio, vale o da instalação.
+- A atividade de cada redação tem a própria janela de 1.000 eventos: a de uma nunca empurra para fora a de outra. O prazo de 90 dias (decisão 15) entra com a `manutencao`.
+- `equipe-listar` traz o gasto do mês de cada pessoa. O gasto da redação, lá e em `GET /api/cota`, só vai ao dono quando o módulo de custo o conta por redação ou quando a instalação tem uma redação só: um número que soma redações não vai a ninguém (seção 4.5). `convites` sai vazio até a entrega dos convites.
+- O perfil legado `convidado` alcança as `conta-*` da própria conta, como os demais papéis (seção 5.4): é a única coisa que ele ganha, e não toca apuração nenhuma.
+
+**O que ainda não existe,** e onde o código difere do texto até lá:
+
+- As operações de `autorizacao.PENDENTES` (convite, redefinição de senha, troca de e-mail, segundo fator, termos, exportação e exclusão da própria conta, recuperação) respondem 404. As seis `contas-*` continuam, só para o dono e só sobre a própria redação (`autorizacao.TRANSITORIAS`), e saem quando a tela Equipe entrar (seção 5.5).
 - `contas-criar` é recusada a todos (403 `operacao_proibida`) numa instalação com mais de uma redação: o login é único na instalação, e a recusa "esse login já existe" contaria a uma redação que outra tem uma conta com ele (seção 4.5). Até o convite por e-mail entrar, nessas instalações as contas novas são criadas pelo operador, no terminal. Com uma redação só, nada muda. Nenhuma outra operação recebe campo único da instalação.
 - A página (`GET /`), `GET /api/sessao` e `GET /api/integracao` também passam pelo portão: de uma redação suspensa, respondem 403 `redacao_suspensa` (a página, um aviso simples, sem dado nem token).
 - `data-papel` leva `admin` para o dono enquanto a interface não conhece os papéis novos; os outros papéis vão com o próprio nome. `GET /api/sessao` já devolve os valores novos e `capacidades`.
 - `pendencias` sai sempre vazia: segundo fator e termos entram com a seção 8.
 - Tentativas de entrada: vale o bloqueio por identificador e endereço de hoje. O teto por identificador, o modo protegido e o aparelho conhecido (seção 8.2) entram com a entrada em dois passos.
+- `lixeira-apagar` e `ia-config-salvar` ainda não pedem a senha (seção 5.15). As telas de hoje não a mandam, e pedir só no servidor deixaria o dono sem apagar de vez e sem gravar a chave. O pedido entra junto com o campo na interface, na mesma integração.
 - Chave de IA: numa instalação `piloto` com mais de uma redação, `ia-config-salvar` é recusada a todos e `ia-config` não mostra os quatro últimos caracteres da chave do serviço, até a chave própria de cada redação existir (seção 8.5).
 - O registro de auditoria descarta os códigos, motivos, papéis e eventos novos até as listas fechadas de `registro_acesso.py` os receberem (pedido à Plataforma, seção 10, em andamento). O portão já grava a recusa como `acesso_negado`, com código, motivo e o id da redação (seção 4.3); enquanto a lista da Plataforma não tiver esse evento, a linha não sai. As duas mudanças precisam entrar juntas na integração.
 
-Chegam com as próximas entregas: `-p test_convites.py`, `-p test_segundo_fator.py`, `-p test_sessoes_conta.py`, `-p test_ciclo_conta.py`, `-p test_correio.py` (seção 8).
+Chegam com as próximas entregas: `-p test_convites.py`, `-p test_segundo_fator.py`, `-p test_ciclo_conta.py`, `-p test_correio.py` (seção 8).
 
 Portão da Onda 2: a matriz inteira coberta por teste; o Revisor tenta atravessar de uma redação para outra e não consegue; segunda leitura da matriz pelo Maestro.
 
 **Manual Follow-Up** (exige pessoa; nenhum agente marca como feito): aprovação deste contrato pelo dono do projeto; confirmação, por quem responde pela LGPD (D6), da decisão 10; contratação do envio de e-mail (D7); ensaio da migração numa cópia dos dados reais, pelo operador; conferência do segundo fator no aplicativo Android, que está congelado (D8).
 
-Status: aprovado pelo dono do projeto em 22/11/2026 (P28), com as duas ressalvas da seção 11; entrega 1 em código (seção 12). Revisão 2, de 22/11/2026, sobre `1972f1b`: decisões do dono do projeto registradas (P27); correção do achado B1 do Revisor e da família dele (seções 4.5, 5.4, 8.1 e 8.2); ressalvas do Revisor (seções 4.2, 4.3, 4.5, 5.5, 5.15 e 10); ressalvas M1 a M3 da segunda leitura do Maestro (M1 na seção 5.6; M2 nas seções 2.1, 2.4, 5.1 e 5.8; M3 nas seções 2.5, 4.2 e 4.6).
+Status: aprovado pelo dono do projeto em 22/11/2026 (P28), com as duas ressalvas da seção 11; entregas 1 e 2 em código (seção 12). Revisão 2, de 22/11/2026, sobre `1972f1b`: decisões do dono do projeto registradas (P27); correção do achado B1 do Revisor e da família dele (seções 4.5, 5.4, 8.1 e 8.2); ressalvas do Revisor (seções 4.2, 4.3, 4.5, 5.5, 5.15 e 10); ressalvas M1 a M3 da segunda leitura do Maestro (M1 na seção 5.6; M2 nas seções 2.1, 2.4, 5.1 e 5.8; M3 nas seções 2.5, 4.2 e 4.6).
