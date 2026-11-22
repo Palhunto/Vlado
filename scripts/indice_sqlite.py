@@ -587,7 +587,10 @@ def pesquisar(root, caso, rodada, consulta, *, modo='comum', documentos=None,
     return _salvar_log(run, result)
 
 
-def ler_passagem(root, caso, rodada, referencia, *, geracao='v1'):
+def ler_passagem(root, caso, rodada, referencia, *, geracao='v1', registrar=True):
+    """The passage of ``referencia`` and its whole unit. A reading (the person's, ``banco.py``'s or the model's tool)
+    goes to the raw query record of the round; ``registrar=False`` is only for the internal re-check of an evidence
+    already recorded (``registros_achados.conferir_evidencia``): it writes nothing and spends no ceiling."""
     run = caminho_rodada(root, caso, rodada)
     con, manifest = _abrir(run, caso, rodada, geracao)
     with closing(con):
@@ -603,4 +606,4 @@ def ler_passagem(root, caso, rodada, referencia, *, geracao='v1'):
             for item, (locator, _) in zip(result['unidade_completa'], located):
                 item['localizador'] = locator
         result['aviso'] = 'Contexto textual; conferir original quando houver imagens, tabelas ou erro de extracao.'
-    return _salvar_log(run, result)
+    return _salvar_log(run, result) if registrar else result

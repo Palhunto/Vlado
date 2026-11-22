@@ -166,7 +166,9 @@ def conferir_evidencia(root, caso, rodada, evidence, sources=None):
         index = evidence['indice']
         if not index:
             raise ValueError('Evidência indexada sem identidade do índice.')
-        result = ler_passagem(root, caso, rodada, index['referencia'], geracao=index['geracao'])
+        # Technical re-check of an evidence already recorded (on every load and publication), not a reading:
+        # its provenance is the record itself, so it writes no raw query file and spends no ceiling (SEG-06).
+        result = ler_passagem(root, caso, rodada, index['referencia'], geracao=index['geracao'], registrar=False)
         if any(result[k] != index[k] for k in ('indice_id', 'banco_sha256')):
             raise ValueError('Identidade do índice documental divergente.')
         hit = result['passagem']
