@@ -100,6 +100,12 @@ app é encerrado e reinicia; o cadastro desse arquivo falha). Se acontecer, com 
 `VLADO_MEM_LIMITE=3g` em `local.env` e rode `subir`. Os temporários do OCR vão para um volume em disco, não para a
 memória; deixe uns 10 GB livres no disco do Docker.
 
+**Extração e OCR no teto de 2 GB:** cada processo de extração tem o próprio teto de memória (`VLADO_EXTRACAO_TETO_MEMORIA_MB`) e o
+padrão de servidor é 2 processos de 2048 MB, que somados à Mesa passariam dos 2 GB e fariam o Docker matar o contêiner. Por isso o
+`local.env` traz **1 processo (`VLADO_EXTRACAO_PROCESSOS=1`) de 1024 MB (`VLADO_EXTRACAO_TETO_MEMORIA_MB=1024`)**: um cadastro de
+vários arquivos fica em fila, um por vez, e um PDF que passe dos 1024 MB falha com o motivo na fila (o original é cadastrado mesmo
+assim). Com os agentes parados e `VLADO_MEM_LIMITE=3g`, suba o teto para 2048.
+
 O Docker Desktop leva por padrão metade da RAM (o WSL2). Se quiser garantir que ele nunca tome mais do que o
 combinado, é uma decisão sua: crie `C:\Users\voce\.wslconfig` com `[wsl2]`, `memory=4GB`, `swap=2GB`, rode
 `wsl --shutdown` e reabra o Docker Desktop (isto derruba também os contêineres da homologação até voltarem).
