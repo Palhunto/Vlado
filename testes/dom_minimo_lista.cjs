@@ -39,3 +39,19 @@ test('lista vazia continua sendo um NodeList vazio', () => {
   assert.equal(nos.item(0), null);
   assert.deepEqual([...nos], []);
 });
+
+test('getElementsByTagName devolve um HTMLCollection: índices, item, namedItem e iterador, sem forEach nem Array', () => {
+  const colecao = criarMesa({scripts: [], html: '<main><i id="x">1</i><i name="y">2</i><b>3</b></main>'}).doc.getElementsByTagName('i');
+  assert.equal(Object.prototype.toString.call(colecao), '[object HTMLCollection]');
+  assert.equal(colecao.length, 2);
+  assert.equal(colecao[0].textContent, '1');
+  assert.equal(colecao.item(1).textContent, '2');
+  assert.equal(colecao.item(2), null);
+  assert.equal(colecao.namedItem('x').textContent, '1');
+  assert.equal(colecao.namedItem('y').textContent, '2');
+  assert.equal(colecao.namedItem('nenhum'), null);
+  assert.deepEqual([...colecao].map(el => el.textContent), ['1', '2']);
+  for (const metodo of ['forEach', 'filter', 'map', 'some', 'find', 'includes', 'indexOf']) {
+    assert.equal(typeof colecao[metodo], 'undefined', `${metodo} existe no HTMLCollection do DOM mínimo`);
+  }
+});

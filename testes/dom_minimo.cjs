@@ -221,6 +221,20 @@ class ListaDeNos {
 }
 const consultarTodos = (raiz, seletor) => new ListaDeNos(consultar(raiz, seletor));
 
+// getElementsByTagName devolve um HTMLCollection: length, item(), namedItem(), índices e iterador; sem forEach (que o
+// NodeList tem e o HTMLCollection não) e sem os métodos de Array.
+class ColecaoDeElementos {
+  constructor(els) {
+    els.forEach((el, i) => { this[i] = el; });
+    Object.defineProperty(this, 'length', {value: els.length});
+    Object.defineProperty(this, '_els', {value: els});
+  }
+  item(i) { return this._els[i] ?? null; }
+  namedItem(nome) { return this._els.find(el => el.getAttribute('id') === nome || el.getAttribute('name') === nome) ?? null; }
+  [Symbol.iterator]() { return this._els.values(); }
+  get [Symbol.toStringTag]() { return 'HTMLCollection'; }
+}
+
 class Elemento extends No {
   constructor(nome, doc) {
     super(1, doc); this.localName = nome.toLowerCase(); this.tagName = nome.toUpperCase();
@@ -284,7 +298,7 @@ class Elemento extends No {
   matches(seletor) { return casa(this, seletor, this); }
   querySelectorAll(seletor) { return consultarTodos(this, seletor); }
   querySelector(seletor) { return consultar(this, seletor, true)[0] || null; }
-  getElementsByTagName(nome) { return consultar(this, nome); }
+  getElementsByTagName(nome) { return new ColecaoDeElementos(consultar(this, nome)); }
   focus() { this.ownerDocument.activeElement = this; }
   blur() { if (this.ownerDocument.activeElement === this) this.ownerDocument.activeElement = this.ownerDocument.body; }
   click() { if (this.disabled) return; this.dispatchEvent(new Evento('click', {bubbles: true, cancelable: true, button: 0, detail: 1})); }
@@ -333,6 +347,7 @@ class Documento extends No {
   get body() { return this.documentElement?.querySelector('body') || null; }
   getElementById(id) { return consultar(this, `#${id}`, true)[0] || null; }
   querySelectorAll(seletor) { return consultarTodos(this, seletor); }
+  getElementsByTagName(nome) { return new ColecaoDeElementos(consultar(this, nome)); }
   querySelector(seletor) { return consultar(this, seletor, true)[0] || null; }
   createTreeWalker(raiz, mostrar = 0xffffffff) {
     const lista = [];
