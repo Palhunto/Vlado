@@ -434,6 +434,8 @@ Ações do cabeçalho: "Ver como lista" (secundário) e "Adicionar ligação" (p
 
 **Rótulo não cobre nó nem outra ligação** *(derivado do canvas, 22/11/2026)*: cada pílula fica sobre o trecho livre da própria ligação, e duas ligações não se cruzam por cima de um rótulo. Se a disposição automática não conseguir, a entidade vai para outra posição do anel.
 
+**Escala e largura** *(derivado, 22/11/2026)*: o mapa é desenhado em escala 1, para o texto nunca ficar abaixo de 14 px. Enquanto os quadros ficam no cartão com abas, o desenho tem 760 px de largura e ocupa a largura do cartão, com a legenda logo abaixo e a lista de pessoas e organizações depois dela. Abaixo de 1024 px o mapa se lê como a lista de ligações, como no celular ([Mapa, 390](#quadros)). O nó tem 200 × 80, o que cabe duas linhas de nome em 16.
+
 **Ícone da ligação pelo tipo livre** *(derivado, 22/11/2026)*: sócio → `relacao-socio`; irmão, pai, mãe, filho, cônjuge → `relacao-parentesco`; cargo, servidor, diretor → `relacao-cargo`; contrato → `contrato`; pagamento → `pagamento`; o resto → `relacao-vinculo`. O texto do tipo fica sempre ao lado e o ícone é `aria-hidden`.
 
 <a id="linha-do-tempo"></a>
