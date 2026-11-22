@@ -794,7 +794,8 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         if principal is None:
             self._sem_principal(api=True)
             return
-        registro_acesso.definir(conta=principal.get('conta'))
+        # The newsroom goes in every audit line of this request (its id only; none in the local mode).
+        registro_acesso.definir(conta=principal.get('conta'), organizacao=(principal.get('organizacao') or {}).get('id'))
         # Pilot mode requires an explicit Origin; local mode keeps accepting same-origin requests without it.
         origem = self.headers.get('Origin', None if self.server.com_contas else self.server.origin)
         if (origem != self.server.origin
@@ -891,9 +892,11 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             self._json(400, {'estado': 'erro', 'erro': mensagem}, exc)
 
     def _recusado(self, recusa, principal):
-        """Answer a refusal of the gate. The real reason goes to the audit log only, never to the browser."""
-        registro_acesso.registrar('operacao_negada', 'negado', (principal or {}).get('conta'), codigo=recusa.codigo,
-                                  motivo=recusa.motivo)
+        """Answer a refusal of the gate. The real reason goes to the audit log only (`acesso_negado`, with
+        `motivo`), never to the browser."""
+        registro_acesso.registrar('acesso_negado', 'negado', (principal or {}).get('conta'), codigo=recusa.codigo,
+                                  motivo=recusa.motivo,
+                                  organizacao=((principal or {}).get('organizacao') or {}).get('id'))
         self._json(recusa.status, recusa.corpo)
 
     def _cadastro_na_fila(self, operation, data):

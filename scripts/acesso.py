@@ -379,7 +379,7 @@ def _evento(tx: _Tx, tipo: str, conta: str | None, por: str | None, momento: dat
         organizacao = dona['organizacao'] if dona else None
     tx.ex('INSERT INTO eventos (em, tipo, conta, por, organizacao) VALUES (?, ?, ?, ?, ?)',
           _iso(momento), tipo, conta, por, organizacao)
-    tx.depois.append(lambda: registro_acesso.do_acesso(tipo, conta, por, momento, **detalhes))
+    tx.depois.append(lambda: registro_acesso.do_acesso(tipo, conta, por, momento, organizacao=organizacao, **detalhes))
     excesso = tx.um('SELECT COUNT(*) AS total FROM eventos')['total'] - MAX_EVENTOS
     if excesso > 0:  # leaving the window is not silent: it goes to the audit log
         for antigo in tx.todos('SELECT n, em, tipo, conta, por FROM eventos ORDER BY n LIMIT ?', excesso):
