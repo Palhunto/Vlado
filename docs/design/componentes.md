@@ -61,6 +61,19 @@ Serifa = `--fonte-titulo` *(novo)*, Source Serif 4. Sem serifa = `--fonte-interf
 
 Todo elemento interativo: `outline: 3px solid var(--theme-focus); outline-offset: 2px` (`--foco-largura`, `--foco-afastamento`, *novos*). Claro: ocre `#8a5a12`; escuro: ocre `#e6bc7a`. Nunca removido, nunca trocado por mudança só de cor. Dentro de contêiner com corte, anel interno (ver `mudancas-de-token.md`, item 2), nunca em botão principal. Origem: canvas (`:focus-visible` de todas as telas e o botão "Em foco" do design system).
 
+<a id="foco-aa"></a>
+
+**Decisões do portão AA** *(derivado, 22/11/2026, sobre o medidor de contraste da Sonda em `lancamento/qa-o3` `1ac811d`)*. Contrastes medidos com os tokens de `b5874ad`, claro / escuro.
+
+| Grupo | Decisão | Contraste depois |
+|---|---|---|
+| (a) Anel da barra lateral e das abas encostando no item ativo vizinho (ocre sobre `--theme-accent`: 1,62 / 1,05) | Nos itens da [barra lateral](#barra-lateral) e das [abas](#abas), inclusive as abas de Minha conta, Equipe e Configurações e as pílulas do celular, o anel de quem **não** é o item selecionado fica colado à borda: `outline: var(--foco-largura) solid var(--theme-focus); outline-offset: 0`. Com o intervalo de 4 px entre itens, sobra 1 px do fundo entre o anel e o vizinho. O item selecionado (`aria-current="page"`) mantém o afastamento de 2 px (`--foco-afastamento`), porque o anel dele cai sobre o fundo da barra e nunca há dois selecionados lado a lado. O intervalo de 4 px do canvas não muda | ocre sobre `--theme-sidebar` 5,12 / 10,22; sobre `--theme-soft` (item sob o mouse) 5,01 / 6,60; sobre `--theme-surface` (abas dos quadros) 5,86 / 8,52; sobre `--theme-background` 5,42 / 9,65 |
+| (b) Editor do Caderno (Vditor) sem contorno de foco | Área de edição (`pre.vditor-reset`): anel interno, `outline: var(--foco-largura) solid var(--theme-focus); outline-offset: calc(-1 * var(--foco-largura) - 2px)` (`mudancas-de-token.md`, item 2), porque ela ocupa o cartão inteiro e o cartão corta. Botões da barra do editor: o anel padrão (3 px, afastamento 2); se a barra cortar o anel, afastamento 0. Campo de texto do editor (`input`): o anel padrão e a borda 1 px `--theme-input-line` do [campo](#campo). Nenhum desses fica sobre fundo verde | ocre sobre `--theme-surface` 5,86 / 8,52; borda do campo sobre `--theme-surface` 3,95 / 5,21 |
+| (c) Seletor de apuração do topo (`select#contexto-caso`) sem borda, no fundo da página (1,00:1) | **Exceção declarada, sem caixa.** O canvas desenha o seletor sem caixa ("Apuração" sobre o nome, com a seta ⌄), e pôr caixa muda o canvas aprovado, o que só o dono autoriza. O WCAG 1.4.11 pede contraste do que identifica o controle, não uma borda. Aqui, o que identifica são o rótulo "Apuração", o nome em 16/600 e a seta, todos em `--theme-text`. Para a exceção valer: a seta é sempre `--theme-text` (nunca `--theme-muted`) e tem 16 px; o foco é o anel padrão; ao passar o mouse, o fundo vira `--theme-soft`, só como reforço, sem levar informação. A Sonda anota a exceção no medidor, para ele não cobrar a borda deste controle | seta e texto sobre `--theme-background` acima de 13:1 nos dois temas |
+| (d) Título da nota no Caderno (`input#apuracao-nota-titulo`) com sublinhado da cor do fundo | Sublinhado sempre visível: `border-bottom: 1px solid var(--theme-input-line)`, sem as outras bordas. No foco, o anel padrão. O rótulo "Título da nota" continua visível acima | `--theme-input-line` sobre `--theme-surface` 3,95 / 5,21 |
+
+Com (a), (b) e (d) corrigidos e (c) registrado como exceção, os grupos foco e campo do medidor ficam zerados, ou com a exceção (c) anotada.
+
 ### Quebras
 
 720, 1024 e 1280 px (`mudancas-de-token.md`, item 6). O canvas desenha 390 e 1440 px; as pranchas derivadas da fase 3 desenham 1024 e 390 px de duas telas ([Telas derivadas](#telas-derivadas)). A faixa de 720 a 1023 px ainda será desenhada.
@@ -603,7 +616,7 @@ A Mesa pede a senha antes de enviar quando sabe que a operação pede (tabela ab
 
 Textos: tornar dono, "Dono vê todas as apurações da redação, administra a equipe e apaga de vez. Vale na próxima ação de Ana Lima."; rebaixar dono, "Rui Castro deixa de administrar a redação e passa a ver só as apurações de que participa. Vale na próxima ação."; desativar, "A pessoa sai na próxima ação e as perguntas em curso dessa conta param. As apurações e os registros ficam; reativar devolve o acesso."; remover, "A conta é excluída: a pessoa perde o acesso, sai de todas as apurações e não pode ser reativada. Notas, revisões e conversas ficam com a redação. O nome continua nos registros já gravados e nos backups, que não podem ser reescritos." (decisão 10 do contrato); salvar a chave, "A chave fica guardada no servidor. A Mesa mostra só os quatro últimos caracteres."; remover a chave, "Sem ela, as perguntas deixam de usar esta chave."
 
-As operações sensíveis que a E2 ainda não tem (`conta-email-trocar`, `conta-fator-*`, `conta-excluir`, `equipe-convidar` como dono, `equipe-recuperar`) ficam fora da tela até existirem ([exceções](#contas-excecoes)).
+Com a E3 de Contas entram mais quatro, cada uma na sua seção: `equipe-convidar` como dono ([convites](#convites)), `equipe-recuperar` e `equipe-recuperar-confirmar` ([recuperar](#recuperar)) e `conta-email-trocar` ([Minha conta](#minha-conta)). As que ainda não existem (`conta-fator-*`, `conta-excluir`) ficam fora da tela até existirem ([exceções](#contas-excecoes)).
 
 <a id="icones"></a>
 
@@ -952,7 +965,7 @@ Ordem: à esquerda, Perfil, Entrada e segurança e Seus dados; à direita, Onde 
 
 | Cartão | Conteúdo e comportamento | Dados |
 |---|---|---|
-| **Perfil** | nome em 16/600; abaixo, o e-mail em 16, ou, na conta migrada sem e-mail, "login ana.lima" em 14 `--theme-muted`; papel e redação em 14 `--theme-muted` ("Repórter · Redação Serena", como o perfil da barra). "Mudar nome" (secundário) troca a linha do nome por um campo "Nome" (44, até 120 caracteres, já preenchido), com "Salvar" (principal) e "Cancelar" (secundário); em branco, "Falta o nome. Escreva o seu nome."; recusa do servidor abaixo do campo. Abaixo, duas caixas de seleção lado a lado, com rótulo acima (W08): **Idioma** (Português, English), que muda o idioma da Mesa, como o botão do cabeçalho, e grava o idioma da conta, com o apoio "Também é o idioma dos e-mails do Vlado."; **Tema** (Do sistema, Claro, Escuro), que fica só neste navegador, como o botão do cabeçalho, e não vai ao servidor (contrato, 2.3). "Do sistema" apaga a escolha guardada, e a Mesa passa a seguir `prefers-color-scheme` sempre que nada está guardado, sem piscar ao abrir (UX-07; aceito em 22/11/2026 sobre `8a45f08`: antes, a Mesa sem escolha guardada abria escura). O e-mail não muda aqui | `conta-ver`; `conta-atualizar` com `nome` ou `idioma` (`pt`, `en`) |
+| **Perfil** | nome em 16/600; abaixo, o e-mail em 16, ou, na conta migrada sem e-mail, "login ana.lima" em 14 `--theme-muted`; papel e redação em 14 `--theme-muted` ("Repórter · Redação Serena", como o perfil da barra). "Mudar nome" (secundário) troca a linha do nome por um campo "Nome" (44, até 120 caracteres, já preenchido), com "Salvar" (principal) e "Cancelar" (secundário); em branco, "Falta o nome. Escreva o seu nome."; recusa do servidor abaixo do campo. Abaixo, duas caixas de seleção lado a lado, com rótulo acima (W08): **Idioma** (Português, English), que muda o idioma da Mesa, como o botão do cabeçalho, e grava o idioma da conta, com o apoio "Também é o idioma dos e-mails do Vlado."; **Tema** (Do sistema, Claro, Escuro), que fica só neste navegador, como o botão do cabeçalho, e não vai ao servidor (contrato, 2.3). "Do sistema" apaga a escolha guardada, e a Mesa passa a seguir `prefers-color-scheme` sempre que nada está guardado, sem piscar ao abrir (UX-07; aceito em 22/11/2026 sobre `8a45f08`: antes, a Mesa sem escolha guardada abria escura). O e-mail muda por "Trocar e-mail" ([abaixo](#minha-conta)) | `conta-ver`; `conta-atualizar` com `nome` ou `idioma` (`pt`, `en`) |
 | **Entrada e segurança** | linha "Senha", com "definida há 12 dias" em 14 `--theme-muted` (de `senha_definida_em`; "definida hoje" no dia), e "Trocar senha" (secundário) à direita. As linhas do segundo fator e da chave de acesso ficam fora ([exceções](#contas-excecoes)) | `conta-ver` |
 | **Onde sua conta está aberta** | uma linha por sessão. A sessão em uso vem primeiro, com "Esta sessão" em 14/600 `--theme-muted` à direita e sem botão: sai-se dela por "Sair". As outras seguem na ordem do servidor (uso mais recente primeiro), com "Encerrar" (secundário). Cada linha tem o aparelho em 16 ("Firefox · Linux", "Aplicativo Android": o texto do servidor, `translate="no"`) e, abaixo, em 14 `--theme-muted`, o último uso e o endereço ("ontem, 21h10 · 189.40.12.7"). Com duas sessões ou mais, "Encerrar todas as outras" (secundário) no pé, e o apoio "Encerrar vale na próxima ação daquele aparelho." (contrato, 8.3). Encerrar é imediato, sem diálogo (W08, regra 5); o botão fica "Encerrando…", a linha sai e a linha de estado diz "✓ Sessão encerrada: Edge · Windows." ou "✓ 2 sessões encerradas." Se o servidor responder "Sessão não encontrada.", a lista recarrega, sem erro | `conta-sessoes`; `conta-sessao-encerrar` com `sessao`; `conta-sessoes-encerrar-outras` |
 | **Seu uso neste mês** | "Gasto com IA" em 16 e o valor em 16/600 à direita ("R$ 18,40 de R$ 50": gasto sempre com centavos; teto sem centavos quando inteiro, como na barra); [medidor](#medidor) de 6 px com `aria-label` ("37% da cota usada"); apoio "O teto é definido pelo dono da redação." Esgotada, o cartão vira o aviso da cota esgotada da barra ("! Cota esgotada", cores de aviso). Sem a rota, o cartão some. Sempre em reais, nunca em tokens (W08, regra 7) | `GET /api/cota`, bloco `conta` |
@@ -979,6 +992,20 @@ Respostas do servidor:
 - `senha_atual_incorreta`: "Senha atual incorreta. Confira e tente de novo.", no campo da senha atual;
 - `bloqueado`: o texto de bloqueio da [tabela](#dialogo-senha);
 - sucesso (`{estado: "senha_trocada", sessoes_encerradas: n}`): o diálogo fecha, a lista de sessões recarrega e a linha de estado diz "✓ Senha trocada." seguido de "Nenhuma outra sessão estava aberta.", "1 outra sessão foi encerrada." ou "3 outras sessões foram encerradas."
+
+**Trocar o próprio e-mail** *(derivado, 22/11/2026; E3 de Contas, `1720332`)*. No Perfil, "Trocar e-mail" (secundário) fica à direita da linha do e-mail. Na conta migrada sem e-mail, o botão é "Cadastrar e-mail". Ele abre a variante [com senha](#dialogo-senha) com o título "Trocar o e-mail da conta", dois campos e a ação principal "Enviar confirmação" ("Enviando…"):
+
+- **Campos:** "E-mail novo" (`type="email"`, `autocomplete="email"`, recebe o foco inicial) e "Sua senha".
+- **Texto:** "Enviamos um link ao e-mail novo. O e-mail atual continua valendo, inclusive para entrar, até você abrir o link."
+- **Erros antes do envio:** em branco, "Falta o e-mail novo. Escreva o endereço que quer usar."; sem a forma de endereço, "E-mail inválido. Confira o endereço, por exemplo ana@redacao.org."
+
+A resposta é sempre `{estado: "confirmacao_enviada"}`, para endereço livre e para endereço que já é de outra conta (contrato, 5.4). O diálogo fecha e a linha de estado diz "✓ Confirmação enviada ao e-mail novo. Abra o link em até 60 minutos." A tela não diz mais nada, para não contar se o endereço já tem conta. Com o transporte `tela`, a resposta traz `link`, e o diálogo mostra o link como no convite (limitação da seção 8.1 do contrato). Um pedido a cada 5 minutos: a recusa do servidor vai ao erro do diálogo.
+
+**Página "Confirmar e-mail"** (`/confirmar-email/<token>`): mais uma seção do Entrar, como [aceitar convite](#aceitar-convite).
+
+- Ao abrir, a página chama `email-confirmar` com o token.
+- Sucesso: "E-mail trocado. Use o e-mail novo para entrar." e a ação principal "Abrir a Mesa". A sessão aberta continua.
+- Link inválido, usado ou vencido: o estado "Este link não vale mais", com o texto do servidor ("Link inválido, usado ou vencido. Peça outro em Minha conta.").
 
 <a id="equipe"></a>
 
@@ -1051,6 +1078,55 @@ Frases da atividade. "Fulano" é `por_nome` e "Beltrano" é `conta_nome`; quando
 As frases de `sessao_encerrada` a `redacao_*` foram propostas pelo Vitral em `8a45f08` (achado D1 da Coruja: tipos que a E2 grava e esta tabela não previa) e aceitas pelo Design em 22/11/2026. No celular, a data vem sempre abaixo da frase, nunca ora ao lado, ora abaixo.
 
 **Só o dono na redação**: a tabela tem uma linha. Antes dos convites, abaixo dela vem o texto da exceção do convite; depois, nada: "Convidar pessoa" está no topo.
+
+<a id="recuperar"></a>
+
+### Recuperar o acesso de outra pessoa (E3)
+
+*(Derivado, 22/11/2026.)* Entra com a E3 de Contas (`1720332`; contrato, 8.2 e 12) e, como os convites, só na integração em que as `contas-*` saem (P30). Recuperar sempre envolve duas partes e pede a senha de quem age. A recuperação da própria conta não é por aqui: é "Esqueci a senha" ou "Trocar senha".
+
+**Onde fica.** No bloco ACESSO do Gerenciar, "Recuperar acesso" é um botão secundário ao lado de "Desativar" e "Remover da redação". Só aparece para conta ativa: a desativada é reativada antes. O apoio do bloco ganha uma frase: "Recuperar manda à pessoa um link para criar uma senha nova; nada muda na conta até ela usar o link." Quando a pessoa é dono, vem mais uma: "Para um dono, outro dono precisa confirmar em até 24 horas."
+
+**Diálogo.** É a variante [com senha](#dialogo-senha), com o título "Recuperar o acesso de Rui Castro?" e a ação principal "Recuperar acesso" ("Recuperando…"). O texto depende do caso. A Mesa sabe o papel da pessoa e o modo (`GET /api/sessao`, `modo`):
+
+| Caso | Texto |
+|---|---|
+| Não é dono, serviço hospedado | "Rui Castro recebe por e-mail um link para criar uma senha nova. O link vale 24 horas. Nada muda na conta até ele ser usado." |
+| Não é dono, Mesa instalada (`local-contas`) | "A Mesa mostra a você um link para Rui Castro criar uma senha nova. Entregue por um canal seguro. O link vale 24 horas." (P33) |
+| É dono | "Rui Castro é dono. O pedido espera até 24 horas que outro dono, que não seja você, o confirme. Só então sai o link." |
+
+Respostas de `equipe-recuperar` (`{conta, senha}`):
+
+| Resposta | O que a tela faz |
+|---|---|
+| `{estado: "enviada", envio: "enviado"}` | o diálogo fecha; linha de estado "✓ Link de recuperação enviado para Rui Castro. Vale 24 horas." |
+| `{estado: "enviada", envio: "falha"}` | o diálogo fecha; linha de estado em cores de aviso: "! O e-mail para Rui Castro não saiu. Peça de novo em alguns minutos." |
+| `{estado: "confirmada", link}` (só na Mesa instalada) | o diálogo troca o formulário pelo link, como no convite com `tela`: título "Entregue o link a Rui Castro"; texto "Mande por um canal seguro. O link vale 24 horas, uma única vez, e não será mostrado de novo. Nada muda na conta até ele ser usado."; o link só de leitura, "Copiar link" e "Já enviei" |
+| `{estado: "aguardando_confirmacao", recuperacao}` | o diálogo fecha; linha de estado "✓ Pedido registrado. Outro dono precisa confirmar a recuperação de Rui Castro até 23 de nov., 19h40."; o pedido aparece no cartão abaixo |
+| 400 `recuperacao_pelo_operador` | erro do diálogo com o texto do servidor ("Essa recuperação é feita pelo operador do serviço, pelo terminal."); a ação fica indisponível e sobra "Cancelar". Não é erro de quem pediu: não há terceiro dono, ou o link não tem como chegar à pessoa |
+| outras recusas 400 | o texto do servidor no erro do diálogo ("Já há um pedido de recuperação à espera de confirmação para essa conta.", "Um link de recuperação acabou de ser enviado a essa pessoa. Espere alguns minutos.") |
+| senha | como na [variante com senha](#dialogo-senha) |
+
+**Cartão "Recuperações à espera de confirmação".** Fica acima da tabela, depois do aviso do perfil antigo, só quando `equipe-listar` traz `recuperacoes`. É o bloco base do cartão, com uma linha com ação por pedido:
+
+- **Linha:** o nome da pessoa em 16 (`conta_nome`). Abaixo, em 14 `--theme-muted`: "pedido por Ana Lima em 22 de nov., 19h40 · vence em 23 de nov., 19h40" (`pedida_por_nome`, `pedida_em`, `expira_em`).
+- **Ação:** "Confirmar" (secundário) para quem não é nem quem pediu nem a própria pessoa (`pedida_por` e `conta` contra a conta da sessão). Para essas duas, no lugar do botão, "Aguardando outro dono" em 14 `--theme-muted`. O servidor recusa do mesmo jeito.
+- **Diálogo de "Confirmar":** a variante com senha, com o título "Confirmar a recuperação do acesso de Rui Castro?" e a ação principal "Confirmar recuperação". O texto é "Ana Lima pediu em 22 de nov., 19h40. Ao confirmar, Rui Castro recebe por e-mail um link para criar uma senha nova, válido por 24 horas." Na Mesa instalada, a segunda frase vira "Ao confirmar, a Mesa mostra a você o link para entregar a Rui Castro."
+- **Respostas** (`equipe-recuperar-confirmar` com `{recuperacao, senha}`): `enviada` e `confirmada` como na tabela acima. "Pedido de recuperação não encontrado." (vencido, de outra redação, ou de quem deixou de ser dono) vai ao erro do diálogo, e a lista recarrega ao fechar.
+- O pedido não se cancela pela tela: ele vence sozinho em 24 horas.
+
+Na atividade:
+
+| Tipo | Frase |
+|---|---|
+| `recuperacao_pedida` | Fulano pediu a recuperação do acesso de Beltrano |
+| `recuperacao_confirmada` | Fulano confirmou a recuperação do acesso de Beltrano |
+| `senha_redefinida` | Beltrano criou uma senha nova pelo link |
+| `redefinicao_pedida` | Beltrano pediu um link para criar uma senha nova |
+| `email_troca_pedida` | Beltrano pediu para trocar o e-mail |
+| `email_trocado` | Beltrano trocou o e-mail |
+
+Nenhuma frase leva endereço de e-mail.
 
 <a id="convites"></a>
 
@@ -1197,7 +1273,7 @@ A conferência destas telas não barra por elas. Cada uma volta ao wireframe qua
 | W09: cartão "Chave de IA da redação" | a chave continua em Configurações, como hoje, com a senha | houver chave por redação (contrato, 8.5, parte da Plataforma) |
 | W09: "aviso em 80%" e "redação convidada para o teste" | só o teto e a contagem de pessoas | o servidor informar o aviso e a situação do teste |
 | W09: "Ana entrou de novo aparelho" na atividade | a atividade sem esse evento | houver aparelho conhecido (contrato, 8.2 e 8.3) |
-| "Recuperar acesso" na Equipe | fica em Configurações, "Contas de acesso", como hoje (P30). Depois da integração dos convites, que tira as `contas-*`, fica fora: com e-mail, a pessoa usa "Esqueci a senha"; com `tela`, quem administra o serviço recupera | houver `equipe-recuperar`, com dupla confirmação (contrato, 8.2) |
+| "Recuperar acesso" na Equipe | fica em Configurações, "Contas de acesso", como hoje (P30) | volta com a E3 de Contas (`1720332`), já especificada em [recuperar](#recuperar), na mesma integração em que as `contas-*` saem |
 | Autor de conta removida como "Conta excluída" | o texto de remover não promete a troca | vier o ciclo de vida (contrato, 8.4 e 12) |
 
 ### Ganchos com o resto da Mesa
