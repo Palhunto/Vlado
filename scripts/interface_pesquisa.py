@@ -47,6 +47,7 @@ import fila_extracao
 from codex_apuracao import Conversas
 import acesso
 import proxies_confiaveis
+import apagamento
 import registro_acesso
 import lixeira
 import trava_cadastro
@@ -922,6 +923,13 @@ def servir(server, prazo=PRAZO_ENCERRAMENTO):
         resumo = {}
     if resumo.get('abandonada') or resumo.get('antiga_removida') or resumo.get('preparo_removido'):
         print('Partida: trava de cadastro recuperada de uma execução interrompida.', flush=True)
+    try:  # a permanent deletion cut by a crash: back to the trash, whole, or concluded (in the background)
+        apagados = apagamento.retomar(server.root, segundo_plano=True)
+    except OSError as exc:
+        print(f'Partida: apagamento definitivo interrompido não retomado ({exc.strerror or exc}).', file=sys.stderr, flush=True)
+    else:
+        if apagados['desfeitos'] or apagados['concluidos']:
+            print('Partida: apagamento definitivo interrompido retomado.', flush=True)
     anteriores = {}
     if threading.current_thread() is threading.main_thread():
         for nome in ('SIGTERM', 'SIGBREAK'):

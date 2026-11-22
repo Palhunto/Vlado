@@ -7,6 +7,7 @@ Exclusão, restauração e apagamento definitivo correm dentro da trava de cadas
 """
 from __future__ import annotations
 
+import apagamento
 import continuidade
 from inferencia_api import resumo_inferencia, salvar_inferencia
 import lixeira
@@ -32,16 +33,16 @@ class RotasGestao:
         if operation == 'lixeira-alcance':
             return lixeira.alcance(self.server.root, data.get('item'))
         if operation == 'lixeira-apagar':
+            # Under the locks only the check and the quarantine (quick); the files go in the background.
             with self.server.cadastro_lock:
-                alcance = lixeira.alcance(self.server.root, data.get('item'))
+                esperado = apagamento.nome_para_confirmar(self.server.root, data.get('item'))
                 nome = data.get('nome')
-                if (not isinstance(nome, str)
-                        or nome.strip().casefold() != str(alcance['nome_para_confirmar']).strip().casefold()):
+                if not isinstance(nome, str) or nome.strip().casefold() != str(esperado).strip().casefold():
                     raise ValueError('Digite o nome do item exatamente como mostrado para confirmar.')
                 return lixeira.apagar_definitivamente(
                     self.server.root, data.get('item'), data.get('confirmacao'),
                     quem=principal.get('nome') or principal.get('conta') or 'operador local',
-                    gerenciador=self.server.conversas)
+                    gerenciador=self.server.conversas, segundo_plano=True)
         if operation in GERENCIAR:
             with self.server.cadastro_lock:
                 manager = self.server.conversas
