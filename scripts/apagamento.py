@@ -389,14 +389,43 @@ def aguardar(prazo: float | None = None) -> bool:
         threads[0].join(resta)
 
 
-def retomar(root, *, segundo_plano: bool = False) -> dict:
+def _concluir_ilegivel(root: Path, item_id: str, caminho: Path) -> None:
+    """A manifest that cannot be read: it exists only after the person confirmed the deletion, so the
+    deletion is concluded from the trash entry (when it is still there): its roots, the quarantine,
+    catalog, trash and a record that says so. OSError leaves it for the next try."""
+    log.warning('Apagamento definitivo %s: manifesto ilegível; o item já tinha sido confirmado para apagar, '
+                'então o apagamento é concluído a partir da lixeira.', item_id)
+    item = next((i for i in lixeira.ativos(root) if i['id'] == item_id), None)
+    raizes = []
+    if item is not None:
+        try:
+            raizes = _escopo(root, item)['raizes']
+        except (ValueError, KeyError, OSError):
+            raizes = []
+    for rel in [*raizes, *(f'{volume}/{QUARENTENA}/{item_id}' for volume in VOLUMES)]:
+        entradas: dict[str, tuple[str, int]] = {}
+        pastas: list[str] = []
+        _varrer(root, rel, entradas, pastas)
+        _remover(root, sorted(entradas), pastas)
+    _limpar_quarentena_vazia(root, item_id)
+    if item is not None:
+        _atualizar_registros(root, item)
+        if not _registrado(root, item_id, 'manifesto_ilegivel'):
+            _registrar(root, item, 'partida da Mesa (manifesto ilegível)',
+                       {'conversas': [], 'rodadas': [], 'categorias': {}, 'totais': {}, 'confirmacao': 'manifesto_ilegivel'})
+    caminho.unlink(missing_ok=True)
+
+
+def retomar(root, *, segundo_plano: bool = False, espera: float | None = None) -> dict:
     """At the Mesa's start: finish what a crash left. Phase ``renomeando``: the roots go back and the
     item stays whole in the trash. Phase ``removendo``: catalog, trash and record (without repeating),
-    then the removal. A quarantine with no manifest (only this module writes there) is removed."""
+    then the removal. A manifest that cannot be read: concluded from the trash (``_concluir_ilegivel``).
+    A quarantine with no manifest (only this module writes there) is removed. ``espera``: how long to
+    wait for the cadastro lock (the default of ``trava_cadastro`` when None)."""
     from cadastrar_documentos import _trava
     root = Path(root).resolve()
-    resumo, pendentes = {'desfeitos': 0, 'concluidos': 0, 'orfas': 0}, []
-    with _trava(root):
+    resumo, pendentes = {'desfeitos': 0, 'concluidos': 0, 'orfas': 0, 'ilegiveis': 0}, []
+    with _trava(root, **({} if espera is None else {'espera': espera})):
         pasta = dentro(root, MANIFESTOS)
         conhecidos = set()
         for caminho in sorted(pasta.glob('*.json')) if pasta.is_dir() else []:
@@ -404,8 +433,16 @@ def retomar(root, *, segundo_plano: bool = False) -> dict:
                 manifesto = ler_json(caminho)
                 item_id, fase = manifesto['item']['id'], manifesto['fase']
             except (OSError, ValueError, KeyError, TypeError):
-                log.warning('Apagamento definitivo: manifesto ilegível %s; ficou como está.', caminho.name)
                 conhecidos.add(caminho.stem)
+                if not re.fullmatch(lixeira.ID_CONVERSA, caminho.stem):
+                    log.warning('Apagamento definitivo: manifesto %s fora do padrão; ficou como está.', caminho.name)
+                    continue
+                try:
+                    _concluir_ilegivel(root, caminho.stem, caminho)
+                    resumo['ilegiveis'] += 1
+                except OSError as exc:
+                    log.warning('Apagamento definitivo %s: não concluído (%s); a próxima partida tenta de novo.',
+                                caminho.stem, exc.strerror or exc)
                 continue
             conhecidos.add(item_id)
             if fase == 'renomeando':
@@ -442,6 +479,28 @@ def retomar(root, *, segundo_plano: bool = False) -> dict:
         else:
             _remover_quarentena(root, manifesto)
     return resumo
+
+
+def retomar_na_partida(root, *, espera: float = 2.0, intervalo: float = 30.0):
+    """``retomar`` for the Mesa's start, which never falls for it: the summary, or None when it could not
+    run now (cadastro lock busy, a file in use, anything else): then it tries again every ``intervalo``
+    seconds in the background until it runs, and the next operation that takes the lock is unaffected."""
+    try:
+        return retomar(root, segundo_plano=True, espera=espera)
+    except Exception as exc:  # noqa: BLE001 - the start goes on; this is retried below
+        log.warning('Apagamento definitivo: retomada na partida não concluída (%s); tenta de novo em segundo plano.', exc)
+
+    def tentar_depois():
+        while True:
+            time.sleep(intervalo)
+            try:
+                retomar(root, segundo_plano=True)
+                log.warning('Apagamento definitivo: retomada concluída em segundo plano.')
+                return
+            except Exception as exc:  # noqa: BLE001 - keeps trying; the Mesa goes on
+                log.warning('Apagamento definitivo: retomada ainda não concluída (%s).', exc)
+    threading.Thread(target=tentar_depois, daemon=True, name='vlado_apagamento_retomada').start()
+    return None
 
 
 def apagar(root, identificador: str, confirmacao: str, *, quem: str, gerenciador=None, ativa=None,
@@ -487,7 +546,12 @@ def apagar(root, identificador: str, confirmacao: str, *, quem: str, gerenciador
             try:
                 _desfazer(root, feitas)
             except OSError:
-                pass  # the manifest stays in "renomeando": the next start puts them back
+                # The manifest stays in "renomeando": the next start puts them back. Say so.
+                log.warning('Apagamento definitivo %s: renomeação desfeita só em parte; a partida termina.', item['id'])
+                raise ValueError('Não foi possível apagar (arquivo em uso ou sem permissão), e parte do item já tinha '
+                                 'sido separada para apagar: ela volta à lixeira na próxima partida da Mesa. Até lá, '
+                                 'não restaure nem apague este item; feche os programas que usem esses arquivos e '
+                                 'reinicie a Mesa.') from exc
             else:
                 _limpar_quarentena_vazia(root, item['id'])
                 _manifesto(root, item['id']).unlink(missing_ok=True)

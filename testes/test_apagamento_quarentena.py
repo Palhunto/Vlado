@@ -168,6 +168,62 @@ class QuedaTest(Base):
         apagamento.retomar(self.root)  # the next start: the file is free now
         self.assert_apagado_sem_sobra()
 
+    def test_renomeacao_e_desfazer_que_falham_dizem_a_verdade_e_a_partida_devolve(self):
+        real, feitas = os.rename, [0]
+
+        def em_uso(origem, destino):
+            if apagamento.QUARENTENA in Path(origem).parts:  # putting a root back: in use too
+                raise PermissionError(13, 'arquivo em uso')
+            feitas[0] += 1
+            if feitas[0] > 1:  # the second root is in use
+                raise PermissionError(13, 'arquivo em uso')
+            return real(origem, destino)
+        with mock.patch('apagamento.ESPERA_S', 0), mock.patch('apagamento.os.rename', side_effect=em_uso), \
+                self.assertLogs('vlado.apagamento', 'WARNING'):
+            with self.assertRaisesRegex(ValueError, 'volta à lixeira na próxima partida') as recusa:
+                apagamento.apagar(self.root, self.item['id'], self.token(), quem='admin')
+        self.assertNotIn('continua na lixeira', str(recusa.exception))  # not the whole truth any more
+        self.assertEqual([m['fase'] for m in self.manifestos()], ['renomeando'])
+        apagamento.retomar(self.root)  # the next start
+        self.assert_inteiro_na_lixeira()
+
+    def test_manifesto_ilegivel_conclui_o_apagamento_confirmado_pela_lixeira(self):
+        real, vezes = os.rename, [0]
+
+        def cai_na_segunda(origem, destino):
+            vezes[0] += 1
+            if vezes[0] == 2:
+                raise Queda()
+            return real(origem, destino)
+        with mock.patch('apagamento.os.rename', side_effect=cai_na_segunda), self.assertRaises(Queda):
+            apagamento.apagar(self.root, self.item['id'], self.token(), quem='admin')
+        manifesto = self.root / apagamento.MANIFESTOS / f'{self.item["id"]}.json'
+        manifesto.write_text('{quebrado', encoding='utf-8')  # unreadable, with a root in the quarantine
+        with self.assertLogs('vlado.apagamento', 'WARNING') as aviso:
+            self.assertEqual(apagamento.retomar(self.root)['ilegiveis'], 1)
+        self.assertIn('manifesto ilegível', '\n'.join(aviso.output))
+        self.assertEqual(self.retrato(), {})  # the quarantined root and the ones still in place: all gone
+        self.assertEqual((lixeira.ativos(self.root), self.no_catalogo()), ([], False))
+        self.assertEqual((self.quarentena(), self.manifestos()), ([], []))
+        self.assertEqual([(r['item_id'], r['confirmacao']) for r in self.registros()],
+                         [(self.item['id'], 'manifesto_ilegivel')])
+
+    def test_partida_nunca_cai_e_tenta_de_novo_em_segundo_plano(self):
+        import trava_cadastro
+        chamadas, feito = [], threading.Event()
+
+        def ocupada_na_primeira(root, **opcoes):
+            chamadas.append(opcoes)
+            if len(chamadas) == 1:
+                raise trava_cadastro.TravaOcupada('trava de cadastro ocupada por outro processo')
+            feito.set()
+            return {'desfeitos': 0, 'concluidos': 0, 'orfas': 0, 'ilegiveis': 0}
+        with mock.patch.object(apagamento, 'retomar', side_effect=ocupada_na_primeira), \
+                self.assertLogs('vlado.apagamento', 'WARNING'):
+            self.assertIsNone(apagamento.retomar_na_partida(self.root, intervalo=0.05))  # no exception
+            self.assertTrue(feito.wait(5), 'a retomada não foi tentada de novo')
+        self.assertEqual(chamadas[0].get('espera'), 2.0)  # the start waits little for the lock
+
     def test_quarentena_sem_manifesto_e_removida_e_o_resto_fica(self):
         orfa = self.root / 'casos' / apagamento.QUARENTENA / ('d' * 32) / '0'
         orfa.mkdir(parents=True)
