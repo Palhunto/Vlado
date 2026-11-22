@@ -133,13 +133,19 @@ test('campos e botões secundários usam a borda de controle, sem cor fixa', () 
   assert.match(css, /\.danger\{[^}]*border-color:var\(--theme-danger-line\)/);
 });
 
-test('texto usa uma escala curta e nunca fica abaixo de 12px', t => {
+test('texto usa seis degraus e nunca fica abaixo de 14px', t => {
+  // Decisão do dono (P11, docs/design/mudancas-de-token.md, item 4): seis degraus, piso de 14 px.
+  // --text-xs e --text-sm são alias de --text-md enquanto as regras migram; as exceções de tamanho
+  // (destaque, número, marca, citação, marca antiga) ficam fora da escala de interface.
+  const ALIAS = ['--text-xs', '--text-sm'];
+  const EXCECOES = ['--text-destaque', '--text-numero', '--text-marca', '--text-quote', '--text-brand'];
   const escala = Object.entries(claro).filter(([nome]) => nome.startsWith('--text-'));
-  const interface_ = escala.filter(([nome]) => !['--text-quote', '--text-brand'].includes(nome));
-  assert.ok(interface_.length >= 6 && interface_.length <= 7, `${interface_.length} degraus de interface`);
+  const interface_ = escala.filter(([nome]) => ![...ALIAS, ...EXCECOES].includes(nome));
+  assert.deepEqual(interface_.map(([, valor]) => parseInt(valor, 10)), [14, 16, 18, 22, 28, 36], 'degraus de interface');
   for (const [nome, valor] of escala) {
+    if (ALIAS.includes(nome)) { assert.equal(valor, 'var(--text-md)', `${nome} aponta para o piso de 14 px`); continue; }
     assert.match(valor, /^\d+px$/, nome);
-    assert.ok(parseInt(valor, 10) >= 12, `${nome}: ${valor}`);
+    assert.ok(parseInt(valor, 10) >= 14, `${nome}: ${valor}`);
   }
   const fixos = blocos(css).flatMap(r => (r.corpo.match(/font(?:-size)?\s*:[^;]*?\d+px[^;]*/g) || []).map(d => `${r.seletor} { ${d} }`));
   assert.deepEqual(fixos, [], 'tamanho de texto fora da escala');
