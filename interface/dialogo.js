@@ -36,7 +36,7 @@
     nome.setAttribute('translate', 'no');
     destino.replaceChildren(antes, nome, depois);
   }
-  const focaveis = caixa => caixa.querySelectorAll(FOCAVEIS)
+  const focaveis = caixa => [...caixa.querySelectorAll(FOCAVEIS)]
     .filter(controle => !controle.disabled && controle.getAttribute('tabindex') !== '-1' && !controle.closest('[hidden]'));
 
   function abrir(opcoes) {

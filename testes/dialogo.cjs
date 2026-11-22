@@ -9,6 +9,16 @@ function abrir(idioma = 'pt') {
   const mesa = criarMesa({scripts: ['i18n_en.js', 'i18n.js', 'dialogo.js'], idioma, armazenamento: idioma === 'en' ? {'vlado-idioma': 'en'} : {},
     html: '<!doctype html><html><head></head><body data-idioma-padrao="pt"><main id="conteudo"><button id="gatilho">Excluir</button></main></body></html>',
     preparar: janela => { janela.AbortController = AbortController; }});
+  // querySelectorAll de verdade devolve NodeList, sem filter nem map: o dialogo.js não pode depender de métodos de Array.
+  const criar = mesa.doc.createElement.bind(mesa.doc);
+  mesa.doc.createElement = etiqueta => {
+    const no = criar(etiqueta);
+    if (etiqueta === 'dialog') {
+      const consultar = no.querySelectorAll.bind(no);
+      no.querySelectorAll = seletor => { const lista = consultar(seletor); return {...lista, length: lista.length, item: i => lista[i], forEach: f => lista.forEach(f), [Symbol.iterator]: () => lista[Symbol.iterator]()}; };
+    }
+    return no;
+  };
   return mesa;
 }
 const caixa = mesa => mesa.doc.querySelector('dialog.dialogo');
