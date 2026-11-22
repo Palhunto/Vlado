@@ -1365,6 +1365,7 @@ window.VLADO_I18N_EN = {
     "Um apagamento definitivo desta apuração ficou pela metade e só se resolve na próxima partida da Mesa. Até lá, não é possível restaurar nem apagar este item; feche os programas que usem esses arquivos e reinicie a Mesa.": "A permanent deletion in this investigation was left halfway and is only settled the next time the Mesa starts. Until then, this item cannot be restored or deleted; close the programs using those files and restart the Mesa.",
     // Minha conta e Equipe (conta.js, equipe.js) e o diálogo com senha (dialogo.js)
     "Sua senha": "Your password",
+    "A apuração nova não foi criada: o primeiro envio não terminou. Envie de novo.": "The new investigation was not created: the first upload did not finish. Send again.",
     "Remover a chave de IA?": "Remove the AI key?",
     "A Mesa deixa de usar a chave salva. A senha confirma que é você quem muda a conexão com a IA.": "The desk stops using the saved key. Your password confirms that it is you changing the AI connection.",
     "Remover chave": "Remove key",

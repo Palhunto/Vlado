@@ -424,3 +424,60 @@ test('Cadastrar arquivos com apuração nova não escolhe o identificador, no en
   await existente.esperar(10);
   assert.deepEqual([manifestoDe(existente.pedidos[0]).novo, manifestoDe(existente.pedidos[0]).caso], [false, 'alfa']);
 });
+
+// --- B1 da Coruja: entrar no caso assim que o servidor o devolve (aceitação do lote), não só na publicação --------------------------------------
+const CASO_DO_SERVIDOR = 'apuracao_aceita_primeiro';
+const aceitar = (mesa, indice, lote) => mesa.pedidos[indice].responder(200, {estado: 'enfileirado', lote: {lote, caso: CASO_DO_SERVIDOR, estado: 'enfileirado', arquivos: []}});
+
+test('primeiro lote aceito e depois FALHO na fila: o segundo lote vai ao mesmo caso (novo:false), e não cria outra apuração', async () => {
+  const mesa = abrir({fila: id => (id === 'L1'
+    ? {lote: id, caso: CASO_DO_SERVIDOR, estado: 'falha', motivo: 'Não foi possível ler os arquivos.', arquivos: []}
+    : {lote: id, caso: CASO_DO_SERVIDOR, estado: 'publicado', recibo: {recebidos: 1, novos: 1, duplicados: 0, corpus_id: 'c1'}, arquivos: [{indice: 0, estado: 'pronto', extracao: 'extraido'}]})});
+  const promessa = mesa.janela.Envio.enviar({escopo: {novo: true, titulo: 'T'}, arquivos: [arquivo('a.pdf', 40 * MB), arquivo('b.pdf', 40 * MB)], alvo: mesa.$('alvo')});
+  await livre(mesa);
+  assert.ok(!('caso' in manifestoDe(mesa.pedidos[0])));
+  aceitar(mesa, 0, 'L1');
+  await livre(mesa); await livre(mesa); await livre(mesa);
+  assert.equal(mesa.pedidos.length, 2, 'o segundo lote segue, mesmo com o primeiro falho');
+  const segundo = manifestoDe(mesa.pedidos[1]);
+  assert.equal(segundo.novo, false); assert.equal(segundo.caso, CASO_DO_SERVIDOR, 'o caso que o servidor devolveu ao aceitar o primeiro');
+  aceitar(mesa, 1, 'L2');
+  const final = await promessa;
+  assert.equal(final.caso_id, CASO_DO_SERVIDOR); assert.equal(final.lotes.length, 1, 'só o segundo publicou'); assert.ok(final.erro, 'o primeiro falhou e o resultado diz');
+});
+
+test('primeiro lote aceito e depois SUMIDO da fila: o segundo lote também leva o caso', async () => {
+  const mesa = abrir();
+  const original = mesa.janela.fetch;
+  mesa.janela.fetch = async (endereco, opcoes) => (String(endereco) === '/api/fila?lote=L1'
+    ? {ok: false, json: async () => ({erro: 'Lote não encontrado na fila.'})}
+    : String(endereco) === '/api/fila?lote=L2'
+      ? {ok: true, json: async () => ({lote: {lote: 'L2', caso: CASO_DO_SERVIDOR, estado: 'publicado', recibo: {recebidos: 1, novos: 1, duplicados: 0}, arquivos: [{indice: 0, estado: 'pronto', extracao: 'extraido'}]}})}
+      : original(endereco, opcoes));
+  const promessa = mesa.janela.Envio.enviar({escopo: {novo: true, titulo: 'T'}, arquivos: [arquivo('a.pdf', 40 * MB), arquivo('b.pdf', 40 * MB)], alvo: mesa.$('alvo')});
+  await livre(mesa);
+  aceitar(mesa, 0, 'L1');
+  await livre(mesa); await livre(mesa); await livre(mesa);
+  assert.equal(mesa.pedidos.length, 2);
+  const segundo = manifestoDe(mesa.pedidos[1]);
+  assert.equal(segundo.novo, false); assert.equal(segundo.caso, CASO_DO_SERVIDOR);
+  aceitar(mesa, 1, 'L2');
+  assert.equal((await promessa).caso_id, CASO_DO_SERVIDOR);
+});
+
+test('se o servidor diz que a apuração nova não existe, o envio para e avisa: os lotes que faltam não são enviados', async () => {
+  const mesa = abrir({fila: id => ({lote: id, caso: CASO_DO_SERVIDOR, estado: 'falha', motivo: 'x', arquivos: []})});
+  const promessa = mesa.janela.Envio.enviar({escopo: {novo: true, titulo: 'T'}, arquivos: [arquivo('a.pdf', 40 * MB), arquivo('b.pdf', 40 * MB), arquivo('c.pdf', 40 * MB)], alvo: mesa.$('alvo')});
+  await livre(mesa);
+  aceitar(mesa, 0, 'L1');
+  await livre(mesa); await livre(mesa); await livre(mesa);
+  assert.equal(mesa.pedidos.length, 2);
+  mesa.pedidos[1].responder(404, {estado: 'erro', erro: 'Caso não encontrado.'});
+  const final = await promessa;
+  assert.equal(mesa.pedidos.length, 2, 'o terceiro lote não foi enviado');
+  assert.ok(final.erro, 'o resultado traz o erro');
+  const [, segunda, terceira] = linhas(mesa);
+  assert.match(resultado(segunda), /A apuração nova não foi criada: o primeiro envio não terminou\. Envie de novo\./);
+  assert.match(resultado(terceira), /A apuração nova não foi criada/);
+  assert.equal(final.recebidos, 0); assert.equal(final.pendentes, 3);
+});

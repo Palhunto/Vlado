@@ -237,6 +237,7 @@
     const resultado = {caso_id: escopo.caso ?? null, lotes: [], enviados: 0, recebidos: 0, novos: 0, duplicados: 0, pendentes: 0, avisos: [], recusados: ctx.linhas.filter(l => l.estado === 'recusado').length, cancelado: false};
     ui.desenhar();
 
+    let casoAceito = null;   // o identificador que o servidor escolheu para a apuração nova, assim que aceita o primeiro lote
     const lotesPlanejados = planejar(ctx.linhas.filter(l => l.estado === 'aguardando'));
     const fazer = async lotes => {
       for (const linhas of lotes) {
@@ -244,23 +245,26 @@
         for (const linha of linhas) { linha.estado = 'enviando'; linha.fracao = 0; }
         ui.mostrarAcoes([{rotulo: t('Cancelar envio'), aoClicar: () => { ctx.cancelado = true; ctx.cancelarEnvio?.(); }}]);
         ui.desenhar();
-        // O primeiro lote cria a apuração nova; os seguintes entram nela, com o identificador que o servidor devolveu.
-        const entrando = resultado.lotes.length > 0 && resultado.caso_id;
-        const manifesto = {...escopo, ...(entrando ? {novo: false, caso: resultado.caso_id} : {}), assincrono: true,
+        // O primeiro lote cria a apuração nova; os seguintes entram nela, com o identificador que o servidor devolveu na ACEITAÇÃO do lote (não na
+        // publicação): se o primeiro for aceito e depois falhar ou sumir da fila, o segundo ainda vai ao mesmo caso, e não cria outra apuração.
+        const manifesto = {...escopo, ...(resultado.lotes.length ? {novo: false} : {}), ...(casoAceito ? {novo: false, caso: casoAceito} : {}), assincrono: true,
           arquivos: linhas.map(l => ({nome: l.nome, tamanho: l.bytes}))};
         let lote;
         try {
           lote = await postarLote(manifesto, linhas, ctx);
         } catch (falha) {
           const cancelou = falha.abortado || ctx.cancelado;
-          for (const linha of linhas) { linha.estado = cancelou ? 'cancelado' : 'nao-enviado'; linha.motivo = cancelou ? '' : falha.message; }
+          // O servidor diz que a apuração nova não existe (o primeiro lote não chegou a criá-la): para e avisa, em vez de seguir com os outros lotes.
+          const semApuracao = !!casoAceito && !resultado.lotes.length && [400, 404].includes(falha.status);
+          for (const linha of linhas) { linha.estado = cancelou ? 'cancelado' : 'nao-enviado'; linha.motivo = cancelou ? '' : semApuracao ? t('A apuração nova não foi criada: o primeiro envio não terminou. Envie de novo.') : falha.message; }
           ui.desenhar();
           if (cancelou) { ctx.cancelado = true; break; }
+          if (semApuracao) { resultado.erro = falha; for (const resto of lotes.slice(lotes.indexOf(linhas) + 1).flat()) { resto.estado = 'nao-enviado'; resto.motivo = t('A apuração nova não foi criada: o primeiro envio não terminou. Envie de novo.'); } ui.desenhar(); break; }
           resultado.erro = falha;
           continue;
         }
         ctx.cancelarEnvio = null;
-        if (lote.caso) resultado.caso_id = lote.caso;   // o identificador que o servidor escolheu para a apuração nova
+        if (lote.caso) { resultado.caso_id = lote.caso; if (escopo.novo && !escopo.caso) casoAceito = lote.caso; }   // o identificador que o servidor escolheu
         ui.mostrarAcoes([]);
         for (const linha of linhas) linha.fracao = 1;
         const dosArquivos = linhas;   // o índice do lote é a posição no manifesto
