@@ -746,7 +746,7 @@ Nenhuma das duas muda uma célula da matriz.
 - `pendencias` sai sempre vazia: segundo fator e termos entram com a seção 8.
 - Tentativas de entrada: vale o bloqueio por identificador e endereço de hoje. O teto por identificador, o modo protegido e o aparelho conhecido (seção 8.2) entram com a entrada em dois passos.
 - Chave de IA: numa instalação `piloto` com mais de uma redação, `ia-config-salvar` é recusada a todos e `ia-config` não mostra os quatro últimos caracteres da chave do serviço, até a chave própria de cada redação existir (seção 8.5).
-- O registro de auditoria descarta os códigos, motivos, papéis e eventos novos até as listas fechadas de `registro_acesso.py` os receberem (pedido à Plataforma, seção 10); até lá, `acesso_negado` com motivo não chega ao registro.
+- O registro de auditoria descarta os códigos, motivos, papéis e eventos novos até as listas fechadas de `registro_acesso.py` os receberem (pedido à Plataforma, seção 10). A recusa do portão é gravada como `operacao_negada`, o evento que o registro já conhece, e não como `acesso_negado` (seção 4.3): a linha sai, mas sem o motivo e sem os códigos novos. O nome do evento se acerta com a Plataforma junto com as listas.
 - Backup: `acesso.copia_consistente` e `acesso.encerrar_todas_as_sessoes` existem, e o `backup.py` ainda não as usa (pedido à Infra, seção 10). Enquanto não usar, uma restauração traz de volta as sessões que estavam no banco copiado.
 
 Chegam com as próximas entregas: `-p test_convites.py`, `-p test_segundo_fator.py`, `-p test_sessoes_conta.py`, `-p test_ciclo_conta.py`, `-p test_correio.py` (seção 8).
