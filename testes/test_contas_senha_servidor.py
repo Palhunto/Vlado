@@ -46,9 +46,9 @@ class ContasSenhaTest(cenario.DuasRedacoes):
         self.assertTrue(corpo['link'])
         self.assertEqual(self.situacao(alvo)['situacao'], 'aguardando_senha')
 
-    def test_criar_conta_nesta_instalacao_e_recusada_antes_de_pedir_a_senha(self):
-        # Nesta instalação as contas novas vêm de quem a administra: a recusa vem sem pedir a senha, e o diálogo não abre à toa
-        # (por isso piloto.js envia o pedido primeiro). Quando o convite por e-mail entrar, a regra da senha do dono vale (contrato, 5.15).
+    def test_criar_conta_com_mais_de_uma_redacao_e_recusada_antes_de_pedir_a_senha(self):
+        # Regra da E1 (5e342fe): com mais de uma redação na instalação, contas-criar é recusada a todos; com uma só, passa. A recusa vem
+        # sem pedir a senha, e o diálogo não abre à toa (por isso piloto.js envia o pedido primeiro). Quando passa, vale a senha do dono (5.15).
         dados = {'nome': 'Caio Dono', 'login': 'caio.dono.senha', 'papel': 'admin', 'horas': 72}
         status, corpo, bruto = self.post('dono', 'contas-criar', dados)
         self.assertEqual((status, corpo.get('codigo')), (403, 'operacao_proibida'), bruto[:200])
