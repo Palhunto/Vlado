@@ -32,7 +32,8 @@ EVENTOS = ('acesso_negado', 'caso_criado', 'caso_atribuido', 'participacao_inclu
 PAPEIS = ('dono', 'editor', 'reporter', 'leitor')
 CODIGOS = ('caso_indisponivel', 'conversa_indisponivel', 'lote_inexistente', 'redacao_suspensa', 'pendencia_de_conta',
            'operacao_inexistente', 'acesso_indisponivel', 'senha_atual_incorreta', 'ultimo_dono', 'senha_necessaria',
-           'convite_duplicado', 'limite_de_convites', 'transporte_indisponivel', 'codigo_invalido', 'fator_necessario')
+           'convite_duplicado', 'limite_de_convites', 'transporte_indisponivel', 'codigo_invalido', 'fator_necessario',
+           'recuperacao_pelo_operador', 'link_invalido', 'senha_invalida')
 MOTIVOS = ('sem_participacao', 'outra_redacao', 'inexistente', 'redacao_suspensa', 'senha_incorreta', 'ultimo_dono',
            'link_expirado', 'email_em_uso', 'limite', 'codigo_invalido', 'protegido', 'pendencia')
 MENSAGENS = ('convite', 'redefinicao', 'novo_acesso', 'senha_trocada', 'fator_alterado', 'recuperacao',
@@ -132,6 +133,11 @@ class ListasDoContratoTest(unittest.TestCase):
             with self.subTest(evento=evento):
                 self.assertEqual(r.montar(evento, 'ok', CONTA, por='manutencao')['por'], 'manutencao')
         self.assertNotIn('por', r.montar('convite_expirado', 'ok', CONTA, por='sistema'))
+
+    def test_recuperacao_pelo_operador_na_recusa_de_administracao(self):
+        # E3: a recovery the operator must do is refused to the dono, and the refusal keeps its code.
+        linha = r.montar('admin_recusada', 'negado', CONTA, codigo='recuperacao_pelo_operador', alvo=CONTA, organizacao=ORG)
+        self.assertEqual((linha['evento'], linha['codigo'], linha['alvo']), ('admin_recusada', 'recuperacao_pelo_operador', CONTA))
 
     def test_fora_das_listas_continua_descartado(self):
         linha = r.montar('acesso_negado', 'negado', CONTA, motivo='porque sim', codigo='inventado', nome_caso='Caso X')

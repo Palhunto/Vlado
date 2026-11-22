@@ -92,7 +92,10 @@ CODIGOS = frozenset({'operacao_proibida', 'caso_nao_liberado', 'campos_nao_permi
                      'ultimo_dono', 'senha_necessaria',
                      # convite e e-mail (E3); segundo fator (E4)
                      'convite_duplicado', 'limite_de_convites', 'transporte_indisponivel', 'codigo_invalido',
-                     'fator_necessario'})
+                     'fator_necessario',
+                     # recusas da E3 (recuperacao_pelo_operador vai em admin_recusada; os outros dois, por paridade
+                     # com as respostas, mesmo que hoje não cheguem ao registro como código)
+                     'recuperacao_pelo_operador', 'link_invalido', 'senha_invalida'})
 # Qual e-mail saiu ou falhou (email_enviado, email_falhou): só o tipo, nunca o endereço nem o texto.
 MENSAGENS = frozenset({'convite', 'redefinicao', 'novo_acesso', 'senha_trocada', 'fator_alterado', 'recuperacao',
                        'muitas_tentativas', 'email_novo', 'conta_inativa'})
