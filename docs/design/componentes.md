@@ -230,7 +230,7 @@ O estado de salvamento é anunciado a leitor de tela quando muda (W11, regra 9).
 
 ### Abas
 
-Onde: cabeçalho dos quadros. Linha com intervalo de 4. Cada aba é `<a>`: altura 44, preenchimento 0 14, raio 8, texto 16 `--theme-text`. Ativa: `aria-current="page"`, fundo `--theme-soft`, texto `--theme-accent` 600. Foco: anel. Ao passar o mouse (derivado): fundo `--theme-soft`. Ocupado, erro, desabilitado e vazio não se aplicam. Ordem: Hipóteses, Linha do tempo, Mapa de relações, Tabelas, Comparador (cinco abas, decisão do dono P15.1; "Conferência do texto" foi para o caderno e "Entrevistas e pedidos" virou a área Pedidos e prazos). Rótulo sem quebra de linha. É o único padrão de aba da Mesa (UX-17 aponta três). No celular, as abas viram pílulas que rolam para o lado: altura 40, preenchimento 0 16, raio pílula, borda 1 px `--theme-input-line`; ativa verde cheio (`--theme-accent`, texto `--theme-on-primary` 600); "Mapa" no lugar de "Mapa de relações"; faixa com preenchimento 12 16, fundo `--theme-surface` e borda inferior 1 px `--theme-line`.
+Onde: cabeçalho dos quadros. Linha com intervalo de 4. Cada aba é `<a>`: altura 44, preenchimento 0 14, raio 8, texto 16 `--theme-text`. Ativa: `aria-current="page"`, fundo `--theme-soft`, texto `--theme-accent` 600. Foco: anel. Ao passar o mouse (derivado): fundo `--theme-soft`. Ocupado, erro, desabilitado e vazio não se aplicam. Ordem: Hipóteses, Linha do tempo, Mapa de relações, Tabelas, Comparador (cinco abas, decisão do dono P15.1; "Conferência do texto" foi para o caderno e "Entrevistas e pedidos" virou a área Pedidos e prazos). Rótulo sem quebra de linha. É o único padrão de aba da Mesa (UX-17 aponta três). No celular, as abas viram pílulas que rolam para o lado: altura 44 (o canvas desenha 40; decisão do dono P20b, 22/11/2026, pelo alvo de toque), preenchimento 0 16, raio pílula, borda 1 px `--theme-input-line`; ativa verde cheio (`--theme-accent`, texto `--theme-on-primary` 600); "Mapa" no lugar de "Mapa de relações"; faixa com preenchimento 12 16, fundo `--theme-surface` e borda inferior 1 px `--theme-line`.
 
 <a id="achado"></a>
 
@@ -936,7 +936,7 @@ Pela regra 1 do contrato, nada disto é construído antes de o Design desenhar e
 
 ## Decisões do dono (21/11/2026)
 
-Respostas do dono às perguntas desta especificação e às pranchas de `aprovacao/`, repassadas pelo Maestro (P11, P12, P14, P14b, P15 e P16 da nota de decisões; P20a, de 22/11/2026). Pergunta aberta: altura das abas em pílula no celular, 40 px como no canvas ou 44 px pelo alvo de toque (o Frontend usa 44 até a resposta).
+Respostas do dono às perguntas desta especificação e às pranchas de `aprovacao/`, repassadas pelo Maestro (P11, P12, P14, P14b, P15 e P16 da nota de decisões; P20a e P20b, de 22/11/2026). Não há pergunta aberta nesta seção.
 
 | Nº | Pergunta | Decisão |
 |---|---|---|
@@ -971,5 +971,6 @@ Respostas do dono às perguntas desta especificação e às pranchas de `aprovac
 | P16.4 | Contador do item ativo | "Documentos 12" vira pílula clara na página atual. |
 | P16.5 | Cadastrar arquivos | Deixa de ser área; vira a área de envio de Documentos. |
 | P20a | Selo do veredito da IA (22/11/2026) | Pílula sem fundo, borda tracejada e texto com "IA ·"; os selos humanos mantêm fundo, borda contínua e sinal ([selo](#selo)). |
+| P20b | Altura das abas em pílula no celular (22/11/2026) | 44 px, pelo alvo de toque; o canvas desenha 40. Mudança no canvas autorizada pelo dono ([abas](#abas)). |
 
 As 27 pranchas da fase 3 e as de `aprovacao/` foram aprovadas e regeneradas com estas decisões, inclusive a barra de 256 px. As telas finais do canvas em `referencia/telas/` continuam como estão: são o registro do contrato; as decisões acima valem sobre elas onde houver diferença, e `referencia/com-decisoes/` mostra as sete telas com elas aplicadas.
