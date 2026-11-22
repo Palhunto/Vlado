@@ -85,7 +85,8 @@
     const botao = $('entrar-idioma');
     botao.textContent = t('idioma');
     botao.setAttribute('aria-label', t('idioma_rotulo'));
-    if (ultimaMensagem) mostrar(ultimaMensagem.chave, ultimaMensagem.ok, false);
+    if (ultimaMensagem?.campo) { if (ultimaMensagem.campo._estadoErro) mostrarNoCampo(ultimaMensagem.chave, ultimaMensagem.campo, false); }
+    else if (ultimaMensagem) mostrar(ultimaMensagem.chave, ultimaMensagem.ok, false);
     aplicarTema(document.documentElement.dataset.theme);
   }
   function aplicarTema(valor) {
@@ -96,8 +97,17 @@
     const meta = document.querySelector('meta[name="theme-color"]');
     if (fundo && meta) meta.content = fundo;
   }
+  // Erro de preenchimento junto ao campo (W11 regra 5; Estados.erroCampo): mensagem logo depois do campo, aria-invalid, aria-describedby e foco.
+  // A mensagem do servidor (senha errada, bloqueio, rede) continua na caixa de aviso: ela não diz qual dos dois campos está errado.
+  function mostrarNoCampo(chave, campo, focar = true) {
+    mostrar(null);
+    const aviso = window.Estados.erroCampo(campo, t(chave), {foco: focar});
+    campo.closest('label')?.after(aviso);   // fora do <label>, para não entrar no nome do campo
+    ultimaMensagem = {chave, campo};
+  }
   function mostrar(chave, ok = false, focar = true) {
     const caixa = $('entrar-mensagem');
+    if (ultimaMensagem?.campo) window.Estados.limparErroCampo(ultimaMensagem.campo);
     ultimaMensagem = chave ? {chave, ok} : null;
     caixa.textContent = chave ? t(chave) : '';
     caixa.hidden = !chave;
@@ -148,7 +158,7 @@
     $('entrar-form').addEventListener('submit', async evento => {
       evento.preventDefault();
       const login = $('entrar-login').value.trim(), senha = $('entrar-senha').value;
-      if (!login || !senha) { mostrar('erro_preencher'); return; }
+      if (!login || !senha) { mostrarNoCampo('erro_preencher', login ? $('entrar-senha') : $('entrar-login')); return; }
       const botao = $('entrar-enviar');
       ocupado(botao, true, 'entrando');
       try {
@@ -179,8 +189,8 @@
     $('ativar-form').addEventListener('submit', async evento => {
       evento.preventDefault();
       const senha = $('ativar-senha').value;
-      if (senha.length < 12 || senha.length > 256) { mostrar('erro_senha_tamanho'); $('ativar-senha').focus(); return; }
-      if (senha !== $('ativar-confirmar').value) { mostrar('erro_senha_diferente'); $('ativar-confirmar').focus(); return; }
+      if (senha.length < 12 || senha.length > 256) { mostrarNoCampo('erro_senha_tamanho', $('ativar-senha')); return; }
+      if (senha !== $('ativar-confirmar').value) { mostrarNoCampo('erro_senha_diferente', $('ativar-confirmar')); return; }
       ocupado(botao, true, 'salvando');
       try {
         const {status, corpo} = await enviar('ativar', {token, senha});
@@ -206,9 +216,10 @@
       evento.preventDefault();
       const nome = $('primeiro-nome').value.trim(), login = $('primeiro-login').value.trim().toLowerCase();
       const senha = $('primeiro-senha').value, confirmacao = $('primeiro-confirmar').value;
-      if (!nome || !/^[a-z0-9][a-z0-9._-]{2,63}$/.test(login)) { mostrar('erro_nome_login'); return; }
-      if (senha.length < 12 || senha.length > 256) { mostrar('erro_senha_tamanho'); $('primeiro-senha').focus(); return; }
-      if (senha !== confirmacao) { mostrar('erro_senha_diferente'); $('primeiro-confirmar').focus(); return; }
+      if (!nome) { mostrarNoCampo('erro_nome_login', $('primeiro-nome')); return; }
+      if (!/^[a-z0-9][a-z0-9._-]{2,63}$/.test(login)) { mostrarNoCampo('erro_nome_login', $('primeiro-login')); return; }
+      if (senha.length < 12 || senha.length > 256) { mostrarNoCampo('erro_senha_tamanho', $('primeiro-senha')); return; }
+      if (senha !== confirmacao) { mostrarNoCampo('erro_senha_diferente', $('primeiro-confirmar')); return; }
       ocupado(botao, true, 'criando');
       try {
         const {status, corpo} = await enviar('primeiro-admin', {nome, login, senha, confirmacao});
