@@ -7,7 +7,7 @@
 // sempre envolve duas partes e pede a senha de quem age; os pedidos à espera de confirmação de um terceiro dono ficam num cartão acima da tabela.
 (() => {
   if (!window.Conta) return;
-  const {no, botao, dado, apoio, carregar, data, dia, reais, rotuloPapel, estado, sensivel, textoDoServidor} = window.Conta;
+  const {no, botao, dado, apoio, carregar, data, dia, reais, rotuloPapel, estado, sensivel, textoDoServidor, vistaDoLink} = window.Conta;
   const t = (pt, vars) => (window.I18N ? window.I18N.t(pt, vars) : String(pt).replace(/\{(\w+)\}/g, (todo, nome) => vars?.[nome] ?? todo));
   const ID_CONTA = /^[0-9a-f]{16}$/;
   const PAPEIS_ESCOLHA = ['dono', 'editor', 'reporter', 'leitor'];
@@ -245,23 +245,6 @@
     return grupo;
   }
   const AVISO_DE_ENVIO = '! O e-mail para {email} não saiu. O convite está entre os pendentes; reenvie quando quiser.';
-  // A vista do link do convite com o transporte `tela`: mostrada uma vez, no diálogo, e não fica na página depois.
-  function vistaDoLink({titulo: tituloDoLink, email, link, expiraEm, texto: textoPronto}) {
-    return {titulo: tituloDoLink, item: email, itemAspas: false, acao: 'Já enviei', semCancelar: true,
-      texto: textoPronto || t('Mande por um canal seguro, pessoalmente ou por mensageiro cifrado. O link vale até {dia}, uma única vez, e não será mostrado de novo.', {dia: dia(expiraEm)}),
-      montar(vista) {
-        const campoDoLink = document.createElement('input'); campoDoLink.type = 'text'; campoDoLink.readOnly = true; campoDoLink.value = link;
-        campoDoLink.className = 'convite-link'; campoDoLink.setAttribute('translate', 'no'); campoDoLink.setAttribute('aria-label', t('Link do convite'));
-        const aviso = no('p', 'conta-apoio'); aviso.setAttribute('role', 'status');
-        const copiar = botao('Copiar link', 'secondary', async () => {
-          try { await navigator.clipboard.writeText(campoDoLink.value); aviso.textContent = t('Link copiado.'); }
-          catch (_) { campoDoLink.select(); aviso.textContent = t('Selecione o link e copie manualmente.'); }
-        });
-        const linha = no('div', 'convite-link-linha'); linha.append(campoDoLink, copiar);
-        vista.append(linha, aviso);
-        Promise.resolve().then(() => { campoDoLink.focus(); campoDoLink.select?.(); });
-      }};
-  }
   function mostrarLink({titulo: tituloDoLink, email, link, expiraEm, gatilho}) {
     return window.Dialogo.confirmar({variante: 'simples', titulo: tituloDoLink, acao: 'Já enviei', gatilho,
       preparar: ctx => ctx.trocarPor(vistaDoLink({titulo: tituloDoLink, email, link, expiraEm}))});

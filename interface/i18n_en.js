@@ -1652,6 +1652,19 @@ window.VLADO_I18N_EN = {
     "Pedido de recuperação não encontrado.": "Recovery request not found.",
     "A confirmação precisa vir de outro dono: nem de quem pediu, nem da própria pessoa.": "The confirmation has to come from another owner: not from who asked, nor from the person.",
     "Reative a conta antes de recuperar o acesso dela.": "Reactivate the account before recovering its access.",
+    // Trocar o próprio e-mail (conta.js)
+    "Você pediu essa troca há pouco. Espere alguns minutos para pedir de novo.": "You asked for this change a moment ago. Wait a few minutes before asking again.",
+    "Esse já é o e-mail da conta.": "That is already the account email.",
+    "Trocar e-mail": "Change email",
+    "Cadastrar e-mail": "Add email",
+    "Trocar o e-mail da conta": "Change the account email",
+    "Enviamos um link ao e-mail novo. O e-mail atual continua valendo, inclusive para entrar, até você abrir o link.": "We send a link to the new email. The current email stays valid, including for signing in, until you open the link.",
+    "Enviar confirmação": "Send confirmation",
+    "E-mail novo": "New email",
+    "Falta o e-mail novo. Escreva o endereço que quer usar.": "The new email is missing. Write the address you want to use.",
+    "Confirmação enviada ao e-mail novo. Abra o link em até 60 minutos.": "Confirmation sent to the new email. Open the link within 60 minutes.",
+    "Confirme o e-mail {item}": "Confirm the email {item}",
+    "Abra o link para confirmar o e-mail novo. Ele vale 60 minutos, uma única vez, e não será mostrado de novo.": "Open the link to confirm the new email. It is valid for 60 minutes, once only, and will not be shown again.",
   },
   padroes: [
     // Cota do mês na barra lateral

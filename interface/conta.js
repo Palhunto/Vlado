@@ -221,6 +221,24 @@
   const sensivel = opcoes => window.Dialogo.comSenha(opcoes);
   const recusaDaSenha = (falha, opcoes) => window.Dialogo.recusaDaSenha(falha, opcoes);
 
+  // A vista do link (convite com o transporte `tela`, recuperação na Mesa instalada, confirmação do e-mail): mostrada uma vez, no diálogo, e não fica na página depois.
+  function vistaDoLink({titulo: tituloDoLink, email, link, expiraEm, texto: textoPronto}) {
+    return {titulo: tituloDoLink, item: email, itemAspas: false, acao: 'Já enviei', semCancelar: true,
+      texto: textoPronto || t('Mande por um canal seguro, pessoalmente ou por mensageiro cifrado. O link vale até {dia}, uma única vez, e não será mostrado de novo.', {dia: dia(expiraEm)}),
+      montar(vista) {
+        const campoDoLink = document.createElement('input'); campoDoLink.type = 'text'; campoDoLink.readOnly = true; campoDoLink.value = link;
+        campoDoLink.className = 'convite-link'; campoDoLink.setAttribute('translate', 'no'); campoDoLink.setAttribute('aria-label', t('Link do convite'));
+        const aviso = no('p', 'conta-apoio'); aviso.setAttribute('role', 'status');
+        const copiar = botao('Copiar link', 'secondary', async () => {
+          try { await navigator.clipboard.writeText(campoDoLink.value); aviso.textContent = t('Link copiado.'); }
+          catch (_) { campoDoLink.select(); aviso.textContent = t('Selecione o link e copie manualmente.'); }
+        });
+        const linha = no('div', 'convite-link-linha'); linha.append(campoDoLink, copiar);
+        vista.append(linha, aviso);
+        Promise.resolve().then(() => { campoDoLink.focus(); campoDoLink.select?.(); });
+      }};
+  }
+
   // --- Minha conta (W08) ---------------------------------------------------------------------------------------------------------------
   const nuvem = {};  // os cartões montados
   let perfilAtual = null;
@@ -286,8 +304,48 @@
     let contato;
     if (conta.email) { contato = dado(conta.email, 'p'); contato.className = 'conta-texto'; }
     else { contato = no('p', 'conta-apoio'); contato.append(t('login'), ' ', dado(conta.login || '')); }
+    // "Trocar e-mail" (secundário) à direita da linha do e-mail; na conta migrada sem e-mail, "Cadastrar e-mail".
+    const trocar = botao(conta.email ? 'Trocar e-mail' : 'Cadastrar e-mail', 'secondary conta-trocar-email', () => trocarEmail(trocar));
     const papel = no('p', 'conta-apoio'); papel.append(rotuloPapel(conta.papel), ' · ', dado(organizacao?.nome || ''));
-    corpo.replaceChildren(nomeLinha, contato, papel, preferencias(conta));
+    corpo.replaceChildren(nomeLinha, linha(contato, trocar), papel, preferencias(conta));
+  }
+  // "Trocar o e-mail da conta": a variante com senha com um campo a mais. A resposta é sempre a mesma, para endereço livre e para endereço de outra conta; só com o
+  // transporte `tela` a resposta traz o link, e o diálogo o mostra como no convite.
+  const FORMA_DE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  async function trocarEmail(gatilho) {
+    let resposta = null;
+    const form = {};
+    const ok = await window.Dialogo.confirmar({
+      variante: 'simples', titulo: 'Trocar o e-mail da conta', texto: 'Enviamos um link ao e-mail novo. O e-mail atual continua valendo, inclusive para entrar, até você abrir o link.',
+      acao: 'Enviar confirmação', ocupado: 'Enviando…', gatilho,
+      campos: [{id: 'senha', rotulo: 'Sua senha', apoio: 'A senha com que você entra na Mesa.', autocomplete: 'current-password', exigido: true}],
+      preparar(ctx) {
+        const email = document.createElement('input'); email.type = 'email'; email.autocomplete = 'email'; email.maxLength = 254; email.setAttribute('translate', 'no');
+        email.setAttribute('spellcheck', 'false'); email.setAttribute('autocapitalize', 'none');
+        const rotulo = no('label', 'conta-campo', t('E-mail novo')); rotulo.append(email);
+        ctx.corpo.append(rotulo); form.email = email; email.focus();
+      },
+      validar() {
+        window.Estados.limparErroCampo(form.email);
+        const digitado = form.email.value.trim();
+        if (!digitado) { window.Estados.erroCampo(form.email, 'Falta o e-mail novo. Escreva o endereço que quer usar.'); return false; }
+        if (!FORMA_DE_EMAIL.test(digitado)) { window.Estados.erroCampo(form.email, 'E-mail inválido. Confira o endereço, por exemplo ana@redacao.org.'); return false; }
+        return {};
+      },
+      async executar(ctx) {
+        try { resposta = await api('conta-email-trocar', {email: form.email.value.trim(), senha: ctx.valores().senha}); }
+        catch (falha) {
+          const recusa = window.Dialogo.recusaDaSenha(falha);  // senha incorreta no campo; bloqueio só com Cancelar; o resto (um pedido a cada 5 minutos) no erro do diálogo
+          throw recusa === falha ? new Error(textoDoServidor(falha)) : recusa;
+        }
+        if (resposta?.link) {
+          ctx.trocarPor(vistaDoLink({titulo: 'Confirme o e-mail {item}', email: form.email.value.trim(), link: resposta.link,
+            texto: t('Abra o link para confirmar o e-mail novo. Ele vale 60 minutos, uma única vez, e não será mostrado de novo.')}));
+        }
+      },
+    });
+    if (!ok || !resposta) return;
+    if (!resposta.link) estado(t('Confirmação enviada ao e-mail novo. Abra o link em até 60 minutos.'));
   }
   // Idioma muda o idioma da Mesa e grava o da conta; Tema fica só neste navegador (contrato, 2.3).
   function preferencias(conta) {
@@ -462,7 +520,7 @@
       : 'Exportar seus dados e excluir sua conta ainda não estão na Mesa. Para pedir, fale com o dono da redação.')));
   }
 
-  window.Conta = {abrir, registrarAba, estado, titulo, dia, textoDoServidor, sensivel, recusaDaSenha, no, botao, dado, apoio, cartao, carregar, linha, data, reais, rotuloPapel,
+  window.Conta = {abrir, registrarAba, estado, titulo, dia, textoDoServidor, vistaDoLink, sensivel, recusaDaSenha, no, botao, dado, apoio, cartao, carregar, linha, data, reais, rotuloPapel,
     capacidade, sessao, atualizarAbas};
 
   // O perfil da barra aparece para qualquer conta (não só para o dono) e leva a Minha conta.
