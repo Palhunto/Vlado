@@ -59,6 +59,8 @@ ARQUIVOS = {'/': ('index.html', 'text/html; charset=utf-8'),
             '/tokens.css': ('tokens.css', 'text/css; charset=utf-8'),
             '/style.css': ('style.css', 'text/css; charset=utf-8'),
             '/caderno.css': ('caderno.css', 'text/css; charset=utf-8'),
+            '/componentes_o3.css': ('componentes_o3.css', 'text/css; charset=utf-8'),
+            '/dialogo.js': ('dialogo.js', 'text/javascript; charset=utf-8'),
             '/quadros.js': ('quadros.js', 'text/javascript; charset=utf-8'),
             '/analise.js': ('analise.js', 'text/javascript; charset=utf-8'),
             '/indicador_salvamento.js': ('indicador_salvamento.js', 'text/javascript; charset=utf-8')}

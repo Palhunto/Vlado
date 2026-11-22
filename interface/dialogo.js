@@ -50,7 +50,6 @@
       caixa.setAttribute('role', 'alertdialog');
       caixa.setAttribute('aria-modal', 'true');
       caixa.setAttribute('aria-labelledby', `${id}-titulo`);
-      caixa.setAttribute('aria-describedby', `${id}-texto`);
 
       const titulo = no('h2', 'dialogo-titulo'); titulo.id = `${id}-titulo`;
       preencherTitulo(titulo, t(opcoes.titulo || ''), opcoes.item);
@@ -58,7 +57,7 @@
       const partes = [];
       if (opcoes.rubrica) partes.push(no('p', 'dialogo-rubrica', t(opcoes.rubrica)));
       partes.push(titulo);
-      if (opcoes.texto) partes.push(texto);
+      if (opcoes.texto) { partes.push(texto); caixa.setAttribute('aria-describedby', texto.id); }
       if (opcoes.nota) partes.push(no('p', 'dialogo-nota', t(opcoes.nota)));
 
       let campo = null;

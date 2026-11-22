@@ -41,16 +41,16 @@
     }
     select.value = value;
   }
-  function canSwitch() {
+  function canSwitch(value) {
     if(cadastroBusy){notice('Aguarde o recibo deste envio antes de trocar de apuração.');return false;}
     if (window.estadoConversa?.().ocupada) {
       notice('Aguarde a execução ou reconecte o acompanhamento antes de trocar de apuração.'); return false;
     }
-    return window.prepararTrocaApuracao?.() !== false;
+    return window.prepararTrocaApuracao?.(() => window.definirContextoCaso(value, {force:true})) !== false;
   }
   window.definirContextoCaso = (value, {force = false} = {}) => {
     if (value === current) return true;
-    if (!force && !canSwitch()) return false;
+    if (!force && !canSwitch(value)) return false;
     current = value;
     for (const name of Object.keys(pageOffsets)) pageOffsets[name] = 0;
     adapt('contexto-caso', value);
@@ -299,9 +299,15 @@
       $(formId).addEventListener('input',()=>{dirty=true;}); $(formId).addEventListener('change',()=>{dirty=true;});
     }
     const close=dialog.querySelector('.section-heading button');
-    const check=()=>!dirty || window.confirm(window.I18N.t('Há texto ou alterações não salvas. Descartar e fechar?'));
-    close.addEventListener('click',event=>{if(!check()){event.preventDefault();event.stopImmediatePropagation();}},true);
-    dialog.addEventListener('cancel',event=>{if(!check())event.preventDefault();},true);
+    // The answer comes from the confirmation dialog, so a dirty form always cancels the event first and, once discarding is confirmed, closes.
+    let discarding=false;
+    const discard=finish=>{
+      window.Dialogo.confirmar({variante:'destrutivo',titulo:'Descartar e fechar?',texto:'Há texto ou alterações não salvas.',acao:'Descartar e fechar'}).then(ok=>{
+        if(!ok)return; discarding=true; try{finish();}finally{discarding=false;}
+      });
+    };
+    close.addEventListener('click',event=>{if(dirty&&!discarding){event.preventDefault();event.stopImmediatePropagation();discard(()=>close.click());}},true);
+    dialog.addEventListener('cancel',event=>{if(dirty&&!discarding){event.preventDefault();discard(()=>dialog.close());}},true);
     dialog.addEventListener('close',()=>{dirty=false;});
     window.addEventListener('beforeunload',event=>{if(dialog.open&&dirty){event.preventDefault();event.returnValue='';}});
     // Automatic draft of the form (continuidade.js). Closing saves or discards for real, so the

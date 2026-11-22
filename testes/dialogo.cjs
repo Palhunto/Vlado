@@ -187,3 +187,11 @@ test('em inglês, os textos fixos e os da chamada passam pelo dicionário', asyn
   await mesa.esperar();
   assert.equal(botoes(mesa)[0].textContent, 'Cancel');
 });
+
+test('a interface não usa mais o confirm() do navegador (UX-16, W11 regra 8)', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const pasta = path.resolve(__dirname, '..', 'interface');
+  const usos = fs.readdirSync(pasta).filter(nome => nome.endsWith('.js') && nome !== 'dialogo.js')
+    .filter(nome => /\b(window\.)?confirm\(/.test(fs.readFileSync(path.join(pasta, nome), 'utf8').replace(/\bDialogo\.confirmar\(/g, '')));
+  assert.deepEqual(usos, [], 'troque por Dialogo.confirmar');
+});
