@@ -140,27 +140,37 @@ O que procurar: rajadas de `login_falha` do mesmo `ip` ou do mesmo `login_ref` (
 logo depois de `login_falha`, `recuperacao_emitida` ou `acesso_alterado` que ninguém pediu, `operacao_negada` repetida de um
 convidado, `download` em volume ou fora do horário, `registro_cheio` (alguém está inundando o registro).
 
-## IP do cliente atrás de CDN ou WAF (SEG-05): `VLADO_PROXIES_CONFIAVEIS`
+## IP do cliente atrás do Caddy e de CDN ou WAF (SEG-05, CONF-03): `VLADO_PROXIES_CONFIAVEIS`
 
-O limite de 20 tentativas por minuto e o registro usam o **IP do cliente**. Sem configurar nada, a Mesa confia no último salto
-do `X-Forwarded-For` (o Caddy). Atrás de uma CDN ou de um WAF todos os pedidos chegam com o IP da borda e **dividem as 20
-tentativas**. A correção é dizer à Mesa quem são os proxies de confiança, no `.env` do ambiente:
+O limite de 20 tentativas por minuto, o teto de pedidos por endereço (CONF-03) e o registro de auditoria usam o **IP do cliente**. O par
+TCP da Mesa é sempre o Caddy; o IP do cliente vem do `X-Forwarded-For` que o Caddy escreve. Sem dizer à Mesa quem são os proxies de
+confiança, o Caddy seria o "cliente" de todos: **um limite e um teto só para o site inteiro**.
 
-```
-VLADO_PROXIES_CONFIAVEIS=172.18.0.0/16, 203.0.113.0/24      # a rede do Compose (o Caddy) e as faixas da CDN
-```
+**O Compose já cuida disso, sem configurar nada.** A rede do Compose tem **sub-rede fixa** (`VLADO_REDE_SUBNET`) e a lista de proxies
+confiáveis que a Mesa recebe **sempre começa por ela**: a rede só tem o Caddy, a Mesa e o serviço de backup, então confiar no
+`X-Forwarded-For` de quem fala por ela é seguro. Não depende mais de `VLADO_CONFIAR_PROXY` (que saiu do Compose).
+
+- **A sub-rede de cada ambiente** está no exemplo (`deploy/ambientes/*.env.example`): homologação `172.29.10.0/24`, demonstração
+  `172.29.20.0/24`, editorial `172.29.30.0/24`, ambiente local `172.29.40.0/24` (o padrão do Compose, sem arquivo, é `172.29.99.0/24`).
+  **Ambientes na mesma máquina precisam de sub-redes diferentes.** Se a sua colidir com outra rede do Docker ou com uma VPN (o Docker
+  responde "Pool overlaps with other one on this address space"), troque `VLADO_REDE_SUBNET` no `.env` por outra faixa privada livre
+  (`docker network ls` e `docker network inspect` mostram as usadas).
+- **Atrás de CDN ou WAF**, todos os pedidos chegam com o IP da borda e dividem o limite. No `.env`, acrescente as faixas da CDN
+  (elas são **somadas** à sub-rede, não a substituem):
+
+  ```
+  VLADO_PROXIES_CONFIAVEIS=203.0.113.0/24, 2001:db8::/32      # só as faixas da CDN; a rede do Compose já vai junto
+  ```
 
 - A lista aceita IPs e redes (IPv4 e IPv6), separados por vírgula, espaço ou ponto e vírgula. Lista inválida **impede a Mesa de
   subir**, com a mensagem dizendo qual item. Uma rede que cobre quase toda a internet (`0.0.0.0/0`, `::/0`, IPv4 menor que /8,
   IPv6 menor que /16) também **impede a partida**: confiar nela deixaria qualquer cliente escolher o próprio IP e escapar do
   limite e da auditoria. Só `VLADO_PROXIES_CONFIAVEIS_AMPLAS=1` a confirma, por decisão consciente.
-- Com a lista, o `X-Forwarded-For` só vale se o par TCP (o Caddy) estiver nela, e o cliente é o **primeiro salto que não está na
-  lista, lendo da direita para a esquerda**: o que o cliente escreve à esquerda não é levado em conta, então ele não consegue
-  forjar o IP. Um salto ilegível interrompe a leitura e vale o par TCP.
-- A rede do Compose: `docker network inspect <projeto>_default` (o campo `Subnet`). As faixas da CDN estão no site do
-  fornecedor e mudam: revise a lista a cada trimestre.
+- Com a lista, o `X-Forwarded-For` só vale se o par TCP estiver nela, e o cliente é o **primeiro salto que não está na lista, lendo
+  da direita para a esquerda**: o que o cliente escreve à esquerda não é levado em conta, então ele não consegue forjar o IP. Um salto
+  ilegível interrompe a leitura e vale o par TCP. As faixas da CDN estão no site do fornecedor e mudam: revise a lista a cada trimestre.
 - **O Caddy também precisa confiar na CDN**, senão ele descarta o `X-Forwarded-For` dela e escreve só o IP da borda. No
-  `deploy/Caddyfile`, nas opções globais, acrescente com as mesmas faixas da CDN (sem a rede do Compose):
+  `deploy/Caddyfile`, nas opções globais, acrescente com as mesmas faixas da CDN:
 
   ```
   {
@@ -171,9 +181,12 @@ VLADO_PROXIES_CONFIAVEIS=172.18.0.0/16, 203.0.113.0/24      # a rede do Compose 
   ```
 
   Depois confira com um pedido de teste e `$DC exec vlado grep login_ok /app/registro/auditoria-*.jsonl | tail -1`: o `ip` tem
-  de ser o seu, não o da borda.
-- Sem a lista o comportamento é o de antes (`VLADO_CONFIAR_PROXY=1` no Compose: último salto). Com a lista, ela vale no lugar
-  dessa regra.
+  de ser o seu, não o da borda nem o do Caddy.
+- **Como conferir que cada cliente é contado separado:** com o ambiente no ar, faça um pedido de login errado de dois computadores e
+  veja no registro (`login_falha`) dois `ip` diferentes, nenhum igual ao do Caddy (`docker network inspect <projeto>_default`).
+  Se todos os `ip` forem o do Caddy, a lista não está chegando: `$DC exec vlado printenv VLADO_PROXIES_CONFIAVEIS` deve começar pela
+  sub-rede. (No Docker Desktop, em teste na própria máquina, todos os clientes locais aparecem com o endereço de entrada da rede do
+  Docker: é do Docker, não da Mesa.)
 
 ## Cabeçalhos e conexões (SEG-06)
 
