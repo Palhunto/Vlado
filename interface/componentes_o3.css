@@ -167,3 +167,16 @@ button[aria-disabled="true"]{cursor:progress}
 .dialogo-tabela tbody th{color:var(--theme-text)}
 .dialogo-tabela tfoot th,.dialogo-tabela tfoot td{border-bottom:0;font-weight:600}
 .dialogo-tabela th+td,.dialogo-tabela td+td{padding-left:var(--espaco-4)}
+
+/* === Diálogo com senha (componentes.md#dialogo-senha; dialogo.js, opção `campos`) === */
+.dialogo-campo-senha{font-weight:600}
+.dialogo-campo-senha label{font-size:var(--text-base);font-weight:600;color:var(--theme-text)}
+.dialogo-senha-linha{display:flex;gap:var(--espaco-2);align-items:stretch}
+.dialogo-senha-linha input{flex:1 1 auto;min-width:0}
+.dialogo-mostrar{flex:none;min-height:44px;padding:0 var(--espaco-3)}
+.dialogo-campo-senha .dialogo-nota{font-weight:400}
+.dialogo-erro-campo{font-weight:400}
+.dialogo-campo-senha input[aria-invalid="true"]{border:2px solid var(--theme-danger)}
+@media (max-width:719px) {
+  .dialogo-senha-linha input,.dialogo-mostrar{min-height:48px}
+}
