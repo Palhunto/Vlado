@@ -9,6 +9,9 @@
     caderno:'Trechos com fonte', diligencias:'Diligências', notas:'Notas do caderno',
     quadros_evidencia:'Quadros de evidência', fontes_web:'Fontes web capturadas', rascunhos:'Rascunhos'};
   const admin = document.body.dataset.papel !== 'convidado';
+  // A permanent delete left half done: only the next start of the Mesa settles it, and until then the server refuses to restore or delete
+  // the item (and the other items of the same investigation). The text is the server's, kept whole.
+  const PENDING = 'Um apagamento definitivo desta apuração ficou pela metade e só se resolve na próxima partida da Mesa. Até lá, não é possível restaurar nem apagar este item; feche os programas que usem esses arquivos e reinicie a Mesa.';
   const t = (text, vars) => window.I18N ? window.I18N.t(text, vars) : text;
   let data = null, sequence = 0, busy = false;
   function fail(message = '') {
@@ -78,10 +81,12 @@
       const blocked = item.tipo !== 'caso' && data.lixeira.some(i => i.tipo === 'caso' && i.caso === item.caso);
       const title = trashTitle(item);
       const caseTitle = data.casos.find(c => c.id === item.caso)?.titulo || data.lixeira.find(c => c.tipo === 'caso' && c.caso === item.caso)?.titulo || 'Apuração preservada';
-      const actions = [{text:'Restaurar', kind:'secondary', blocked, run:() => mutate('restaurar', {item:item.id})}];
-      if (admin) actions.push({text:'Apagar definitivamente…', kind:'danger', run:button => openDelete(item, title, button)});
-      $('gerenciar-lixeira').append(row(title,
-        `${caseTitle} · Excluído em ${date}${blocked ? ' · Restaure a apuração primeiro' : ''}`, actions, item));
+      const pending = item.apagamento_pendente === true;
+      const actions = [{text:'Restaurar', kind:'secondary', blocked:blocked || pending, run:() => mutate('restaurar', {item:item.id})}];
+      if (admin) actions.push({text:'Apagar definitivamente…', kind:'danger', blocked:pending, run:button => openDelete(item, title, button)});
+      const line = row(title, `${caseTitle} · Excluído em ${date}${blocked ? ' · Restaure a apuração primeiro' : ''}`, actions, item);
+      if (pending) { const note = element('p', t(PENDING), 'notice'); note.setAttribute('role', 'status'); line.firstChild.append(note); }
+      $('gerenciar-lixeira').append(line);
     }
     emptyList('gerenciar-lixeira', 'A lixeira está vazia.');
     controls();
@@ -156,6 +161,7 @@
       try {
         const found = await api('lixeira-alcance', {item:item.id});
         if (ctx.fechou()) return;
+        if (found.apagamento_pendente === true) { ctx.estado(PENDING); return; }   // nothing to confirm: the field stays off; a reason, not an error
         scope = found; ctx.corpo.replaceChildren(...scopeNodes(found)); ctx.estado(''); ctx.nome(found.nome_para_confirmar);
       } catch (error) { if (ctx.fechou()) return; ctx.estado(''); ctx.erro(error.message); }
     };
