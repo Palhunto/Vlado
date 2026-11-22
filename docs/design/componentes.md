@@ -67,7 +67,7 @@ Todo elemento interativo: `outline: 3px solid var(--theme-focus); outline-offset
 
 | Grupo | Decisão | Contraste depois |
 |---|---|---|
-| (a) Anel da barra lateral e das abas encostando no item ativo vizinho (ocre sobre `--theme-accent`: 1,62 / 1,05) | Nos itens da [barra lateral](#barra-lateral) e das [abas](#abas), inclusive as abas de Minha conta, Equipe e Configurações e as pílulas do celular, o anel de quem **não** é o item selecionado entra 1 px na borda do próprio item: `outline: var(--foco-largura) solid var(--theme-focus); outline-offset: -1px`. Com o intervalo de 4 px entre itens, sobram 2 px do fundo entre o anel e o vizinho, o bastante para o medidor da Sonda, que lê a 1 px do anel, ver só o fundo (ressalva A1 da Coruja sobre `0750504..38ae70d`; a primeira versão, com afastamento 0, deixava 1 px). Do lado de dentro, o anel encosta no fundo do próprio item, que não é verde. O item selecionado (`aria-current="page"`) mantém o afastamento de 2 px (`--foco-afastamento`), porque o anel dele cai sobre o fundo da barra e nunca há dois selecionados lado a lado. O intervalo de 4 px do canvas não muda | ocre sobre `--theme-sidebar` 5,12 / 10,22; sobre `--theme-soft` (item sob o mouse) 5,01 / 6,60; sobre `--theme-surface` (abas dos quadros) 5,86 / 8,52; sobre `--theme-background` 5,42 / 9,65 |
+| (a) Anel da barra lateral e das abas encostando no item ativo vizinho (ocre sobre `--theme-accent`: 1,62 / 1,05) | Nos itens da [barra lateral](#barra-lateral) e das [abas](#abas), inclusive as abas de Minha conta, Equipe e Configurações e as pílulas do celular, o anel de quem **não** é o item selecionado entra 1 px na borda do próprio item: `outline: var(--foco-largura) solid var(--theme-focus); outline-offset: -1px`. Com o intervalo de 4 px entre itens, sobram 2 px do fundo entre o anel e o vizinho, o bastante para o medidor da Sonda, que lê a 1 px do anel, ver só o fundo (ressalva A1 da Coruja sobre `0750504..38ae70d`; a primeira versão, com afastamento 0, deixava 1 px). Do lado de dentro, o anel encosta no fundo do próprio item, que não é verde. Conferido com a Sonda (`testes/contraste_wcag.py:335-337` em `1ac811d`): o medidor lê a `max(afastamento + largura, 0) + 1` px da borda, aqui a 3 px, sobre o fundo da barra, com 1 px de folga antes do vizinho. **O intervalo de 4 px entre itens é condição:** com 3 px ou menos, a leitura cai no vizinho ativo e volta a reprovar. O item selecionado (`aria-current="page"`) mantém o afastamento de 2 px (`--foco-afastamento`), porque o anel dele cai sobre o fundo da barra e nunca há dois selecionados lado a lado. O intervalo de 4 px do canvas não muda | ocre sobre `--theme-sidebar` 5,12 / 10,22; sobre `--theme-soft` (item sob o mouse) 5,01 / 6,60; sobre `--theme-surface` (abas dos quadros) 5,86 / 8,52; sobre `--theme-background` 5,42 / 9,65 |
 | (b) Editor do Caderno (Vditor) sem contorno de foco | Área de edição (`pre.vditor-reset`): anel interno, `outline: var(--foco-largura) solid var(--theme-focus); outline-offset: calc(-1 * var(--foco-largura) - 2px)` (`mudancas-de-token.md`, item 2), porque ela ocupa o cartão inteiro e o cartão corta. Botões da barra do editor: o anel padrão (3 px, afastamento 2); se a barra cortar o anel, afastamento 0. Campo de texto do editor (`input`): o anel padrão e a borda 1 px `--theme-input-line` do [campo](#campo). Nenhum desses fica sobre fundo verde | ocre sobre `--theme-surface` 5,86 / 8,52; borda do campo sobre `--theme-surface` 3,95 / 5,21 |
 | (c) Seletor de apuração do topo (`select#contexto-caso`) sem borda, no fundo da página (1,00:1) | **Sem caixa, como no canvas: decisão do dono, P34 (22/11/2026).** O seletor fica como o canvas desenha ("Apuração" sobre o nome, com a seta ⌄). Pelo WCAG 1.4.11, o que precisa de 3:1 é o que identifica o controle, o texto e a seta, não uma borda. Aqui, o que identifica são o rótulo "Apuração", o nome em 16/600 e a seta, todos em `--theme-text`. Para a exceção valer: a seta é sempre `--theme-text` (nunca `--theme-muted`) e tem 16 px; o foco é o anel padrão; ao passar o mouse, o fundo vira `--theme-soft`, só como reforço, sem levar informação. A Sonda anota a exceção no medidor, para ele não cobrar a borda deste controle | seta e texto sobre `--theme-background` acima de 13:1 nos dois temas |
 | (d) Título da nota no Caderno (`input#apuracao-nota-titulo`) com sublinhado da cor do fundo | Sublinhado sempre visível: `border-bottom: 1px solid var(--theme-input-line)`, sem as outras bordas. No foco, o anel padrão. O rótulo "Título da nota" continua visível acima | `--theme-input-line` sobre `--theme-surface` 3,95 / 5,21 |
@@ -929,6 +929,43 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 - "Acervo conferido? Explore o que os documentos permitem afirmar." com "Perguntar aos documentos" (principal) no pé, como próximo passo.
 - "Ver recibo" abre o recibo conferido num cartão logo abaixo do cartão de envio. O cartão mostra só o que o envio não mostrou: título 16/600 ("Recibo do lote: 3 de 3 arquivos"), novos e duplicados ("3 novos · nenhum duplicado") e "Detalhes técnicos" com apuração e versão. O resultado de cada arquivo já está no cartão de envio e não se repete. Plural concordado, sem "(s)".
 
+<a id="nova-apuracao"></a>
+
+### Nova apuração (W01)
+
+*(Derivado, 22/11/2026, a pedido do Lume, para a R4: a área "Cadastrar arquivos" deixa de existir, P16.5.)* Estrutura do wireframe W01 do canvas: uma página própria em três passos, "1 Nome e fontes · 2 Documentos · 3 Conferir recibo". O passo 1 é a página "Nova apuração". Os passos 2 e 3 são a própria tela [Documentos](#documentos), com a área de envio e o recibo. Nada é criado antes do primeiro envio: a apuração nasce nele (`cadastrar` com `novo: true`, contrato, 5.6), como hoje.
+
+**Por onde se chega.** "Nova apuração" (principal) da Visão geral, e qualquer outro "Nova apuração" da Mesa, abre o passo 1. "Adicionar documentos" da Visão geral leva a Documentos com a apuração escolhida, sem os passos.
+
+**Passo 1, "Nova apuração".**
+
+- **Moldura:** a das outras áreas, sem item selecionado na barra. O título "Nova apuração" vem em serifa 28/600. Abaixo dele, a linha de etapas, a mesma do topo de Documentos ("1 Documentos 2 Pergunta…"), com "1 Nome e fontes" ativa e os outros dois passos apagados. No celular, "Passo 1 de 3 · Nome e fontes".
+- **Cartão:** um só, de até 720 px.
+  - **"Nome da apuração":** [campo](#campo) de 44 px, até 200 caracteres, obrigatório, com a dica "Ex.: Transporte escolar em Vila Serena". Recebe o foco.
+  - **"Natureza dos documentos":** caixa com "Documentos públicos" e "Materiais sintéticos", como hoje. Vale para o primeiro envio.
+  - **"De onde vêm as fontes?":** grupo de opções (`<fieldset>` com essa legenda), cada opção com o texto de apoio em 14 `--theme-muted`.
+    - "Só documentos" (padrão), com o apoio "Padrão. Nada é buscado na internet."
+    - "Documentos e um site", com o apoio "Você indica o site; o Vlado só captura páginas dele, a seu pedido." Escolhida esta opção, aparece "Endereço do site": campo com a dica "prefeitura.sp.gov.br", `translate="no"` e o apoio "Só o domínio, exato. Escolhido só agora: depois de criada, a apuração não troca de site."
+- **Ações:** à direita, "Cancelar" (secundário), que volta à Visão geral sem criar nada, e "Continuar para documentos" (principal).
+- **Erros, junto ao campo:** nome em branco, "Falta o nome. Dê um nome à apuração."; site em branco com a opção escolhida, "Falta o site. Escreva o domínio, por exemplo prefeitura.sp.gov.br."; site inválido, interno ou com caminho, "Site inválido. Use só o domínio, sem https:// nem caminho, por exemplo prefeitura.sp.gov.br." (W01, regra 3). A recusa do servidor no envio vai ao campo a que se refere.
+
+**Passo 2, Documentos de uma apuração ainda por criar.** A tela [Documentos](#documentos) muda em poucos pontos:
+
+- **Topo:** "Nova apuração" e o nome digitado, no lugar do título da apuração. A linha de etapas mostra "2 Documentos" ativa.
+- **Pílulas:** sem as abas "Acervo cadastrado" e "Pesquisar no conteúdo", sem a busca e sem a barra "Leitura".
+- **Acima da área de envio:** "A apuração é criada no primeiro envio. Antes disso, nada fica guardado." em 14 `--theme-muted`, e o [link](#link) "‹ Nome e fontes", que volta ao passo 1 com os campos preenchidos.
+- **No envio:** o cartão de envio por arquivo de sempre. Quando o primeiro lote é aceito, a apuração passa a existir: o seletor do topo passa a ela e a tela vira a Documentos comum.
+- **Passo 3:** quando o recibo do lote fica pronto, a linha de etapas marca "3 Conferir recibo" e "Ver recibo" abre o cartão do recibo, como hoje. Depois do recibo conferido, a linha de etapas sai.
+
+**Sair no meio.** Quem sai no passo 1 ou no 2, antes do envio, não deixa nada. A Mesa não guarda rascunho de apuração; quando o formulário foi preenchido, pede a confirmação "Sair sem criar a apuração?" (variante simples do [diálogo](#dialogo), ação "Sair").
+
+**Exceções declaradas, por falta de servidor.**
+
+| O que o W01 mostra | O que a tela mostra até lá | Volta quando |
+|---|---|---|
+| Vários sites, até 10, com apelido, "Adicionar site" e "Remover" (regras 1 a 5) | um site só, sem apelido (o manifesto guarda um domínio) | o manifesto aceitar uma lista, mudança que pede alterar o `AGENTS.md` e revisão de segurança (W01) |
+| Adicionar ou remover sites depois, em "Fontes" (regra 4) | o site é escolhido só na criação | houver a área "Fontes", que ainda não tem desenho |
+
 ---
 
 <a id="contas"></a>
@@ -1062,6 +1099,8 @@ A resposta é sempre `{estado: "confirmacao_enviada"}`, para endereço livre e p
   - **Alternativa:** o Frontend escreve um codificador próprio, em modo byte, correção M, versões 1 a 10, com teste contra vetores conhecidos.
 
   O endereço tem uns 150 caracteres, o que pede a versão 7 ou 8.
+
+  **Aval do Maestro (22/11/2026):** vale o caminho recomendado. Entra em `interface/vendor/` o "QR Code generator library" do Project Nayuki (MIT, um arquivo), com versão fixa, o hash do arquivo registrado, o arquivo de licença ao lado e a linha correspondente em `docs/AVISOS_DE_LICENCA.md`. Quem vendoriza é o Frontend que fizer o cadastro do fator.
 
 <a id="entrar-fator"></a>
 
