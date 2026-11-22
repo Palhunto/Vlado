@@ -20,8 +20,10 @@ milionésimos de real; o mês é o do calendário em UTC. Uma pergunta é recusa
 quando o saldo não cobre a estimativa mínima, e interrompida quando o gasto passa do teto.
 
 **Registro.** Cada gravação do gasto também atualiza uma cópia anterior
-(``gasto_mensal.anterior.json``). Registro ilegível é lido da cópia; sem cópia legível, a cota é
-tratada como esgotada, com aviso no log, nunca como zero gasto. Se o gasto não puder ser gravado
+(``gasto_mensal.anterior.json``). Registro ilegível, ou com um mês danificado (campo ausente ou de
+tipo errado), é lido da cópia; sem cópia legível, a cota é tratada como esgotada, com aviso no
+log, nunca como zero gasto. O custo de uma chamada que não pôde ser gravado fica em memória e é
+somado na primeira gravação que funcionar. Se o gasto não puder ser gravado
 (disco cheio, permissão) ou calculado, a pergunta em curso para antes da próxima chamada, e
 nenhuma pergunta começa até o registro voltar a gravar (a recusa antes de começar confere a
 gravação).
@@ -59,6 +61,8 @@ ORGANIZACAO = 'instalacao'  # the one organization until Onda 2 (accounts and or
 CONTA_LOCAL = 'local'  # the single operator of the local mode
 MICRO = Decimal(1_000_000)
 MESES_GUARDADOS = 12
+# Costs whose write failed (R1): {(data folder, month, account key): micro-reais}, added at the next write.
+_PENDENTES = {}
 SEM_PRECO = 'openai'  # the only provider whose models may be allowed without a price (estimated)
 _TRAVA = threading.Lock()
 log = logging.getLogger('vlado.custo')
@@ -168,10 +172,18 @@ def preco(root, modelo, tabela=None):
 
 
 def preco_maximo(tabela) -> dict:
-    """The highest price of the table in each kind of token: what an unpriced model is counted at."""
+    """The highest price of the table in each kind of token: what an unpriced model is counted at.
+
+    Cache writes of every validity at the highest write price of any validity: a write of an
+    unknown model never costs less than the highest the table knows.
+    """
     precos = [p for lista in tabela['modelos'].values() for p in lista.values()]
     chaves = {k for p in precos for k in p}
-    return {k: max(p[k] for p in precos if k in p) for k in chaves}
+    maximo = {k: max(p[k] for p in precos if k in p) for k in chaves}
+    escritas = [v for k, v in maximo.items() if ESCRITA.fullmatch(k)]
+    if escritas:
+        maximo.update({k: max(escritas) for k in maximo if ESCRITA.fullmatch(k)})
+    return maximo
 
 
 def modelos_permitidos(root) -> list:
@@ -327,6 +339,12 @@ def _registro(caminho):
         raise ValueError(str(exc)) from exc
     if not isinstance(dados, dict) or not isinstance(dados.get('meses'), dict):
         raise ValueError('estrutura inválida')
+    for quando, atual in dados['meses'].items():
+        if not isinstance(atual, dict) or any(
+                not isinstance(atual.get(grupo), dict)
+                or any(type(v) is not int or v < 0 for v in atual[grupo].values())
+                for grupo in ('contas', 'organizacoes')):
+            raise ValueError(f'mês {quando} danificado')
     return dados
 
 
@@ -374,9 +392,14 @@ def gasto(root, conta) -> dict:
 def somar_gasto(root, conta, micro_brl) -> dict:
     """Add one call's cost to this month's account and organization; returns the new totals."""
     chaves, quando = chaves_orcamento(conta), mes()
+    pendente = (str(Path(root).resolve()), quando, chaves['conta'])
     try:
         return _somar(root, chaves, quando, micro_brl)
-    except OSError as exc:  # the lock file or the writes: no question goes on without its count (R1)
+    except (OSError, GastoSemRegistro) as exc:  # no question goes on without its count (R1)
+        with _TRAVA:  # kept, and added at the first write that works (the call was spent)
+            _PENDENTES[pendente] = _PENDENTES.get(pendente, 0) + max(0, int(micro_brl))
+        if isinstance(exc, GastoSemRegistro):
+            raise
         log.warning('Gasto do mês não gravado: %s', exc)
         raise GastoSemRegistro(MENSAGEM_SEM_GRAVAR) from exc
 
@@ -384,10 +407,16 @@ def somar_gasto(root, conta, micro_brl) -> dict:
 def _somar(root, chaves, quando, micro_brl):
     with _TRAVA, trava_arquivo(_arquivo(root)):
         dados = _ler_gasto(root)
+        raiz = str(Path(root).resolve())
+        guardados = {k: v for k, v in _PENDENTES.items() if k[0] == raiz}
+        for (_, mes_pendente, conta_pendente), valor in guardados.items():
+            atrasado = _do_mes(dados, mes_pendente)
+            for grupo, chave in (('contas', conta_pendente), ('organizacoes', chaves['organizacao'])):
+                atrasado[grupo][chave] = atrasado[grupo].get(chave, 0) + valor
+            dados['meses'][mes_pendente] = atrasado
         atual = _do_mes(dados, quando)
         for grupo, chave in (('contas', chaves['conta']), ('organizacoes', chaves['organizacao'])):
-            anterior = atual[grupo].get(chave)
-            atual[grupo][chave] = (anterior if type(anterior) is int and anterior >= 0 else 0) + max(0, int(micro_brl))
+            atual[grupo][chave] = atual[grupo].get(chave, 0) + max(0, int(micro_brl))
         dados['meses'][quando] = atual
         for antigo in sorted(dados['meses'])[:-MESES_GUARDADOS]:
             del dados['meses'][antigo]
@@ -395,6 +424,10 @@ def _somar(root, chaves, quando, micro_brl):
         _arquivo(root).parent.mkdir(parents=True, exist_ok=True)
         _atomico(_arquivo(root), conteudo)
         _atomico(_reserva(root), conteudo)  # the copy an unreadable ledger is read from
+        for chave in guardados:  # recorded now
+            _PENDENTES.pop(chave, None)
+        if guardados:
+            log.warning('Gasto do mês: %s chamada(s) que não tinham sido gravadas foram somadas agora.', len(guardados))
         return {'conta': atual['contas'][chaves['conta']], 'organizacao': atual['organizacoes'][chaves['organizacao']]}
 
 

@@ -131,7 +131,10 @@ class PrecoTest(Base):
         tabela = custo.tabela_precos(self.root)
         maximo = custo.preco_maximo(tabela)
         self.assertEqual({k: maximo[k] for k in ('entrada', 'cache_leitura', 'saida', 'cache_escrita_12h')},
-                         {'entrada': 8.0, 'cache_leitura': 0.5, 'saida': 40.0, 'cache_escrita_12h': 5.0})
+                         {'entrada': 8.0, 'cache_leitura': 0.5, 'saida': 40.0, 'cache_escrita_12h': 16.0})
+        # Every write validity at the highest write of the table (Fable 5.2, 1 hour): never below the input.
+        self.assertEqual({maximo[k] for k in maximo if custo.ESCRITA.fullmatch(k)}, {16.0})
+        self.assertGreaterEqual(maximo['cache_escrita_30m'], maximo['entrada'])
         with self.assertLogs('vlado.custo', 'WARNING') as aviso:
             registro = custo.custo_da_chamada(self.root, 'gpt-outro-sem-preco', uso)
         self.assertIn('gpt-outro-sem-preco', '\n'.join(aviso.output))
@@ -217,6 +220,28 @@ class CotaTest(Base):
         self.assertEqual(erros.codigo_de(str(recusa.exception))[0], 'gasto_ilegivel')
         with self.assertRaises(custo.GastoSemRegistro):
             custo.situacao(self.root, 'a')
+
+    def test_mes_danificado_e_registro_ilegivel(self):
+        for danificado in ({'contas': 'x', 'organizacoes': {}}, {'contas': {'a': '10'}, 'organizacoes': {}},
+                           {'organizacoes': {}}, [], {'contas': {'a': -5}, 'organizacoes': {}}):
+            with self.subTest(danificado=danificado):
+                (self.root / 'ajustes').mkdir(exist_ok=True)
+                (self.root / 'ajustes/gasto_mensal.anterior.json').unlink(missing_ok=True)
+                (self.root / 'ajustes/gasto_mensal.json').write_text(
+                    json.dumps({'esquema': 1, 'meses': {custo.mes(): danificado}}), encoding='utf-8')
+                with self.assertLogs('vlado.custo', 'WARNING'), self.assertRaises(custo.GastoSemRegistro):
+                    custo.conferir_antes(self.root, 'a', SONNET)
+
+    def test_chamada_nao_gravada_e_somada_na_primeira_gravacao(self):
+        with mock.patch.object(custo, '_atomico', side_effect=OSError(28, 'No space left on device')), \
+                self.assertLogs('vlado.custo', 'WARNING'):
+            with self.assertRaises(custo.GastoSemRegistro):
+                custo.somar_gasto(self.root, 'a', 643500)
+        with self.assertLogs('vlado.custo', 'WARNING') as aviso:
+            custo.conferir_antes(self.root, 'a', SONNET)  # the check before the next question writes it
+        self.assertIn('somadas agora', '\n'.join(aviso.output))
+        self.assertEqual(custo.gasto(self.root, 'a'), {'conta': 643500, 'organizacao': 643500})
+        self.assertEqual(custo.somar_gasto(self.root, 'a', 1)['conta'], 643501)  # added once
 
     def test_registro_ilegivel_lido_da_copia_anterior(self):
         self.gastar('a', 40)
@@ -359,7 +384,9 @@ class PerguntaTest(unittest.TestCase):
             self.assertEqual(self.manager.contexts[identificador]['meta']['situacao']['causa'], 'gasto_nao_registrado')
             with self.assertRaisesRegex(custo.GastoSemRegistro, 'nenhuma pergunta é feita até o registro voltar'):
                 self.manager.perguntar(self.pergunta())
-        self.assertTrue(self.manager.perguntar(self.pergunta())['conversa'])  # recorded again: questions go on
+        with self.assertLogs('vlado.custo', 'WARNING'):  # recorded again: the call that stopped it is added
+            self.assertTrue(self.manager.perguntar(self.pergunta())['conversa'])
+        self.assertEqual(custo.gasto(self.root, None)['conta'], 643500)
 
     def test_custo_que_nao_calcula_interrompe(self):
         identificador = self.start()
