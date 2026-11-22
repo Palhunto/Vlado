@@ -8,9 +8,12 @@ teto de perguntas simultâneas por conta e no total; lista de modelos permitidos
 na pergunta; tabela de preços versionada; rota de leitura do gasto e do saldo.
 """
 from decimal import Decimal
+import contextlib
 import http.client
 import json
+import os
 from pathlib import Path
+import stat
 import sys
 import tempfile
 import threading
@@ -246,10 +249,10 @@ class CotaTest(Base):
     def test_copia_que_nao_grava_nao_conta_de_novo(self):
         original = custo._atomico
 
-        def sem_copia(caminho, conteudo):
+        def sem_copia(caminho, conteudo, **opcoes):
             if Path(caminho).name == 'gasto_mensal.anterior.json':
                 raise OSError(28, 'No space left on device')
-            return original(caminho, conteudo)
+            return original(caminho, conteudo, **opcoes)
         self.gastar('a', 1)  # a good copy exists before
         with mock.patch.object(custo, '_atomico', side_effect=OSError(28, 'No space left on device')), \
                 self.assertLogs('vlado.custo', 'WARNING'):
@@ -263,6 +266,82 @@ class CotaTest(Base):
         self.assertFalse((self.root / 'ajustes/gasto_mensal.anterior.json').exists())  # a stale copy never stands in
         self.assertEqual(self.gastar('a', 0)['conta'], 1_640_000)  # writable again: same total, copy back
         self.assertTrue((self.root / 'ajustes/gasto_mensal.anterior.json').exists())
+        self.assertFalse((self.root / 'ajustes/gasto_mensal.anterior.invalida.json').exists())  # its mark gone
+        (self.root / 'ajustes/gasto_mensal.json').write_text('{corrompido', encoding='utf-8')
+        with self.assertLogs('vlado.custo', 'WARNING'):
+            self.assertEqual(custo.gasto(self.root, 'a')['conta'], 1_640_000)  # the new copy is read
+
+    def copia_que_nao_troca_nem_sai(self):
+        """The copy can be neither replaced nor removed (a read-only file on Windows)."""
+        copia = self.root / 'ajustes/gasto_mensal.anterior.json'
+        if os.name == 'nt':
+            os.chmod(copia, stat.S_IREAD)
+            self.addCleanup(lambda: copia.exists() and os.chmod(copia, stat.S_IREAD | stat.S_IWRITE))
+            return contextlib.nullcontext()
+        # POSIX replaces and removes a read-only file in a writable folder: both refused here instead.
+        atomico, unlink = custo._atomico, Path.unlink
+
+        def sem_trocar(caminho, conteudo, **opcoes):
+            if Path(caminho) == copia:
+                raise PermissionError(13, 'Permission denied')
+            return atomico(caminho, conteudo, **opcoes)
+
+        def sem_remover(caminho, missing_ok=False):
+            if Path(caminho) == copia:
+                raise PermissionError(13, 'Permission denied')
+            return unlink(caminho, missing_ok=missing_ok)
+        pilha = contextlib.ExitStack()
+        pilha.enter_context(mock.patch.object(custo, '_atomico', side_effect=sem_trocar))
+        pilha.enter_context(mock.patch.object(Path, 'unlink', sem_remover))
+        return pilha
+
+    def test_copia_que_nao_troca_nem_sai_nunca_vale_no_lugar_do_registro(self):
+        self.gastar('a', 1)  # ledger and copy: R$ 1,00
+        with self.copia_que_nao_troca_nem_sai(), self.assertLogs('vlado.custo', 'WARNING') as aviso:
+            self.assertEqual(self.gastar('a', 0.6435)['conta'], 1_643_500)
+        self.assertIn('marcada como velha', '\n'.join(aviso.output))
+        copia = json.loads((self.root / 'ajustes/gasto_mensal.anterior.json').read_text(encoding='utf-8'))
+        self.assertEqual(copia['meses'][custo.mes()]['contas']['a'], 1_000_000)  # it stayed behind
+        (self.root / 'ajustes/gasto_mensal.json').write_text('{corrompido', encoding='utf-8')
+        with self.assertLogs('vlado.custo', 'WARNING') as aviso, self.assertRaises(custo.GastoSemRegistro):
+            custo.gasto(self.root, 'a')  # the Coruja's proof read R$ 1,00 here, for R$ 1,6435
+        self.assertIn('mais velha que o registro', '\n'.join(aviso.output))
+        with self.assertLogs('vlado.custo', 'WARNING'), self.assertRaises(custo.GastoSemRegistro):
+            custo.conferir_antes(self.root, 'a', SONNET)  # quota exhausted, never R$ 1,00 spent
+
+    def test_copia_velha_sem_marca_legivel_tambem_nao_vale(self):
+        for marca in ('{quebrada', '{"geracao_minima": "3"}', '[]'):
+            with self.subTest(marca=marca):
+                self.gastar('a', 1)
+                (self.root / 'ajustes/gasto_mensal.anterior.invalida.json').write_text(marca, encoding='utf-8')
+                (self.root / 'ajustes/gasto_mensal.json').write_text('{corrompido', encoding='utf-8')
+                with self.assertLogs('vlado.custo', 'WARNING'), self.assertRaises(custo.GastoSemRegistro):
+                    custo.gasto(self.root, 'a')
+                for nome in ('gasto_mensal.json', 'gasto_mensal.anterior.json', 'gasto_mensal.anterior.invalida.json'):
+                    (self.root / 'ajustes' / nome).unlink()
+
+    def test_sem_registro_nem_copia_mas_com_marca_nao_e_zero(self):
+        self.gastar('a', 1)
+        with self.copia_que_nao_troca_nem_sai(), self.assertLogs('vlado.custo', 'WARNING'):
+            self.gastar('a', 1)
+        for nome in ('gasto_mensal.json', 'gasto_mensal.anterior.json'):
+            caminho = self.root / 'ajustes' / nome
+            os.chmod(caminho, stat.S_IREAD | stat.S_IWRITE)
+            caminho.unlink()
+        with self.assertLogs('vlado.custo', 'WARNING'), self.assertRaises(custo.GastoSemRegistro):
+            custo.gasto(self.root, 'a')  # something was spent here: never the empty ledger
+
+    def test_geracao_sobe_a_cada_gravacao_e_danificada_e_ilegivel(self):
+        self.gastar('a', 1)
+        self.gastar('a', 1)
+        registro = json.loads((self.root / 'ajustes/gasto_mensal.json').read_text(encoding='utf-8'))
+        self.assertEqual(registro['geracao'], 2)
+        for danificada in ('2', -1, 1.5):
+            with self.subTest(geracao=danificada):
+                (self.root / 'ajustes/gasto_mensal.json').write_text(
+                    json.dumps({**registro, 'geracao': danificada}), encoding='utf-8')
+                with self.assertLogs('vlado.custo', 'WARNING'):
+                    self.assertEqual(custo.gasto(self.root, 'a')['conta'], 2_000_000)  # from the copy
 
     def test_registro_ilegivel_lido_da_copia_anterior(self):
         self.gastar('a', 40)

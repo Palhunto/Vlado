@@ -41,6 +41,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 import json
+import math
 import re
 from pathlib import Path
 import threading
@@ -325,6 +326,27 @@ def _reserva(root) -> Path:
     return Path(root) / 'ajustes' / 'gasto_mensal.anterior.json'
 
 
+def _marca(root) -> Path:
+    """Written when the copy could not be updated: the generation a copy needs to be read."""
+    return Path(root) / 'ajustes' / 'gasto_mensal.anterior.invalida.json'
+
+
+def _geracao(dados) -> int:
+    return dados.get('geracao', 0)  # a ledger from before the generations: 0
+
+
+def _geracao_minima(root):
+    """None without the mark; else the generation a copy needs (an unreadable mark: no copy is read)."""
+    try:
+        marca = json.loads(_marca(root).read_text(encoding='utf-8'))
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        return math.inf
+    valor = marca.get('geracao_minima') if isinstance(marca, dict) else None
+    return valor if type(valor) is int and valor >= 0 else math.inf
+
+
 def _vazio():
     return {'esquema': 1, 'moeda': 'BRL', 'unidade': 'milionesimos de real', 'meses': {}}
 
@@ -339,6 +361,8 @@ def _registro(caminho):
         raise ValueError(str(exc)) from exc
     if not isinstance(dados, dict) or not isinstance(dados.get('meses'), dict):
         raise ValueError('estrutura inválida')
+    if 'geracao' in dados and (type(dados['geracao']) is not int or dados['geracao'] < 0):
+        raise ValueError('geração inválida')
     for quando, atual in dados['meses'].items():
         if not isinstance(atual, dict) or any(
                 not isinstance(atual.get(grupo), dict)
@@ -360,11 +384,16 @@ def _ler_gasto(root) -> dict:
         anterior = _registro(_reserva(root))
     except ValueError:
         anterior = None
+    minima = _geracao_minima(root)
+    if anterior is not None and minima is not None and _geracao(anterior) < minima:
+        log.warning('Cópia anterior do gasto mensal mais velha que o registro (geração %s, mínima %s): '
+                    'não vale no lugar dele.', _geracao(anterior), minima)
+        anterior = None  # it would count less than the ledger it stands in for
     if anterior is not None:
         if defeito is not None:
             log.warning('Registro do gasto mensal ilegível (%s); lido da cópia anterior.', defeito)
         return anterior
-    if defeito is None and not _reserva(root).exists():
+    if defeito is None and not _reserva(root).exists() and minima is None:
         return _vazio()  # nothing was ever spent here
     log.warning('Registro do gasto mensal ilegível e sem cópia anterior legível (%s): cota tratada como esgotada.',
                 defeito or 'cópia anterior ilegível')
@@ -420,6 +449,7 @@ def _somar(root, chaves, quando, micro_brl):
         dados['meses'][quando] = atual
         for antigo in sorted(dados['meses'])[:-MESES_GUARDADOS]:
             del dados['meses'][antigo]
+        dados['geracao'] = _geracao(dados) + 1
         conteudo = (json.dumps(dados, ensure_ascii=False, indent=1) + '\n').encode('utf-8')
         _arquivo(root).parent.mkdir(parents=True, exist_ok=True)
         _atomico(_arquivo(root), conteudo)
@@ -427,18 +457,39 @@ def _somar(root, chaves, quando, micro_brl):
             _PENDENTES.pop(chave, None)
         if guardados:
             log.warning('Gasto do mês: %s chamada(s) que não tinham sido gravadas foram somadas agora.', len(guardados))
-        try:
-            _atomico(_reserva(root), conteudo)  # the copy an unreadable ledger is read from
+        try:  # the copy an unreadable ledger is read from; few tries: the mark covers a failure
+            _atomico(_reserva(root), conteudo, tentativas=4)
         except OSError as exc:
-            # The spend is in the ledger: only the copy is stale. A stale copy must not stand in for
-            # the ledger later (it would count less), so it goes; without it, an unreadable ledger
-            # makes the quota exhausted.
-            log.warning('Cópia anterior do gasto do mês não gravada (%s); removida para não valer no lugar do registro.', exc)
+            _copia_velha(root, dados['geracao'], exc)
+        else:
             try:
-                _reserva(root).unlink(missing_ok=True)
+                _marca(root).unlink(missing_ok=True)
             except OSError:
-                pass
+                pass  # the copy is as new as the mark or newer: read all the same
         return {'conta': atual['contas'][chaves['conta']], 'organizacao': atual['organizacoes'][chaves['organizacao']]}
+
+
+def _copia_velha(root, geracao, exc):
+    """The spend is in the ledger; only its copy is stale, and must never stand in for it (it would
+    count less). Marked first, then removed: Windows neither replaces nor removes a read-only file,
+    and the mark holds all the same. Without a readable copy, an unreadable ledger exhausts the quota."""
+    marcada = removida = False
+    try:
+        _atomico(_marca(root), (json.dumps({'esquema': 1, 'geracao_minima': geracao}) + '\n').encode('utf-8'))
+        marcada = True
+    except OSError:
+        pass
+    try:
+        _reserva(root).unlink(missing_ok=True)
+        removida = True
+    except OSError:
+        pass
+    if marcada or removida:
+        log.warning('Cópia anterior do gasto do mês não gravada (%s); %s para não valer no lugar do registro.', exc,
+                    'marcada como velha' + (' e removida' if removida else '') if marcada else 'removida')
+    else:
+        log.error('Cópia anterior do gasto do mês não gravada, nem marcada como velha, nem removida (%s): se o '
+                  'registro ficar ilegível, ela contaria menos. Confira as permissões de ajustes/.', exc)
 
 
 # --- cota ---------------------------------------------------------------------------------------
