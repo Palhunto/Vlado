@@ -430,7 +430,9 @@ Cada linha é `role="img"` com `aria-label` em frase ("Marta Reis é sócia da C
 
 Ações do cabeçalho: "Ver como lista" (secundário) e "Adicionar ligação" (principal). O formulário de "Adicionar ligação" é da Onda 4 (PROD-01).
 
-**Enquanto os dados não distinguem empresa de órgão público** *(derivado, 22/11/2026)*. A Mesa só sabe se a entidade é pessoa ou organização. Toda organização usa a forma e a cor de empresa (quadrado de raio 9, `--mapa-organizacao`), mas o texto diz "Organização" (no nó, "Organização · 3 documentos"; na legenda, "Organização"): chamar de empresa um órgão público seria afirmar o que os documentos não dizem. Nada é deduzido do nome. A forma ameixa do órgão público fica pronta e entra, com "Empresa" e "Órgão público" na legenda, quando Produto acrescentar a natureza da organização.
+**Enquanto os dados não distinguem empresa de órgão público** *(derivado, 22/11/2026)*. A Mesa só sabe se a entidade é pessoa ou organização. Toda organização usa a forma e a cor de empresa (quadrado de raio 9, `--mapa-organizacao`), mas o texto diz "Organização" (no nó, "Organização · 3 documentos"; na legenda, "Organização"): chamar de empresa um órgão público seria afirmar o que os documentos não dizem. Nada é deduzido do nome. A forma ameixa do órgão público fica pronta e entra, com "Empresa" e "Órgão público" na legenda, quando Produto acrescentar a natureza da organização. Até lá, a legenda é: Pessoa, Organização, Ligação com documento, A confirmar, sem documento, e, se houver ligação pontilhada, "Suporte parcial ou não revisado"; sem descrição da marca entre parênteses. O raio do quadrado da organização é o token de 8 px (`--raio-controle`), o mais perto dos 9 do canvas.
+
+**Rótulo não cobre nó nem outra ligação** *(derivado do canvas, 22/11/2026)*: cada pílula fica sobre o trecho livre da própria ligação, e duas ligações não se cruzam por cima de um rótulo. Se a disposição automática não conseguir, a entidade vai para outra posição do anel.
 
 **Ícone da ligação pelo tipo livre** *(derivado, 22/11/2026)*: sócio → `relacao-socio`; irmão, pai, mãe, filho, cônjuge → `relacao-parentesco`; cargo, servidor, diretor → `relacao-cargo`; contrato → `contrato`; pagamento → `pagamento`; o resto → `relacao-vinculo`. O texto do tipo fica sempre ao lado e o ícone é `aria-hidden`.
 
@@ -459,6 +461,8 @@ Onde: Linha do tempo. Conteúdo com preenchimento 28 40; painel de filtros de 36
 - Ícone do marco pelo tipo de data: assinatura → `contrato`; emissão, publicação, registro e declarada por fonte → `documento`; pagamento → `pagamento`; recebimento, fato e vigência → `data`. O envelope fica só para pedido de informação, para não querer dizer duas coisas.
 - O intervalo sem documento não aparece: a lista tem só acontecimentos com data, e um vão entre eles não prova um vão de documentos. Volta quando Produto entregar os documentos do acervo por data; até lá, a linha "Intervalo sem documento" de "COMO LER" também sai.
 - O gráfico "Pago ao longo do tempo" não aparece: os acontecimentos não têm valor em reais estruturado, só texto. Volta com esse dado.
+- Enquanto os quadros ficam no cartão com abas, "Tipos de data" (rubrica), as pílulas e "COMO LER" (só as duas linhas de marco) ficam acima da lista, e não num painel à direita. As pílulas aparecem sempre, sem ficar recolhidas.
+- "Tudo" ligado quer dizer nenhum tipo escolhido: as pílulas dos tipos ficam desligadas. Ligar um tipo desliga "Tudo"; desligar o último volta a "Tudo". Só há as duas aparências do [filtro em pílula](#botao), ligada e desligada.
 
 | Estado do evento | Aparência | Origem |
 |---|---|---|
