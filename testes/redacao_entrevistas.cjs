@@ -93,7 +93,7 @@ test('texto com cada afirmação destacada pelo estado, nas posições do servid
   const texto = painel.querySelector('.redacao-texto');
   assert.equal(texto.textContent, TEXTO, 'o texto fica íntegro, só com as afirmações marcadas');
   assert.equal(texto.getAttribute('translate'), 'no');
-  const trechos = painel.querySelectorAll('.redacao-afirmacao');
+  const trechos = [...painel.querySelectorAll('.redacao-afirmacao')];
   assert.deepEqual(trechos.map(b => [b.textContent, b.dataset.estado]), [['A fonte declara valor 12.', 'suportada'], ['O valor é 14.', 'suporte_parcial']]);
   assert.ok(trechos.every(b => b.localName === 'button' && b.type === 'button'), 'cada afirmação é focável pelo teclado');
   trechos[1].click(); await f.mesa.esperar(2);

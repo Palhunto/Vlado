@@ -1,6 +1,7 @@
 const editor=require('./editor_notas.cjs');
 'use strict';
-const {chromium}=require('playwright');
+const {chromium}=require('playwright');
+const {irParaNovaApuracao} = require('./qa_navegacao.cjs');
 const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
 const path=require('node:path');
@@ -64,7 +65,7 @@ const [origin,out,chat]=process.argv.slice(2);
   result.checks.push('Editor visual acompanha o tema e preserva o texto ao alternar.');
   await editor.write(page,'Rascunho que não deve se perder.');page.once('dialog',dialog=>dialog.dismiss());await page.selectOption('#contexto-caso','');assert.equal(await page.inputValue('#contexto-caso'),'alpha');assert.equal((await editor.read(page)).trim(),'Rascunho que não deve se perder.');await page.click('#apuracao-salvar');await page.locator('#apuracao-status').filter({hasText:'Nota salva'}).waitFor();result.checks.push('Troca de apuração respeita o aviso de rascunho não salvo.');
   await go('diligencias');await page.click('#diligencias-nova');await page.fill('#diligencias-acao','Solicitar comprovante sintético');await page.fill('#diligencias-responsavel','Repórter de teste');await page.fill('#diligencias-autor','Autoria de teste');await page.click('#diligencias-salvar');await page.locator('.diligence-entry').first().waitFor();assert.equal(await page.locator('.mesa-diligence-column').count(),3);await shot('diligencias');result.checks.push('Diligência salva aparece na coluna correspondente ao estado real.');
-  await page.click('#mesa-nova');await page.fill('#cadastro-titulo-input','Caso de interface — lote sintético');await page.setInputFiles('#cadastro-arquivos',{name:'fonte_visual.txt',mimeType:'text/plain',buffer:Buffer.from('Arquivo sintético para cadastro e recibo, sem pergunta editorial.')});await shot('cadastro');await page.click('#enviar-documentos');await page.locator('#cadastro-perguntar:not([hidden])').waitFor();const newCase=await page.inputValue('#cadastro-caso');assert.match(newCase,/^apuracao_/);await shot('recibo');
+  await irParaNovaApuracao(page);await page.fill('#cadastro-titulo-input','Caso de interface — lote sintético');await page.setInputFiles('#cadastro-arquivos',{name:'fonte_visual.txt',mimeType:'text/plain',buffer:Buffer.from('Arquivo sintético para cadastro e recibo, sem pergunta editorial.')});await shot('cadastro');await page.click('#enviar-documentos');await page.locator('#cadastro-perguntar:not([hidden])').waitFor();const newCase=await page.inputValue('#cadastro-caso');assert.match(newCase,/^apuracao_/);await shot('recibo');
   const metadata=await page.evaluate(async id=>(await (await fetch('/api/catalogo')).json()).casos.find(c=>c.id===id),newCase);assert.equal(metadata.rodadas.length,0);result.checks.push('Cadastro e recibo reais preservam o lote antes da pergunta, sem criar rodada.');
   await go('gerenciar');await page.locator('#gerenciar-excluir-caso').waitFor({state:'visible'});await shot('gerenciar');await page.click('#gerenciar-excluir-caso');await page.locator('#excluir-dialogo button[value=excluir]').click();await page.locator('#gerenciar-lixeira button').first().waitFor();await page.locator('#gerenciar-lixeira button').first().click();await page.locator('#gerenciar-lixeira .manage-empty').waitFor();result.checks.push('Exclusão confirmada e restauração preservadas no gerenciador.');
   await page.selectOption('#contexto-caso','alpha');
