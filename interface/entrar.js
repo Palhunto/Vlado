@@ -56,7 +56,7 @@
       rotulo_seu_nome: 'Seu nome',
       rotulo_crie_senha: 'Crie uma senha',
       dica_senha_convite: 'De 12 a 256 caracteres. Pode colar ou usar o gerenciador de senhas.',
-      termos: 'Li e aceito os termos de uso e a política de privacidade do teste.',
+      termos_antes: 'Li e aceito os ', termos_uso: 'termos de uso', termos_e: ' e a ', termos_priv: 'política de privacidade', termos_fim: ' do teste.',
       botao_aceitar: 'Criar conta e entrar',
       criando_conta: 'Criando a conta…',
       aviso_titulo: 'Antes de começar',
@@ -77,7 +77,9 @@
       titulo_redefinir: 'Crie uma senha nova',
       rotulo_senha_nova: 'Senha nova',
       botao_redefinir: 'Salvar a senha nova',
-      redefinido: 'Senha nova salva. As sessões abertas desta conta foram encerradas. Entre com a senha nova.',
+      titulo_redefinido: 'Senha nova salva',
+      redefinido: 'As sessões abertas desta conta foram encerradas. Entre com a senha nova.',
+      nova_aba: 'abre em nova aba',
       link_sem_efeito: 'Este link não vale mais',
       link_sem_efeito_texto: 'Link inválido, usado ou vencido. Peça outro em Esqueci a senha.',
       pedir_outro: 'Pedir outro link',
@@ -139,7 +141,7 @@
       rotulo_seu_nome: 'Your name',
       rotulo_crie_senha: 'Create a password',
       dica_senha_convite: '12 to 256 characters. You can paste or use a password manager.',
-      termos: 'I have read and accept the terms of use and the privacy policy of the trial.',
+      termos_antes: 'I have read and accept the ', termos_uso: 'terms of use', termos_e: ' and the ', termos_priv: 'privacy policy', termos_fim: ' of the trial.',
       botao_aceitar: 'Create account and sign in',
       criando_conta: 'Creating the account…',
       aviso_titulo: 'Before you start',
@@ -160,7 +162,9 @@
       titulo_redefinir: 'Create a new password',
       rotulo_senha_nova: 'New password',
       botao_redefinir: 'Save the new password',
-      redefinido: 'New password saved. The open sessions of this account were ended. Sign in with the new password.',
+      titulo_redefinido: 'New password saved',
+      redefinido: 'The open sessions of this account were ended. Sign in with the new password.',
+      nova_aba: 'opens in a new tab',
       link_sem_efeito: 'This link is no longer valid',
       link_sem_efeito_texto: 'Invalid, used or expired link. Ask for another one in Forgot password.',
       pedir_outro: 'Ask for another link',
@@ -187,6 +191,8 @@
       const chave = no.classList.contains('entrar-mostrar') && no.getAttribute('aria-pressed') === 'true' ? 'ocultar' : no.dataset.t;
       no.textContent = t(chave);
     });
+    // Link que abre em outra aba diz isso no nome acessível.
+    document.querySelectorAll('[data-nova-aba]').forEach(link => link.setAttribute('aria-label', `${link.textContent} (${t('nova_aba')})`));
     const botao = $('entrar-idioma');
     botao.textContent = t('idioma');
     botao.setAttribute('aria-label', t('idioma_rotulo'));
@@ -491,6 +497,7 @@
         if (status === 200) {
           $('redefinir-senha').value = '';
           mostrar(null); $('redefinir-form').hidden = true; $('redefinir-pronto').hidden = false;
+          $('redefinir-titulo').dataset.t = 'titulo_redefinido'; $('redefinir-titulo').textContent = t('titulo_redefinido');
           $('redefinir-entrar').focus();
           return;
         }

@@ -131,6 +131,13 @@ test('com termos_versao a caixa aparece, é obrigatória e a versão lida vai no
   const {mesa, chamadas} = await abrir({api: operacao => (operacao === 'convite-consultar' ? {...CONVITE, termos_versao: '2026-11'} : operacao === 'convite-aceitar' ? {conta: {}, csrf: 'x', destino: '/'} : undefined)});
   assert.equal(visivel(mesa, 'aceitar-termos-rotulo'), true);
   assert.equal(mesa.$('aceitar-termos-rotulo').textContent.trim(), 'Li e aceito os termos de uso e a política de privacidade do teste.');
+  const links = [...mesa.$('aceitar-termos-rotulo').querySelectorAll('a')];
+  assert.deepEqual(links.map(a => [a.textContent, a.getAttribute('href'), a.getAttribute('target'), a.getAttribute('rel')]),
+    [['termos de uso', '/termos', '_blank', 'noopener'], ['política de privacidade', '/privacidade', '_blank', 'noopener']]);
+  assert.deepEqual(links.map(a => a.getAttribute('aria-label')), ['termos de uso (abre em nova aba)', 'política de privacidade (abre em nova aba)']);
+  mesa.$('entrar-idioma').click(); await mesa.esperar(3);
+  assert.deepEqual(links.map(a => a.getAttribute('aria-label')), ['terms of use (opens in a new tab)', 'privacy policy (opens in a new tab)']);
+  mesa.$('entrar-idioma').click(); await mesa.esperar(3);
   digitar(mesa.$('aceitar-nome'), 'Ana'); digitar(mesa.$('aceitar-senha'), 'uma frase longa e boa');
   await enviar(mesa, 'aceitar-form');
   assert.equal(avisos(mesa)[0].textContent, 'Falta aceitar os termos. Marque a caixa para continuar.');
@@ -233,7 +240,9 @@ test('Redefinir: senha nova com foco, tamanho conferido, o pedido leva token e s
   await enviar(mesa, 'redefinir-form');
   assert.deepEqual(chamadas('senha-redefinir').map(p => p.dados), [{token: TOKEN, senha: 'uma senha nova e longa'}]);
   assert.equal(visivel(mesa, 'redefinir-form'), false); assert.equal(visivel(mesa, 'redefinir-pronto'), true);
-  assert.ok(mesa.$('redefinir-pronto').textContent.includes('Senha nova salva. As sessões abertas desta conta foram encerradas. Entre com a senha nova.'));
+  assert.equal(mesa.$('redefinir-titulo').textContent, 'Senha nova salva', 'o título acompanha o estado (R1 do Design)');
+  assert.ok(mesa.$('redefinir-pronto').textContent.includes('As sessões abertas desta conta foram encerradas. Entre com a senha nova.'));
+  assert.ok(!mesa.$('redefinir-pronto').textContent.includes('Senha nova salva'), 'o texto não repete o título');
   assert.equal(mesa.$('redefinir-senha').value, '', 'a senha não fica no campo');
   assert.equal(destinos.length, 0, 'não abre sessão nem navega sozinha');
   mesa.$('redefinir-entrar').click();
@@ -331,9 +340,16 @@ test('o aviso de teste é só da entrada: some no convite, na redefinição e em
   assert.equal(visivel(esqueci.mesa, 'entrar-teste'), true, 'de volta à entrada');
 });
 
-test('o Entrar não oferece o que o dono tirou: chave de acesso, e não inventa os links de Termos e Privacidade sem destino', async () => {
+test('o Entrar não oferece o que o dono tirou (chave de acesso); os links de Termos e Privacidade do rodapé esperam as páginas da Documentação (D6)', async () => {
   const {mesa} = await abrir({url: 'http://127.0.0.1:8765/entrar'});
   const texto = mesa.doc.body.textContent;
   assert.ok(!/chave de acesso/i.test(texto));
-  assert.equal([...mesa.doc.querySelectorAll('a')].filter(a => /termos|privacidade/i.test(a.textContent)).length, 0);
+  assert.equal([...mesa.doc.querySelector('.entrar-rodape').querySelectorAll('a')].length, 0);
+});
+
+test('o foco que vai ao título ao trocar de estado fica sem anel (B1 do Design); o anel continua em todo controle', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'interface', 'entrar.css'), 'utf8');
+  assert.ok(css.includes('.entrar-cartao [tabindex="-1"]:focus,.entrar-cartao [tabindex="-1"]:focus-visible{outline:none}'));
+  const regra = css.slice(css.indexOf('[tabindex="-1"]:focus'));
+  assert.ok(!/button|input|a\[|:focus-visible\{outline:(?!none)/.test(regra.split('}')[0]), 'a regra não alcança controles');
 });

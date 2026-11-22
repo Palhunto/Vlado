@@ -68,3 +68,6 @@
 .entrar-rodape p{margin:0}
 .entrar-link-rodape{min-height:var(--espaco-6);padding:0;border:0;background:none;color:var(--theme-accent);font-size:var(--text-md);font-weight:400;text-decoration:underline}
 .entrar-link-rodape:hover{background:none;color:var(--theme-primary-hover)}
+
+/* O foco programático vai ao título (ou ao aviso) ao trocar de estado, para o leitor de tela; sem anel nele. O anel continua em todo controle. */
+.entrar-cartao [tabindex="-1"]:focus,.entrar-cartao [tabindex="-1"]:focus-visible{outline:none}

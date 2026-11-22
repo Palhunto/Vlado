@@ -110,7 +110,8 @@ const texto = async (page, seletor) => (await page.textContent(seletor)).replace
       await senha.fill('#redefinir-senha', redefinir.senha);
       await senha.click('#redefinir-enviar');
       await aguardar(senha, '#redefinir-pronto:not([hidden])');
-      assert.ok((await texto(senha, '#redefinir-pronto')).startsWith('Senha nova salva. As sessões abertas desta conta foram encerradas. Entre com a senha nova.'));
+      assert.equal(await texto(senha, '#redefinir-titulo'), 'Senha nova salva');
+      assert.ok((await texto(senha, '#redefinir-pronto')).startsWith('As sessões abertas desta conta foram encerradas. Entre com a senha nova.'));
       await capturar(senha, 'redefinir-pronto', rotuloTela, tema);
       await Promise.all([senha.waitForURL(url => url.pathname === '/entrar'), senha.click('#redefinir-entrar')]);
       await senha.goto(`${args.origem}/redefinir/${redefinir.token}`);
