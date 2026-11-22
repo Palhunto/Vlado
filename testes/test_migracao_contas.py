@@ -249,7 +249,9 @@ class NaoAmpliacaoTest(Base):
         for operacao, dados, codigo in (('codex-listar', {'caso': 'beta'}, 'caso_indisponivel'),
                                         ('apuracao-notas', {'caso': 'alpha'}, 'operacao_proibida'),
                                         ('achados-catalogo', {'caso': 'alpha'}, 'operacao_proibida'),
-                                        ('contas-listar', {}, 'operacao_proibida'),
+                                        ('equipe-listar', {}, 'operacao_proibida'),
+                                        ('equipe-convidar', {'email': 'x@exemplo.test', 'papel': 'dono'}, 'operacao_proibida'),
+                                        ('contas-listar', {}, 'operacao_inexistente'),  # withdrawn with the invitation
                                         ('cadastrar', {'novo': True}, 'operacao_proibida')):
             with self.subTest(operacao=operacao), self.assertRaises(autorizacao.Recusa) as recusa:
                 autorizacao.conferir(self.root, 'piloto', principal, operacao, dados)

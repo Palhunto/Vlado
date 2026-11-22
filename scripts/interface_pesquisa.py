@@ -57,7 +57,7 @@ import trava_cadastro
 from indice_sqlite import ID_CASO, caminho_rodada, cobertura, ler_passagem, pesquisar
 # Names also imported from here by the launcher, the tests and older callers.
 from rotas_caderno import CADERNO_OPERACOES, DILIGENCIAS_OPERACOES
-from rotas_contas import (RotasContas, CONTAS_OPERACOES, OPERACOES_CONVIDADO, OPERACOES_CONVERSA,  # noqa: F401
+from rotas_contas import (RotasContas, OPERACOES_CONVIDADO, OPERACOES_CONVERSA,  # noqa: F401
                           OPERACOES_PUBLICAS, AMBIENTES, SEM_SESSAO, OPERACOES_COM_COTA, ATIVOS_CONVERSA,
                           COOKIE_PILOTO, CONTA_PROPRIA)
 from rotas_conversa import RotasConversa, RESPONDIDO, CAMPOS_INTERNOS_CONVERSA, _sem_internos  # noqa: F401
@@ -118,7 +118,7 @@ ROTAS_GET_COM_PARAMETROS = ('/api/catalogo', '/api/fila', '/api/cota')  # each o
 # Every POST operation behind a session; anything else is 404 before the body is parsed.
 OPERACOES_API = (*rotas_conversa.OPERACOES, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES,
                  *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, *rotas_redacao.OPERACOES,
-                 *rascunhos.OPERACOES, *fontes_web.OPERACOES, *rotas_gestao.OPERACOES, *CONTAS_OPERACOES, 'sessao-sair',
+                 *rascunhos.OPERACOES, *fontes_web.OPERACOES, *rotas_gestao.OPERACOES, 'sessao-sair',
                  *rotas_achados.OPERACOES, *CONSULTA_OPERACOES, *rotas_equipe.OPERACOES, *CONTA_PROPRIA)
 registro_acesso.permitir_operacoes((*OPERACOES_API, *OPERACOES_PUBLICAS))  # SEG-02: o registro só aceita nomes que existem
 
@@ -844,9 +844,6 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 caso_novo = data['caso']
             if operation == 'sessao-sair':
                 self._sair()
-                return
-            if operation in CONTAS_OPERACOES:
-                self._json(200, self._contas(operation, data, principal))
                 return
             consulta_contada = False
             if operation in OPERACOES_COM_COTA and dono is not None:

@@ -257,6 +257,16 @@ class EquipeTest(cenario.DuasRedacoes):
             self.assertEqual(self.post('dono', 'equipe-teto', invalido)[0], 400, invalido)
         self.assertEqual(self.post('dono', 'equipe-listar', {})[1]['redacao']['cota_mensal_brl'], None)  # only the operator sets it
 
+    def test_quem_e_retirado_de_uma_apuracao_tem_as_execucoes_dela_paradas(self):
+        # As `contas-atualizar` did before it left: nobody keeps spending the API on a case taken away.
+        alvo, _, _ = self.nova('leitor', casos=('alpha', 'gama'))
+        with patch.object(interface_pesquisa.Handler, '_parar_execucoes') as parar:
+            self.assertEqual(self.post('dono', 'caso-retirar', {'caso': 'alpha', 'conta': alvo})[0], 200)
+        parar.assert_called_once_with(alvo, ('gama',))  # what is kept: the cases the account still reaches
+        with patch.object(interface_pesquisa.Handler, '_parar_execucoes') as parar:
+            self.assertEqual(self.post('dono', 'caso-retirar', {'caso': 'alpha', 'conta': INEXISTENTE})[0], 400)
+        parar.assert_not_called()
+
     def test_campos_fora_da_lista_sao_recusados_sem_efeito(self):
         alvo, _, _ = self.nova('leitor')
         for operacao, dados in (('equipe-papel', {'conta': alvo, 'papel': 'editor', 'organizacao': self.b}),

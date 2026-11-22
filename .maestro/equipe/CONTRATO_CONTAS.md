@@ -359,7 +359,7 @@ Resolvedor `nenhum`. Toda operação age só sobre a redação da sessão. O id 
 | `codex-status` | L | sim | sim | sim | sim | sim | Estado da conexão com o provedor; não leva dado de redação. |
 | `codex-desligar` | A | sim | — | — | — | — | Só nos modos locais. No `piloto`, recusado a todos (`servico_nao_encerravel`), como hoje. |
 
-**Operações retiradas:** `contas-listar`, `contas-criar`, `contas-atualizar`, `contas-desativar`, `contas-reativar` e `contas-recuperar` saem de `OPERACOES_API` e passam a responder 404, como qualquer operação inexistente, para todos os papéis. As `equipe-*` as substituem. `contas-criar` e `contas-recuperar` devolviam o link a quem pedia, que é o defeito de CON-03. Por decisão do dono do projeto (P30, 22/11/2026), elas ficam até o convite por e-mail e saem junto com ele, na mesma integração; a tela Equipe entra antes, sem "Convidar". Enquanto existirem, pedem a senha de quem faz nos mesmos casos das `equipe-*` e não atribuem o perfil `convidado` a quem não o tem (seção 5.15).
+**Operações retiradas:** `contas-listar`, `contas-criar`, `contas-atualizar`, `contas-desativar`, `contas-reativar` e `contas-recuperar` saem de `OPERACOES_API` e passam a responder 404, como qualquer operação inexistente, para todos os papéis. As `equipe-*` as substituem. `contas-criar` e `contas-recuperar` devolviam o link a quem pedia, que é o defeito de CON-03. Por decisão do dono do projeto (P30, 22/11/2026), elas ficaram até o convite por e-mail e saíram junto com ele, na mesma integração. O que cada uma fazia passou a: `equipe-listar` e `equipe-atividade` (listar); `equipe-convidar` (criar; o perfil `convidado` não é mais criado pela Mesa); `equipe-papel`, `caso-incluir` e `caso-retirar` (atualizar); `equipe-desativar` e `equipe-reativar`; `equipe-recuperar` (recuperar, sem devolver link no serviço hospedado). A cota diária do perfil legado e os links de ativação ficam com o operador, no terminal.
 
 ### 5.6 Apurações: criação, participação e lixeira
 
@@ -474,7 +474,7 @@ Resolvedor `caso` em todas. O rascunho é sempre da conta da sessão: ninguém l
 
 `conta-senha-trocar`, `conta-email-trocar`, `conta-fator-iniciar`, `conta-fator-codigos`, `conta-fator-remover`, `conta-excluir`, `equipe-convidar` (ao convidar como dono), `equipe-papel` (ao promover a dono e ao mudar o papel de quem é dono), `equipe-desativar` (quando o alvo é dono), `equipe-remover`, `equipe-recuperar`, `ia-config-salvar` e `lixeira-apagar` levam a senha da conta no corpo, no campo `senha` (`senha_atual` em `conta-senha-trocar`). A senha é sempre a de quem faz, nunca a do alvo. As duas condições sobre outro dono são a primeira ressalva de P28 (seção 11). O alvo é conferido antes da senha: uma conta que não existe, ou de outra redação, responde como inexistente com ou sem senha, e a tentativa não conta. Uma sessão aberta num computador esquecido, ou um conteúdo malicioso exibido na Mesa (seção 9), não consegue executá-las.
 
-O nome da operação não é um caminho por fora. Enquanto as `contas-*` existirem (seção 5.5), elas passam pela mesma conferência, com o mesmo campo `senha`: `contas-criar` com o papel dono, `contas-atualizar` ao promover a dono e ao mudar o papel de quem é dono, `contas-desativar` quando o alvo é dono, e toda `contas-recuperar`, que devolve um link capaz de abrir a conta de outra pessoa.
+O nome da operação não é um caminho por fora. As `contas-*`, que faziam as mesmas coisas por outro nome, saíram (seção 5.5): respondem 404 em todos os modos, e com elas saiu a `contas-recuperar`, que devolvia a quem pedia um link capaz de abrir a conta de outra pessoa.
 
 Limitação conhecida e aceita: quem tem em mãos a sessão aberta de uma pessoa pode errar a senha cinco vezes e deixá-la 15 minutos sem confirmar nada. É o preço do teto de tentativas; a entrada e o resto da sessão não são afetados.
 
@@ -805,8 +805,9 @@ Do que a entrega 3 decide, além do texto da seção 8.1:
 
 **O que ainda não existe,** e onde o código difere do texto até lá:
 
-- As operações de `autorizacao.PENDENTES` (segundo fator, termos, exportação e exclusão da própria conta) respondem 404. As seis `contas-*` continuam, só para o dono e só sobre a própria redação (`autorizacao.TRANSITORIAS`), com a senha pedida nos casos da seção 5.15, e saem com o convite por e-mail (P30, seção 5.5).
-- `contas-criar` é recusada a todos (403 `operacao_proibida`) numa instalação com mais de uma redação: o login é único na instalação, e a recusa "esse login já existe" contaria a uma redação que outra tem uma conta com ele (seção 4.5). Até o convite por e-mail entrar, nessas instalações as contas novas são criadas pelo operador, no terminal. Com uma redação só, nada muda. Nenhuma outra operação recebe campo único da instalação.
+- As operações de `autorizacao.PENDENTES` (segundo fator, termos, exportação e exclusão da própria conta) respondem 404. As seis `contas-*` saíram com o convite por e-mail (P30, seção 5.5): respondem 404 em todos os modos, a todos os papéis, e `autorizacao.TRANSITORIAS` ficou vazia. A tela antiga "Contas de acesso" (`piloto.js`) sai na mesma integração.
+- Quem é retirado de uma apuração (`caso-retirar`) tem as execuções em curso naquela apuração paradas, como acontecia em `contas-atualizar`.
+- O perfil legado `convidado` não é mais criado pela Mesa, nem a cota diária dele é mudada por ela: as contas que o têm continuam, e o operador as administra pelo terminal.
 - A página (`GET /`), `GET /api/sessao` e `GET /api/integracao` também passam pelo portão: de uma redação suspensa, respondem 403 `redacao_suspensa` (a página, um aviso simples, sem dado nem token).
 - `data-papel` leva `admin` para o dono enquanto a interface não conhece os papéis novos; os outros papéis vão com o próprio nome. `GET /api/sessao` já devolve os valores novos e `capacidades`.
 - `pendencias` sai sempre vazia: segundo fator e termos entram com a seção 8.
