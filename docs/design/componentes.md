@@ -928,7 +928,7 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 
 - **Minha conta** abre pelo perfil no rodapé da [barra lateral](#barra-lateral) (W08, regra 1). Abaixo de 1280 px, abre pelo mesmo perfil no pé da gaveta. Com a página aberta, o perfil leva `aria-current="page"` e nenhum item de área fica selecionado. No modo `local`, sem contas, não há perfil nem Minha conta.
 - **Para o dono**, Minha conta, Equipe e Configurações são três [abas](#abas) no topo da página, nessa ordem; no celular, pílulas de 44 (P20b). Quem não é dono vê só Minha conta, sem a linha de abas. Cada aba aparece pela capacidade que `GET /api/sessao` devolve: Equipe com `equipe-listar`, Configurações com `ia-config`. A Mesa não decide pelo nome do papel.
-- O botão "Configurações" do cabeçalho leva à aba Configurações. "Contas de acesso" sai de Configurações na mesma integração em que Equipe entra, junto com as operações `contas-*` (contrato, 5.5). Em Configurações fica só a configuração da IA, com a senha da [tabela](#dialogo-senha).
+- O botão "Configurações" do cabeçalho leva à aba Configurações. "Contas de acesso" continua em Configurações, como hoje, até o convite por e-mail da E3 de Contas; sai junto com as operações `contas-*`, na mesma integração do convite (decisão do dono, P30). Depois disso, em Configurações fica só a configuração da IA, com a senha da [tabela](#dialogo-senha).
 
 ### Moldura comum
 
@@ -1007,7 +1007,7 @@ Só para quem tem `equipe-listar`, isto é, o dono. Os dados vêm de `equipe-lis
 | TETO MENSAL | campo "Teto de gasto com IA, em reais", de 44 px e até 160 px de largura, `inputmode="decimal"`, aceitando "30" e "30,50"; "Salvar" (secundário). Apoio: "Padrão da redação: R$ 50. Não passa do teto da redação." Com teto próprio, "Usar o padrão" ([link](#link)) o apaga. A Mesa envia `teto_brl` como texto com ponto ("30.50"), nunca como número, e `null` para voltar ao padrão (`equipe-teto` com `conta`). Recusa: o texto do servidor abaixo do campo |
 | ACESSO | conta ativa: "Desativar" e "Remover da redação" (destrutivos). Conta desativada: "Reativar" (secundário, sem diálogo) e "Remover da redação". Apoio: "Desativar encerra as sessões e para as perguntas em curso; as apurações ficam. Remover exclui a conta." Os diálogos estão na [tabela](#dialogo-senha) |
 
-O "Recuperar acesso" de hoje sai com as `contas-*` ([exceções](#contas-excecoes)).
+Criar conta com link e "Recuperar acesso" continuam em "Contas de acesso", em Configurações, até a E3 (P30; [exceções](#contas-excecoes)).
 
 **Abaixo da tabela**, em grade de duas colunas:
 
@@ -1052,11 +1052,11 @@ A conferência destas telas não barra por elas. Cada uma volta ao wireframe qua
 | W08: cidade aproximada da sessão | aparelho, último uso e endereço | não volta: decisão 5 do contrato (P27) |
 | W08: "14 perguntas" no uso do mês | só o valor em reais | `GET /api/cota` trazer a contagem |
 | W08: "Exportar meus dados" e "Excluir minha conta" | o cartão Seus dados, só com o caminho por pessoa | houver `conta-exportar` e `conta-excluir` (contrato, 8.4); "Excluir" vem com o diálogo com senha e o nome digitado |
-| W09: "Convidar pessoa", convites pendentes e "Reenviar" | nada no lugar do botão; abaixo da tabela, em 14 `--theme-muted`, "Para incluir alguém na redação, fale com quem administra o serviço." | houver convite por e-mail (contrato, 8.1) |
+| W09: "Convidar pessoa", convites pendentes e "Reenviar" | nada no lugar do botão. Abaixo da tabela, em 14 `--theme-muted`: numa instalação com uma redação só, "Para incluir alguém, crie uma conta em Configurações, Contas de acesso.", com "Contas de acesso" como [link](#link) para a aba; com mais de uma redação, onde `contas-criar` já é recusada (`5e342fe`), "Para incluir alguém na redação, fale com quem administra o serviço." | o convite por e-mail da E3 de Contas (contrato, 8.1). As `contas-*` e "Contas de acesso" saem na mesma integração (P30) |
 | W09: cartão "Chave de IA da redação" | a chave continua em Configurações, como hoje, com a senha | houver chave por redação (contrato, 8.5, parte da Plataforma) |
 | W09: "aviso em 80%" e "redação convidada para o teste" | só o teto e a contagem de pessoas | o servidor informar o aviso e a situação do teste |
 | W09: "Ana entrou de novo aparelho" na atividade | a atividade sem esse evento | houver aparelho conhecido (contrato, 8.2 e 8.3) |
-| "Recuperar acesso" da tela de hoje | fora | houver `equipe-recuperar`, com dupla confirmação (contrato, 8.2) |
+| "Recuperar acesso" na Equipe | fica em Configurações, "Contas de acesso", como hoje (P30) | houver `equipe-recuperar`, com dupla confirmação (contrato, 8.2) |
 | Autor de conta removida como "Conta excluída" | o texto de remover não promete a troca | vier o ciclo de vida (contrato, 8.4 e 12) |
 
 ### Ganchos com o resto da Mesa
@@ -1195,7 +1195,7 @@ Pela regra 1 do contrato, nada disto é construído antes de o Design desenhar e
 
 ## Decisões do dono (21/11/2026)
 
-Respostas do dono às perguntas desta especificação e às pranchas de `aprovacao/`, repassadas pelo Maestro (P11, P12, P14, P14b, P15 e P16 da nota de decisões; P20a e P20b, de 22/11/2026). Não há pergunta aberta nesta seção.
+Respostas do dono às perguntas desta especificação e às pranchas de `aprovacao/`, repassadas pelo Maestro (P11, P12, P14, P14b, P15 e P16 da nota de decisões; P20a, P20b e P30, de 22/11/2026). Não há pergunta aberta nesta seção.
 
 | Nº | Pergunta | Decisão |
 |---|---|---|
@@ -1231,5 +1231,6 @@ Respostas do dono às perguntas desta especificação e às pranchas de `aprovac
 | P16.5 | Cadastrar arquivos | Deixa de ser área; vira a área de envio de Documentos. |
 | P20a | Selo do veredito da IA (22/11/2026) | Pílula sem fundo, borda tracejada e texto com "IA ·"; os selos humanos mantêm fundo, borda contínua e sinal ([selo](#selo)). |
 | P20b | Altura das abas em pílula no celular (22/11/2026) | 44 px, pelo alvo de toque; o canvas desenha 40. Mudança no canvas autorizada pelo dono ([abas](#abas)). |
+| P30 | Saída das `contas-*` (22/11/2026) | Ficam até o convite por e-mail da E3 e saem junto com ele, na mesma integração. A Equipe entra sem "Convidar" e "Contas de acesso" continua em Configurações até lá ([exceções](#contas-excecoes)). |
 
 As 27 pranchas da fase 3 e as de `aprovacao/` foram aprovadas e regeneradas com estas decisões, inclusive a barra de 256 px. As telas finais do canvas em `referencia/telas/` continuam como estão: são o registro do contrato; as decisões acima valem sobre elas onde houver diferença, e `referencia/com-decisoes/` mostra as sete telas com elas aplicadas.
