@@ -150,7 +150,7 @@ Onde: design system, Conferir achado, mapa. `<span>` 14/600, preenchimento 4 12,
 | Lida por OCR | `--theme-warning` | `--theme-warning-bg` | `--theme-warning-line` | nenhum (o texto basta) |
 | Precisa de ajuste *(derivado)* | `--theme-warning` | `--theme-warning-bg` | `--theme-warning-line` | ! |
 
-**Veredito da IA (derivado, 22/11/2026).** O canvas só desenha os selos da conferência humana (tabela acima). O veredito da IA sobre o suporte de um achado é o mesmo selo, com raio pílula, mas a forma o separa da pessoa por três sinais juntos, nunca só pela cor:
+**Veredito da IA (derivado, aprovado pelo dono em 22/11/2026, P20a).** O canvas só desenha os selos da conferência humana (tabela acima). O veredito da IA sobre o suporte de um achado é o mesmo selo, com raio pílula, mas a forma o separa da pessoa por três sinais juntos, nunca só pela cor:
 
 - sem fundo (transparente);
 - borda 1 px **tracejada**, como em tudo o que ainda espera confirmação na Mesa ("a confirmar" do mapa, item a resolver);
@@ -936,7 +936,7 @@ Pela regra 1 do contrato, nada disto é construído antes de o Design desenhar e
 
 ## Decisões do dono (21/11/2026)
 
-Respostas do dono às perguntas desta especificação e às pranchas de `aprovacao/`, repassadas pelo Maestro (P11, P12, P14, P14b, P15 e P16 da nota de decisões). Não há pergunta aberta nesta seção.
+Respostas do dono às perguntas desta especificação e às pranchas de `aprovacao/`, repassadas pelo Maestro (P11, P12, P14, P14b, P15 e P16 da nota de decisões; P20a, de 22/11/2026). Pergunta aberta: altura das abas em pílula no celular, 40 px como no canvas ou 44 px pelo alvo de toque (o Frontend usa 44 até a resposta).
 
 | Nº | Pergunta | Decisão |
 |---|---|---|
@@ -970,5 +970,6 @@ Respostas do dono às perguntas desta especificação e às pranchas de `aprovac
 | P16.3 | Lista de documentos | Tabela no desktop, cartões no celular. |
 | P16.4 | Contador do item ativo | "Documentos 12" vira pílula clara na página atual. |
 | P16.5 | Cadastrar arquivos | Deixa de ser área; vira a área de envio de Documentos. |
+| P20a | Selo do veredito da IA (22/11/2026) | Pílula sem fundo, borda tracejada e texto com "IA ·"; os selos humanos mantêm fundo, borda contínua e sinal ([selo](#selo)). |
 
 As 27 pranchas da fase 3 e as de `aprovacao/` foram aprovadas e regeneradas com estas decisões, inclusive a barra de 256 px. As telas finais do canvas em `referencia/telas/` continuam como estão: são o registro do contrato; as decisões acima valem sobre elas onde houver diferença, e `referencia/com-decisoes/` mostra as sete telas com elas aplicadas.
