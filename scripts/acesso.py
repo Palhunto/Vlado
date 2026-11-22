@@ -88,7 +88,10 @@ CONVITES_PENDENTES = 50  # per newsroom: an invitation must not become a way to 
 REENVIO_MINUTOS = 60  # each invitation is sent again at most once an hour
 CONVITES_POR_ENDERECO = 3  # messages a newsroom sends to the same address in that hour, cancelled ones included
 ATIVIDADE_DIAS = 90  # the newsroom's activity is kept for 90 days (decision 15)
-ESQUEMA = 3  # PRAGMA user_version of the store; `_ATUALIZACOES` takes an older store up to it
+REDEFINICAO_MINUTOS = 60  # a password-reset link is valid for one hour, once (decision 15)
+REDEFINICAO_INTERVALO_MINUTOS = 5  # the same address is sent at most one reset message in this time
+CHAVE_ESQUECI = '#esqueci|'  # when a reset was last asked for an address, whether an account has it or not
+ESQUEMA = 4  # PRAGMA user_version of the store; `_ATUALIZACOES` takes an older store up to it
 ESPERA_BD_S = 10
 NOME_PADRAO_REDACAO = 'Redação'
 CREDENCIAIS = 'Login ou senha incorretos.'
@@ -104,6 +107,7 @@ ULTIMO_DONO = 'A redação precisa de ao menos um dono ativo.'
 TETO_INVALIDO = 'Informe o teto em reais, com até duas casas decimais (por exemplo, 50 ou 50.00).'
 CONVITE_INVALIDO = 'Convite inválido, cancelado ou vencido. Peça um novo a quem convidou.'
 CONVITE_INEXISTENTE = 'Convite não encontrado.'
+LINK_INVALIDO = 'Link inválido, usado ou vencido. Peça outro em Esqueci a senha.'
 CHAVE_CONFIRMACAO = '#senha|'  # attempt counter of the password asked again; `#` never starts a login
 
 _HASHER = PasswordHasher()  # library defaults (argon2id); check_needs_rehash follows them
@@ -173,6 +177,10 @@ CREATE TABLE convites (
     enviado_em TEXT NOT NULL, envio TEXT, encerrado_em TEXT, conta TEXT);
 CREATE INDEX convites_por_organizacao ON convites (organizacao, estado);
 CREATE INDEX convites_por_email ON convites (email);
+CREATE TABLE links (
+    token_sha256 TEXT PRIMARY KEY, tipo TEXT NOT NULL, conta TEXT NOT NULL REFERENCES contas(id),
+    criado_em TEXT NOT NULL, expira_em TEXT NOT NULL);
+CREATE INDEX links_por_conta ON links (conta, tipo);
 """
 # From each older version of the store to the next one (applied in order, each in one transaction).
 _ATUALIZACOES = {1: ('ALTER TABLE contas ADD COLUMN idioma TEXT',
@@ -187,7 +195,10 @@ _ATUALIZACOES = {1: ('ALTER TABLE contas ADD COLUMN idioma TEXT',
                      ' criado_por TEXT NOT NULL, expira_em TEXT NOT NULL, enviado_em TEXT NOT NULL, envio TEXT,'
                      ' encerrado_em TEXT, conta TEXT)',
                      'CREATE INDEX convites_por_organizacao ON convites (organizacao, estado)',
-                     'CREATE INDEX convites_por_email ON convites (email)')}
+                     'CREATE INDEX convites_por_email ON convites (email)'),
+                 3: ('CREATE TABLE links (token_sha256 TEXT PRIMARY KEY, tipo TEXT NOT NULL,'
+                     ' conta TEXT NOT NULL REFERENCES contas(id), criado_em TEXT NOT NULL, expira_em TEXT NOT NULL)',
+                     'CREATE INDEX links_por_conta ON links (conta, tipo)')}
 
 
 class RegistroIlegivel(ValueError):
@@ -258,6 +269,19 @@ class ConviteInvalido(ValueError):
 
     def __init__(self, motivo='link_invalido'):
         super().__init__(CONVITE_INVALIDO)
+        self.motivo = motivo
+
+
+class SenhaInvalida(ValueError):
+    """The password somebody chose is out of size (the public pages answer it with their own code)."""
+
+
+class LinkInvalido(ValueError):
+    """One refusal for every password-reset link that changes nothing: unknown, used, expired, or of an account
+    that is no longer active. `motivo` goes to the audit log only."""
+
+    def __init__(self, motivo='link_invalido'):
+        super().__init__(LINK_INVALIDO)
         self.motivo = motivo
 
 
@@ -744,7 +768,7 @@ def _validar_horas(horas) -> int:
 
 def _validar_senha(senha) -> str:
     if not isinstance(senha, str) or not SENHA_MIN <= len(senha) <= SENHA_MAX:
-        raise ValueError(f'A senha deve ter de {SENHA_MIN} a {SENHA_MAX} caracteres.')
+        raise SenhaInvalida(f'A senha deve ter de {SENHA_MIN} a {SENHA_MAX} caracteres.')
     return senha
 
 
@@ -805,7 +829,10 @@ def _cancelar_convites_de(tx: _Tx, cid: str, momento: datetime | None = None) ->
 
 
 def _derrubar_sessoes(tx: _Tx, cid: str) -> None:
+    """End every session of the account. A password-reset link still pending dies with them: whatever ends the
+    sessions (deactivation, recovery, removal, a new password) must not leave a way back in."""
     tx.ex('DELETE FROM sessoes WHERE conta = ?', cid)
+    tx.ex('DELETE FROM links WHERE conta = ?', cid)
 
 
 def _emitir_ativacao(tx: _Tx, cid: str, horas: int, motivo: str, momento: datetime) -> str:
@@ -1629,6 +1656,88 @@ def manutencao(root: Path) -> dict:
         return {'convites_vencidos': vencidos, 'eventos_podados': podados}
 
 
+# --- password reset by e-mail (senha-esqueci, senha-redefinir) ------------------------------------
+
+def _destinatario(conta) -> dict:
+    """What a message to the account's own address needs: never shown to anybody else."""
+    return {'id': conta['id'], 'email': conta['email'], 'nome': conta['nome'], 'idioma': conta['idioma'] or IDIOMAS[0]}
+
+
+def pedir_redefinicao(root: Path, email) -> tuple[str, dict] | None:
+    """A person forgot the password and typed the e-mail. Returns (token, who to write to) when a message must go,
+    or None; the caller answers the same in both cases, and what it does next must not depend on which.
+
+    The store is written the same way whether an account has the address or not (when a reset was last asked for
+    it), so neither the answer nor its time tells. An address gets at most one message every
+    REDEFINICAO_INTERVALO_MINUTOS, and a new link kills the one before. Only an active account with a password, in
+    an active newsroom, gets a link; the token exists only in the message."""
+    texto = email.strip().lower() if isinstance(email, str) else ''
+    if not 6 <= len(texto) <= 254 or not EMAIL.fullmatch(texto):
+        return None
+    token, chave = secrets.token_urlsafe(32), CHAVE_ESQUECI + texto
+    with _bd(root, escrever=True) as tx:
+        momento = agora()
+        ultimo = tx.um('SELECT em FROM tentativas WHERE chave = ?', chave)
+        conta = tx.um('SELECT * FROM contas WHERE email = ?', texto)
+        if ultimo and ultimo['em'] and _data(ultimo['em']) + timedelta(minutes=REDEFINICAO_INTERVALO_MINUTOS) > momento:
+            return None  # asked a moment ago: nothing new is sent, to anybody
+        tx.ex('INSERT INTO tentativas (chave, falhas, bloqueado_ate, em) VALUES (?, 0, NULL, ?) ON CONFLICT (chave) DO UPDATE'
+              ' SET em = excluded.em', chave, _iso(momento))
+        _podar_tentativas(tx, momento)
+        redacao = tx.um('SELECT situacao FROM organizacoes WHERE id = ?', conta['organizacao']) if conta else None
+        if not conta or not conta['ativa'] or not conta['senha_hash'] or not redacao or redacao['situacao'] != 'ativa':
+            tx.depois.append(lambda: registro_acesso.registrar(
+                'redefinicao_pedida', 'falha', conta['id'] if conta else None, momento,
+                motivo='conta_inativa' if conta else 'nao_encontrado',
+                login_ref=None if conta else registro_acesso.referencia_do_login(texto)))
+            return None
+        tx.ex("DELETE FROM links WHERE conta = ? AND tipo = 'redefinicao'", conta['id'])
+        tx.ex("INSERT INTO links (token_sha256, tipo, conta, criado_em, expira_em) VALUES (?, 'redefinicao', ?, ?, ?)",
+              _hash(token), conta['id'], _iso(momento), _iso(momento + timedelta(minutes=REDEFINICAO_MINUTOS)))
+        _evento(tx, 'redefinicao_pedida', conta['id'], conta['id'], momento)
+        return token, _destinatario(conta)
+
+
+def _por_link(tx: _Tx, token, tipo: str, momento: datetime):
+    """The account of a link that can still be used, or LinkInvalido."""
+    if not isinstance(token, str) or not 20 <= len(token) <= 100:
+        raise LinkInvalido()
+    link = tx.um('SELECT * FROM links WHERE token_sha256 = ? AND tipo = ?', _hash(token), tipo)
+    if not link:
+        raise LinkInvalido()
+    if _data(link['expira_em']) <= momento:
+        raise LinkInvalido('link_expirado')
+    conta = tx.um('SELECT * FROM contas WHERE id = ?', link['conta'])
+    if not conta or not conta['ativa'] or conta['excluida_em']:
+        raise LinkInvalido()
+    return conta
+
+
+def redefinir_senha(root: Path, token, senha) -> dict:
+    """Set a new password from the link of the reset message: every session of the account ends, the link (and any
+    other pending one) dies, and the person signs in next. Returns who to tell that the password changed."""
+    senha = _validar_senha(senha)
+    try:
+        with _bd(root) as tx:
+            _por_link(tx, token, 'redefinicao', agora())  # refuse before spending time on the hash
+        with _VezDoHash():
+            senha_hash = _HASHER.hash(senha)
+        with _bd(root, escrever=True) as tx:
+            momento = agora()
+            conta = _por_link(tx, token, 'redefinicao', momento)
+            cid = conta['id']
+            tx.ex('UPDATE contas SET senha_hash = ?, senha_definida_em = ?, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
+                  ' ativacao_motivo = NULL WHERE id = ?', senha_hash, _iso(momento), cid)
+            _derrubar_sessoes(tx, cid)
+            _limpar_tentativas(tx, conta)
+            tx.ex('DELETE FROM tentativas WHERE chave = ?', CHAVE_CONFIRMACAO + cid)
+            _evento(tx, 'senha_redefinida', cid, cid, momento)
+            return _destinatario(conta)
+    except LinkInvalido as exc:
+        registro_acesso.registrar('ativacao_falha', 'falha', motivo=exc.motivo, acesso_operacao='redefinir')
+        raise
+
+
 # --- first administrator (local mode with accounts) ----------------------------------------------
 
 PRIMEIRO_ACESSO_ENCERRADO = 'A conta de administração já foi criada. Entre com login e senha.'
@@ -2062,6 +2171,7 @@ def trocar_senha(root: Path, cid, senha_atual, senha_nova, sessao_atual=None, ip
         tx.ex('UPDATE contas SET senha_hash = ?, senha_definida_em = ?, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
               ' ativacao_motivo = NULL WHERE id = ?', senha_hash, _iso(momento), cid)
         encerradas = tx.ex('DELETE FROM sessoes WHERE conta = ? AND publico IS NOT ?', cid, sessao_atual).rowcount
+        tx.ex('DELETE FROM links WHERE conta = ?', cid)  # a reset link asked before the change is dead
         _limpar_tentativas(tx, conta)
         _evento(tx, 'senha_trocada', cid, cid, momento)
         return encerradas

@@ -167,12 +167,13 @@ _linhas(TRANSITORIAS, 'nenhum', 'A', SO_DONO, 'contas-listar contas-criar contas
                                               'contas-reativar contas-recuperar')
 # Operações que o contrato já define e que entram nas próximas entregas (senha por e-mail, segundo fator, ciclo de vida).
 PENDENTES = frozenset((
-    'entrar-segundo-fator senha-esqueci senha-redefinir '
+    'entrar-segundo-fator '
     'conta-email-trocar conta-fator-iniciar conta-fator-confirmar conta-fator-codigos conta-fator-remover '
     'conta-termos-aceitar conta-exportar conta-excluir '
     'equipe-recuperar equipe-recuperar-confirmar').split())
 # Antes da sessão (seção 5.3): sem papel, conferidas em `rotas_contas._publico`.
-PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin', 'convite-consultar', 'convite-aceitar')
+PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin', 'convite-consultar', 'convite-aceitar',
+            'senha-esqueci', 'senha-redefinir')
 _REGRAS = {**MATRIZ, **TRANSITORIAS}
 
 

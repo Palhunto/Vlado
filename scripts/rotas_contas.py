@@ -18,6 +18,7 @@ import os
 
 import acesso
 import autorizacao
+import correio
 import proxies_confiaveis
 import rascunhos
 import registro_acesso
@@ -32,7 +33,10 @@ OPERACOES_CONVIDADO = ('codex-status', 'codex-listar', 'codex-perguntar', 'codex
 # Guest operations on an existing conversation: the conversation's case is checked on every call.
 OPERACOES_CONVERSA = ('codex-eventos', 'codex-cancelar', 'codex-original', 'codex-retomar')
 # Before a session exists (hosted mode only): Origin + JSON, no CSRF, small bodies.
-OPERACOES_PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin', 'convite-consultar', 'convite-aceitar')
+OPERACOES_PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin', 'convite-consultar', 'convite-aceitar',
+                      'senha-esqueci', 'senha-redefinir')
+ESQUECI_ENVIADO = 'Se houver uma conta com esse e-mail, a mensagem para redefinir a senha foi enviada.'
+ESQUECI_DESLIGADO = 'Nesta instalação a senha é recuperada por quem administra a redação.'
 AMBIENTES = ('homologacao', 'editorial', 'demonstracao')
 SEM_SESSAO = 'Sessão expirada ou encerrada. Entre novamente.'
 # Asking and retrying both spend one of the guest's daily questions (given back if refused).
@@ -76,6 +80,9 @@ def conta_propria(root, operation, data, principal, ip=None):
         return acesso.atualizar_perfil(root, conta, nome=data.get('nome'), idioma=data.get('idioma'))
     if operation == 'conta-senha-trocar':
         encerradas = acesso.trocar_senha(root, conta, data.get('senha_atual'), data.get('senha_nova'), atual, ip)
+        perfil = acesso.ver_conta(root, conta)['conta']
+        if perfil['email']:  # the person is told, at the account's own address (contract, 8.1)
+            correio.enviar_depois('senha_trocada', perfil['email'], perfil['idioma'], {}, conta=conta, raiz=root)
         return {'estado': 'senha_trocada', 'sessoes_encerradas': encerradas}
     if operation == 'conta-sessao-encerrar':
         acesso.encerrar_sessao_da_conta(root, conta, data.get('sessao'), atual)
@@ -173,6 +180,14 @@ class RotasContas:
                                    f'<meta name="viewport" content="width=device-width, initial-scale=1">'
                                    f'<title>Vlado</title><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/style.css"><main class="panel">{texto}</main></html>'
                                    ).encode('utf-8'), 'text/html; charset=utf-8')
+
+    def _esqueci_ligado(self):
+        """Whether "esqueci a senha" works here: only with real delivery, as there is nobody to show the link to
+        (contract, 8.1). A wrong mail configuration reads as off."""
+        try:
+            return correio.transporte() != 'tela'
+        except ValueError:
+            return False
 
     def _ambiente_publico(self):
         if self.server.modo != 'piloto':
@@ -359,6 +374,28 @@ class RotasContas:
                 self._send(200, json.dumps({'conta': publica, 'csrf': csrf, 'destino': autorizacao.destino_inicial(conta)},
                                            ensure_ascii=False).encode('utf-8'),
                            extra={'Set-Cookie': f'{COOKIE_PILOTO}={sid}; {self.server.atributos_cookie()}'})
+            elif operation == 'senha-esqueci':
+                # One answer, in the same time, whether an account has the address or not: the message leaves in
+                # another thread. Without real delivery there is nobody to show the link to (contract, 8.1).
+                acesso.limitar_ip(self._ip(), 'esqueci')
+                if not self._esqueci_ligado():
+                    self._json(400, {'estado': 'erro', 'codigo': 'transporte_indisponivel', 'erro': ESQUECI_DESLIGADO})
+                    return
+                pedido = acesso.pedir_redefinicao(root, data.get('email'))
+                if pedido:
+                    token, quem = pedido
+                    correio.enviar_depois('redefinicao', quem['email'], quem['idioma'],
+                                          {'link': f'{self.server.origin}/redefinir/{token}', 'origem': self.server.origin,
+                                           'minutos': acesso.REDEFINICAO_MINUTOS}, conta=quem['id'], raiz=root)
+                self._json(200, {'estado': 'enviado', 'mensagem': ESQUECI_ENVIADO})
+            elif operation == 'senha-redefinir':
+                acesso.limitar_ip(self._ip(), 'redefinir')
+                if set(data) - {'token', 'senha', 'codigo'}:
+                    raise ValueError('Campos inválidos na redefinição de senha.')
+                quem = acesso.redefinir_senha(root, data.get('token'), data.get('senha'))
+                if quem['email']:
+                    correio.enviar_depois('senha_trocada', quem['email'], quem['idioma'], {}, conta=quem['id'], raiz=root)
+                self._json(200, {'estado': 'senha_redefinida'})
             else:
                 acesso.limitar_ip(self._ip(), 'ativar')
                 conta = acesso.ativar(root, data.get('token'), data.get('senha'))
@@ -373,6 +410,12 @@ class RotasContas:
             self._json(400, {'estado': 'erro', 'codigo': 'ativacao_invalida', 'erro': str(exc)})
         except acesso.ConviteInvalido as exc:  # one answer for every link that creates nothing
             self._json(400, {'estado': 'erro', 'codigo': 'convite_invalido', 'erro': str(exc)})
+        except acesso.LinkInvalido as exc:  # and one for every reset link that changes nothing
+            self._json(400, {'estado': 'erro', 'codigo': 'link_invalido', 'erro': str(exc)})
+        except acesso.SenhaInvalida as exc:  # the password chosen is out of size: the page says so under the field
+            if operation == 'ativar':
+                registro_acesso.registrar('ativacao_falha', 'falha', motivo='validacao', acesso_operacao='ativar')
+            self._json(400, {'estado': 'erro', 'codigo': 'senha_invalida', 'erro': str(exc)})
         except (ValueError, OSError) as exc:
             if operation == 'ativar':  # a refused password (too short...) is not a bad link: audited as validation
                 registro_acesso.registrar('ativacao_falha', 'falha', motivo='validacao', acesso_operacao='ativar')

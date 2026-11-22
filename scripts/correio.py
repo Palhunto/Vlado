@@ -63,11 +63,30 @@ MODELOS = {
                'This e-mail address already has an account on Vlado and, during this trial, an account belongs to one '
                'newsroom only. So this invitation does not create another account and changes nothing in yours.\n\n'
                'If you want to join the other newsroom, talk to whoever invited you.\n')}),
+    'redefinicao': ('redefinicao', {
+        'pt': ('Redefinição de senha no Vlado',
+               'Alguém pediu para redefinir a senha da conta deste e-mail no Vlado.\n\n'
+               'Para escolher uma senha nova, abra este endereço:\n{link}\n\n'
+               'O endereço vale por {minutos} minutos e só pode ser usado uma vez.\n'
+               'Se não foi você, ignore esta mensagem: a sua senha continua a mesma.\n'),
+        'en': ('Password reset on Vlado',
+               'Someone asked to reset the password of the account of this e-mail on Vlado.\n\n'
+               'To choose a new password, open this address:\n{link}\n\n'
+               'The address is valid for {minutos} minutes and can be used only once.\n'
+               'If it was not you, ignore this message: your password stays the same.\n')}),
+    'senha_trocada': ('senha_trocada', {
+        'pt': ('A senha da sua conta no Vlado foi trocada',
+               'A senha da sua conta no Vlado acaba de ser trocada, e as outras sessões da conta foram encerradas.\n\n'
+               'Se não foi você, avise quem administra a sua redação agora.\n'),
+        'en': ('The password of your Vlado account was changed',
+               'The password of your Vlado account has just been changed, and the other sessions of the account were '
+               'ended.\n\nIf it was not you, tell whoever runs your newsroom now.\n')}),
 }
 
 _TRAVA = threading.Lock()
 _CAIXA: list[dict] = []
 _FORCADO: list[str] = []
+_FIOS: list[threading.Thread] = []
 
 
 class ErroDeCorreio(ValueError):
@@ -167,14 +186,15 @@ def montar(tipo: str, idioma, dados: dict) -> tuple[str, str]:
         raise ValueError('Mensagem sem um dos campos do modelo.') from exc
 
 
-def enviar(tipo: str, para: str, idioma, dados: dict, *, conta: str | None = None) -> str:
+def enviar(tipo: str, para: str, idioma, dados: dict, *, conta: str | None = None, por: str | None = None) -> str:
     """Send one message and return the transport used. With ``tela`` nothing is sent: the caller shows the link
-    to whoever asked. Raises FalhaDeEnvio when a real delivery fails (the caller records it and goes on)."""
+    to whoever asked. Raises FalhaDeEnvio when a real delivery fails (the caller records it and goes on).
+    ``por`` fixes the transport (``enviar_depois`` reads it when asked, not when the thread runs)."""
     assunto, corpo = montar(tipo, idioma, dados)
     para = para.strip().lower() if isinstance(para, str) else ''
     if not _ENDERECO.fullmatch(para) or len(para) > 254:
         raise ValueError('Endereço de e-mail inválido.')
-    nome, rotulo = transporte(), MODELOS[tipo][0]
+    nome, rotulo = por or transporte(), MODELOS[tipo][0]
     if nome == 'tela':
         return nome
     try:
@@ -190,6 +210,38 @@ def enviar(tipo: str, para: str, idioma, dados: dict, *, conta: str | None = Non
         raise FalhaDeEnvio('Não foi possível enviar o e-mail.') from (None if isinstance(exc, ErroDeCorreio) else exc)
     registro_acesso.registrar('email_enviado', 'ok', conta, mensagem=rotulo)
     return nome
+
+
+def enviar_depois(tipo: str, para: str, idioma, dados: dict, *, conta: str | None = None, raiz=None) -> None:
+    """Send without making the caller wait. The answer to who asked must take the same time whether there was a
+    message to send or not ("esqueci a senha"), and a notice must not hold a request. A failure is audited
+    (``email_falhou``); nobody is told. ``raiz`` is the data folder, for the audit log of the other thread."""
+    montar(tipo, idioma, dados)  # a programming error shows here, in the caller, not in a thread nobody reads
+    nome = transporte()
+    if nome == 'tela':
+        return
+
+    def tarefa():
+        if raiz is not None:
+            registro_acesso.lembrar_raiz(raiz)
+        try:
+            enviar(tipo, para, idioma, dados, conta=conta, por=nome)
+        except (FalhaDeEnvio, ValueError):
+            pass
+        finally:
+            registro_acesso.encerrar_requisicao()
+    fio = threading.Thread(target=tarefa, name='vlado-correio', daemon=True)
+    with _TRAVA:
+        _FIOS[:] = [f for f in _FIOS if f.is_alive()] + [fio]
+    fio.start()
+
+
+def aguardar(prazo: float = 10.0) -> None:
+    """Wait for the messages of ``enviar_depois`` still on their way (tests, and the server's orderly stop)."""
+    with _TRAVA:
+        fios = list(_FIOS)
+    for fio in fios:
+        fio.join(prazo)
 
 
 def _smtp(para: str, assunto: str, corpo: str) -> None:
