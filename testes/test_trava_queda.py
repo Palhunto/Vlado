@@ -5,7 +5,9 @@ dados sintéticos. Cada teste para uma operação dentro da trava, com a pasta d
 e então mata o processo (TerminateProcess no Windows, SIGKILL no Linux) ou pede o encerramento
 (SIGTERM no Linux, Ctrl+Break no Windows). Depois sobe outra Mesa na mesma pasta, como faz a
 política de reinício do Compose, e confere que ela volta sozinha: trava livre, preparo limpo,
-cadastro e pergunta funcionando, nenhum dado do cadastro perdido ou corrompido.
+cadastro e pergunta funcionando, nenhum dado do cadastro perdido ou corrompido. Com a fila de
+extração (CONF-02), o envio cortado na publicação também não se perde: fica na fila, a Mesa
+reiniciada o publica uma vez só e o mesmo arquivo enviado de novo é duplicata.
 """
 import base64
 import http.client
@@ -85,6 +87,19 @@ class Mesa:
         finally:
             con.close()
 
+    def fila(self, caso='alpha'):
+        """The batches of ``caso`` in the extraction queue (``GET /api/fila``, CONF-02)."""
+        con = http.client.HTTPConnection('127.0.0.1', self.porta, timeout=10)
+        try:
+            con.request('GET', f'/api/fila?caso={caso}', headers={'X-Session-Token': self.token})
+            resposta = con.getresponse()
+            dados = json.loads(resposta.read())
+            if resposta.status != 200:
+                raise AssertionError(f'GET /api/fila: {resposta.status} {dados}')
+            return dados['lotes']
+        finally:
+            con.close()
+
     def saude(self):
         con = http.client.HTTPConnection('127.0.0.1', self.porta, timeout=10)
         try:
@@ -125,6 +140,13 @@ class QuedaTest(unittest.TestCase):
         base = self.root / pasta
         return sorted(p.name for p in base.iterdir() if p.name.startswith(prefixo)) if base.is_dir() else []
 
+    def publicado_na_partida(self, mesa):
+        """Wait until the one batch cut by the stop is published by ``mesa``; (novos, corpus_id)."""
+        esperar(lambda: [l['estado'] for l in mesa.fila()] == ['publicado'],
+                mensagem='o lote interrompido não foi publicado pela Mesa reiniciada')
+        (interrompido,) = mesa.fila()
+        return interrompido['recibo']['novos'], interrompido['recibo']['corpus_id']
+
     def enviar_em_segundo_plano(self, mesa, operacao, dados):
         resultado = {}
 
@@ -154,12 +176,17 @@ class QuedaTest(unittest.TestCase):
         self.marca.unlink()
         nova = Mesa(self, self.root)
         self.assertEqual(nova.saude(), 200)
+        # The upload stayed in the extraction queue (CONF-02): the new Mesa publishes it on its own.
+        self.assertEqual(self.publicado_na_partida(nova), (1, 'alpha_v2'))
         self.assertEqual(self.preparo('casos', '.lote_'), [])
+        # Published once: the same file again is a duplicate; another file makes a new version.
         status, recibo = nova.post('cadastrar', lote())
-        self.assertEqual(status, 200, recibo)
-        self.assertEqual((recibo['novos'], recibo['corpus_id']), (1, 'alpha_v2'))
+        self.assertEqual((status, recibo.get('novos'), recibo.get('duplicados'), recibo.get('corpus_id')),
+                         (200, 0, 1, 'alpha_v2'), recibo)
+        status, recibo = nova.post('cadastrar', lote('outro.txt', 'Outro documento sintético, depois da queda.'))
+        self.assertEqual((status, recibo.get('novos'), recibo.get('corpus_id')), (200, 1, 'alpha_v3'), recibo)
         status, inventario = nova.post('inventario', {'caso': 'alpha'})
-        self.assertEqual((status, inventario['total_documentos']), (200, 2))
+        self.assertEqual((status, inventario['total_documentos']), (200, 3))
         nova.desligar(self)
         saida, erros = nova.texto()
         self.assertIn(f'abandonada pelo processo {mesa.pid}', erros)
@@ -240,9 +267,10 @@ class QuedaTest(unittest.TestCase):
         self.assertEqual(trava_cadastro.ler_dono(self.root)['estado'], 'ocupada')
         self.marca.unlink()
         nova = Mesa(self, self.root)
-        status, recibo = nova.post('cadastrar', lote())
-        self.assertEqual((status, recibo.get('novos')), (200, 1), recibo)
+        self.assertEqual(self.publicado_na_partida(nova), (1, 'alpha_v2'))
         self.assertEqual(self.preparo('casos', '.lote_'), [])
+        status, recibo = nova.post('cadastrar', lote('outro.txt', 'Outro documento sintético, depois do prazo.'))
+        self.assertEqual((status, recibo.get('novos'), recibo.get('corpus_id')), (200, 1, 'alpha_v3'), recibo)
         nova.desligar(self)
 
 

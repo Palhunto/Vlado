@@ -5,7 +5,7 @@
         uma linha na entrada padrão (ou até ser morto).
 
     python apoio_trava_processo.py servidor RAIZ [--pausa-cadastro MARCA] [--pausa-congelamento MARCA]
-                                                 [--segundos N] [--prazo N]
+                                                 [--segundos N] [--prazo N] [--extracao local|processos]
         Sobe a Mesa (modo local) com provedor simulado, que nunca chama a API, e imprime uma
         linha JSON {"porta", "token", "pid"}. As pausas gravam MARCA quando a operação está dentro
         da trava, com a pasta de preparo criada, e esperam N segundos: a do cadastro antes de
@@ -54,7 +54,7 @@ def servidor(raiz, args):
     # only text files, so a fixed synthetic answer keeps each start fast.
     interface_pesquisa.diagnostico = lambda: {'pronto': True, 'extracao_pdf': {'disponivel': False},
                                               'ocr': {'disponivel': False}}
-    server = interface_pesquisa.Servidor(('127.0.0.1', 0), root=raiz)
+    server = interface_pesquisa.Servidor(('127.0.0.1', 0), root=raiz, extracao=args.extracao)
     server.conversas.factory = FakeServer
     with server:
         print(json.dumps({'porta': server.server_port, 'token': server.token,
@@ -72,6 +72,8 @@ def main():
     parser.add_argument('--pausa-congelamento')
     parser.add_argument('--segundos', type=float, default=3600)
     parser.add_argument('--prazo', type=float, default=8.0)
+    parser.add_argument('--extracao', choices=('local', 'processos'), default='local',
+                        help='Fila de extração em threads da Mesa (padrão dos testes) ou em processos separados.')
     args = parser.parse_args()
     if args.modo == 'segurar':
         segurar(args.raiz)
