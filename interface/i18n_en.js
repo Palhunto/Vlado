@@ -1382,7 +1382,9 @@ window.VLADO_I18N_EN = {
     "nenhum duplicado": "no duplicates",
     "nenhum novo": "none new",
     "novo": "new",
-    "novos": "new"
+    "novos": "new",
+    "Os documentos deste lote foram informados como públicos, diferente da apuração (sintéticos): a apuração passa a natureza não informada (mista).": "The documents in this batch were declared as public, unlike the investigation (synthetic): the investigation becomes nature not stated (mixed).",
+    "Os documentos deste lote foram informados como sintéticos, diferente da apuração (públicos): a apuração passa a natureza não informada (mista).": "The documents in this batch were declared as synthetic, unlike the investigation (public): the investigation becomes nature not stated (mixed)."
   },
   padroes: [
     // Cota do mês na barra lateral
