@@ -264,6 +264,15 @@ class DocumentosDeOperacaoTest(unittest.TestCase):
         self.assertIn('--mesmo-com-a-mesa-no-ar', self.texto('BACKUP.md'))
         self.assertIn('se recusa', self.texto('INCIDENTE.md'))
 
+    def test_backup_declara_as_limitacoes_da_revisao_e_o_que_mudou_na_fase_4(self):
+        texto = (RAIZ / 'deploy' / 'BACKUP.md').read_text(encoding='utf-8')
+        secao = texto[texto.index('## Limitações conhecidas'):texto.index('## Pendências que dependem de pessoa')]
+        for codigo in ('J3', 'J5', 'J6', 'J8', 'J2'):
+            self.assertRegex(secao, rf'\| {codigo} \|', codigo)
+        for trecho in ('unhealthy', 'tmp_vlado', 'VLADO_VIGIA_DISCO_MIN_GB', 'bloqueio de objeto',
+                       'VLADO_BACKUP_STDIN_MAX_GB', '10 GB', 'age=1.1.1-1*', 'rclone=1.60.1+dfsg-2*', 'falha de propósito'):
+            self.assertIn(trecho, secao, trecho)
+
     def test_roteiro_nao_traz_chave_nem_senha_de_exemplo_reais(self):
         for nome in ('INCIDENTE.md', 'MONITORAMENTO.md', 'BACKUP.md'):
             texto = self.texto(nome)

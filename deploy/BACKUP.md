@@ -198,6 +198,36 @@ tiver certeza de que ninguém está usando e o endereço aponta para outro lugar
 Perda máxima esperada: o que foi gravado desde o último backup (até 24 h). Para reduzir, rode `rodada` à mão antes de
 uma atualização e depois de um cadastro grande.
 
+## Limitações conhecidas (declaradas, sem mudança de código)
+
+São riscos pequenos, medidos ou raciocinados na revisão da fase 2, que ficam como estão por ora. Cada um diz o que
+observar.
+
+| | Limitação | O que acontece e o que fazer |
+|---|---|---|
+| J3 | **Acervo grande com gente trabalhando pode impedir o backup de fechar.** Toda operação que termina durante a cópia (cadastro, congelamento de rodada...) faz o backup recomeçar: três tentativas e nova rodada 60 min depois. Uma cópia de 300 MB levou cerca de 70 s numa máquina carregada. | Com vários gigabytes e uso no horário do backup, ele pode não fechar. O aviso é o serviço `backup` ficar `unhealthy` depois de 30 h sem sucesso. Se acontecer: mude `VLADO_BACKUP_HORARIO_UTC` para a madrugada (o padrão, 06:30 UTC, já é 03:30 em Brasília) ou faça `rodada` à mão quando ninguém estiver cadastrando. |
+| J5 | **A assinatura da trava de cadastro é o `stat` do arquivo** (inode, mtime, ctime). Uma operação que comece e termine dentro do mesmo "tique" do relógio do sistema de arquivos em que a anterior soltou a trava não muda o mtime. | Janela de milissegundos, que não se conseguiu provocar. Se um dia um backup restaurado parecer sem um cadastro feito no instante do backup, repita o backup: o seguinte o inclui. |
+| J6 | **No Windows (só desenvolvimento) a sonda lê o texto do registro da trava**: depois de uma queda ele fica "ocupada", e o `criar` manual recusa até a próxima operação que use a trava. | Não afeta o servidor (Linux, `flock`). No Windows de desenvolvimento, a recusa passa na próxima operação que use a trava (um cadastro qualquer). |
+| J8 | **O volume `tmp_vlado` não tem teto de tamanho** (escolha da I1: temporário de OCR em disco, não em memória, para PDF grande não derrubar o OCR). Um OCR descontrolado pode encher o disco dos dados. | Deixe espaço livre (o exemplo de ambiente pede), e acompanhe o disco: a vigia avisa quando passa do limite (`VLADO_VIGIA_DISCO_MIN_GB`, ver `MONITORAMENTO.md`). O volume é esvaziado a cada partida do app. |
+| J2 | A credencial do destino precisa poder apagar (a retenção apaga cópias vencidas); um servidor invadido, então, apaga os backups. | Use versionamento ou bloqueio de objeto no bucket (passo 2 acima). Item do dono (P17). |
+
+## Restauração pela entrada padrão (`restaurar -`)
+
+`python scripts/backup.py restaurar - < dados.tar.gz` lê um `.tar.gz` **em claro** da entrada padrão. O fluxo é gravado em um
+arquivo privado (0600) na pasta de trabalho, em blocos de 1 MiB (a memória não cresce com o tamanho), conferido e
+apagado ao terminar, com ou sem erro. **Teto: 10 GB**; acima disso a restauração recusa, com mensagem, sem tocar nos
+dados. Mude com `VLADO_BACKUP_STDIN_MAX_GB`. Para backups cifrados ou maiores, informe o arquivo ou `--do-destino`.
+Se a decifragem ou a leitura falhar (chave errada, arquivo truncado), as pastas temporárias de `/trabalho/tmp` são
+removidas na hora.
+
+## Versões do `age` e do `rclone` na imagem de backup
+
+A imagem `backup` instala `age 1.1.1` e `rclone 1.60.1` por versão fixada (`age=1.1.1-1*`, `rclone=1.60.1+dfsg-2*`),
+e o build confere o que foi instalado. A fixação deixa passar as correções de segurança do Debian na mesma versão e o
+sufixo de recompilação. Se o Debian oferecer outra versão, o build **falha de propósito**: nada muda sozinho. Para
+atualizar, troque as duas versões no `Dockerfile` (estágio `backup`) e em `testes/test_dockerfile_endurecido.py`,
+reconstrua e refaça o ensaio de restauração.
+
 ## Pendências que dependem de pessoa
 
 | | Quem |
