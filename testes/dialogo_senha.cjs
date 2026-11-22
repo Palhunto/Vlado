@@ -132,6 +132,9 @@ test('as demais recusas (ultimo_dono, senha_necessaria com o diálogo já aberto
   digitar(entradas(mesa)[0], 'x'); botaoAcao(mesa).click(); await mesa.esperar(4);
   assert.equal(erroDoDialogo(mesa).textContent, 'A redação precisa de ao menos um dono ativo.');
   assert.equal(recusas, 1); assert.equal(mensagensDoCampo(mesa).length, 0, 'não é erro de campo');
+  assert.equal(entradas(mesa)[0].value, '', 'a senha não fica no campo depois de uma recusa que não é dela');
+  assert.ok(botaoAcao(mesa).disabled, 'sem senha digitada a ação espera; digitando, a pessoa pode tentar de novo');
+  digitar(entradas(mesa)[0], 'de-novo');
   assert.ok(!botaoAcao(mesa).disabled, 'a pessoa pode tentar de novo');
   botoes(mesa)[0].click();
   assert.equal(await resposta, null);
@@ -184,4 +187,51 @@ test('em inglês, o rótulo, o apoio, o Mostrar e a recusa saem em inglês', asy
   digitar(entradas(mesa)[0], 'x'); botaoAcao(mesa).click(); await mesa.esperar(4);
   assert.equal(mensagensDoCampo(mesa)[0].textContent, 'Wrong password. Check it and try again.');
   botoes(mesa)[0].click(); await resposta;
+});
+
+test('R1: com o bloqueio (429), o Enter no campo também não envia mais um pedido', async () => {
+  const {mesa, pedidos, D} = await abrir();
+  const resposta = D.comSenha({operacao: 'equipe-papel', enviar: async (operacao, corpo) => { pedidos.push(corpo); throw falha('bloqueado', 'Muitas tentativas.', 'bloqueado'); }, dialogo: {titulo: 'T', acao: 'Fazer'}});
+  await mesa.esperar(3);
+  digitar(entradas(mesa)[0], 'x'); botaoAcao(mesa).click(); await mesa.esperar(4);
+  assert.equal(pedidos.length, 1);
+  digitar(entradas(mesa)[0], 'outra-senha');
+  const evento = tecla(entradas(mesa)[0], 'Enter'); await mesa.esperar(4);
+  assert.ok(evento.defaultPrevented, 'o Enter é tratado, não deixa o formulário agir');
+  assert.equal(pedidos.length, 1, 'nenhum pedido novo depois do bloqueio');
+  botoes(mesa)[0].click(); assert.equal(await resposta, null);
+});
+
+test('R2: o reenvio leva o MESMO pedido, copiado na entrada; mexer no objeto depois, ou o `enviar` mexer no que recebe, não muda o reenvio', async () => {
+  const {mesa, pedidos, D} = await abrir();
+  const corpo = {conta: 'c1', papel: 'dono'};
+  const enviar = async (operacao, recebido) => {
+    pedidos.push(JSON.parse(JSON.stringify(recebido)));
+    recebido.papel = 'alterado-por-quem-recebeu'; delete recebido.conta;  // quem recebe pode mexer na sua cópia
+    if (!recebido.senha) throw falha('senha_necessaria', 'Digite a sua senha para confirmar.');
+    return {estado: 'ok'};
+  };
+  const resposta = D.comSenha({operacao: 'equipe-papel', dados: corpo, pedirAntes: false, enviar, dialogo: {titulo: 'T', acao: 'Fazer'}});
+  await mesa.esperar(4);
+  corpo.conta = 'outra-conta'; corpo.extra = 'entrou-depois';  // quem chamou mexe no objeto com o diálogo aberto
+  digitar(entradas(mesa)[0], 'senha'); botaoAcao(mesa).click();
+  assert.deepEqual(dados(await resposta), {estado: 'ok'});
+  assert.deepEqual(pedidos, [{conta: 'c1', papel: 'dono'}, {conta: 'c1', papel: 'dono', senha: 'senha'}], 'o reenvio é o pedido de antes, mais a senha');
+});
+
+test('R3: qualquer recusa que não é da senha limpa os campos de senha (a senha não fica entre tentativas); a recusa do campo limpa só o dele', async () => {
+  const {mesa, D} = await abrir();
+  let resposta = falha('ultimo_dono', 'A redação precisa de ao menos um dono ativo.', 'erro');
+  const confirmacao = D.confirmar({variante: 'simples', titulo: 'T', acao: 'Fazer', campos: [{id: 'a', rotulo: 'Um'}, {id: 'b', rotulo: 'Dois'}],
+    executar: async () => { throw resposta; }});
+  await mesa.esperar(3);
+  digitar(entradas(mesa)[0], 'um'); digitar(entradas(mesa)[1], 'dois');
+  botaoAcao(mesa).click(); await mesa.esperar(4);
+  assert.deepEqual(entradas(mesa).map(c => c.value), ['', ''], 'recusa que não é de um campo: todos os campos de senha são limpos');
+  assert.ok(erroDoDialogo(mesa) && !erroDoDialogo(mesa).hidden);
+  resposta = Object.assign(new Error('Senha incorreta.'), {campo: 'a'});
+  digitar(entradas(mesa)[0], 'um'); digitar(entradas(mesa)[1], 'dois');
+  botaoAcao(mesa).click(); await mesa.esperar(4);
+  assert.deepEqual(entradas(mesa).map(c => c.value), ['', 'dois'], 'recusa de um campo: só o dele é limpo');
+  botoes(mesa)[0].click(); await confirmacao;
 });
