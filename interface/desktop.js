@@ -223,7 +223,9 @@
   const navigate=name=>showArea(name);
   // Drawer (below 1280 px, docs/design/componentes.md#tablet): while it is open everything behind it is inert and Tab cycles inside it.
   const behindDrawer=()=>[document.querySelector('.skip-link'),$('mesa-ambiente'),document.querySelector('.app-header'),$('conteudo')].filter(Boolean);
-  const drawerItems=()=>[...$('mesa-sidebar').querySelectorAll('.areas button,.areas a,.mesa-perfil')].filter(node=>!node.hidden);
+  // Every visible focusable control inside the drawer, in document order: on phones language, theme and sign-out live there too.
+  const drawerItems=()=>[...$('mesa-sidebar').querySelectorAll('a[href],button,input,select,textarea,summary,[tabindex]')]
+    .filter(node=>!node.disabled&&node.getAttribute('tabindex')!=='-1'&&!node.closest('[hidden]'));
   function closeMenu(restoreFocus){
     const wasOpen=document.body.classList.contains('mesa-menu-open');
     document.body.classList.remove('mesa-menu-open');$('mesa-menu').setAttribute('aria-expanded','false');$('mesa-menu').setAttribute('aria-label','Abrir navegação');
