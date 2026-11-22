@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import json
 
-from inferencia_api import ErroIA, Resposta, mapear_erro, seguro
+from inferencia_api import CODIGOS_COBRANCA, MENSAGEM_COBRANCA, ErroIA, Resposta, mapear_erro, seguro
 
 NOME = 'openai'
 TIMEOUT = 600
-CODIGOS_LIMITE = ('rate_limit_exceeded', 'insufficient_quota')
+CODIGOS_LIMITE = ('rate_limit_exceeded',)  # insufficient_quota is billing: CODIGOS_COBRANCA
 LIMITE_ARGUMENTOS = 8000
 
 
@@ -55,6 +55,8 @@ def _argumentos(bruto):
 def _falha(erro):
     codigo = getattr(erro, 'code', None)
     mensagem = seguro(getattr(erro, 'message', None) or 'Falha informada pela API.')
+    if codigo in CODIGOS_COBRANCA:
+        return ErroIA(f'{MENSAGEM_COBRANCA} Detalhe: {mensagem}', codigo='cobranca')
     return ErroIA('Falha na API: ' + mensagem, codigo='limite' if codigo in CODIGOS_LIMITE else None)
 
 
@@ -113,10 +115,27 @@ class ProvedorOpenAI:
             raise ErroIA('A resposta foi interrompida pelo filtro de conteúdo do provedor.', codigo='filtro')
         if motivo:
             raise ErroIA(f'A API devolveu uma resposta incompleta ({seguro(motivo)}).', codigo='incompleta')
-        uso = final.usage
-        detalhes_entrada = getattr(uso, 'input_tokens_details', None)
-        detalhes_saida = getattr(uso, 'output_tokens_details', None)
-        return Resposta(''.join(textos), tuple(chamadas), {
-            'entrada': uso.input_tokens or 0, 'saida': uso.output_tokens or 0,
-            'cache_leitura': getattr(detalhes_entrada, 'cached_tokens', 0) or 0,
-            'raciocinio': getattr(detalhes_saida, 'reasoning_tokens', 0) or 0}, final.model, tuple(opaco))
+        return Resposta(''.join(textos), tuple(chamadas), uso_da_resposta(final.usage), final.model, tuple(opaco))
+
+
+def uso_da_resposta(uso) -> dict:
+    """Usage in the priced kinds (custo). Here ``input_tokens_details`` breaks ``input_tokens`` down:
+    the cache reads and writes are inside it, and the uncached part is the rest. Writes come by
+    retention (30 minutes, 12 hours); without the breakdown they count as 30 minutes, recorded in
+    ``cache_escrita_30m_suposto``. Reasoning is part of the output."""
+    entrada = getattr(uso, 'input_tokens', None) or 0
+    detalhes = getattr(uso, 'input_tokens_details', None)
+    lidos = getattr(detalhes, 'cached_tokens', 0) or 0
+    escritos = getattr(detalhes, 'cache_write_tokens', 0) or 0
+    validades = getattr(detalhes, 'cache_write_tokens_details', None)
+    resultado = {'entrada': entrada, 'saida': getattr(uso, 'output_tokens', None) or 0, 'cache_leitura': lidos,
+                 'raciocinio': getattr(getattr(uso, 'output_tokens_details', None), 'reasoning_tokens', 0) or 0,
+                 'entrada_sem_cache': max(0, entrada - lidos - escritos), 'cache_escrita': escritos}
+    if validades is not None:
+        doze = getattr(validades, 'ttl_12h_tokens', 0) or 0
+        resultado.update(cache_escrita_12h=doze, cache_escrita_30m=max(0, escritos - doze))
+    else:
+        resultado.update(cache_escrita_30m=escritos, cache_escrita_12h=0)
+        if escritos:  # writes without the retention breakdown: counted as 30 minutes, and said so
+            resultado['cache_escrita_30m_suposto'] = escritos
+    return resultado

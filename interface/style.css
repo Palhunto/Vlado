@@ -1015,7 +1015,6 @@ progress{accent-color:var(--green)}
   align-items:center;
   justify-content:flex-start;
   gap:var(--espaco-3);
-  margin-top:auto;
   min-height:44px;
   padding:0 var(--espaco-2);
   border:0;
@@ -1029,6 +1028,19 @@ progress{accent-color:var(--green)}
 .mesa-perfil-texto{display:flex;flex-direction:column;min-width:0;line-height:1.25}
 .mesa-perfil-nome{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--text-base);font-weight:600}
 .mesa-perfil-papel{font-size:var(--text-md);color:var(--muted)}
+/* Rodapé da barra: cartão da cota do mês (GET /api/cota, em reais) e perfil. */
+.mesa-rodape-barra{margin-top:auto;display:flex;flex-direction:column;gap:var(--espaco-3)}
+.mesa-cota{display:flex;flex-direction:column;gap:var(--espaco-2);padding:var(--espaco-3) var(--espaco-4);background:var(--white);border:1px solid var(--line);border-radius:var(--raio-cartao)}
+.mesa-cota-linha{display:flex;flex-wrap:wrap;justify-content:space-between;gap:0 var(--espaco-2);margin:0;font-size:var(--text-md);line-height:1.25}
+.mesa-cota-rotulo{color:var(--muted)}
+.mesa-cota-valor{font-weight:600;white-space:nowrap}
+/* Medidor (componentes.md#medidor): 6 px, trilha de linha, preenchimento de acento; passou do teto, cor de aviso. */
+.mesa-medidor{height:6px;border-radius:var(--raio-pilula);background:var(--line);overflow:hidden}
+.mesa-medidor::before{content:'';display:block;height:100%;width:var(--uso,0%);border-radius:inherit;background:var(--theme-accent)}
+.mesa-cota[data-esgotada=true]{background:var(--theme-warning-bg);border-color:var(--theme-warning-line)}
+.mesa-cota[data-esgotada=true] :is(.mesa-cota-rotulo,.mesa-cota-valor){color:var(--theme-warning);font-weight:600}
+.mesa-cota[data-esgotada=true] .mesa-cota-rotulo::before{content:'! ' / ''}
+.mesa-cota[data-esgotada=true] .mesa-medidor::before{background:var(--theme-warning)}
 main{padding:var(--espaco-8);max-width:1600px;min-height:calc(100dvh - var(--cabecalho-altura));margin:0 auto;min-width:0}
 .intro{margin:0 0 28px;max-width:none}
 .intro h1{max-width:none}
@@ -1709,6 +1721,7 @@ body[data-papel="convidado"] .first-use,
 body[data-papel="convidado"] #codex-desligar,
 body[data-papel="convidado"] #codex-excluir,
 body[data-papel="convidado"] #codex-continuar-documentos,
+body[data-papel="convidado"] #codex-inventario-detalhes,
 body[data-papel="convidado"] #mesa-etapas{
   display:none;
 }

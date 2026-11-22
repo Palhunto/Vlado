@@ -81,6 +81,7 @@ COPY scripts/acesso.py \
      scripts/codex_apuracao.py \
      scripts/comparador.py \
      scripts/comum.py \
+     scripts/custo.py \
      scripts/conferencia_redacao.py \
      scripts/continuidade.py \
      scripts/criar_caso.py \
@@ -92,6 +93,7 @@ COPY scripts/acesso.py \
      scripts/exportar_apuracao.py \
      scripts/extrair_office.py \
      scripts/extrair_pdf.py \
+     scripts/fila_extracao.py \
      scripts/fluxo_codex.py \
      scripts/fontes_web.py \
      scripts/hipoteses.py \
@@ -107,7 +109,9 @@ COPY scripts/acesso.py \
      scripts/ocr.py \
      scripts/provedor_anthropic.py \
      scripts/provedor_openai.py \
+     scripts/proxies_confiaveis.py \
      scripts/rascunhos.py \
+     scripts/registro_acesso.py \
      scripts/registros_achados.py \
      scripts/revisao_humana.py \
      scripts/rotas_achados.py \
@@ -124,19 +128,22 @@ COPY scripts/acesso.py \
      scripts/segredos.py \
      scripts/semear_ambiente.py \
      scripts/tabelas_apuracao.py \
+     scripts/tetos_extracao.py \
+     scripts/trabalhador_extracao.py \
      scripts/trava_cadastro.py \
      ./scripts/
 COPY interface/ ./interface/
 COPY prompts/ ./prompts/
 COPY modelos/ ./modelos/
-COPY configuracao.json AGENTS.md README.md ./
+# precos_modelos.json: tabela de preços que scripts/custo.py lê de ROOT (/app) a cada pergunta; sem ela a Mesa não pergunta.
+COPY configuracao.json AGENTS.md README.md precos_modelos.json ./
 COPY casos/README.md casos/catalogo.json ./casos/
 COPY entrada/README.md ./entrada/
 
 # Data folders are Docker volumes (see docker-compose.yml). Only they are writable by the
 # app user; the code stays read-only for it (and the whole root filesystem is read-only in Compose).
-RUN mkdir -p conversas execucoes lixeira segredos ajustes acesso /var/tmp/vlado \
-    && chown -R vlado:vlado casos conversas execucoes lixeira entrada segredos ajustes acesso /var/tmp/vlado
+RUN mkdir -p conversas execucoes lixeira segredos ajustes acesso registro /var/tmp/vlado \
+    && chown -R vlado:vlado casos conversas execucoes lixeira entrada segredos ajustes acesso registro /var/tmp/vlado
 USER vlado
 
 EXPOSE 8765

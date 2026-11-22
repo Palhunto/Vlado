@@ -13,7 +13,7 @@ DIGEST = re.compile(r'@sha256:[0-9a-f]{64}$')
 # da imagem. Pastas de agente, docs, testes, instalador, Android e dados nunca entram.
 COPY_PERMITIDO = {
     'deploy/requirements.lock', 'interface/', 'prompts/', 'modelos/',
-    'configuracao.json', 'AGENTS.md', 'README.md', 'casos/README.md', 'casos/catalogo.json',
+    'configuracao.json', 'AGENTS.md', 'README.md', 'precos_modelos.json', 'casos/README.md', 'casos/catalogo.json',
     'entrada/README.md', 'scripts/backup.py',  # esta última só no estágio `backup` (age + rclone), sem o app
 }
 PROIBIDO_NA_IMAGEM = ('.maestro', '.maestri', '.claude', '.git', 'segredos', 'acesso', 'ajustes', 'testes',
@@ -157,6 +157,43 @@ class ListaDeInclusaoTest(unittest.TestCase):
                 for proibido in PROIBIDO_NA_IMAGEM:
                     self.assertFalse(origem.strip('/').startswith(proibido), f'{origem} não pode entrar na imagem')
                 self.assertTrue((RAIZ / origem.rstrip('/')).exists(), f'{origem} não existe')
+
+    # Citados em mensagens de erro ("instale as dependências de requirements.txt"), nunca lidos em execução.
+    SO_EM_MENSAGEM = {'requirements.txt', 'requirements-opcional.txt'}
+
+    def test_arquivos_de_dados_que_os_scripts_da_imagem_leem_por_caminho_foram_copiados(self):
+        """O teste do fecho só enxerga `import`; um arquivo lido do disco (precos_modelos.json, configuracao.json...) some da
+        imagem sem aviso e a Mesa recusa perguntas ou não parte. Procura, nos scripts que a imagem copia, todo texto que é o nome de
+        um arquivo de dados existente na raiz do projeto (ou em casos/ e entrada/) e exige que haja um COPY dele."""
+        scripts = {Path(o).name for partes in _copias() for o in partes[:-1] if o.startswith('scripts/')} - {'backup.py'}
+        self.assertGreater(len(scripts), 40)
+        copiados_na_raiz = {o for partes in _copias() for o in partes[:-1] if '/' not in o and partes[-1] == './'}
+        copiados_exatos = {o for partes in _copias() for o in partes[:-1]}
+        padrao_raiz = re.compile(r'[A-Za-z0-9_.-]+\.(?:json|md|txt|csv)')
+        padrao_pasta = re.compile(r'(?:casos|entrada)/[A-Za-z0-9_.-]+\.(?:json|md|txt|csv)')
+        lidos_raiz, lidos_pasta = {}, {}
+        for nome in sorted(scripts):
+            for no in ast.walk(ast.parse((RAIZ / 'scripts' / nome).read_text(encoding='utf-8'))):
+                if isinstance(no, ast.Constant) and isinstance(no.value, str):
+                    if padrao_raiz.fullmatch(no.value) and (RAIZ / no.value).is_file():
+                        lidos_raiz.setdefault(no.value, nome)
+                    elif padrao_pasta.fullmatch(no.value) and (RAIZ / no.value).is_file():
+                        lidos_pasta.setdefault(no.value, nome)
+        for esperado in ('precos_modelos.json', 'configuracao.json'):
+            self.assertIn(esperado, lidos_raiz, f'o teste deveria enxergar a leitura de {esperado}')
+        faltando = {f: por for f, por in lidos_raiz.items() if f not in copiados_na_raiz and f not in self.SO_EM_MENSAGEM}
+        self.assertEqual(faltando, {}, f'arquivos de dados lidos pelos scripts e fora da imagem (arquivo: script que o cita): {faltando}')
+        faltando = {f: por for f, por in lidos_pasta.items() if f not in copiados_exatos}
+        self.assertEqual(faltando, {}, f'arquivos de dados de casos/ e entrada/ lidos e fora da imagem: {faltando}')
+
+    def test_tabela_de_precos_que_o_custo_le_esta_na_imagem_na_raiz_que_a_mesa_le(self):
+        """scripts/custo.py lê `precos_modelos.json` de ROOT (a pasta do projeto, /app na imagem); sem ele a Mesa não pergunta."""
+        fonte = (RAIZ / 'scripts' / 'custo.py').read_text(encoding='utf-8')
+        self.assertIn("TABELA = 'precos_modelos.json'", fonte)
+        self.assertIn('caminho = ROOT / TABELA', fonte)
+        copias = {origem: partes[-1] for partes in _copias() for origem in partes[:-1]}
+        self.assertEqual(copias.get('precos_modelos.json'), './', 'copiado para a raiz do WORKDIR (/app), onde ROOT aponta')
+        self.assertTrue((RAIZ / 'precos_modelos.json').is_file())
 
     def test_dockerignore_nao_esconde_o_que_o_copy_precisa(self):
         regras = [l.strip() for l in (RAIZ / '.dockerignore').read_text(encoding='utf-8').splitlines()

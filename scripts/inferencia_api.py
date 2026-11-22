@@ -59,7 +59,7 @@ class ErroIA(ValueError):
 _CODIGOS_SDK = (
     (('AuthenticationError', 'PermissionDeniedError'), 'autenticacao',
      'A API recusou a chave ou a permissão. Confira a chave configurada no servidor.'),
-    (('RateLimitError', 'OverloadedError', 'EnforcedSpendLimitReachedError', 'ServiceUnavailableError'),
+    (('RateLimitError', 'OverloadedError', 'ServiceUnavailableError'),
      'limite', 'Limite de uso ou capacidade da API atingido. Tente novamente mais tarde.'),
     (('APIConnectionError', 'APITimeoutError', 'GatewayTimeoutError', 'DeadlineExceededError',
       'RequestTimeoutError'), 'conexao', 'Falha de conexão ou prazo esgotado na API.'),
@@ -67,11 +67,27 @@ _CODIGOS_SDK = (
 )
 
 
+# Billing, not capacity (CONF-04): retrying does not help until the provider account is settled.
+# Anthropic: 402 billing_error, and 429 enforced_spend_limit_reached (the account's monthly spend
+# cap, in error.details.error_code); OpenAI: 429 insufficient_quota (in error.code and error.type).
+CODIGOS_COBRANCA = ('billing_error', 'enforced_spend_limit_reached', 'insufficient_quota')
+MENSAGEM_COBRANCA = ('A conta do provedor da IA está sem crédito ou chegou ao teto de gasto dela; tentar de novo '
+                     'não resolve até a cobrança ser regularizada na conta do provedor.')
+
+
+def _cobranca(exc, nomes) -> bool:
+    if 'EnforcedSpendLimitReachedError' in nomes or getattr(exc, 'status_code', None) == 402:
+        return True
+    return any(getattr(exc, campo, None) in CODIGOS_COBRANCA for campo in ('type', 'code', 'error_code'))
+
+
 def mapear_erro(exc: Exception) -> ErroIA:
     """Classify SDK errors by class name (both SDKs share them) without importing the SDKs."""
     if isinstance(exc, ErroIA):
         return exc
     nomes = {cls.__name__ for cls in type(exc).__mro__}
+    if _cobranca(exc, nomes):
+        return ErroIA(f'{MENSAGEM_COBRANCA} Detalhe: {seguro(exc)}', codigo='cobranca')
     for classes, codigo, mensagem in _CODIGOS_SDK:
         if nomes.intersection(classes):
             return ErroIA(f'{mensagem} Detalhe: {seguro(exc)}', codigo=codigo)
@@ -137,10 +153,15 @@ def resumo_inferencia(root: Path) -> dict:
     """What the settings panel may show: never a key, only presence and its last four characters."""
     inferencia = ler_inferencia(root)
     ajustes = ler_json(_ajustes(root)) if _ajustes(root).is_file() else {}
+    import custo
+    try:
+        permitidos = custo.modelos_permitidos(root)
+    except ValueError:
+        permitidos = []  # the question says why; the panel still shows the rest
     return {'provedor': inferencia.provedor, 'modelo': inferencia.modelo,
             'modelo_preferido': ajustes.get('modelo_preferido') if 'modelo_preferido' in ajustes else None,
             'max_tokens_saida': inferencia.max_tokens, 'modelos_padrao': dict(MODELOS_PADRAO),
-            'chaves': segredos.resumo(root)}
+            'modelos_permitidos': permitidos, 'chaves': segredos.resumo(root)}
 
 
 def salvar_inferencia(root: Path, dados: dict) -> dict:
@@ -158,6 +179,9 @@ def salvar_inferencia(root: Path, dados: dict) -> dict:
         raise ValueError('Chave de API em formato inválido: cole somente a chave, sem espaços (20 a 300 caracteres).')
     if type(dados.get('remover_chave', False)) is not bool:
         raise ValueError('Indicação de remoção da chave inválida.')
+    import custo
+    # Only a model of the installation's list, which always has a price (CUS-03); nothing saved otherwise.
+    custo.conferir_modelo(root, provedor, modelo.strip() if modelo else MODELOS_PADRAO[provedor])
     if chave:
         segredos.salvar_chave(root, provedor, chave)
     elif dados.get('remover_chave'):
@@ -261,7 +285,13 @@ class ServidorAPI:
         inferencia = ler_inferencia(self.root)
         if not self._chave(inferencia.provedor):
             return {'account': None}
-        return {'account': {'type': 'api', 'provedor': inferencia.provedor, 'modelo': inferencia.modelo}}
+        conta = {'type': 'api', 'provedor': inferencia.provedor, 'modelo': inferencia.modelo}
+        import custo
+        try:  # a model outside the installation's list is refused before any question (CUS-03)
+            custo.conferir_modelo(self.root, inferencia.provedor, inferencia.modelo)
+        except ValueError as exc:
+            conta['recusa_modelo'] = str(exc)
+        return {'account': conta}
 
     def _catalogo(self, params):
         modelo = ler_inferencia(self.root).modelo

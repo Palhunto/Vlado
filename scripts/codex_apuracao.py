@@ -5,6 +5,7 @@ import base64
 from contextlib import contextmanager
 import hashlib
 from datetime import datetime, timezone
+import itertools
 import json
 from pathlib import Path
 import re
@@ -15,10 +16,12 @@ import uuid
 
 from comum import dentro, escrever_json, ler_json, sha256
 from cadastrar_documentos import _atomico, _bytes, _trava, inventario
+import custo
 import fila_extracao
 import trava_cadastro
 from inferencia_api import CHAVES, ErroIA, ServidorAPI, seguro
 from fontes_web import documentos_e_capturas
+import tetos_extracao
 from indice_sqlite import _entradas, construir_snapshot, cobertura, ler_passagem, pesquisar
 from nova_rodada import _criar_rodada, preparar_pasta_rodada
 from fluxo_codex import Fluxo, ETAPAS
@@ -30,6 +33,10 @@ import diligencias
 import limites
 
 ACTIVE = {'preparando', 'executando', 'cancelando', 'publicando'}
+# Conversations kept in memory (CONF-03): idle ones are dropped and read again from disk when used,
+# in the same state a restart leaves them. Never one that is running or receiving documents.
+MAXIMO_CONTEXTOS = 200
+OCIOSO_CONTEXTO = 30 * 60  # seconds without use
 LIMITE_RESULTADO = 60_000    # characters of one tool result sent back to the model
 LIMITE_ARGUMENTOS = 8_000    # characters of tool arguments kept in the round's records
 # Seconds a question waits for a cadastro in progress before freezing (it holds no other lock
@@ -54,6 +61,9 @@ MENSAGENS_SITUACAO = {
 CAUSAS_ERRO = {
     'autenticacao': ('erro', 'autenticacao', 'A API recusou a chave ou não há chave configurada. Corrija a chave em Conexão e opções e tente novamente.'),
     'limite': ('sem_cota', 'limite_api', 'Limite de uso ou capacidade da API atingido. Aguarde e tente novamente.'),
+    'cobranca': ('sem_cota', 'cobranca_api', 'A conta do provedor da IA está sem crédito ou chegou ao teto de gasto '
+                 'dela. Tentar de novo não resolve até a cobrança ser regularizada na conta do provedor; avise quem '
+                 'administra a Mesa. O que já foi concluído foi preservado.'),
     'conexao': ('erro', 'conexao', 'Falha de conexão com a API ou prazo esgotado. Verifique a rede e tente novamente.'),
     'servidor': ('erro', 'servidor', 'Erro temporário no servidor do provedor. Tente novamente.'),
     'max_tokens': ('erro', 'max_tokens', 'A resposta foi truncada pelo limite de tokens de saída. Aumente max_tokens_saida em configuracao.json e tente novamente.'),
@@ -67,6 +77,10 @@ CAUSAS_ERRO = {
     'tempo_etapa': ('erro', 'tempo_etapa', 'Tempo máximo de 10 minutos para a etapa excedido.'),
     'limite_consulta': ('sem_cota', 'limite_consulta', None),
     'limite_dia': ('sem_cota', 'limite_dia', None),
+    'limite_cota_conta': ('sem_cota', 'limite_cota_conta', None),
+    'limite_cota_organizacao': ('sem_cota', 'limite_cota_organizacao', None),
+    'gasto_nao_registrado': ('erro', 'gasto_nao_registrado', None),
+    'modelo_nao_permitido': ('erro', 'modelo_nao_permitido', None),
 }
 
 
@@ -146,12 +160,15 @@ class _LoteNaFila(Exception):
 class Conversas:
     def __init__(self, root, factory=ServidorAPI):
         self.root = Path(root).resolve()
+        # PDF page as an image for the model; the Mesa sets its queue's isolated renderer (SEG-01).
+        self.renderizar_pagina = None
         self.folder = dentro(self.root, 'conversas')
         self.factory = factory
         self.rpc = None
         self.lock = threading.RLock()
         self.condition = threading.Condition(self.lock)
         self.contexts = {}
+        self._usos = itertools.count(1)  # order of use: the clock ties within 16 ms on Windows
         self.loaded = set()
         self.stopping = False
         self.workers = []
@@ -171,7 +188,36 @@ class Conversas:
         account = rpc.call('account/read', {}).get('account') or {}
         return {'versao': rpc.version, 'autenticado': account.get('type') == 'api',
                 'tipo': account.get('type'), 'provedor': account.get('provedor'),
-                'modelo': account.get('modelo'), 'online': True}
+                'modelo': account.get('modelo'), 'online': True,
+                # The inference server says when the configured model is outside the list (CUS-03).
+                'recusa_modelo': account.get('recusa_modelo')}
+
+    def _antes_de_executar(self, conta, convidado):
+        """Checks before a question or a retry spends anything: key, model, daily tokens and the month's
+        quota of the account and of the organization (CUS-01, CUS-03). Returns the status."""
+        estado = self.status()
+        if not estado['autenticado']:
+            raise ErroIA('Chave de API ausente: cole a chave em Perguntar à IA › Conexão e opções, ou defina '
+                         + ' ou '.join(CHAVES.values()) + ' no ambiente do servidor.', codigo='autenticacao')
+        if estado.get('recusa_modelo'):
+            raise ValueError(estado['recusa_modelo'])
+        limites.conferir_dia(self.root)
+        custo.conferir_antes(self.root, conta, estado.get('modelo'), convidado=convidado)
+        return estado
+
+    def _conferir_simultaneas(self, conta):
+        """Ceiling of executions at the same time, per account (administrators too) and in all.
+        Caller holds ``self.lock``."""
+        orcamento = custo.ler_orcamento(self.root)
+        chave = custo.chaves_orcamento(conta)['conta']
+        ativas = [c for c in self.contexts.values() if c.get('busy')]
+        da_conta = sum(1 for c in ativas if custo.chaves_orcamento(c['meta'].get('conta'))['conta'] == chave)
+        if da_conta >= orcamento['execucoes_simultaneas_por_conta']:
+            raise ValueError(f'Já há {da_conta} pergunta{"s" if da_conta != 1 else ""} em andamento nesta conta. '
+                             'As conversas e os documentos seguem disponíveis; envie esta quando uma delas terminar.')
+        if len(ativas) >= orcamento['execucoes_simultaneas']:
+            raise ValueError(f'A Mesa já está com {len(ativas)} perguntas em andamento. As conversas e os documentos '
+                             'seguem disponíveis; envie esta pergunta em alguns minutos.')
 
     def _path(self, identifier):
         if not isinstance(identifier, str) or not re.fullmatch(ID, identifier):
@@ -198,8 +244,27 @@ class Conversas:
                     self._event(identifier, 'erro', {'mensagem': 'Backend reiniciado durante a execução; saída parcial preservada.'})
                     self._save(identifier)
             ctx = self.contexts[identifier]
+            ctx['usado_em'], ctx['uso'] = time.monotonic(), next(self._usos)
+            self._descartar_ociosos(identifier)
             lixeira.conferir_disponivel(self.root, ctx['meta']['caso'], conversa=identifier)
             return ctx
+
+    @staticmethod
+    def _descartavel(ctx) -> bool:
+        """A context whose reload from disk gives the state a restart gives: nothing in course."""
+        return not (ctx.get('busy') or ctx['meta'].get('estado') in ACTIVE or ctx.get('documentos_em_cadastro'))
+
+    def _descartar_ociosos(self, manter=None):
+        """Drop idle conversations from memory (CONF-03): unused for OCIOSO_CONTEXTO, and the least
+        recently used past MAXIMO_CONTEXTOS. ``manter`` is the one being used now. Caller holds the lock."""
+        agora_ = time.monotonic()
+        livres = sorted((ctx.get('uso', 0), ctx.get('usado_em', 0.0), ident)
+                        for ident, ctx in self.contexts.items() if ident != manter and self._descartavel(ctx))
+        excesso = len(self.contexts) - MAXIMO_CONTEXTOS
+        for _, usado_em, ident in livres:
+            if excesso > 0 or agora_ - usado_em > OCIOSO_CONTEXTO:
+                del self.contexts[ident]
+                excesso -= 1
 
     def _save(self, identifier):
         with self.lock:  # stage thread and provider notifications both save the conversation
@@ -429,15 +494,14 @@ class Conversas:
             return {'caso': case, 'conversa': identifier,
                     'conteudo': self._caderno(case, data.get('selecoes'), ctx, evolution, module)}
 
-    def perguntar(self, data, dono=None):
+    def perguntar(self, data, dono=None, conta=None):
+        """``dono``: the guest account (None for administrators); ``conta``: the account that asks,
+        administrators included (None in the local mode): it spends the month's quota."""
         question, case = data.get('pergunta'), data.get('caso')
         if not isinstance(question, str) or not 1 <= len(question.strip()) <= 16000:
             raise ValueError('Informe uma pergunta de até 16000 caracteres.')
         lixeira.conferir_disponivel(self.root, case, conversa=data.get('conversa'))
-        if not self.status()['autenticado']:
-            raise ErroIA('Chave de API ausente: cole a chave em Perguntar à IA › Conexão e opções, ou defina '
-                         + ' ou '.join(CHAVES.values()) + ' no ambiente do servidor.', codigo='autenticacao')
-        limites.conferir_dia(self.root)
+        estado = self._antes_de_executar(conta, dono is not None)
         identifier = data.get('conversa')
         with self.lock:
             lixeira.conferir_disponivel(self.root, case, conversa=identifier)
@@ -452,6 +516,7 @@ class Conversas:
             if dono is not None and any(c['meta'].get('dono') == dono and c.get('busy')
                                         for c in self.contexts.values()):
                 raise ValueError('Já há uma pergunta em andamento para este convite. Aguarde a resposta ou cancele.')
+            self._conferir_simultaneas(conta)
             if identifier:
                 ctx = self._conferir_dono(identifier, dono)
                 if ctx['meta']['caso'] != case:
@@ -474,7 +539,8 @@ class Conversas:
                        'corpus_id': inventory['corpus_id'], 'criada_em_utc': agora(),
                        'estado': 'pronto', 'thread_id': None, 'rodadas': [], 'turn_id': None,
                        'modelo': None, 'dono': dono, 'politica': 'read-only; on-request; sem web/conectores/shell'},
-                       'events': [], 'busy': False}
+                       'events': [], 'busy': False, 'usado_em': time.monotonic(),
+                       'uso': next(self._usos)}
                 self.contexts[identifier] = ctx
                 if feedback:
                     ctx['meta']['rodada_base'] = feedback['conteudo']['rodada_origem']
@@ -508,6 +574,8 @@ class Conversas:
                 ctx['meta']['historico_analitico_no_contexto'] = True
             ctx['busy'] = True
             ctx['cancel'] = False
+            ctx['meta']['conta'] = conta  # whose quota this execution spends (CUS-01)
+            ctx['modelo_cobrado'] = estado.get('modelo')
             ctx['observacoes_humanas'] = feedback['conteudo'] if feedback else None
             ctx['meta']['observacoes_humanas'] = None
             if feedback or notebook or followups:
@@ -932,6 +1000,11 @@ class Conversas:
         ctx = self.contexts[identifier]
         uso = {k: v for k, v in (params.get('uso') or {}).items() if type(v) is int and v >= 0}
         modelo = seguro(params.get('modelo') or '')
+        try:  # every kind of token at its own price, cache included (CUS-01)
+            gasto = custo.custo_da_chamada(self.root, modelo, uso, ctx.get('modelo_cobrado'))
+        except (ValueError, OSError) as exc:
+            gasto = None
+            self._event(identifier, 'aviso', {'mensagem': 'Custo da chamada não calculado: ' + seguro(exc)})
         with self.lock:
             ctx['uso_numero'] = ctx.get('uso_numero', 0) + 1
             numero = ctx['uso_numero']
@@ -943,6 +1016,9 @@ class Conversas:
                 modelos.append(modelo)
             registro = {'numero': numero, 'etapa': ctx['meta'].get('etapa'), 'rodada': ctx['meta'].get('rodada'),
                         'turno': params.get('turnId'), 'modelo': modelo, 'uso': uso, 'registrado_em_utc': agora()}
+            if gasto:
+                registro['custo'] = gasto
+                ctx['meta']['custo_micro_brl'] = ctx['meta'].get('custo_micro_brl', 0) + gasto['micro_brl']
             total = dict(totais)
             falha = None
             if ctx.get('run'):
@@ -953,20 +1029,33 @@ class Conversas:
             self._save(identifier)
         if falha:
             self._event(identifier, 'aviso', {'mensagem': f'Registro de uso da API {numero:04} não gravado: {falha}'})
-        self._event(identifier, 'uso', {'etapa': registro['etapa'], 'modelo': modelo, 'uso': uso, 'total': total})
-        self._aplicar_limites(identifier, uso, total)
+        self._event(identifier, 'uso', {'etapa': registro['etapa'], 'modelo': modelo, 'uso': uso, 'total': total,
+                                        **({'custo_brl': gasto['brl']} if gasto else {})})
+        self._aplicar_limites(identifier, uso, total, gasto)
 
-    def _aplicar_limites(self, identifier, uso, total):
-        """Stop the round when it exceeds the per-question or the installation's daily token budget."""
+    def _aplicar_limites(self, identifier, uso, total, gasto=None):
+        """Stop the round when it exceeds the per-question or daily token budget (cache included) or the
+        month's quota in reais of its account or of the organization."""
+        meta = self.contexts[identifier]['meta']
+        totais, sem_registro = None, None
+        if gasto is None and custo.tokens_totais(uso):
+            sem_registro = custo.MENSAGEM_SEM_CALCULO  # spent and not priced: never go on without a count (R1)
+        elif gasto:  # the month's spend first: it is added even when the token limits cannot be read
+            try:
+                totais = custo.somar_gasto(self.root, meta.get('conta'), gasto['micro_brl'])
+            except custo.GastoSemRegistro as exc:
+                sem_registro = str(exc)  # stop before the next call (R1, R2)
         try:
             valores = limites.ler(self.root)
-            dia = limites.somar_dia(self.root, uso.get('entrada', 0) + uso.get('saida', 0))
+            dia = limites.somar_dia(self.root, custo.tokens_totais(uso))
         except (ValueError, OSError) as exc:
-            self._event(identifier, 'aviso', {'mensagem': 'Limites de uso não conferidos: ' + seguro(exc)})
-            return
-        consulta = total.get('entrada', 0) + total.get('saida', 0)
+            self._event(identifier, 'aviso', {'mensagem': 'Limites de tokens não conferidos: ' + seguro(exc)})
+            valores, dia = {'tokens_por_consulta': None, 'tokens_por_dia': None}, 0
+        consulta = custo.tokens_totais(total)
         motivo = causa = None
-        if valores['tokens_por_consulta'] is not None and consulta > valores['tokens_por_consulta']:
+        if sem_registro:
+            causa, motivo = 'gasto_nao_registrado', sem_registro
+        elif valores['tokens_por_consulta'] is not None and consulta > valores['tokens_por_consulta']:
             motivo = f'Limite de tokens por consulta atingido ({consulta} de {valores["tokens_por_consulta"]}).'
             causa = 'limite_consulta'
         elif valores['tokens_por_dia'] is not None and dia > valores['tokens_por_dia']:
@@ -975,6 +1064,13 @@ class Conversas:
             motivo = ('Limite diário de uso da instalação atingido. Tente novamente amanhã (UTC).'
                       if self.contexts[identifier]['meta'].get('dono') is not None
                       else f'Limite diário de tokens da instalação atingido ({dia} de {valores["tokens_por_dia"]}).')
+        elif totais is not None:
+            try:
+                estourou = custo.estouro(self.root, totais, convidado=meta.get('dono') is not None)
+            except ValueError:
+                estourou = None
+            if estourou:
+                causa, motivo = estourou
         ctx = self.contexts[identifier]
         if not motivo or ctx.get('cancel'):
             return
@@ -1140,7 +1236,7 @@ class Conversas:
         ctx.setdefault('acervos', {})[run_id] = self._apresentacao(manifest)
         return run, question, pipeline
 
-    def retomar(self, identifier, dono=None, casos=None):
+    def retomar(self, identifier, dono=None, casos=None, conta=None):
         """Retry the SAME frozen round from the first stage not yet accepted (no new round, no duplicate findings).
 
         The HTTP layer must count this call like a question (acesso.registrar_consulta) and give it
@@ -1159,12 +1255,9 @@ class Conversas:
             raise ValueError(situacao['mensagem'])
         if not meta.get('rodada_pergunta') or meta.get('rodada_pergunta') != meta.get('rodada'):
             raise ValueError('A pergunta não chegou a ser congelada; envie-a novamente.')
-        if not self.status()['autenticado']:
-            raise ErroIA('Chave de API ausente: cole a chave em Perguntar à IA › Conexão e opções, ou defina '
-                         + ' ou '.join(CHAVES.values()) + ' no ambiente do servidor.', codigo='autenticacao')
-        limites.conferir_dia(self.root)
+        estado = self._antes_de_executar(conta, dono is not None)
         limite = limites.ler(self.root)['tokens_por_consulta']
-        usados = sum((meta.get('uso_tokens') or {}).get(k, 0) for k in ('entrada', 'saida'))
+        usados = custo.tokens_totais(meta.get('uso_tokens'))
         if limite is not None and usados >= limite:
             raise ValueError(f'O limite de tokens por consulta ({limite}) já foi consumido nesta pergunta '
                              f'({usados}). Aumente o limite em configuracao.json para retomar.')
@@ -1175,6 +1268,9 @@ class Conversas:
             if dono is not None and any(c['meta'].get('dono') == dono and c.get('busy')
                                         for c in self.contexts.values()):
                 raise ValueError('Já há uma pergunta em andamento para este convite. Aguarde a resposta ou cancele.')
+            self._conferir_simultaneas(conta)
+            meta['conta'] = conta
+            ctx['modelo_cobrado'] = estado.get('modelo')
             run, question, pipeline = self._reconstruir(identifier)
             pendentes = [e for e in pipeline.etapas if e not in pipeline.accepted]
             record = run / 'saidas/codex_execucao.json'
@@ -1288,14 +1384,9 @@ class Conversas:
                 if path.suffix.lower() == '.pdf':
                     if type(page) is not int or page < 1:
                         raise ValueError('Informe uma página física positiva.')
-                    try:
-                        import fitz
-                    except ImportError as exc:
-                        raise ValueError('Leitura visual de PDF exige PyMuPDF opcional. Consulte o original na interface; não presuma tabela conferida.') from exc
-                    with fitz.open(path) as pdf:
-                        if page > len(pdf):
-                            raise ValueError('Página fora do PDF.')
-                        content = pdf[page - 1].get_pixmap(matrix=fitz.Matrix(1.5, 1.5)).tobytes('png')
+                    # The page is untrusted input: pixel caps, and in the Mesa's queue an isolated
+                    # process renders it (SEG-01); MuPDF never decodes it in this process there.
+                    content = (self.renderizar_pagina or tetos_extracao.renderizar_png)(path, page)
                     mime = 'image/png'
                     locator = f'página física PDF {page}'
                 elif path.suffix.lower() in ('.png', '.jpg', '.jpeg'):

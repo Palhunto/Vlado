@@ -60,13 +60,17 @@ padrão min(4, CPUs): 4 vCPU e 8 GB da D7), ``VLADO_EXTRACAO_TEMPO_MAXIMO`` (seg
 padrão 4 horas). O que pode esperar na fila: ``VLADO_FILA_LOTES_POR_CASO`` (20), ``VLADO_FILA_LOTES``
 (50), ``VLADO_FILA_MB_POR_CASO`` (250) e ``VLADO_FILA_MB`` (1000), contando também os envios sendo
 gravados; acima disso o envio é recusado na hora com a mensagem de limite (``fila_limite_envios``).
-Modo ``processos`` (Mesa pela linha de comando, contêiner) ou ``local``
-(threads da própria Mesa: testes e Mesa instalada no Windows, cujo executável congelado não sobe
-outro interpretador). Um só coordenador por pasta de dados (trava ``casos/.fila/.coordenador``):
-uma segunda Mesa na mesma pasta só enfileira e espera.
+Modo ``processos`` (Mesa pela linha de comando, contêiner): um processo de extração isolado por
+arquivo (SEG-01: tetos do sistema e sem rede, ``trabalhador_extracao``; tetos de páginas e
+pixels, ``tetos_extracao``), e também a página como imagem para a leitura visual da apuração
+(``renderizar_pagina``). Modo ``local`` (threads da própria Mesa: testes e Mesa instalada no
+Windows, cujo executável congelado não sobe outro interpretador): só os tetos de páginas e
+pixels valem. Um só coordenador por pasta de dados (trava ``casos/.fila/.coordenador``): uma
+segunda Mesa na mesma pasta só enfileira e espera.
 """
 from __future__ import annotations
 
+import base64
 from datetime import datetime, timezone
 import json
 import logging
@@ -83,6 +87,7 @@ import uuid
 
 import cadastrar_documentos as cadastro
 from comum import dentro, ler_json
+import tetos_extracao
 import trava_cadastro
 
 PASTA = '.fila'
@@ -117,9 +122,34 @@ def configuracao(modo='local', **valores) -> dict:
               'lotes_por_caso': inteiro('VLADO_FILA_LOTES_POR_CASO', 20, 1, 1000),
               'lotes': inteiro('VLADO_FILA_LOTES', 50, 1, 10000),
               'mb_por_caso': inteiro('VLADO_FILA_MB_POR_CASO', 250, 1, 1_000_000),
-              'mb': inteiro('VLADO_FILA_MB', 1000, 1, 10_000_000)}
+              'mb': inteiro('VLADO_FILA_MB', 1000, 1, 10_000_000),
+              'tetos': tetos_extracao.configuracao()}  # a bad cap stops the Mesa's start, not a file
     config.update({k: v for k, v in valores.items() if v is not None})
     return config
+
+
+def _abrir_trabalhador():
+    """Start one ``trabalhador_extracao`` (own process group on POSIX, no window on Windows)."""
+    if os.name == 'nt':
+        opcoes = {'creationflags': subprocess.CREATE_NO_WINDOW}
+    else:
+        # Own group (killed whole on timeout); few malloc arenas, so RLIMIT_AS measures real use.
+        opcoes = {'start_new_session': True, 'env': {**os.environ, 'MALLOC_ARENA_MAX': '2'}}
+    return subprocess.Popen([sys.executable, str(TRABALHADOR), '--pai', str(os.getpid())],
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding='utf-8',
+                            cwd=str(TRABALHADOR.parent), **opcoes)
+
+
+def motivo_da_saida(codigo) -> str:
+    """Why an extraction process ended without an answer, from its exit code."""
+    if codigo in (-24, 152, 1816):  # SIGXCPU; Windows ERROR_NOT_ENOUGH_QUOTA (the job's CPU time)
+        return 'O processo de extração passou do teto de CPU do sistema (VLADO_EXTRACAO_TETO_CPU_S).'
+    if codigo in (-9, 137):
+        return ('O processo de extração foi morto pelo sistema (sinal 9), em geral por falta de memória do '
+                'contêiner ou da máquina.')
+    if codigo in (3221225477, -1073741819):  # STATUS_ACCESS_VIOLATION
+        return 'O processo de extração caiu com violação de acesso ao ler o arquivo (código 0xC0000005).'
+    return f'O processo de extração terminou sem resposta (código {codigo}).'
 
 
 def _agora():
@@ -292,14 +322,12 @@ class _ExecutorLocal(_Executor):
 
 
 class _ExecutorProcesso(_Executor):
-    """One ``trabalhador_extracao`` process, one file at a time, killed on timeout or shutdown."""
+    """One ``trabalhador_extracao`` process for one file (SEG-01), killed on timeout or shutdown."""
 
     def __init__(self, fila):
         super().__init__(fila)
-        opcoes = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {'start_new_session': True}
-        self.proc = subprocess.Popen([sys.executable, str(TRABALHADOR), '--pai', str(os.getpid())],
-                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding='utf-8',
-                                     cwd=str(TRABALHADOR.parent), **opcoes)
+        self.limites = None  # what the system accepted (the process says it at start)
+        self.proc = _abrir_trabalhador()
         self.pid = self.proc.pid
         threading.Thread(target=self._ler, daemon=True, name='vlado_extracao_leitor').start()
 
@@ -518,6 +546,40 @@ class Fila:
 
     def consultar(self, *, lote=None, caso=None):
         return consultar(self.root, lote=lote, caso=caso)
+
+    def renderizar_pagina(self, pdf, numero, prazo=60):
+        """PNG of one PDF page for the model's visual reading (SEG-01), within the pixel caps.
+
+        Mode ``processos``: in a new isolated extraction process (the PDF is untrusted input and
+        MuPDF runs in it, not in the Mesa). Mode ``local``: in this process, with the same caps.
+        ValueError with the reason.
+        """
+        if self.config['modo'] != 'processos':
+            return tetos_extracao.renderizar_png(Path(pdf), int(numero))
+        proc = _abrir_trabalhador()
+        pedido = json.dumps({'renderizar': {'pdf': str(pdf), 'pagina': int(numero)}}, ensure_ascii=False) + '\n'
+        try:
+            saida, _ = proc.communicate(pedido, timeout=prazo)
+        except subprocess.TimeoutExpired:
+            try:
+                if os.name == 'nt':
+                    proc.kill()
+                else:
+                    os.killpg(proc.pid, 9)
+            except (OSError, ProcessLookupError):
+                pass
+            proc.communicate()
+            raise ValueError(f'A leitura visual da página excedeu {prazo} s; consulte o original na interface.') from None
+        for linha in saida.splitlines():
+            try:
+                mensagem = json.loads(linha)
+            except ValueError:
+                continue
+            if mensagem.get('tipo') == 'imagem':
+                return base64.b64decode(mensagem['png'])
+            if mensagem.get('tipo') in ('erro', 'limite'):
+                raise ValueError(mensagem.get('mensagem') or 'A página não pôde ser lida como imagem.')
+        raise ValueError(motivo_da_saida(proc.returncode) + ' Consulte o original na interface.')
 
     # ciclo de vida -------------------------------------------------------------------------------
     def iniciar(self):
@@ -814,6 +876,12 @@ class Fila:
                 executor.fechar()
 
     def _mensagem(self, executor, mensagem):
+        if mensagem.get('tipo') == 'limites':
+            executor.limites = mensagem.get('aplicado')
+            falhas = {k: v for k, v in (executor.limites or {}).items() if k.startswith('falha')}
+            if falhas:
+                log.warning('Fila de extração: teto do sistema não aplicado no processo %s: %s', executor.pid, falhas)
+            return
         if executor.tarefa is None:
             return  # a late message of a task already given up
         lote, indice = executor.tarefa
@@ -829,13 +897,21 @@ class Fila:
                            pagina=mensagem.get('feitas'), paginas=mensagem.get('total'))
             self._gravar(reg, urgente=False)
         elif tipo == 'resultado':
-            executor.tarefa, executor.ocioso_desde = None, time.monotonic()
+            self._concluir(executor)
             _gravar_json(reg['dir'] / f'derivados/{indice}/resultado.json',
                          {'resultado': mensagem['resultado'], 'derivado': mensagem.get('derivado')})
-            arquivo.update(estado='pronto', extracao=(mensagem['resultado'] or {}).get('estado'), motivo=None, processo=None)
+            extracao = (mensagem['resultado'] or {}).get('estado')
+            if mensagem.get('teto'):  # over a cap of the whole file: failed, with the reason; no retry
+                arquivo.update(estado='falha', extracao=extracao, etapa=None, motivo=mensagem['teto'], processo=None)
+            else:
+                arquivo.update(estado='pronto', extracao=extracao, motivo=None, processo=None)
+            self._gravar(reg)
+        elif tipo == 'limite':  # a cap of the system (CPU, memory): the process ends; no retry
+            self._concluir(executor)
+            self._falha_por_teto(reg, indice, mensagem.get('mensagem') or 'Teto do processo de extração excedido.')
             self._gravar(reg)
         elif tipo == 'erro':
-            executor.tarefa, executor.ocioso_desde = None, time.monotonic()
+            self._concluir(executor)
             # The exception text may carry server paths: it goes to the log, the state says a fixed text (C5).
             log.warning('Fila de extração: erro ao ler o arquivo %s do lote %s: %s', indice, lote, mensagem.get('mensagem'))
             arquivo['tentativas'] = arquivo.get('tentativas', 0) + 1
@@ -861,9 +937,23 @@ class Fila:
             return
         if executor.motivo_fim:  # timeout: reading it again would take as long
             reg['estado']['arquivos'][indice]['tentativas'] = MAX_TENTATIVAS - 1
-        self._tentativa_perdida(reg, indice, executor.motivo_fim
-                                or f'O processo de extração terminou sem resposta (código {codigo}).')
+        self._tentativa_perdida(reg, indice, executor.motivo_fim or motivo_da_saida(codigo))
         self._gravar(reg)
+
+    def _concluir(self, executor):
+        """The executor answered for its file. A process serves one file and then ends (SEG-01)."""
+        executor.tarefa, executor.ocioso_desde = None, time.monotonic()
+        if isinstance(executor, _ExecutorProcesso) and executor in self._executores:
+            self._executores.remove(executor)
+
+    def _falha_por_teto(self, reg, indice, motivo):
+        """The file failed on a cap: its original is registered with the extraction in error."""
+        item, arquivo = reg['pedido']['itens'][indice], reg['estado']['arquivos'][indice]
+        _remover(reg['dir'] / f'derivados/{indice}')
+        _gravar_json(reg['dir'] / f'derivados/{indice}/resultado.json',
+                     {'resultado': {**cadastro.resultado_sem_extracao(item['tipo'], item['sufixo'], motivo), 'teto': motivo},
+                      'derivado': None})
+        arquivo.update(estado='falha', extracao='erro', etapa=None, motivo=motivo, processo=None)
 
     def _abandonar(self, executor):
         """Give up an executor's task: it is stopped and never reused, so a late message of that

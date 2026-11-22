@@ -648,6 +648,13 @@ class PerguntaComLoteNaFilaTest(unittest.TestCase):
         import test_codex_integracao as integracao
         integracao.CodexIntegrationTest.setUp(self)
         self.start = lambda: integracao.CodexIntegrationTest.start(self)
+        # Three questions of the local account are in course at the end: the one in 'beta', the next one
+        # of the conversation (it waits for the batch inside its execution, then runs) and the first one
+        # after the batch; the simulated provider never ends them. The CUS-01 ceiling (2 by default,
+        # tested in test_custo) is right to count them, so this test raises it instead.
+        config = json.loads((self.root / 'configuracao.json').read_text(encoding='utf-8'))
+        config['orcamento'] = {'execucoes_simultaneas_por_conta': 3}
+        (self.root / 'configuracao.json').write_text(json.dumps(config), encoding='utf-8')
 
     def test_primeira_pergunta_recusada_e_pergunta_seguinte_espera_o_lote(self):
         from agente_fluxo_fixture import completar
@@ -768,7 +775,7 @@ class FilaProcessosTest(Base):
         resposta = self.fila.aguardar(lote, 120)
         arquivo = self.publico(lote)['arquivos'][0]
         self.assertEqual((arquivo['estado'], arquivo['extracao'], arquivo['tentativas']), ('falha', 'erro', 2))
-        self.assertIn('terminou sem resposta', arquivo['motivo'])
+        self.assertRegex(arquivo['motivo'], 'terminou sem resposta|morto pelo sistema')  # Linux: signal 9
         self.assertEqual((resposta['novos'], resposta['corpus_id']), (1, 'alpha_v2'))
         doc = next(d for d in self.documentos() if d['id'] == 'D002')
         self.assertEqual((doc['extracao_pdf']['estado'], doc['derivados']), ('erro', []))

@@ -43,7 +43,7 @@ def _trava(root, **opcoes):
     return trava_cadastro.trava(root, **opcoes)
 
 
-def _atomico(path, content):
+def _atomico(path, content, tentativas=40):
     """Publish a metadata file without exposing partial JSON."""
     with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as stream:
         temp = Path(stream.name)
@@ -51,12 +51,12 @@ def _atomico(path, content):
     try:
         # Windows refuses os.replace while another writer or an antivirus scan holds the
         # destination for a moment; retry briefly instead of failing the whole operation.
-        for tentativa in range(40):
+        for tentativa in range(max(1, tentativas)):
             try:
                 os.replace(temp, path)
                 break
             except PermissionError:
-                if tentativa == 39:
+                if tentativa >= tentativas - 1:
                     raise
                 time.sleep(0.025)
     finally:
@@ -360,19 +360,32 @@ def extrair_item(tarefa, *, base=None, paralelo=None, progresso=None):
 
     Runs in the command line's own process, in a thread of the Mesa (local queue) or in
     ``trabalhador_extracao`` (separate process). Never touches the manifest or the lock.
-    Returns ``{'resultado': outcome, 'derivado': path of the copy relative to base, or None}``.
+    Returns ``{'resultado': outcome, 'derivado': path of the copy relative to base, or None}``,
+    plus ``'teto': reason`` when the whole file was over a cap (``tetos_extracao``; memory
+    included): the outcome is then an error without a copy, and the queue marks the file failed.
     """
     origem, destino = Path(tarefa['origem']), Path(tarefa['destino'])
     destino.parent.mkdir(parents=True, exist_ok=True)
-    with ocr.execucao(paralelo=paralelo, progresso=progresso):
-        if tarefa['tipo'] == 'pdf':
-            resultado = extrair_pdf(origem, tarefa['identificador'], destino)
-        elif tarefa['tipo'] == 'office':
-            resultado = extrair_office(origem, tarefa['identificador'], destino)
-        elif tarefa['tipo'] == 'imagem':
-            resultado = ocr.ocr_imagem(origem, tarefa['identificador'], destino)
-        else:
-            raise ValueError('Tipo de extração desconhecido.')
+    try:
+        with ocr.execucao(paralelo=paralelo, progresso=progresso):
+            if tarefa['tipo'] == 'pdf':
+                resultado = extrair_pdf(origem, tarefa['identificador'], destino)
+            elif tarefa['tipo'] == 'office':
+                resultado = extrair_office(origem, tarefa['identificador'], destino)
+            elif tarefa['tipo'] == 'imagem':
+                resultado = ocr.ocr_imagem(origem, tarefa['identificador'], destino)
+            else:
+                raise ValueError('Tipo de extração desconhecido.')
+    except MemoryError:
+        destino.unlink(missing_ok=True)  # a copy cut in the middle is never taken
+        teto = ('O arquivo excedeu o teto de memória da extração (VLADO_EXTRACAO_TETO_MEMORIA_MB). '
+                'O original está preservado; o texto não foi extraído.')
+        return {'resultado': {**resultado_sem_extracao(tarefa['tipo'], origem.suffix.lower(), teto), 'teto': teto},
+                'derivado': None, 'teto': teto}
+    teto = resultado.get('teto') if isinstance(resultado, dict) else None
+    if teto:
+        destino.unlink(missing_ok=True)
+        return {'resultado': resultado, 'derivado': None, 'teto': teto}
     derivado = None
     if destino.is_file():
         derivado = destino.relative_to(base).as_posix() if base else str(destino)

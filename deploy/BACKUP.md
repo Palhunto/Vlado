@@ -36,6 +36,17 @@ Passo a passo para o dono e para quem opera o servidor. O que é decisão ou ato
 | | `configuracao.json` e o código | Fazem parte da imagem (`VLADO_VERSAO`). |
 | | pastas de preparo (`.lote_*`, `.r_*`, `.novo_*`...), `casos/.cadastro.trava`, `casos/.fila/.coordenador` e os `*.lock` | Trabalho em andamento e arquivos de trava, não dados: a Mesa recria a trava no primeiro uso. |
 
+### Registro de auditoria (`registro/`, SEG-02): FORA do backup, de propósito
+
+A Mesa grava os eventos de autenticação, administração e downloads no volume `registro` (ver `MONITORAMENTO.md`). **Decisão: não
+entra no backup.** Motivos: (1) tem **IP de pessoas**, retido por 30 dias; o backup guarda até 6 meses (retenção
+`diarios=7,semanais=4,mensais=6`), então incluí-lo quebraria a promessa de retenção; (2) o registro serve para investigar o que
+aconteceu, não para restaurar o estado; (3) uma restauração troca a pasta de dados e, se o registro morasse junto, **apagaria o
+histórico justamente quando ele é mais necessário**. Por isso ele fica num volume à parte, que o serviço `backup` nem monta, e
+a restauração não o toca. A chave das referências do registro fica em `segredos/registro_ref.chave`, fora desse volume e fora do
+backup comum (só entra se alguém ligar `VLADO_BACKUP_INCLUIR_SEGREDOS=1`, a decisão consciente de sempre). Para um incidente,
+copie o volume `registro` como evidência (`INCIDENTE.md` 5.2).
+
 ### Fila de extração (`casos/.fila/`, CONF-02): entra no backup
 
 A Mesa grava os envios em `casos/.fila/<lote>/` (pedido, estado, originais recebidos, cópias de trabalho) e só depois de lidos

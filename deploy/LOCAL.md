@@ -41,6 +41,7 @@ powershell -ExecutionPolicy Bypass -File deploy\vlado-local.ps1 <comando>
 | Ler os registros (últimas 200 linhas) de tudo, ou de um serviço (`vlado`, `caddy`, `backup`) | `registros` ou `registros backup` |
 | Acompanhar ao vivo | `seguir` ou `seguir vlado` |
 | Ver quem acessou (IP, caminho sem o token, status) | `acessos` |
+| Ver quem entrou, administrou ou baixou (registro de auditoria, sem conteúdo) | `auditoria` |
 | Criar os casos e contas sintéticos (e rever os links de ativação) | `semear` |
 | Fazer um backup agora | `backup` |
 | Listar os backups | `backups` |
@@ -99,6 +100,12 @@ app é encerrado e reinicia; o cadastro desse arquivo falha). Se acontecer, com 
 `VLADO_MEM_LIMITE=3g` em `local.env` e rode `subir`. Os temporários do OCR vão para um volume em disco, não para a
 memória; deixe uns 10 GB livres no disco do Docker.
 
+**Extração e OCR no teto de 2 GB:** cada processo de extração tem o próprio teto de memória (`VLADO_EXTRACAO_TETO_MEMORIA_MB`) e o
+padrão de servidor é 2 processos de 2048 MB, que somados à Mesa passariam dos 2 GB e fariam o Docker matar o contêiner. Por isso o
+`local.env` traz **1 processo (`VLADO_EXTRACAO_PROCESSOS=1`) de 1024 MB (`VLADO_EXTRACAO_TETO_MEMORIA_MB=1024`)**: um cadastro de
+vários arquivos fica em fila, um por vez, e um PDF que passe dos 1024 MB falha com o motivo na fila (o original é cadastrado mesmo
+assim). Com os agentes parados e `VLADO_MEM_LIMITE=3g`, suba o teto para 2048.
+
 O Docker Desktop leva por padrão metade da RAM (o WSL2). Se quiser garantir que ele nunca tome mais do que o
 combinado, é uma decisão sua: crie `C:\Users\voce\.wslconfig` com `[wsl2]`, `memory=4GB`, `swap=2GB`, rode
 `wsl --shutdown` e reabra o Docker Desktop (isto derruba também os contêineres da homologação até voltarem).
@@ -126,6 +133,14 @@ combinado, é uma decisão sua: crie `C:\Users\voce\.wslconfig` com `[wsl2]`, `m
 A vigia (`VLADO_VIGIA_PING_URL`) avisa um serviço de fora (healthchecks.io) que o app respondeu; sem esse endereço
 ela não roda, e aqui não faz sentido ter um: com o computador desligado nada avisaria. Vale então olhar `status`.
 Se quiser um receptor próprio no futuro, é só preencher a variável.
+
+## Registro de auditoria (quem entrou, administrou ou baixou)
+
+A Mesa grava um registro sem conteúdo (entradas, falhas, administração de contas e downloads, com horário, conta e IP) no volume
+`registro` deste ambiente, 30 dias por padrão; `deploy\vlado-local.ps1 auditoria` mostra as últimas 200 linhas e `apagar-tudo` o
+apaga junto com o resto. Ele **não entra no backup**. **Fora do Docker** (a Mesa instalada no Windows ou iniciada a partir do código,
+em modo local), o mesmo registro é criado em `registro/` dentro da pasta de dados (ao lado de `casos/`), com a chave das referências em
+`segredos/`; as duas pastas ficam fora do git. Detalhes: `deploy/MONITORAMENTO.md`.
 
 ## Portas e nomes
 
