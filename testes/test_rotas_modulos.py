@@ -33,6 +33,9 @@ OPERACOES = {
     'apuracao-nota-excluir', 'apuracao-nota-inserir', 'apuracao-nota-salvar', 'apuracao-notas',
     'apuracao-original', 'apuracao-salvar', 'buscar', 'cadastrar', 'caderno-cruzar', 'caderno-detalhe',
     'caso-incluir', 'caso-participantes', 'caso-responsavel', 'caso-retirar',
+    'conta-atualizar', 'conta-senha-trocar', 'conta-sessao-encerrar', 'conta-sessoes', 'conta-sessoes-encerrar-outras',
+    'conta-ver', 'equipe-atividade', 'equipe-desativar', 'equipe-listar', 'equipe-papel', 'equipe-reativar',
+    'equipe-remover', 'equipe-teto',
     'caderno-documentos', 'caderno-exportar', 'caderno-listar', 'caderno-original', 'caderno-salvar',
     'cobertura', 'codex-caderno-previa', 'codex-cancelar', 'codex-corpus-previa', 'codex-desligar',
     'codex-diligencias-previa', 'codex-documentos-cadastrar', 'codex-eventos', 'codex-listar',
@@ -56,10 +59,10 @@ OPERACOES = {
 
 
 class RotasModulosTest(unittest.TestCase):
-    def test_lista_branca_tem_as_118_operacoes(self):
-        # The 114 of before and the four `caso-*` of the accounts contract (contrato de contas, 5.6).
-        self.assertEqual(len(OPERACOES), 118)
-        self.assertEqual(len(interface_pesquisa.OPERACOES_API), 118, 'operação repetida na lista branca')
+    def test_lista_branca_tem_as_131_operacoes(self):
+        # The 114 of before, the four `caso-*` (contrato de contas, 5.6), six `conta-*` (5.4) and seven `equipe-*` (5.5).
+        self.assertEqual(len(OPERACOES), 131)
+        self.assertEqual(len(interface_pesquisa.OPERACOES_API), 131, 'operação repetida na lista branca')
         self.assertEqual(set(interface_pesquisa.OPERACOES_API), OPERACOES)
 
     def test_publicas_ficam_fora_da_lista_com_sessao(self):
@@ -73,7 +76,7 @@ class RotasModulosTest(unittest.TestCase):
             'downloads': set(rotas_downloads.OPERACOES),
             'captura web': {fontes_web.CAPTURAR},
             'gestao': set(rotas_gestao.OPERACOES),
-            'equipe': set(rotas_equipe.OPERACOES),
+            'equipe': set(rotas_equipe.OPERACOES) | set(interface_pesquisa.CONTA_PROPRIA),
             'conversa': set(rotas_conversa.OPERACOES),
         }
         for (a, x), (b, y) in combinations(ramos.items(), 2):

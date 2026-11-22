@@ -214,7 +214,7 @@ class DiaCheioTest(Auditoria):
             self.marcar()
             cookie, csrf = self.entrar('editora')
             status, criada = self.post((cookie, csrf), 'contas-criar', {'nome': 'Outra Editora', 'login': 'outra.editora',
-                                                                        'papel': 'admin'})
+                                                                        'papel': 'admin', 'senha': SENHA})
             self.assertEqual(status, 200, criada)
             self.publico('entrar', {'login': 'ninguem', 'senha': SENHA})  # falha anônima: descartada, sem derrubar nada
         eventos = [(l['evento'], l['resultado']) for l in self.novas()]
@@ -274,11 +274,13 @@ class AdministracaoTest(Auditoria):
                                                            'casos': ['alpha'], 'cota_diaria': 3})
         self.assertEqual(status, 200, criada)
         cid, link = criada['conta']['id'], criada['link']
-        self.assertEqual(self.admin_posta('contas-atualizar', {'id': cid, 'papel': 'admin'})[0], 200)
-        self.assertEqual(self.admin_posta('contas-atualizar', {'id': cid, 'papel': 'convidado', 'casos': ['beta']})[0], 200)
+        # Promoting to dono, changing the role of a dono and recovering ask the password (contrato de contas, 5.15),
+        # and the legacy guest profile is not given again (2.3): the account goes on as leitor.
+        self.assertEqual(self.admin_posta('contas-atualizar', {'id': cid, 'papel': 'admin', 'senha': SENHA})[0], 200)
+        self.assertEqual(self.admin_posta('contas-atualizar', {'id': cid, 'papel': 'leitor', 'casos': ['beta'], 'senha': SENHA})[0], 200)
         self.assertEqual(self.admin_posta('contas-desativar', {'id': cid})[0], 200)
         self.assertEqual(self.admin_posta('contas-reativar', {'id': cid})[0], 200)
-        status, recuperada = self.admin_posta('contas-recuperar', {'id': cid})
+        status, recuperada = self.admin_posta('contas-recuperar', {'id': cid, 'senha': SENHA})
         self.assertEqual(status, 200)
         eventos = [(l['evento'], l['conta'], l['por']) for l in self.novas() if l['evento'] != 'sessao_expirada']
         self.assertEqual(eventos, [('conta_criada', cid, self.admin_id), ('acesso_alterado', cid, self.admin_id),
@@ -289,7 +291,7 @@ class AdministracaoTest(Auditoria):
         papel1, papel2 = self.novas('acesso_alterado')
         # The administrator of before is the dono (contrato de contas, 2.4 and 6); `admin` is still accepted on input.
         self.assertEqual((papel1['papel'], papel1['campos']), ('dono', ['casos', 'cota', 'papel']))
-        self.assertEqual((papel2['papel'], papel2['campos']), ('convidado', ['casos', 'cota', 'papel']))
+        self.assertEqual((papel2['papel'], papel2['campos']), ('leitor', ['casos', 'papel']))
         self.assertEqual([l['operacao'] for l in self.novas()],
                          ['contas-criar', 'contas-atualizar', 'contas-atualizar', 'contas-desativar', 'contas-reativar', 'contas-recuperar'])
         for segredo in (link, recuperada['link'], link.rsplit('/', 1)[1], recuperada['link'].rsplit('/', 1)[1], 'Carla', 'carla'):
@@ -302,7 +304,7 @@ class AdministracaoTest(Auditoria):
         linha, = self.novas('admin_recusada')
         self.assertEqual((linha['resultado'], linha['conta'], linha['motivo'], linha['operacao']),
                          ('falha', self.admin_id, 'validacao', 'contas-criar'))
-        status, _ = self.admin_posta('contas-desativar', {'id': self.admin_id})  # último administrador
+        status, _ = self.admin_posta('contas-desativar', {'id': self.admin_id, 'senha': SENHA})  # último administrador
         self.assertEqual(status, 400)
         ultima = self.novas('admin_recusada')[-1]
         self.assertEqual((ultima['operacao'], ultima['alvo']), ('contas-desativar', self.admin_id))
