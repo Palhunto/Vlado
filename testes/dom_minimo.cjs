@@ -419,7 +419,7 @@ function criarMesa({url = 'http://127.0.0.1:8765/', papel = 'admin', modo = 'loc
   const janela = {
     document: doc, console, Map, Set, WeakMap, Promise, JSON, Math, Date, Intl, URL: URLMesa, URLSearchParams, Proxy, Reflect, Symbol, Array, Object,
     String, Number, Boolean, RegExp, Error, TypeError, structuredClone, setTimeout, clearTimeout, setInterval, clearInterval,
-    queueMicrotask, Blob: class { constructor(partes = [], opcoes = {}) { this.partes = partes; this.type = opcoes.type || ''; } async text() { return this.partes.join(''); } },
+    queueMicrotask, AbortController, Blob: class { constructor(partes = [], opcoes = {}) { this.partes = partes; this.type = opcoes.type || ''; } async text() { return this.partes.join(''); } },
     Event: Evento, CustomEvent: Evento, NodeFilter: {SHOW_ELEMENT: 1, SHOW_TEXT: 4},
     Option: function (texto = '', valor) { const op = doc.createElement('option'); op.textContent = texto; if (valor !== undefined) op.value = valor; return op; },
     MutationObserver: class { observe() {} disconnect() {} },

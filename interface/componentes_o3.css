@@ -154,3 +154,15 @@ button[aria-disabled="true"]{cursor:progress}
 .docs-recibo-titulo{font-size:var(--text-base);font-weight:600}
 /* Aviso do recibo (natureza informada diferente da apuração): cor de aviso, com sinal, nunca a de erro. */
 .docs-aviso{display:flex;align-items:flex-start;gap:var(--espaco-2);color:var(--theme-warning);font-weight:600}
+
+/* Diálogo com campo e conteúdo do servidor (Apagar definitivamente): linha do item, tabela do que sai e linha de estado. */
+.dialogo-linha{font-size:var(--text-base);font-weight:600;line-height:1.5}
+.dialogo-corpo{display:flex;flex-direction:column;gap:var(--espaco-3)}
+.dialogo-corpo:empty{display:none}
+.dialogo-tabela{width:100%;border-collapse:collapse;font-size:var(--text-md)}
+.dialogo-tabela th,.dialogo-tabela td{padding:var(--espaco-2) 0;border-bottom:1px solid var(--theme-line);text-align:right}
+.dialogo-tabela thead th{font-weight:600;color:var(--theme-muted)}
+.dialogo-tabela th:first-child{text-align:left;font-weight:600}
+.dialogo-tabela tbody th{color:var(--theme-text)}
+.dialogo-tabela tfoot th,.dialogo-tabela tfoot td{border-bottom:0;font-weight:600}
+.dialogo-tabela th+td,.dialogo-tabela td+td{padding-left:var(--espaco-4)}

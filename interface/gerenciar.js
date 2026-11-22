@@ -113,9 +113,9 @@
     } finally { busy = false; controls(); }
   }
 
-  // Permanent delete: show the server's scope, require the exact name, send its token.
-  const deleteDialog = $('apagar-dialogo');
-  let pending = null;
+  // Permanent delete (Dialogo, variante com campo, modo executar): shows the server's scope, requires the exact name, sends its token.
+  // The server answers fast and removes the files in the background, so the wait is short and cannot be cancelled.
+  let deleting = false;
   const locale = () => (window.I18N?.idioma?.() === 'en' ? 'en' : 'pt-BR');
   const number = (value, digits = 0) => new Intl.NumberFormat(locale(), {minimumFractionDigits:digits, maximumFractionDigits:digits}).format(value);
   function size(bytes) {
@@ -125,106 +125,68 @@
     return `${number(bytes / 1024 ** 3, 1)} GB`;
   }
   const files = count => count === 1 ? t('1 arquivo') : t('{n} arquivos', {n:number(count)});
-  // Python's casefold() after strip(), as the server compares it.
-  const comparable = value => String(value ?? '').trim().toUpperCase().toLowerCase();
-  function deleteError(message = '') {
-    $('apagar-erro').textContent = message ? t(message) : '';
-    $('apagar-erro').hidden = !message;
-  }
-  function deleteControls() {
-    const working = !pending || pending.busy;
-    const ready = !!pending?.scope && !working;
-    $('apagar-nome').disabled = !ready;
-    $('apagar-cancelar').disabled = !!pending?.busy;
-    $('apagar-confirmar').disabled = !ready || comparable($('apagar-nome').value) !== comparable(pending.scope.nome_para_confirmar);
-    $('apagar-confirmar').textContent = pending?.busy ? t('Apagando…') : t('Apagar definitivamente');
-  }
-  function renderScope(scope) {
-    $('apagar-categorias').replaceChildren(...Object.entries(scope.categorias).map(([name, info]) => {
+  // What leaves the project: a table by category with the total, the rounds kept for other conversations and the backup notice.
+  function scopeNodes(scope) {
+    const table = element('table', undefined, 'dialogo-tabela');
+    table.append(element('caption', t('O que será apagado'), 'sr-only'));
+    const head = element('thead'), headRow = element('tr');
+    for (const title of ['Categoria', 'Arquivos', 'Tamanho']) { const th = element('th', t(title)); th.scope = 'col'; headRow.append(th); }
+    head.append(headRow);
+    const body = element('tbody');
+    for (const [name, info] of Object.entries(scope.categorias)) {
       const line = element('tr'), label = element('th', t(categories[name] || name));
       label.scope = 'row'; line.append(label, element('td', number(info.arquivos)), element('td', size(info.bytes)));
-      return line;
-    }));
-    $('apagar-total').textContent = `${files(scope.totais.arquivos)}, ${size(scope.totais.bytes)}`;
-    const kept = scope.rodadas_preservadas || [];
-    $('apagar-preservadas').textContent = kept.length ? t('Estas rodadas continuam porque são usadas por outras conversas: {rodadas}', {rodadas:kept.join(', ')}) : '';
-    $('apagar-preservadas').hidden = !kept.length;
-    $('apagar-backup').textContent = t(scope.aviso_backup || '');
-    $('apagar-backup').hidden = !scope.aviso_backup;
-    const [before, after] = t('Digite «{nome}» para confirmar').split('{nome}');
-    const name = element('strong', scope.nome_para_confirmar); name.setAttribute('translate', 'no');
-    $('apagar-nome-rotulo').replaceChildren(before, name, after ?? '');
-    $('apagar-nome').value = '';
-    $('apagar-alcance').hidden = false;
-  }
-  async function loadScope() {
-    const captured = pending;
-    captured.scope = null; captured.ticket = (captured.ticket || 0) + 1;
-    const ticket = captured.ticket;
-    $('apagar-alcance').hidden = true;
-    $('apagar-status').textContent = t('Calculando o que será apagado…');
-    deleteControls();
-    try {
-      const scope = await api('lixeira-alcance', {item:captured.item.id});
-      if (pending !== captured || ticket !== captured.ticket) return;
-      captured.scope = scope; renderScope(scope);
-      $('apagar-status').textContent = '';
-    } catch (error) {
-      if (pending !== captured || ticket !== captured.ticket) return;
-      $('apagar-status').textContent = ''; deleteError(error.message);
-    } finally { if (pending === captured) deleteControls(); }
-  }
-  // The item type is interface text; its title or round id is data.
-  function renderItem(item) {
-    const name = element('span', item.tipo === 'rodada' ? item.rodada : item.titulo);
-    name.setAttribute('translate', 'no');
-    $('apagar-item').replaceChildren(t(labels[item.tipo]), ' · ', name);
+      body.append(line);
+    }
+    const foot = element('tfoot'), total = element('tr'), totalLabel = element('th', t('Total')), totalValue = element('td', `${files(scope.totais.arquivos)}, ${size(scope.totais.bytes)}`);
+    totalLabel.scope = 'row'; totalValue.colSpan = 2; total.append(totalLabel, totalValue); foot.append(total);
+    table.append(head, body, foot);
+    const nodes = [table], kept = scope.rodadas_preservadas || [];
+    if (kept.length) nodes.push(element('p', t('Estas rodadas continuam porque são usadas por outras conversas: {rodadas}', {rodadas:kept.join(', ')}), 'dialogo-nota'));
+    if (scope.aviso_backup) nodes.push(element('p', t(scope.aviso_backup), 'dialogo-nota'));
+    return nodes;
   }
   async function openDelete(item, title, opener) {
-    if (busy || deleteDialog.open) return;
-    pending = {item, title, opener, scope:null, busy:false};
-    renderItem(item);
-    deleteError(); $('apagar-nome').value = '';
-    deleteControls();
-    deleteDialog.showModal();
-    $('apagar-cancelar').focus();
-    await loadScope();
-  }
-  async function confirmDelete() {
-    const captured = pending;
-    if (!captured?.scope || captured.busy || $('apagar-confirmar').disabled) return;
-    captured.busy = true; deleteError(); deleteControls();
+    if (busy || deleting) return;
+    deleting = true;
+    let scope = null, failed = false, result = null;
+    const loadScope = async ctx => {
+      scope = null; ctx.nome(null); ctx.corpo.replaceChildren(); ctx.estado('Calculando o que será apagado…');
+      try {
+        const found = await api('lixeira-alcance', {item:item.id});
+        if (ctx.fechou()) return;
+        scope = found; ctx.corpo.replaceChildren(...scopeNodes(found)); ctx.estado(''); ctx.nome(found.nome_para_confirmar);
+      } catch (error) { if (ctx.fechou()) return; ctx.estado(''); ctx.erro(error.message); }
+    };
     try {
-      const result = await api('lixeira-apagar', {item:captured.item.id, nome:$('apagar-nome').value, confirmacao:captured.scope.confirmacao});
-      captured.busy = false;
-      deleteDialog.close();
-      const totals = result.totais || captured.scope.totais;
-      $('gerenciar-status').textContent = t('Apagado definitivamente: {arquivos} ({tamanho}).', {arquivos:files(totals.arquivos), tamanho:size(totals.bytes)});
-      window.dispatchEvent(new CustomEvent('acervo-alterado', {detail:result}));
-      await load();
-    } catch (error) {
-      captured.busy = false;
-      if (pending !== captured) return;
-      // Stable code from the server (8f03d9c); the PT text is only a fallback for older servers.
-      if (error.result?.codigo === 'alcance_alterado' || /mudou desde a conferência/.test(error.result?.erro || '')) {
-        deleteError('O conteúdo mudou desde a conferência. Confira o alcance atualizado e digite o nome de novo.');
-        await loadScope();
-      } else { deleteError(error.message); deleteControls(); }
-    }
+      const deleted = await window.Dialogo.confirmar({
+        variante:'campo', titulo:'Apagar definitivamente', linha:[labels[item.tipo], item.tipo === 'rodada' ? item.rodada : item.titulo],
+        texto:'Os arquivos listados saem do projeto. A Mesa não consegue recuperá-los depois.',
+        acao:'Apagar definitivamente', ocupado:'Apagando…', gatilho:opener,
+        preparar:loadScope,
+        aoIdioma:ctx => { if (scope) ctx.corpo.replaceChildren(...scopeNodes(scope)); },
+        executar:async ctx => {
+          try { result = await api('lixeira-apagar', {item:item.id, nome:ctx.valor(), confirmacao:scope.confirmacao}); }
+          catch (error) {
+            failed = true;
+            // Stable code from the server (8f03d9c); the PT text is only a fallback for older servers.
+            if (error.result?.codigo === 'alcance_alterado' || /mudou desde a conferência/.test(error.result?.erro || '')) {
+              ctx.limparCampo(); await loadScope(ctx);
+              throw new Error('O conteúdo mudou desde a conferência. Confira o alcance atualizado e digite o nome de novo.');
+            }
+            throw error;   // any other refusal stays in the dialog, with the server's own text
+          }
+        },
+      });
+      if (deleted) {
+        const totals = result.totais || scope.totais;
+        $('gerenciar-status').textContent = [t('Apagado definitivamente: {arquivos} ({tamanho}).', {arquivos:files(totals.arquivos), tamanho:size(totals.bytes)}),
+          result.aviso_backup ? t(result.aviso_backup) : ''].filter(Boolean).join(' ');
+        window.dispatchEvent(new CustomEvent('acervo-alterado', {detail:result}));
+        await load();
+      } else if (failed) await load();   // a refusal may have changed what is in the trash
+    } finally { deleting = false; }
   }
-  $('apagar-nome').addEventListener('input', deleteControls);
-  $('apagar-nome').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); confirmDelete(); } });
-  $('apagar-confirmar').addEventListener('click', confirmDelete);
-  $('apagar-cancelar').addEventListener('click', () => { if (!pending?.busy) deleteDialog.close(); });
-  deleteDialog.addEventListener('cancel', event => { if (pending?.busy) event.preventDefault(); });
-  deleteDialog.addEventListener('close', () => {
-    const opener = pending?.opener; pending = null;
-    if (opener?.isConnected) opener.focus();
-  });
-  // List rows are Portuguese text the i18n observer translates; only the dialog builds translated text.
-  window.addEventListener('vlado-idioma', () => {
-    if (pending) { renderItem(pending.item); deleteControls(); if (pending.scope) { const typed = $('apagar-nome').value; renderScope(pending.scope); $('apagar-nome').value = typed; deleteControls(); } }
-  });
 
   window.excluirItem = async (scope, title) => {
     const dialog = $('excluir-dialogo');

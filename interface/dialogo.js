@@ -1,8 +1,8 @@
 'use strict';
 // Diálogo de confirmação da Mesa (docs/design/componentes.md#dialogo, UX-16, W11 regra 8). Substitui o confirm() do navegador.
 //
-//   const ok = await Dialogo.confirmar({variante, rubrica, titulo, texto, nota, acao, cancelar, item, nome, gatilho,
-//                                       ocupado, executar, longa});
+//   const ok = await Dialogo.confirmar({variante, rubrica, titulo, linha, texto, nota, acao, cancelar, item, nome, gatilho,
+//                                       ocupado, executar, longa, preparar, aoIdioma});
 //
 // Variantes (todas aprovadas pelo dono em 21/11/2026):
 //   'simples'    a ação é o botão principal e recebe o foco;
@@ -14,6 +14,11 @@
 // junto das ações (role="alert") e a pessoa pode tentar de novo; se termina, o diálogo fecha e a promessa devolve true.
 // Com `longa: true` a espera é a longa de W11 (regra 3): barra com etapa, aviso de que dá para sair da tela e "Cancelar" ativo;
 // `ctx.etapa(texto, fracao)` atualiza a barra e `ctx.sinal` (AbortSignal) avisa o cancelamento.
+// `linha: [rotulo, dado]` é a linha do item sob o título ("Apuração · nome": o rótulo é da interface, o dado não se traduz).
+// `preparar(ctx)` roda depois de aberto, para o que vem do servidor: ctx.corpo (onde entra o conteúdo, como a tabela do que sai),
+// ctx.estado(texto) (linha de estado, role=status), ctx.nome(valor) (o nome a digitar; sem ele o campo e a ação ficam desabilitados),
+// ctx.limparCampo(), ctx.erro(mensagem), ctx.valor() e ctx.fechou(). `executar(ctx)` recebe o mesmo ctx, mais etapa e sinal.
+// `aoIdioma(ctx)` é chamado se a língua mudar com o diálogo aberto (o conteúdo de `corpo` é montado por quem chamou).
 // Clique no véu não fecha (decisão do dono, P12.5). Esc fecha como "Cancelar". O foco fica preso e, ao fechar, volta a `gatilho`.
 (() => {
   const t = (pt, vars) => (window.I18N ? window.I18N.t(pt, vars) : String(pt).replace(/\{(\w+)\}/g, (todo, nome) => vars?.[nome] ?? todo));
@@ -57,21 +62,36 @@
       const partes = [];
       if (opcoes.rubrica) partes.push(no('p', 'dialogo-rubrica', t(opcoes.rubrica)));
       partes.push(titulo);
+      if (opcoes.linha) {
+        const linha = no('p', 'dialogo-linha');
+        const dado = no('span', '', opcoes.linha[1]); dado.setAttribute('translate', 'no');
+        linha.append(t(opcoes.linha[0]), ' · ', dado);
+        partes.push(linha);
+      }
       if (opcoes.texto) { partes.push(texto); caixa.setAttribute('aria-describedby', texto.id); }
       if (opcoes.nota) partes.push(no('p', 'dialogo-nota', t(opcoes.nota)));
+      const corpo = no('div', 'dialogo-corpo');
+      const linhaEstado = no('p', 'dialogo-nota'); linhaEstado.hidden = true; linhaEstado.setAttribute('role', 'status'); linhaEstado.setAttribute('aria-live', 'polite');
+      if (opcoes.preparar) partes.push(corpo, linhaEstado);
 
-      let campo = null;
+      let campo = null, nomeEsperado = opcoes.nome ?? null, fraseDoCampo = null;
       if (variante === 'campo') {
         const rotulo = no('label', 'dialogo-campo');
-        const [antes, depois] = t('Digite «{nome}» para confirmar').split('{nome}');
-        const nome = no('strong', '', opcoes.nome ?? ''); nome.setAttribute('translate', 'no');
-        const frase = no('span'); frase.append(antes, nome, depois ?? '');
+        fraseDoCampo = no('span');
         campo = document.createElement('input');
         campo.type = 'text'; campo.maxLength = 300; campo.autocomplete = 'off';
         campo.setAttribute('spellcheck', 'false'); campo.setAttribute('translate', 'no');
-        rotulo.append(frase, campo);
+        rotulo.append(fraseDoCampo, campo);
         partes.push(rotulo);
       }
+      // "Digite «nome» para confirmar": o nome é dado e não se traduz; sem nome ainda (vem do servidor), só a frase.
+      function rotularCampo() {
+        if (!fraseDoCampo) return;
+        const [antes, depois] = t('Digite «{nome}» para confirmar').split('{nome}');
+        const nome = no('strong', '', nomeEsperado ?? ''); nome.setAttribute('translate', 'no');
+        fraseDoCampo.replaceChildren(antes, nome, depois ?? '');
+      }
+      rotularCampo();
 
       const progresso = no('div', 'dialogo-progresso'); progresso.hidden = true;
       progresso.setAttribute('role', 'status');
@@ -93,15 +113,17 @@
 
       let estado = 'aberto';       // aberto | ocupado | cancelando | fechado
       let controlador = null;
+      const fechamento = new AbortController();
+      let interagiu = false;
       let tarefa = null;
       const inertes = [];
 
-      const nomeConfere = () => !campo || comparavel(campo.value) === comparavel(opcoes.nome);
+      const nomeConfere = () => !campo || (nomeEsperado !== null && comparavel(campo.value) === comparavel(nomeEsperado));
       function atualizar() {
         const livre = estado === 'aberto';
         // Na espera nada recebe `disabled` onde há foco: o campo fica só leitura e a ação, aria-disabled; assim o foco não vai para o corpo da
         // página (o Tab e o Esc continuam presos no diálogo) e o clique na ação é ignorado por `confirmar`.
-        if (campo) campo.readOnly = !livre;
+        if (campo) { campo.readOnly = !livre; campo.disabled = nomeEsperado === null; }
         botaoAcao.disabled = livre && !nomeConfere();
         botaoAcao.setAttribute('aria-disabled', String(!livre));
         botaoCancelar.disabled = estado === 'cancelando' || (estado === 'ocupado' && !opcoes.longa);
@@ -126,6 +148,8 @@
       function fechar(valor) {
         if (estado === 'fechado') return;
         estado = 'fechado';
+        fechamento.abort();
+        window.removeEventListener('vlado-idioma', aoMudarIdioma);
         caixa.removeEventListener('keydown', aoTeclar);
         caixa.removeEventListener('cancel', aoCancelarNativo);
         try { caixa.close(); } catch (falha) { /* já fechado */ }
@@ -134,6 +158,22 @@
         if (gatilho && gatilho.isConnected && typeof gatilho.focus === 'function') gatilho.focus();
         resolver(valor);
       }
+      // O que `preparar`, `executar` e `aoIdioma` recebem.
+      const ctx = {
+        corpo,
+        estado(texto) { linhaEstado.textContent = texto ? t(texto) : ''; linhaEstado.hidden = !texto; },
+        nome(valor) {
+          nomeEsperado = valor ?? null; rotularCampo(); atualizar();
+          // O nome chegou: o campo é o foco inicial (aprovado pelo Design), se a pessoa ainda não mexeu em nada.
+          if (campo && nomeEsperado !== null && !interagiu && estado === 'aberto') campo.focus();
+        },
+        limparCampo() { if (campo) campo.value = ''; atualizar(); },
+        erro: mostrarErro,
+        valor: () => (campo ? campo.value : ''),
+        fechou: () => estado === 'fechado',
+        sinalFechado: fechamento.signal,
+      };
+      function aoMudarIdioma() { rotularCampo(); opcoes.aoIdioma?.(ctx); }
       async function confirmar() {
         if (estado !== 'aberto' || !nomeConfere()) return;
         if (!opcoes.executar) { fechar(true); return; }
@@ -141,7 +181,7 @@
         controlador = new AbortController();
         etapa(opcoes.longa ? (opcoes.etapaInicial || 'Começando…') : undefined, 0);
         atualizar();
-        tarefa = Promise.resolve().then(() => opcoes.executar({etapa, sinal: controlador.signal}));
+        tarefa = Promise.resolve().then(() => opcoes.executar({...ctx, etapa, sinal: controlador.signal}));
         try {
           await tarefa;
           fechar(true);
@@ -150,7 +190,7 @@
           estado = 'aberto';
           mostrarErro(falha?.message || 'Não deu para concluir. Tente de novo.');
           atualizar();
-          botaoAcao.focus();
+          (campo && !campo.disabled ? campo : botaoAcao).focus();
         }
       }
       function cancelar() {
@@ -161,6 +201,7 @@
         }
       }
       function aoTeclar(evento) {
+        interagiu = true;
         if (evento.key === 'Escape') { evento.preventDefault(); evento.stopPropagation(); cancelar(); return; }
         if (evento.key === 'Enter' && evento.target === campo) { evento.preventDefault(); confirmar(); return; }
         if (evento.key !== 'Tab') return;
@@ -173,8 +214,9 @@
       // O navegador dispara "cancel" no Esc; o tratamento acima já cuida, e aqui só se impede o fechamento nativo.
       function aoCancelarNativo(evento) { evento.preventDefault(); cancelar(); }
 
-      botaoCancelar.addEventListener('click', cancelar);
+      botaoCancelar.addEventListener('click', () => { interagiu = true; cancelar(); });
       botaoAcao.addEventListener('click', confirmar);
+      window.addEventListener('vlado-idioma', aoMudarIdioma);
       if (campo) campo.addEventListener('input', atualizar);
       caixa.addEventListener('keydown', aoTeclar);
       caixa.addEventListener('cancel', aoCancelarNativo);
@@ -188,8 +230,12 @@
       atualizar();
       // Se o navegador recusar o showModal, a página não pode ficar inerte: desfaz tudo e devolve "cancelado".
       try { caixa.showModal(); } catch (falha) { caixa.remove(); for (const [elemento, antes] of inertes) elemento.inert = antes; estado = 'fechado'; resolver(false); return; }
-      const inicial = variante === 'simples' ? botaoAcao : variante === 'campo' ? campo : botaoCancelar;
+      // Com campo: o campo, se já puder receber o nome; senão "Cancelar" até o nome chegar (então o foco passa ao campo).
+      const inicial = variante === 'simples' ? botaoAcao : variante === 'campo' && !campo.disabled ? campo : botaoCancelar;
       inicial.focus();
+      if (opcoes.preparar) {
+        Promise.resolve().then(() => opcoes.preparar(ctx)).catch(falha => { if (estado !== 'fechado') mostrarErro(falha?.message || 'Não deu para concluir. Tente de novo.'); });
+      }
     });
   }
 
