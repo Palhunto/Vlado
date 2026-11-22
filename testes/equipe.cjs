@@ -261,7 +261,7 @@ test('Acesso: desativar sem ser dono é a destrutiva sem senha; desativar um don
   assert.ok(texto(dialogo(mesa)).includes('A conta é excluída: a pessoa perde o acesso') && texto(dialogo(mesa)).includes('que não podem ser reescritos.'));
   digitar(dialogo(mesa).querySelector('input'), 'sy'); acoesDoDialogo(mesa)[1].click(); await esperar(mesa);
   assert.deepEqual(dados(mesa.chamadas.find(c => c.operacao === 'equipe-remover').dados), {conta: ID.davi, senha: 'sy'});
-  assert.equal(texto(estado(mesa)), '✓ Davi Melo foi removida da redação.');
+  assert.equal(texto(estado(mesa)), '✓ Davi Melo não faz mais parte da redação.');
   painel = await abrirGerenciar(ID.cora);
   assert.equal(botaoPorTexto(painel, 'Desativar'), undefined, 'conta desativada: Reativar no lugar de Desativar'); assert.ok(botaoPorTexto(painel, 'Remover da redação'));
   botaoPorTexto(painel, 'Reativar').click(); await esperar(mesa);
@@ -342,8 +342,23 @@ test('Atividade: cada tipo que o servidor grava tem frase (nenhum cai em "Ação
 test('sem atividade: "Nenhuma ação registrada ainda."; sem Convidar: só o texto da exceção abaixo da tabela, e nenhum botão de convite', async () => {
   const {mesa} = await abrirEquipe(com([ANA()]));
   assert.equal(texto(mesa.doc.querySelector('[data-cartao="atividade"] .conta-cartao-corpo')), 'Nenhuma ação registrada ainda.');
-  assert.equal(texto(painelEquipe(mesa).querySelector('.equipe-convite')), 'Para incluir alguém na redação, fale com quem administra o serviço.');
-  assert.ok(![...painelEquipe(mesa).querySelectorAll('button')].some(b => /convid|recuperar/i.test(b.textContent)), 'sem Convidar, Reenviar nem Recuperar acesso');
+  assert.equal(texto(painelEquipe(mesa).querySelector('.equipe-convite')), 'Para incluir alguém, crie uma conta em Configurações, Contas de acesso.');
+  assert.ok(![...painelEquipe(mesa).querySelectorAll('button')].some(b => /convid|recuperar|reenviar/i.test(b.textContent)), 'sem Convidar, Reenviar nem Recuperar acesso');
+  const link = botaoPorTexto(painelEquipe(mesa).querySelector('.equipe-convite'), 'Contas de acesso');
+  assert.ok(link, '"Contas de acesso" é um link para a aba Configurações');
+  link.click(); await esperar(mesa);
+  assert.equal(mesa.$('conta-aba-configuracoes').getAttribute('aria-pressed'), 'true'); assert.ok(!mesa.$('conta-painel-configuracoes').hidden); assert.ok(mesa.$('conta-painel-equipe').hidden);
+  assert.ok(mesa.$('acesso-painel'), 'o painel de Contas de acesso segue em Configurações até o convite por e-mail');
+});
+
+test('a coluna do papel mantém a largura mínima com a linha de Gerenciar aberta, e em inglês a atividade mostra a frase', async () => {
+  const {mesa} = await abrirEquipe(com([ANA(), CORA()]));
+  const classes = () => celulas(linhaDe(mesa, ID.cora))[1].className;
+  assert.ok(classes().split(' ').includes('equipe-celula-papel'));
+  celulas(linhaDe(mesa, ID.cora))[4].querySelector('button').click(); await esperar(mesa);
+  assert.ok(classes().split(' ').includes('equipe-celula-papel'), 'a classe que fixa a largura continua na célula depois de abrir Gerenciar');
+  const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'interface', 'componentes_o3.css'), 'utf8');
+  assert.ok(/\.equipe-celula-papel\{min-width:calc\(220px/.test(css), 'a regra de 220 px mais o preenchimento está no CSS');
 });
 
 test('abaixo de 1024 px a tabela vira um cartão por pessoa, com "Papel" visível, apurações e uso em 14 e "Gerenciar" em largura cheia', async () => {

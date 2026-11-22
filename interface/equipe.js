@@ -25,7 +25,12 @@
     raiz.aviso = no('div', 'equipe-aviso'); raiz.aviso.hidden = true;
     raiz.tabela = no('section', 'conta-cartao conta-cartao-tabela'); raiz.tabela.setAttribute('aria-label', t('Pessoas da redação'));
     raiz.corpoTabela = no('div', 'conta-cartao-corpo'); raiz.tabela.append(raiz.corpoTabela);
-    raiz.convite = no('p', 'conta-apoio equipe-convite', t('Para incluir alguém na redação, fale com quem administra o serviço.'));
+    // Enquanto 'Contas de acesso' existir em Configurações (P30), é lá que o dono inclui alguém; o texto leva à aba. Com mais de uma redação o servidor
+    // recusa contas-criar, mas as capacidades não dizem isso: a Mesa não distingue e mostra sempre este texto (decisão do Design).
+    raiz.convite = no('p', 'conta-apoio equipe-convite');
+    const [antesDoLink, depoisDoLink] = t('Para incluir alguém, crie uma conta em Configurações, {link}.').split('{link}');
+    const irParaContas = botao('Contas de acesso', 'equipe-link equipe-link-texto', () => window.Conta.abrir('configuracoes'));
+    raiz.convite.append(antesDoLink, irParaContas, depoisDoLink ?? '');
     raiz.gasto = window.Conta.cartao('Gasto com IA neste mês');
     raiz.atividade = window.Conta.cartao('Atividade recente', 'equipe-atividade-cartao');
     raiz.gasto.raiz.dataset.cartao = 'gasto'; raiz.atividade.raiz.dataset.cartao = 'atividade';
@@ -143,9 +148,13 @@
     const corpo = document.createElement('tbody');
     for (const pessoa of todas) {
       const tr = document.createElement('tr'); tr.dataset.conta = pessoa.id;
-      for (const conteudo of [celulaPessoa(pessoa), celulaPapel(pessoa), celulaApuracoes(pessoa), celulaUso(pessoa), botaoGerenciar(pessoa)]) {
-        const td = document.createElement('td'); if (conteudo) td.append(conteudo); tr.append(td);
-      }
+      [celulaPessoa(pessoa), celulaPapel(pessoa), celulaApuracoes(pessoa), celulaUso(pessoa), botaoGerenciar(pessoa)].forEach((conteudo, indice) => {
+        const td = document.createElement('td');
+        if (indice === 0) td.className = 'equipe-celula-pessoa';  // o e-mail não quebra no meio da palavra
+        if (indice === 1) td.className = 'equipe-celula-papel';  // a caixa de papel mantém a largura com ou sem a linha de Gerenciar aberta
+        if (conteudo) td.append(conteudo);
+        tr.append(td);
+      });
       corpo.append(tr);
       if (aberto.has(pessoa.id) && !ehEu(pessoa)) {
         const extra = document.createElement('tr'); extra.className = 'equipe-gerenciar-linha';
@@ -332,7 +341,7 @@
         texto: 'A conta é excluída: a pessoa perde o acesso, sai de todas as apurações e não pode ser reativada. Notas, revisões e conversas ficam com a redação. O nome continua nos registros já gravados e nos backups, que não podem ser reescritos.', aoRecusar: () => { recusou = true; }}});
       if (!resultado) { if (recusou) recarregar(); return; }
       aberto.delete(pessoa.id);
-      estado(t('{nome} foi removida da redação.', {nome: pessoa.nome})); await recarregar(); carregarAtividade();
+      estado(t('{nome} não faz mais parte da redação.', {nome: pessoa.nome})); await recarregar(); carregarAtividade();
     } catch (falha) { estado(falha.message, {erro: true}); }
   }
 

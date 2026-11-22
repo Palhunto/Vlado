@@ -240,8 +240,11 @@ button[aria-disabled="true"]{cursor:progress}
 .equipe-pessoa p{margin:0}
 .equipe-pessoa-nome{font-size:var(--text-base);overflow-wrap:anywhere}
 .equipe-uso{display:flex;flex-direction:column;gap:var(--espaco-1)}
-.equipe-uso-esgotada{font-size:var(--text-md);font-weight:600;color:var(--theme-warning)}
+.equipe-uso-esgotada{font-size:var(--text-md);font-weight:600;color:var(--theme-warning);white-space:nowrap}
 .equipe-papel{min-height:44px;min-width:220px;max-width:100%}
+.equipe-celula-papel{min-width:calc(220px + 2 * var(--espaco-4))}
+.equipe-celula-pessoa{min-width:calc(200px + 2 * var(--espaco-4))}
+.equipe-link.equipe-link-texto{display:inline;min-height:0;padding:0;font-size:inherit}
 .equipe-gerenciar-botao{min-height:44px;padding:0 var(--espaco-2);border:0;background:none;color:var(--theme-accent);font-size:var(--text-base);font-weight:600;text-decoration:underline;cursor:pointer}
 .equipe-gerenciar-botao:hover{background:none;color:var(--theme-primary-hover)}
 .equipe-gerenciar-botao.secondary{width:100%;border:1px solid var(--theme-input-line);text-decoration:none;background:var(--theme-surface);color:var(--theme-text)}
@@ -270,4 +273,5 @@ button[aria-disabled="true"]{cursor:progress}
 }
 @media (max-width:719px) {
   .conta-linha{min-height:44px}
+  .equipe-atividade-item{flex-direction:column}  /* a data sempre abaixo da frase no celular */
 }

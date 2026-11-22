@@ -252,3 +252,16 @@ test('em inglês: abas, cartões, datas e a linha de estado saem em inglês', as
   }
   assert.equal(mesa.$('area-titulo').textContent, 'My account');
 });
+
+test('tema.js (no <head>, antes da pintura): o guardado vale; sem nada guardado, o sistema decide, claro ou escuro, e sem a consulta fica o escuro de sempre', () => {
+  const tema = (armazenamento, sistemaClaro) => {
+    const mesa = criarMesa({scripts: [], armazenamento, preparar: janela => { janela.matchMedia = consulta => ({matches: sistemaClaro && /prefers-color-scheme:\s*light/.test(consulta)}); }});
+    mesa.executar('tema.js');
+    return mesa.doc.documentElement.dataset.theme;
+  };
+  assert.equal(tema({'apuracao:tema': 'light'}, false), 'light'); assert.equal(tema({'apuracao:tema': 'dark'}, true), 'dark');
+  assert.equal(tema({}, true), 'light', 'sem nada guardado, segue o sistema'); assert.equal(tema({}, false), 'dark');
+  assert.equal(tema({'apuracao:tema': 'qualquer-coisa'}, true), 'light', 'valor desconhecido conta como sem escolha');
+  const index = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'interface', 'index.html'), 'utf8');
+  assert.ok(/<script src="\/tema\.js[^"]*"><\/script>/.test(index), 'sem defer: roda antes da primeira pintura');
+});
