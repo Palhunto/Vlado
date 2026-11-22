@@ -580,7 +580,7 @@ Forma do banco, em linhas gerais:
 
 O banco usa modo WAL, chaves estrangeiras ligadas, escrita em transação imediata, permissão 0600 e versão do esquema em `user_version`. Banco ilegível ou que falha na conferência de integridade responde 503 e não deixa ninguém entrar, como o arquivo ilegível de hoje. O banco fica em disco local do servidor ou em volume Docker local; sistema de arquivos de rede não é suportado.
 
-**A semente do segundo fator é cifrada** (AES-GCM, biblioteca `cryptography`) com uma chave em `segredos/contas.chave`, fora do volume de contas e fora do backup comum, como a chave do registro de auditoria. Quem copiar só o banco não gera códigos (decisão 13). As chaves de IA das redações ficam em `segredos/chaves.json`, numa seção por redação.
+**A semente do segundo fator é cifrada** (AES-GCM, biblioteca `cryptography`) com uma chave em `segredos/contas.chave`, fora do volume de contas e fora do backup comum, como a chave do registro de auditoria. Quem copiar só o banco não gera códigos (decisão 13). Por isso essa chave não vai no backup comum, nem no agendado, que não monta `segredos/`: por decisão do dono do projeto (P36, 22/11/2026), quem opera o serviço guarda uma cópia de `segredos/contas.chave` junto com os outros segredos, fora do backup comum. Restaurar as contas sem ela deixa todo segundo fator inutilizável, e cada pessoa é recuperada e cadastra o aplicativo de novo. O backup sem segredos avisa no manifesto quando essa chave existe e ficou de fora, e `deploy/BACKUP.md` diz o mesmo a quem opera. As chaves de IA das redações ficam em `segredos/chaves.json`, numa seção por redação.
 
 ## 8. Desenho do que a Onda 2 entrega
 
