@@ -323,7 +323,7 @@
   Q.registrarAba({id: 'mapa', rotulo: t('Mapa de relações'), carregar: Q.quadro('quadros_evidencia', async (painel, casoId, vigente) => {
     const mapa = await api('mapa-ver', {caso: casoId});
     if (!vigente()) return;
-    if (!mapa.entidades.length) { Q.estado(painel, 'vazio', t('O mapa mostra pessoas, empresas e órgãos e como se ligam nos documentos.'), {titulo: t('Nenhuma ligação ainda'), acao: Q.perguntar()}); return; }
+    if (!mapa.entidades.length) { Q.estado(painel, 'vazio', t('O mapa mostra as pessoas e organizações que os documentos citam e como elas se ligam.'), {titulo: t('Nenhuma ligação ainda'), acao: Q.perguntar()}); return; }
     const nomes = Object.fromEntries(mapa.entidades.map(e => [e.id, e.nome]));
     const saida = element('section', undefined, 'mapa-detalhe'); saida.tabIndex = -1; saida.setAttribute('aria-live', 'polite');
     saida.append(element('p', t('Escolha uma ligação para ver as evidências.'), 'small'));

@@ -662,7 +662,7 @@
   window.continuarComCaderno=(preview,request)=>levarContribuicoes(preview,request,'caderno');
   window.continuarComDiligencias=(preview,request)=>levarContribuicoes(preview,request,'diligencias');
   // Empty or blank question: the error stays beside the field (W11 rule 5), not in the browser's own bubble.
-  const emptyQuestion = () => window.Estados.erroCampo($('codex-pergunta'), 'Escreva a pergunta antes de enviar.');
+  const emptyQuestion = () => window.Estados.erroCampo($('codex-pergunta'), 'Falta a pergunta. Escreva o que quer saber dos documentos.');
   $('codex-pergunta').addEventListener('invalid', e => { e.preventDefault(); emptyQuestion(); });
   $('codex-form').addEventListener('submit', async e => {
     e.preventDefault(); if (active || submitting || trackingPending || trackingFailed) return;

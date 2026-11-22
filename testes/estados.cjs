@@ -139,7 +139,7 @@ test('Perguntar: pergunta em branco mostra o erro junto ao campo, com aria-inval
   mesa.$('codex-form').dispatchEvent(new Evento('submit', {bubbles: true, cancelable: true}));
   await mesa.esperar(2);
   assert.equal(campo.getAttribute('aria-invalid'), 'true');
-  assert.equal(campo.nextSibling.textContent, 'Escreva a pergunta antes de enviar.');
+  assert.equal(campo.nextSibling.textContent, 'Falta a pergunta. Escreva o que quer saber dos documentos.');
   assert.ok(mesa.doc.activeElement === campo);
   assert.equal(mesa.chamadas.filter(c => c.operacao === 'codex-perguntar').length, 0, 'nada foi enviado');
   // O evento "invalid" do navegador (campo vazio com required) também cai aqui, sem a bolha nativa.
@@ -148,4 +148,53 @@ test('Perguntar: pergunta em branco mostra o erro junto ao campo, com aria-inval
   campo.dispatchEvent(invalido);
   assert.equal(invalido.defaultPrevented, true);
   assert.equal(campo.getAttribute('aria-invalid'), 'true');
+});
+
+// Quadros (quadros.js) com estados de tela: espera, vazio com ação, erro em bloco e "Mostrar tudo" na linha do tempo filtrada.
+function quadros({api}) {
+  const m = criarMesa({scripts: [...PILHA, 'quadros.js', 'analise.js', 'indicador_salvamento.js'], desktop: true, api,
+    preparar: janela => {
+      const original = janela.fetch;
+      janela.fetch = async (rota, opcoes) => String(rota) === '/api/integracao' ? {ok: true, json: async () => ({quadros_evidencia: true})} : original(rota, opcoes);
+    }});
+  m.avaliar('window.contextoCaso = () => "alpha";');
+  return m;
+}
+const TIPOS = {fato: 'Data do fato', assinatura: 'Data de assinatura', publicacao: 'Data de publicação'};
+const evento = (id, tipo) => ({evento_id: id, sha256: 'e'.repeat(64), descricao: `Evento ${id}`, data: {tipo, valor: '2021', precisao: 'ano', aproximada: false, fonte: 0, observacao: '', rotulo: TIPOS[tipo]},
+  fonte_da_data: null, fonte_conferida: false, evidencias: [], divergente: false, divergencia: null, retirado: false, motivo_retirada: ''});
+
+test('linha do tempo filtrada sem resultado: texto do Design e "Mostrar tudo" refaz a consulta sem filtro (W11 regra 1)', async () => {
+  const m = quadros({api: (operacao, dados) => operacao === 'linha-tempo-listar'
+    ? {caso: 'alpha', total: 2, divergencias: [], fontes_indisponiveis: [], divergentes: [], tipos_data: TIPOS, aviso: '',
+      entradas: dados.tipos ? [] : [evento('T1', 'assinatura'), evento('T2', 'fato')]} : {}});
+  m.$('ver-quadros').click(); await m.esperar(8);
+  m.$('quadros-aba-tempo').click(); await m.esperar(8);
+  assert.equal(m.$('quadros-tempo').querySelectorAll('.tempo-evento').length, 2);
+  const caixas = m.$('quadros-tempo').querySelectorAll('.tempo-filtro input');
+  caixas[0].checked = false; caixas[1].checked = false;
+  caixas[1].dispatchEvent(new Evento('change', {bubbles: true})); await m.esperar(8);
+  const vazio = m.$('quadros-tempo').querySelector('[data-estado="vazio"]');
+  assert.ok(vazio, 'estado vazio no lugar da lista');
+  assert.match(vazio.textContent, /Nenhum acontecimento tem os tipos de data escolhidos\./);
+  const acao = vazio.querySelector('button');
+  assert.equal(acao.textContent, 'Mostrar tudo');
+  acao.click(); await m.esperar(8);
+  assert.equal(m.chamadas.at(-1).dados.tipos, undefined, 'a consulta volta sem filtro');
+  assert.equal(m.$('quadros-tempo').querySelectorAll('.tempo-evento').length, 2);
+});
+
+test('quadro sem dados: bloco vazio com o que é a coisa e uma ação que existe; erro do servidor vira bloco de erro (título e texto)', async () => {
+  const vazio = quadros({api: operacao => operacao === 'hipoteses-quadro' ? {caso: 'alpha', total: 0, hipoteses: [], divergentes: [], aviso: ''} : {}});
+  vazio.$('ver-quadros').click(); await vazio.esperar(8);
+  const bloco = vazio.$('quadros-hipoteses').querySelector('[data-estado="vazio"]');
+  assert.match(bloco.querySelector('.estado-titulo').textContent, /Nenhuma hipótese ainda/);
+  assert.match(bloco.textContent, /afirmação que os documentos podem sustentar ou contrariar/);
+  assert.equal(bloco.querySelector('button').textContent, 'Fazer uma pergunta');
+  const falha = quadros({api: () => { throw new Error('Apuração não encontrada.'); }});
+  falha.$('ver-quadros').click(); await falha.esperar(8);
+  const erro = falha.$('quadros-hipoteses').querySelector('[data-estado="erro"]');
+  assert.equal(erro.getAttribute('role'), 'alert');
+  assert.match(erro.textContent, /Não deu para abrir este quadro\./);
+  assert.match(erro.textContent, /Apuração não encontrada\./);
 });

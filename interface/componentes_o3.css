@@ -48,7 +48,8 @@
 .estado-erro .estado-titulo{color:var(--theme-danger)}
 .estado-sinal{flex:none;width:var(--espaco-4);height:var(--espaco-4);fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
 .estado-detalhes{font-size:var(--text-md);color:var(--theme-muted)}
-.estado-detalhes summary{cursor:pointer;min-height:44px;display:flex;align-items:center}
+/* "Detalhes" com cara de link (componentes.md#estados): 14/600 de acento, sublinhado, 44 px de altura. */
+.estado-detalhes summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600;color:var(--theme-accent);text-decoration:underline}
 .estado-detalhes code{overflow-wrap:anywhere}
 /* Espera curta: três barras, 70, 90 e 50 % da largura. Sem animação: com prefers-reduced-motion e sem, o esqueleto fica parado. */
 .estado-esqueleto{display:flex;flex-direction:column;gap:var(--espaco-2);padding:var(--espaco-4) 0}
@@ -56,7 +57,7 @@
 .estado-esqueleto span:nth-child(1){width:70%}
 .estado-esqueleto span:nth-child(2){width:90%}
 .estado-esqueleto span:nth-child(3){width:50%}
-.campo-erro{margin:var(--espaco-1) 0 0;font-size:var(--text-md);line-height:1.5;color:var(--theme-danger)}
+.campo-erro{margin:var(--espaco-1) 0 0;font-size:var(--text-md);font-weight:400;line-height:1.5;color:var(--theme-danger)}
 :is(input,select,textarea)[aria-invalid="true"]{border:2px solid var(--theme-danger)}
 button[aria-disabled="true"]{cursor:progress}
 

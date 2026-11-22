@@ -1328,7 +1328,11 @@ window.VLADO_I18N_EN = {
     "{novos} novo(s) · {duplicados} duplicado(s).": "{novos} new · {duplicados} duplicate.",
     "{n} de {total} cadastrados": "{n} of {total} registered",
     "{n} pág.": "{n} pp.",
-    "É conferido antes da primeira pergunta.": "It is checked before the first question."
+    "É conferido antes da primeira pergunta.": "It is checked before the first question.",
+    "Nenhum acontecimento tem os tipos de data escolhidos.": "No event has the chosen date types.",
+    "Mostrar tudo": "Show all",
+    "O mapa mostra as pessoas e organizações que os documentos citam e como elas se ligam.": "The map shows the people and organizations the documents mention and how they are linked.",
+    "Falta a pergunta. Escreva o que quer saber dos documentos.": "The question is missing. Write what you want to know from the documents."
   },
   padroes: [
     // Cota do mês na barra lateral
