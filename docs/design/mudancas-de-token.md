@@ -14,7 +14,7 @@ Onde o canvas e os tokens divergem, vale o canvas (`PLANO_LANCAMENTO.md`, "Refer
 
 ## Resumo
 
-Decisões do dono de 21/11/2026 (P11 e P12) já incorporadas; a lista completa está em `componentes.md`, "Decisões do dono". Arredondamento para a grade de 4 px (P11.8): preenchimento, intervalo e margem fora da grade sobem para o múltiplo de 4 seguinte.
+Decisões do dono de 21/11/2026 (P11 e P12) e de 22/11/2026 (P20b, abas de 44 px no celular, item 8) já incorporadas; a lista completa está em `componentes.md`, "Decisões do dono". Arredondamento para a grade de 4 px (P11.8): preenchimento, intervalo e margem fora da grade sobem para o múltiplo de 4 seguinte.
 
 | # | O quê | Hoje (`tokens.css` / CSS) | Canvas | Origem no canvas |
 |---|---|---|---|---|
@@ -163,7 +163,7 @@ Rótulo e contador não quebram linha (`white-space: nowrap`; contador com `flex
 --aba-ativa-fundo:var(--theme-soft); --aba-ativa-texto:var(--theme-accent);
 ```
 
-As abas dos quadros (Hipóteses, Linha do tempo, Mapa de relações, Tabelas e Comparador, P15.1) usam o verde suave com texto verde (8,14:1), não o verde cheio.
+As abas dos quadros (Hipóteses, Linha do tempo, Mapa de relações, Tabelas e Comparador, P15.1) usam o verde suave com texto verde (8,14:1), não o verde cheio. No celular, viram pílulas de 44 px de altura, com a ativa em verde cheio; o canvas desenha 40 px, e o dono autorizou 44 pelo alvo de toque (P20b, 22/11/2026). Não é token novo: a altura vem da regra de alvo (44 px), não de um valor próprio da aba.
 
 ## 9. Trecho citado no PDF: contorno opaco
 

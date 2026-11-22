@@ -648,6 +648,13 @@ class PerguntaComLoteNaFilaTest(unittest.TestCase):
         import test_codex_integracao as integracao
         integracao.CodexIntegrationTest.setUp(self)
         self.start = lambda: integracao.CodexIntegrationTest.start(self)
+        # Three questions of the local account are in course at the end: the one in 'beta', the next one
+        # of the conversation (it waits for the batch inside its execution, then runs) and the first one
+        # after the batch; the simulated provider never ends them. The CUS-01 ceiling (2 by default,
+        # tested in test_custo) is right to count them, so this test raises it instead.
+        config = json.loads((self.root / 'configuracao.json').read_text(encoding='utf-8'))
+        config['orcamento'] = {'execucoes_simultaneas_por_conta': 3}
+        (self.root / 'configuracao.json').write_text(json.dumps(config), encoding='utf-8')
 
     def test_primeira_pergunta_recusada_e_pergunta_seguinte_espera_o_lote(self):
         from agente_fluxo_fixture import completar
