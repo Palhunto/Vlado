@@ -242,6 +242,16 @@ window.Quadros = (() => {
     const [a, m, d] = String(data.valor).split('-');
     return data.precisao === 'dia' ? `${d}/${m}/${a}` : data.precisao === 'mes' ? `${m}/${a}` : a;
   };
+  // Linha do tempo (componentes.md#linha-do-tempo): ano como cabeçalho, dia e mês na coluna da data, marco cheio (data exata) ou vazado (parcial)
+  // com o ícone do tipo de data, cartão com o acontecimento e o selo da fonte.
+  const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  const ICONE_TIPO = {assinatura: 'contrato', emissao_documento: 'documento', publicacao: 'documento', registro: 'documento', declarada_por_fonte: 'documento',
+    pagamento: 'pagamento', recebimento: 'data', fato: 'data', vigencia_inicio: 'data', vigencia_fim: 'data'};
+  const quandoCurto = data => {
+    const [a, m, d] = String(data.valor).split('-');
+    return data.precisao === 'dia' ? `${Number(d)} ${MESES[Number(m) - 1]}` : data.precisao === 'mes' ? MESES[Number(m) - 1] : a;
+  };
+  const anoDe = data => String(data.valor).slice(0, 4);
   let tipos = null, escolhidos = null, filtroAberto = null;
   // The filter sits in a <details>: open on wide screens, closed on phones (it would push the events
   // a screen down); the summary says how many types are chosen, and the choice survives reloads.
@@ -252,9 +262,12 @@ window.Quadros = (() => {
     gaveta.addEventListener('toggle', () => { filtroAberto = gaveta.open; });
     const total = Object.keys(tipos).length;
     gaveta.append(element('summary', escolhidos ? t('Tipos de data: {n} de {total}', {n: escolhidos.length, total}) : t('Tipos de data: todos ({total})', {total})));
-    const campo = element('fieldset', undefined, 'tempo-filtro');
+    const campo = element('fieldset', undefined, 'tempo-filtro'); campo.dataset.todos = String(!escolhidos);
     gaveta.append(campo);
     campo.append(element('legend', t('Tipos de data')));
+    const tudo = element('button', t('Tudo'), 'tempo-tudo'); tudo.type = 'button'; tudo.setAttribute('aria-pressed', String(!escolhidos));
+    tudo.addEventListener('click', () => { escolhidos = null; carregar(painel, casoId); });
+    campo.append(tudo);
     for (const [tipo, rotulo] of Object.entries(tipos)) {
       const caixa = element('input'); caixa.type = 'checkbox'; caixa.value = tipo; caixa.id = `tempo-tipo-${tipo}`;
       caixa.checked = !escolhidos || escolhidos.includes(tipo);
@@ -274,19 +287,57 @@ window.Quadros = (() => {
     const exata = e.data.precisao === 'dia' && !e.data.aproximada;
     li.dataset.precisao = e.data.precisao; li.dataset.tipo = e.data.tipo;
     li.classList.add(exata ? 'marco-exato' : 'marco-parcial');
+    // Coluna da data: dia e mês em destaque; o qualificador diz o que não se sabe (nunca só pela cor).
     const quando = element('p', undefined, 'tempo-data');
-    const hora = element('time', formatar(e.data)); hora.setAttribute('datetime', e.data.valor);
-    quando.append(hora, element('span', ` · ${t(PRECISAO[e.data.precisao] || e.data.precisao)}${e.data.aproximada ? ` · ${t('aproximada')}` : ''}`, 'small'));
-    li.append(quando, element('p', t(e.data.rotulo || e.data.tipo), 'small tempo-tipo'), Q.dado('h3', e.descricao));
-    if (e.data.observacao) li.append(Q.dado('p', e.data.observacao, 'small'));
-    if (e.divergente) li.append(element('p', t('Há datas divergentes do mesmo tipo neste evento. O quadro não escolhe uma: confira as fontes.'), 'notice'));
-    if (e.retirado) { const aviso = element('p', `${t('Evento retirado:')} `, 'notice'); aviso.append(Q.dado('span', e.motivo_retirada)); li.append(aviso); }
+    const hora = element('time', quandoCurto(e.data)); hora.setAttribute('datetime', e.data.valor); hora.setAttribute('title', formatar(e.data));
+    const qualificador = e.data.precisao === 'dia' ? (e.data.aproximada ? t('data aproximada') : t('data exata'))
+      : e.data.precisao === 'mes' ? t('dia não informado') : t('mês e dia não informados');
+    quando.append(hora, element('span', qualificador, `tempo-qualificador${exata ? '' : ' is-parcial'}`));
+    // Marco: círculo cheio para data exata, vazado para parcial, com o ícone do tipo de data.
+    const marco = element('span', undefined, 'tempo-marco'); marco.setAttribute('aria-hidden', 'true'); marco.append(Q.icone(ICONE_TIPO[e.data.tipo] || 'data', 'tempo-marco-icone'));
+    // Cartão: o acontecimento em serifa, o tipo de data e a observação, e o selo da fonte à direita.
+    const cartao = element('div', undefined, 'tempo-cartao');
+    const texto = element('div', undefined, 'tempo-cartao-texto');
+    texto.append(Q.dado('h4', e.descricao), element('p', t(e.data.rotulo || e.data.tipo), 'small tempo-tipo'));
+    if (e.data.observacao) texto.append(Q.dado('p', e.data.observacao, 'small'));
+    if (e.divergente) texto.append(element('p', t('Há datas divergentes do mesmo tipo neste evento. O quadro não escolhe uma: confira as fontes.'), 'notice'));
+    if (e.retirado) { const aviso = element('p', `${t('Evento retirado:')} `, 'notice'); aviso.append(Q.dado('span', e.motivo_retirada)); texto.append(aviso); }
+    cartao.append(texto);
     const fonte = element('div', undefined, 'tempo-fonte');
-    fonte.append(element('p', t('Evidência da data'), 'eyebrow'));
-    if (e.fonte_da_data) fonte.append(Q.evidencia(casoId, e.fonte_da_data, 'div'));
-    else fonte.append(element('p', t('Data sem fonte vinculada.'), 'notice'));
-    li.append(fonte);
+    if (e.fonte_da_data) {
+      const v = e.fonte_da_data, ev = v.evidencia, loc = ev?.localizador || v.localizador || {};
+      const nome = ev?.documento?.nome ? Leitura.nome({nome_documento: ev.documento.nome}) : (v.documento_id || t('Documento'));
+      const selo = Q.botao(`${nome}, ${loc.legivel || Leitura.localizador(loc)}`, 'tempo-selo'); selo.setAttribute('translate', 'no');
+      const retorno = element('p', '', 'small'); retorno.setAttribute('role', 'status');
+      selo.setAttribute('aria-label', `${t('Abrir o original')}: ${nome} · ${loc.legivel || ''}`.trim());
+      selo.addEventListener('click', () => Q.abrirOriginal(casoId, v, selo, retorno));
+      fonte.append(selo, retorno);
+      // A evidência inteira (trecho, avaliação, justificativa) segue a um clique, recolhida.
+      const detalhe = element('details', undefined, 'tempo-evidencia');
+      detalhe.append(element('summary', t('Evidência da data')), Q.evidencia(casoId, e.fonte_da_data, 'div'));
+      texto.append(detalhe);
+    } else fonte.append(element('p', t('Data sem fonte vinculada.'), 'notice'));
+    cartao.append(fonte);
+    li.append(quando, marco, cartao);
     return li;
+  }
+  // Agrupa por ano: cabeçalho com o ano e a contagem ("6 acontecimentos · 5 com documento"), e a lista do ano.
+  function porAno(casoId, entradas) {
+    const anos = new Map();
+    for (const e of entradas) { const ano = anoDe(e.data); if (!anos.has(ano)) anos.set(ano, []); anos.get(ano).push(e); }
+    return [...anos].map(([ano, lista]) => {
+      const secao = element('section', undefined, 'tempo-ano'); secao.setAttribute('aria-labelledby', `tempo-ano-${ano}`);
+      const cab = element('header', undefined, 'tempo-ano-cab');
+      const titulo = element('h3', ano, 'tempo-ano-titulo'); titulo.id = `tempo-ano-${ano}`;
+      const com = lista.filter(e => e.fonte_da_data).length;
+      cab.append(titulo, element('span', undefined, 'tempo-ano-filete'),
+        element('span', t(lista.length === 1 ? '1 acontecimento · {c} com documento' : '{n} acontecimentos · {c} com documento', {n: lista.length, c: com}), 'tempo-ano-conta'));
+      const ol = element('ol', undefined, 'tempo-lista');
+      ol.setAttribute('aria-label', t('Acontecimentos de {ano}', {ano}));
+      for (const e of lista) ol.append(entrada(casoId, e));
+      secao.append(cab, ol);
+      return secao;
+    });
   }
   const carregar = Q.quadro('quadros_evidencia', async (painel, casoId, vigente) => {
     const pedido = {caso: casoId};
@@ -295,12 +346,14 @@ window.Quadros = (() => {
     if (!vigente()) return;
     tipos = dados.tipos_data || tipos || {};
     const corpo = [filtro(painel, casoId, carregar), element('p', t(dados.aviso || ''), 'small quadro-aviso')];
-    const lista = element('ol', undefined, 'tempo-lista');
-    lista.setAttribute('aria-label', t('Linha do tempo: {n} eventos', {n: dados.entradas?.length || 0}));
-    for (const e of dados.entradas || []) lista.append(entrada(casoId, e));
     if (!dados.entradas?.length) corpo.push(escolhidos ? Q.estado(element('div'), 'vazio', t('Nenhum acontecimento tem os tipos de data escolhidos.'), {acao: {rotulo: t('Mostrar tudo'), aoClicar: () => { escolhidos = null; carregar(painel, casoId); }}})
       : Q.estado(element('div'), 'vazio', t('A linha do tempo reúne os acontecimentos datados que os documentos registram.'), {titulo: t('Nenhum acontecimento com data ainda'), acao: Q.perguntar()}));
-    else corpo.push(lista);
+    else {
+      const linha = element('div', undefined, 'tempo-linha');
+      linha.setAttribute('role', 'group'); linha.setAttribute('aria-label', t('Linha do tempo: {n} eventos', {n: dados.entradas.length}));
+      linha.append(...porAno(casoId, dados.entradas));
+      corpo.push(linha);
+    }
     if (dados.fontes_indisponiveis?.length) corpo.push(element('p', t('{n} fontes de data estão indisponíveis.', {n: dados.fontes_indisponiveis.length}), 'notice'));
     painel.replaceChildren(...corpo);
   });

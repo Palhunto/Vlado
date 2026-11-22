@@ -2380,37 +2380,52 @@ html{scroll-padding-top:calc(var(--faixa-ambiente) + 96px)}
   .tempo-filtro-caixa>summary::before{transition:none}
 }
 .tempo-filtro-caixa[open]>summary{margin-bottom:var(--espaco-2)}
-.tempo-filtro{
-  display:flex;
-  flex-wrap:wrap;
-  gap:var(--espaco-1) var(--espaco-4);
-  border:1px solid var(--quadro-borda);
-  border-radius:var(--raio-cartao);
-  padding:var(--espaco-3) var(--espaco-4);
-  margin:0 0 var(--espaco-4);
+/* Filtro por tipo de data: "Tudo" e uma pílula por tipo (a caixa de seleção segue sendo o controle, com o rótulo desenhado como pílula). */
+.tempo-filtro{display:flex;flex-wrap:wrap;gap:var(--espaco-2);border:0;padding:0;margin:0 0 var(--espaco-4)}
+.tempo-filtro legend{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.tempo-filtro .tempo-opcao,.tempo-tudo{position:relative;display:inline-flex;flex-direction:row;align-items:center;min-height:44px;padding:0 var(--espaco-4);border:1px solid var(--theme-input-line);border-radius:var(--raio-pilula);background:var(--white);color:var(--theme-text);font-size:var(--text-base);font-weight:400;cursor:pointer}
+.tempo-filtro input{position:absolute;inset:0;width:100%;height:100%;min-height:0;margin:0;opacity:0;cursor:pointer}
+.tempo-filtro .tempo-opcao:has(input:checked),.tempo-tudo[aria-pressed=true]{background:var(--green);border-color:var(--green);color:var(--theme-on-primary);font-weight:600}
+/* Com tudo marcado, o filtro está desligado: as pílulas dos tipos ficam suaves e só "Tudo" aparece cheia. */
+.tempo-filtro[data-todos=true] .tempo-opcao:has(input:checked){background:var(--soft);border-color:var(--theme-accent-line);color:var(--theme-accent);font-weight:400}
+.tempo-filtro .tempo-opcao:has(input:focus-visible){outline:var(--foco-largura) solid var(--theme-focus);outline-offset:var(--foco-afastamento)}
+/* Linha do tempo (componentes.md#linha-do-tempo): ano, três colunas (data, marco, cartão), marco cheio para data exata e vazado para parcial. */
+.tempo-linha{margin:var(--espaco-4) 0}
+.tempo-ano{margin:0 0 var(--espaco-6)}
+.tempo-ano-cab{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--espaco-1) var(--espaco-4);margin:0 0 var(--espaco-4)}
+.tempo-ano-titulo{flex:none;margin:0;font:600 var(--text-3xl)/1 var(--fonte-titulo);letter-spacing:-.4px}
+.tempo-ano-filete{flex:1;height:1px;align-self:center;background:var(--line)}
+.tempo-ano-conta{color:var(--muted);font-size:var(--text-md);white-space:nowrap}
+.tempo-lista{list-style:none;margin:0;padding:0}
+.tempo-evento{position:relative;display:grid;grid-template-columns:96px 36px minmax(0,1fr);gap:0 var(--espaco-5);padding-bottom:var(--espaco-4)}
+.tempo-evento::before{content:'';position:absolute;left:calc(96px + var(--espaco-5) + 17px);top:44px;bottom:0;width:2px;background:var(--tempo-trilho)}
+.tempo-evento:last-child::before{display:none}
+.tempo-data{display:flex;flex-direction:column;margin:0;padding-top:var(--espaco-3);text-align:right;font-weight:600;line-height:1.2}
+.tempo-data time{font-size:var(--text-base);font-variant-numeric:tabular-nums}
+.tempo-qualificador{font-size:var(--text-md);font-weight:400;color:var(--muted)}
+.tempo-qualificador.is-parcial{font-weight:600;color:var(--theme-warning)}
+.tempo-marco{position:relative;z-index:1;display:grid;place-items:center;width:36px;height:36px;margin-top:var(--espaco-2);border:2px solid var(--tempo-marco-exato);border-radius:50%;background:var(--tempo-marco-exato);color:var(--theme-on-primary)}
+.tempo-evento.marco-parcial .tempo-marco{background:var(--tempo-marco-parcial);color:var(--theme-accent)}
+.tempo-marco-icone{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tempo-cartao{display:flex;align-items:center;gap:var(--espaco-4);min-width:0;padding:var(--espaco-4) var(--espaco-5);background:var(--theme-surface);border:1px solid var(--line);border-radius:var(--raio-cartao)}
+.tempo-cartao-texto{flex:1;min-width:0}
+.tempo-cartao h4{margin:0;font:400 var(--text-lg)/1.35 var(--fonte-titulo);overflow-wrap:anywhere}
+.tempo-tipo{margin:var(--espaco-1) 0 0}
+.tempo-fonte{flex:none;max-width:42%}
+.tempo-selo{min-height:0;padding:var(--espaco-2) var(--espaco-3);border:0;border-radius:var(--raio-pilula);background:var(--soft);color:var(--theme-accent);font-size:var(--text-md);font-weight:600;line-height:1.25;text-align:left}
+.tempo-selo:hover{background:var(--theme-active);color:var(--theme-accent)}
+.tempo-evidencia{margin-top:var(--espaco-2)}
+.tempo-evidencia>summary{min-height:0;padding:var(--espaco-1) 0;font-size:var(--text-md);font-weight:400;color:var(--muted)}
+@media (max-width:719px) {
+  .tempo-ano-filete{display:none}
+  .tempo-ano-conta{white-space:normal}
+  .tempo-evento{grid-template-columns:36px minmax(0,1fr);gap:0 var(--espaco-3)}
+  .tempo-evento::before{left:17px}
+  .tempo-data{grid-column:2;grid-row:1;flex-direction:row;gap:var(--espaco-2);align-items:baseline;padding-top:0;text-align:left}
+  .tempo-marco{grid-column:1;grid-row:1 / span 2;margin-top:0}
+  .tempo-cartao{grid-column:2;grid-row:2;flex-direction:column;align-items:stretch;margin-top:var(--espaco-2)}
+  .tempo-fonte{max-width:none}
 }
-.tempo-filtro legend{font-weight:600;padding:0 var(--espaco-1)}
-.tempo-filtro .tempo-opcao{flex-direction:row;align-items:center;gap:var(--espaco-2);font-weight:400;min-height:44px}
-.tempo-filtro input{width:20px;min-height:20px;height:20px;margin:0}
-.tempo-lista{list-style:none;margin:0;padding:0 0 0 var(--espaco-6);border-left:2px solid var(--tempo-trilho)}
-.tempo-evento{position:relative;margin:0 0 var(--espaco-6);padding-left:var(--espaco-2)}
-.tempo-evento::before{
-  content:'';
-  position:absolute;
-  left:calc(-1 * var(--espaco-6) - 8px);
-  top:6px;
-  width:14px;
-  height:14px;
-  border-radius:50%;
-  border:2px solid var(--tempo-marco-exato);
-  background:var(--tempo-marco-exato);
-}
-.tempo-evento.marco-parcial::before{background:var(--tempo-marco-parcial);border-style:dashed}
-.tempo-data{margin:0;font-weight:700;font-variant-numeric:tabular-nums}
-.tempo-tipo{margin:0}
-.tempo-evento h3{font-size:var(--text-base);margin:var(--espaco-1) 0 var(--espaco-2)}
-.tempo-fonte{margin-top:var(--espaco-2)}
-.tempo-fonte .eyebrow{margin:0 0 var(--espaco-1)}
 /* Analysis boards (analise.js): comparator, verifiable table, relationship map. */
 .comparar-form{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:var(--espaco-3);align-items:end;margin:var(--espaco-4) 0}
 .comparar-resumo{font-weight:700}
