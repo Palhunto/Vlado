@@ -565,6 +565,8 @@ Os oito `confirm()` de hoje e a variante de cada um (rótulos de ação aprovado
 | `piloto.js:135` | "Desativar esta conta? A pessoa sai na próxima ação." | destrutiva, com o nome da pessoa | "Desativar conta" |
 | `piloto.js:143` | "Gerar novo link de ativação? A senha atual deixa de valer e as sessões abertas são encerradas." | simples | "Gerar novo link" |
 
+**"Apagar definitivamente" na Mesa** *(derivado, 22/11/2026)*: antes da tabela, enquanto o alcance chega, "Calculando o que será apagado…" em 14 `--theme-muted`; quando ele chega, o foco passa de "Cancelar" ao campo. Abaixo da tabela, o aviso de backup que o servidor manda, em 14 `--theme-muted`. "Digite «nome» para confirmar" em 16/400, só o nome em 600; o texto do campo em 16/400. Na tabela, número e unidade nunca se separam ("52,3 MB", "28 arquivos"); no celular, o nome da categoria pode quebrar. Recusa do servidor: o texto inteiro no lugar do erro, e o foco volta ao campo. A resposta é rápida (a quarentena do servidor), então o ocupado é o curto, "Apagando…", sem "Cancelar" ativo; a espera longa de P12.5 não se aplica.
+
 "Desfazer quando possível" (W11, regra 8): excluir nota hoje não oferece desfazer (UX-16). Decisão do dono (P12.7): sem "Desfazer" por enquanto.
 
 <a id="icones"></a>
