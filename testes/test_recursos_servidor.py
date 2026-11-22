@@ -5,6 +5,9 @@
   acima do teto não atrasa o 503 dos outros e é fechado no prazo ou no teto de bytes (B1).
 - A linha do pedido e os cabeçalhos têm prazo total, mesmo chegando um byte por vez; conexão parada
   sai no mesmo prazo e devolve a vaga.
+- No modo piloto, um mesmo endereço de cliente (o do registro de acessos, com os proxies confiáveis)
+  tem no máximo ``MAXIMO_POR_IP`` pedidos em curso; acima disso, 429 na hora, e os outros clientes
+  seguem. Atrás de um proxy fora da lista o cliente não é conhecido e não há teto por endereço.
 - Conversa ociosa sai da memória (tempo sem uso, e a mais antiga quando passa do teto) e volta do
   disco no próximo uso, como depois de uma reinicialização; conversa em execução ou recebendo
   documentos nunca sai.
@@ -12,6 +15,7 @@ Provedor simulado e dados sintéticos; sem rede externa nem modelo.
 """
 import http.client
 import json
+import os
 from pathlib import Path
 import shutil
 import socket
@@ -143,6 +147,73 @@ class TetoDeConexoesTest(unittest.TestCase):
         while self.saude()[0] != 200:
             self.assertLess(time.monotonic(), limite, 'a vaga não voltou depois de fechar as conexões')
             time.sleep(0.1)
+
+
+class TetoPorEnderecoTest(unittest.TestCase):
+    def setUp(self):
+        from modelo_pasta import copiar
+        temp, self.root, _ = copiar('CodexIntegrationTest', integracao.CodexIntegrationTest.montar)
+        self.addCleanup(temp.cleanup)
+        ambiente = mock.patch.dict(os.environ, {'VLADO_ACESSO': '', 'VLADO_AMBIENTE': '', 'VLADO_CONFIAR_PROXY': '',
+                                                'VLADO_PROXIES_CONFIAVEIS': '127.0.0.1/32'})
+        ambiente.start()
+        self.addCleanup(ambiente.stop)
+        teto = mock.patch.object(interface_pesquisa, 'MAXIMO_POR_IP', 2)
+        teto.start()
+        self.addCleanup(teto.stop)
+        self.server = interface_pesquisa.Servidor(('127.0.0.1', 0), self.root, modo='piloto', origem='https://vlado.test')
+        thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(lambda: (self.server.shutdown(), self.server.server_close(), thread.join(5)))
+
+    def em_curso(self, cliente):
+        """A request in course for ``cliente`` (behind the trusted proxy): its body never comes."""
+        conexao = socket.create_connection(('127.0.0.1', self.server.server_port), timeout=10)
+        self.addCleanup(conexao.close)
+        linhas = ['POST /api/entrar HTTP/1.1', 'Host: vlado.test', 'Content-Type: application/json',
+                  'Content-Length: 100', f'X-Forwarded-For: {cliente}', '', '']
+        conexao.sendall('\r\n'.join(linhas).encode('ascii'))
+        return conexao
+
+    def saude(self, cliente=None):
+        con = http.client.HTTPConnection('127.0.0.1', self.server.server_port, timeout=10)
+        try:
+            con.request('GET', '/saude', headers={'Host': 'vlado.test', **({'X-Forwarded-For': cliente} if cliente else {})})
+            resposta = con.getresponse()
+            corpo = resposta.read()
+            return resposta.status, resposta.getheader('Retry-After'), corpo
+        finally:
+            con.close()
+
+    def test_acima_do_teto_do_endereco_429_na_hora_e_os_outros_seguem(self):
+        self.em_curso('203.0.113.7'), self.em_curso('203.0.113.7')
+        time.sleep(0.3)
+        inicio = time.monotonic()
+        status, espera, corpo = self.saude('203.0.113.7')
+        self.assertEqual((status, espera), (429, '2'))
+        self.assertLess(time.monotonic() - inicio, 2)
+        self.assertIn('Muitas requisições', json.loads(corpo)['erro'])
+        self.assertEqual(self.saude('198.51.100.9')[0], 200)  # another client
+        self.assertEqual(self.saude()[0], 200)  # straight to the Mesa: its own address
+
+    def test_a_vaga_do_endereco_volta_quando_o_pedido_termina(self):
+        conexoes = [self.em_curso('203.0.113.7'), self.em_curso('203.0.113.7')]
+        time.sleep(0.3)
+        self.assertEqual(self.saude('203.0.113.7')[0], 429)
+        for conexao in conexoes:
+            conexao.close()
+        limite = time.monotonic() + 5
+        while self.saude('203.0.113.7')[0] != 200:
+            self.assertLess(time.monotonic(), limite, 'a vaga do endereço não voltou')
+            time.sleep(0.1)
+        # Nothing left counted (each request leaves the count just after its answer is sent).
+        esperar(lambda: self.server._por_ip == {}, 5, f'contagem por endereço sobrou: {self.server._por_ip}')
+
+    def test_atras_de_proxy_fora_da_lista_nao_ha_teto_por_endereco(self):
+        with mock.patch.dict(os.environ, {'VLADO_PROXIES_CONFIAVEIS': ''}):
+            self.em_curso('203.0.113.7'), self.em_curso('203.0.113.7'), self.em_curso('203.0.113.7')
+            time.sleep(0.3)
+            self.assertEqual(self.saude('203.0.113.7')[0], 200)  # all seem to come from the proxy: not limited
 
 
 class ConversasOciosasTest(unittest.TestCase):

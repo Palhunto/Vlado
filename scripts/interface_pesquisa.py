@@ -90,6 +90,14 @@ PRAZO_CABECALHOS = 10.0
 # its thread, and a large upload has the time its size needs at that rate.
 PRAZO_CORPO = 10.0
 TAXA_MINIMA_CORPO = 32 * 1024
+# Requests in course from one client address at a time, in pilot mode (CONF-03): past it, 429 at
+# once, without reading the body, so one client cannot take all MAXIMO_CONEXOES. The address is the
+# one of the limits and the audit (rotas_contas._ip, with the trusted proxies of SEG-05). Half the
+# connections by default: a newsroom behind one NAT shares an address. Behind a proxy that is not on
+# the list every request seems to come from the proxy, so then there is no per-address ceiling (it
+# would be one ceiling for the whole site). 0 turns it off.
+MAXIMO_POR_IP = int(os.environ.get('VLADO_MAXIMO_POR_IP') or max(1, MAXIMO_CONEXOES // 2))
+MENSAGEM_POR_IP = 'Muitas requisições ao mesmo tempo deste endereço. Aguarde alguns segundos e tente de novo.'
 # Case data answered by ``executar`` (frozen analyses, intake, search index).
 CONSULTA_OPERACOES = ('analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario', 'preparar-pdfs')
 # Answered by the extraction queue in do_POST, outside cadastro_lock (executar still serves direct calls).
@@ -327,6 +335,7 @@ class Servidor(ThreadingHTTPServer):
         self._vagas = threading.BoundedSemaphore(max(1, MAXIMO_CONEXOES))
         self._recusas = queue.Queue()
         self._recusas_vagas = threading.BoundedSemaphore(max(1, MAXIMO_RECUSAS))
+        self._por_ip, self._por_ip_trava = {}, threading.Lock()  # requests in course per client address
         self._recusas_trava = threading.Lock()
         self._recusadora = None
         # Extraction and OCR of uploads (CONF-02): 'processos' runs them in separate processes
@@ -473,13 +482,44 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         finally:
             self._leitura.corpo_desde = None
             self._sem_prazo()
+            self._sair_do_teto_por_ip()
 
     def parse_request(self):
         try:
-            return super().parse_request()  # reads the headers
+            aceito = super().parse_request()  # reads the headers
         finally:
             self._sem_prazo()
             self._leitura.corpo_desde, self._leitura.corpo_lido = time.monotonic(), 0  # the body's minimum rate
+        return aceito and self._dentro_do_teto_por_ip()
+
+    def _dentro_do_teto_por_ip(self):
+        """Count this request for its client address (pilot mode), or answer 429 past MAXIMO_POR_IP."""
+        self._ip_contado = None
+        if self.server.modo != 'piloto' or MAXIMO_POR_IP <= 0:
+            return True
+        ip = self._ip()
+        if ip == self.client_address[0] and self.headers.get('X-Forwarded-For'):
+            return True  # behind a proxy not on the list: the client is not known
+        with self.server._por_ip_trava:
+            em_curso = self.server._por_ip.get(ip, 0)
+            if em_curso < MAXIMO_POR_IP:
+                self.server._por_ip[ip], self._ip_contado = em_curso + 1, ip
+                return True
+        self.close_connection = True
+        self._descartar_corpo_pequeno()
+        self._send(429, json.dumps({'erro': MENSAGEM_POR_IP}, ensure_ascii=False).encode('utf-8'),
+                   extra={'Retry-After': '2'})
+        return False
+
+    def _sair_do_teto_por_ip(self):
+        ip = self.__dict__.pop('_ip_contado', None)
+        if ip is not None:
+            with self.server._por_ip_trava:
+                restam = self.server._por_ip.get(ip, 1) - 1
+                if restam > 0:
+                    self.server._por_ip[ip] = restam
+                else:
+                    self.server._por_ip.pop(ip, None)
 
     def finish(self):
         """An upload refused before its files were read: read (and drop) what the client still sends, up to
