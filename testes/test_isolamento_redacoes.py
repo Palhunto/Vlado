@@ -22,6 +22,7 @@ import cenario_redacoes as cenario
 import interface_pesquisa
 from comum import escrever_json
 from criar_caso import criar_caso
+from test_acesso import SENHA
 
 SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
 CONTAS_DE_ALFA = ('dono', 'editor', 'reporter', 'reporter2', 'leitor', 'convidado')
@@ -106,14 +107,17 @@ class TravessiaTest(cenario.DuasRedacoes):
         self.assertEqual([l['lote'] for l in self.get('dono_b', '/api/fila')[1]['lotes']], [self.lotes['beta']])
 
     def test_contas_e_eventos_listados_sao_so_os_da_propria_redacao(self):
-        status, corpo, bruto = self.post('dono', 'contas-listar', {})
+        status, corpo, bruto = self.post('dono', 'equipe-listar', {})
         self.assertEqual(status, 200)
-        self.assertEqual({c['login'] for c in corpo['contas']},
+        self.assertEqual({c['login'] for c in corpo['pessoas']},
                          {'dona.alfa', 'edu.editor', 'rita.reporter', 'rui.reporter', 'leo.leitor', 'cora.convidada'})
-        self.assertEqual({c['papel'] for c in corpo['contas']}, {'admin', 'editor', 'reporter', 'leitor', 'convidado'})
-        self.assertFalse({self.ids['dono_b'], self.ids['reporter_b']} & {e['conta'] for e in corpo['eventos']})
+        self.assertEqual({c['papel'] for c in corpo['pessoas']}, {'dono', 'editor', 'reporter', 'leitor', 'convidado'})
         self.sem_sentinela(bruto)
-        self.assertEqual({c['login'] for c in self.post('dono_b', 'contas-listar', {})[1]['contas']},
+        status, atividade, bruto = self.post('dono', 'equipe-atividade', {'limite': 200})
+        self.assertEqual(status, 200)
+        self.assertFalse({self.ids['dono_b'], self.ids['reporter_b']} & {e['conta'] for e in atividade['eventos']})
+        self.sem_sentinela(bruto)
+        self.assertEqual({c['login'] for c in self.post('dono_b', 'equipe-listar', {})[1]['pessoas']},
                          {'dono.sentinela', 'rep.sentinela'})
 
     # --- cada resolvedor com id da outra redação -------------------------------------------------
@@ -177,7 +181,7 @@ class TravessiaTest(cenario.DuasRedacoes):
                                                                      'documento_b': 'D001'})
         self.sem_sentinela(bruto)
 
-    def test_conta_de_outra_redacao_responde_como_conta_inexistente_na_equipe_e_nas_contas(self):
+    def test_conta_de_outra_redacao_responde_como_conta_inexistente_na_equipe(self):
         de_beta, nao_existe = self.ids['reporter_b'], '0123456789abcdef'
         antes = self.post('dono', 'caso-participantes', {'caso': 'alpha'})[1]
         for operacao in ('caso-incluir', 'caso-retirar', 'caso-responsavel'):
@@ -185,44 +189,43 @@ class TravessiaTest(cenario.DuasRedacoes):
                 real = self.igual_ao_inexistente('dono', operacao, {'caso': 'alpha', 'conta': de_beta},
                                                  {'caso': 'alpha', 'conta': nao_existe})
                 self.assertEqual(real[1]['erro'], 'Conta não encontrada.')
-        for operacao, extra in (('contas-atualizar', {'nome': 'Tomada'}), ('contas-desativar', {}), ('contas-reativar', {}),
-                                ('contas-recuperar', {})):
+        for operacao, extra in (('equipe-papel', {'papel': 'leitor'}), ('equipe-desativar', {}), ('equipe-reativar', {}),
+                                ('equipe-teto', {'teto_brl': '10'}), ('equipe-remover', {'senha': SENHA})):
             with self.subTest(operacao=operacao):
-                self.igual_ao_inexistente('dono', operacao, {'id': de_beta, **extra}, {'id': nao_existe, **extra})
+                real = self.igual_ao_inexistente('dono', operacao, {'conta': de_beta, **extra}, {'conta': nao_existe, **extra})
+                self.assertEqual(real[1]['erro'], 'Conta não encontrada.')
         self.assertEqual(self.post('dono', 'caso-participantes', {'caso': 'alpha'})[1], antes)
         self.assertEqual(self.post('reporter_b', 'codex-status', {})[0], 200)  # still active, same session, same name
         self.assertEqual(self.get('reporter_b', '/api/sessao')[1]['conta']['nome'], 'Reporter Sentinela')
-        # Cases of the other newsroom cannot be given to an account, and the refusal is the one of a case that does not exist.
-        self.igual_ao_inexistente('dono', 'contas-criar', {'nome': 'Nova', 'login': 'nova.conta', 'papel': 'leitor', 'casos': ['beta']},
-                                  {'nome': 'Nova', 'login': 'nova.conta', 'papel': 'leitor', 'casos': [INEXISTENTE]})
-        self.igual_ao_inexistente('dono', 'contas-atualizar', {'id': self.ids['leitor'], 'casos': ['beta']},
-                                  {'id': self.ids['leitor'], 'casos': [INEXISTENTE]})
+        # Cases of the other newsroom cannot be given to anybody, and the refusal is the one of a case that does not exist.
+        self.igual_ao_inexistente('dono', 'equipe-convidar', {'email': 'nova@exemplo.test', 'papel': 'leitor', 'casos': ['beta']},
+                                  {'email': 'nova@exemplo.test', 'papel': 'leitor', 'casos': [INEXISTENTE]})
+        self.igual_ao_inexistente('dono', 'caso-incluir', {'caso': 'beta', 'conta': self.ids['leitor']},
+                                  {'caso': INEXISTENTE, 'conta': self.ids['leitor']})
+        self.assertEqual(self.post('dono', 'equipe-listar', {})[1]['convites'], [])
 
-    def test_login_de_outra_redacao_nao_e_confirmado_por_nenhuma_operacao_de_contas(self):
-        # The login is unique in the installation: "this login already exists" would tell Alfa that Beta has it.
-        # With more than one newsroom nobody chooses a login in the Mesa, so no answer depends on the login asked.
-        antes = self.post('dono', 'contas-listar', {})[1]['contas']
+    def test_email_de_outra_redacao_nao_e_confirmado_por_nenhuma_operacao_de_contas(self):
+        # The e-mail is unique in the installation: "this address already has an account" would tell Alfa that Beta
+        # has it. An invitation and a change of the own e-mail answer the same for an address of Beta and a free one.
+        _, token, _ = acesso.convidar(self.root, self.b, self.ids['dono_b'], 'pessoa@sentinela.example', 'leitor', ['beta'])
+        acesso.aceitar_convite(self.root, token, 'Pessoa Sentinela', SENHA)
         respostas = {}
-        for rotulo, login in (('de Beta', 'dono.sentinela'), ('de Beta, outro', 'rep.sentinela'), ('livre', 'login.livre.sintetico'),
-                              ('da própria Alfa', 'edu.editor'), ('malformado', 'X')):
-            for papel in ('leitor', 'admin', 'convidado'):
-                dados = {'nome': 'Pessoa Nova', 'login': login, 'papel': papel, **({'casos': ['alpha']} if papel != 'admin' else {})}
-                resposta = self.post('dono', 'contas-criar', dados)
-                respostas[rotulo, papel] = (resposta[0], resposta[2])
-                self.sem_sentinela(resposta[2], f'contas-criar {rotulo}')
-        self.assertEqual(len(set(respostas.values())), 1, 'a resposta de contas-criar depende do login pedido')
-        self.assertEqual(next(iter(respostas.values()))[0], 403)
-        self.assertEqual(self.post('dono', 'contas-listar', {})[1]['contas'], antes)  # and nothing was created
-        self.assertEqual(self.post('dono_b', 'contas-criar', {'nome': 'Pessoa', 'login': 'dona.alfa', 'papel': 'admin'})[0], 403)
-        # No other operation takes a field that is unique in the installation: a login sent to `contas-atualizar`
-        # is not read, whether another newsroom has it or not, and the login of the account stays.
-        de_beta = self.post('dono', 'contas-atualizar', {'id': self.ids['leitor'], 'nome': 'Leo Leitor', 'login': 'dono.sentinela'})
-        livre = self.post('dono', 'contas-atualizar', {'id': self.ids['leitor'], 'nome': 'Leo Leitor', 'login': 'login.livre.sintetico'})
-        com_email = self.post('dono', 'contas-atualizar', {'id': self.ids['leitor'], 'nome': 'Leo Leitor', 'email': 'dono@sentinela.example'})
-        self.assertEqual((de_beta[0], de_beta[2]), (livre[0], livre[2]))
-        self.assertEqual((com_email[0], com_email[2]), (livre[0], livre[2]))
-        self.assertEqual((livre[0], livre[1]['conta']['login'], livre[1]['conta']['email']), (200, 'leo.leitor', None))
-        self.sem_sentinela(de_beta[2])
+        for rotulo, email in (('de Beta', 'pessoa@sentinela.example'), ('livre', 'livre@exemplo.test')):
+            convite = self.post('dono', 'equipe-convidar', {'email': email, 'papel': 'leitor', 'casos': ['alpha']})
+            self.sem_sentinela(convite[2].replace(email.encode('utf-8'), b''), f'equipe-convidar {rotulo}')
+            respostas[rotulo] = (convite[0], set(convite[1]), set(convite[1]['convite']),
+                                 {k: v for k, v in convite[1]['convite'].items() if k in ('papel', 'casos', 'estado', 'envio')})
+        self.assertEqual(respostas['de Beta'], respostas['livre'], 'a resposta do convite depende de o e-mail ter conta em outra redação')
+        self.assertEqual(respostas['livre'][0], 200)
+        pendentes = {c['email'] for c in self.post('dono', 'equipe-listar', {})[1]['convites']}
+        self.assertLessEqual({'pessoa@sentinela.example', 'livre@exemplo.test'}, pendentes)  # both listed alike
+        trocas = {rotulo: self.post('leitor' if rotulo == 'de Beta' else 'editor', 'conta-email-trocar', {'email': email, 'senha': SENHA})
+                  for rotulo, email in (('de Beta', 'pessoa@sentinela.example'), ('livre', 'outro.livre@exemplo.test'))}
+        self.assertEqual({r: (t[0], set(t[1]), t[1]['estado']) for r, t in trocas.items()}['de Beta'],
+                         (trocas['livre'][0], set(trocas['livre'][1]), trocas['livre'][1]['estado']))
+        self.assertEqual(acesso.organizacao_da_conta(self.root, self.ids['dono_b']), self.b)
+        for convite in self.post('dono', 'equipe-listar', {})[1]['convites']:  # leave the scenario as it was
+            self.post('dono', 'equipe-convite-cancelar', {'convite': convite['id']})
         self.assertEqual(self.post('dono_b', 'codex-status', {})[0], 200)
 
     def test_mesmos_ids_internos_nas_duas_redacoes_nao_se_misturam(self):
@@ -299,7 +302,7 @@ class TravessiaTest(cenario.DuasRedacoes):
     def test_redacao_suspensa_nao_opera_e_a_outra_nem_percebe(self):
         acesso.definir_situacao_redacao(self.root, self.b, 'suspensa')
         try:
-            for operacao, dados in (('codex-status', {}), ('analises', {'caso': 'beta'}), ('contas-listar', {})):
+            for operacao, dados in (('codex-status', {}), ('analises', {'caso': 'beta'}), ('equipe-listar', {})):
                 status, corpo, _ = self.post('dono_b', operacao, dados)
                 self.assertEqual((status, corpo.get('codigo')), (403, 'redacao_suspensa'), operacao)
             self.assertEqual(self.get('dono_b', '/api/catalogo')[0], 403)
@@ -355,7 +358,7 @@ class TravessiaTest(cenario.DuasRedacoes):
 
     def test_operacao_que_nao_esta_na_matriz_nao_existe(self):
         self.assertEqual(self.post('dono', 'acesso-listar', {})[0], 404)
-        self.assertEqual(self.post('dono', 'equipe-listar', {})[0], 404)  # defined by the contract, not delivered yet
+        self.assertEqual(self.post('dono', 'conta-excluir', {})[0], 404)  # defined by the contract, not delivered yet
         with self.assertRaises(autorizacao.Recusa) as recusa:
             autorizacao.conferir(self.root, 'piloto', acesso.sessao(self.root, self.sessoes['dono'][0].split('=', 1)[1]),
                                  'operacao-nova-sem-linha', {})
@@ -380,7 +383,8 @@ class RotasNaoLeemOPapelTest(unittest.TestCase):
         local = {'papel': 'dono', 'conta': None, 'casos': None, 'organizacao': None}
         concedido = autorizacao.conferir(Path('.'), 'local', local, 'analises', {'caso': 'qualquer'})
         self.assertEqual((concedido.caso, concedido.restrito, concedido.dono), ('qualquer', False, None))
-        for operacao in ('contas-listar', 'caso-participantes'):
+        for operacao in ('caso-participantes', 'conta-ver', 'conta-senha-trocar', 'equipe-listar',
+                         'equipe-remover'):  # accounts, newsrooms and teams do not exist in the local mode
             with self.assertRaises(autorizacao.Recusa):
                 autorizacao.conferir(Path('.'), 'local', local, operacao, {})
 

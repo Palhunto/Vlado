@@ -34,6 +34,7 @@ import fontes_web
 import revisao_humana
 import apuracao
 import autorizacao
+import correio
 import rotas_achados
 import rotas_caderno
 import rotas_conversa
@@ -56,9 +57,9 @@ import trava_cadastro
 from indice_sqlite import ID_CASO, caminho_rodada, cobertura, ler_passagem, pesquisar
 # Names also imported from here by the launcher, the tests and older callers.
 from rotas_caderno import CADERNO_OPERACOES, DILIGENCIAS_OPERACOES
-from rotas_contas import (RotasContas, CONTAS_OPERACOES, OPERACOES_CONVIDADO, OPERACOES_CONVERSA,  # noqa: F401
+from rotas_contas import (RotasContas, OPERACOES_CONVIDADO, OPERACOES_CONVERSA,  # noqa: F401
                           OPERACOES_PUBLICAS, AMBIENTES, SEM_SESSAO, OPERACOES_COM_COTA, ATIVOS_CONVERSA,
-                          COOKIE_PILOTO)
+                          COOKIE_PILOTO, CONTA_PROPRIA)
 from rotas_conversa import RotasConversa, RESPONDIDO, CAMPOS_INTERNOS_CONVERSA, _sem_internos  # noqa: F401
 import rotas_documentos
 from rotas_documentos import MAX_UPLOAD, catalogo, receber_documentos  # noqa: F401
@@ -117,8 +118,8 @@ ROTAS_GET_COM_PARAMETROS = ('/api/catalogo', '/api/fila', '/api/cota')  # each o
 # Every POST operation behind a session; anything else is 404 before the body is parsed.
 OPERACOES_API = (*rotas_conversa.OPERACOES, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES,
                  *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, *rotas_redacao.OPERACOES,
-                 *rascunhos.OPERACOES, *fontes_web.OPERACOES, *rotas_gestao.OPERACOES, *CONTAS_OPERACOES, 'sessao-sair',
-                 *rotas_achados.OPERACOES, *CONSULTA_OPERACOES, *rotas_equipe.OPERACOES)
+                 *rascunhos.OPERACOES, *fontes_web.OPERACOES, *rotas_gestao.OPERACOES, 'sessao-sair',
+                 *rotas_achados.OPERACOES, *CONSULTA_OPERACOES, *rotas_equipe.OPERACOES, *CONTA_PROPRIA)
 registro_acesso.permitir_operacoes((*OPERACOES_API, *OPERACOES_PUBLICAS))  # SEG-02: o registro só aceita nomes que existem
 
 
@@ -701,8 +702,13 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             if path.startswith('/convite/'):
                 self._convite_antigo()
                 return
-            if path == '/entrar' or re.fullmatch(r'/ativar(/[A-Za-z0-9_-]{1,100})?', path):
-                # Static page without case data; the token stays in the path, read by entrar.js.
+            if path == '/api/entrada':
+                # Public, before any session: what the sign-in page may offer. Nothing of any account.
+                self._json(200, {'esqueci_senha': self._esqueci_ligado()})
+                return
+            if path == '/entrar' or re.fullmatch(r'/ativar(/[A-Za-z0-9_-]{1,100})?|/(aceitar|redefinir|confirmar-email)/[A-Za-z0-9_-]{1,100}', path):
+                # Static page without case data; the token stays in the path, read by entrar.js. Like every answer,
+                # it goes with `Cache-Control: no-store` and `Referrer-Policy: no-referrer` (`_send`).
                 self._send(200, rotas_estaticas.conteudo('entrar.html'), 'text/html; charset=utf-8')
                 return
             if path in ('/', '/api/catalogo', '/api/integracao', '/api/fila', '/api/cota') and self._principal() is None:
@@ -842,9 +848,6 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             if operation == 'sessao-sair':
                 self._sair()
                 return
-            if operation in CONTAS_OPERACOES:
-                self._json(200, self._contas(operation, data, principal))
-                return
             consulta_contada = False
             if operation in OPERACOES_COM_COTA and dono is not None:
                 acesso.registrar_consulta(self.server.root, dono)
@@ -860,8 +863,8 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 result = self._cadastro_na_fila(operation, data)
             elif operation in rotas_gestao.OPERACOES:
                 result = self._gestao(operation, data, principal, concedido)
-            elif operation in rotas_equipe.OPERACOES:
-                result = rotas_equipe.executar(self.server.root, operation, data, principal)
+            elif operation in rotas_equipe.OPERACOES or operation in CONTA_PROPRIA:
+                result = self._equipe(operation, data, principal)
             elif operation in rotas_conversa.OPERACOES:
                 result = self._conversa(operation, data, dono, casos_liberados, consulta_contada,
                                         conta=principal['conta'])
@@ -892,6 +895,11 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             self._json(409, {'estado': 'erro', 'codigo': 'conflito', 'erro': str(exc), 'atual': exc.atual})
         except rascunhos.ConflitoRascunho as exc:
             self._json(409, {'estado': 'erro', 'codigo': 'rascunho_conflito', 'erro': str(exc), 'atual': exc.atual})
+        except acesso.Bloqueado as exc:  # too many wrong passwords on a sensitive operation
+            self._json(429, {'estado': 'bloqueado', 'codigo': 'bloqueado', 'erro': str(exc)})
+        except acesso.Recusada as exc:  # a refusal with its own status and code (password asked again, last dono)
+            self._json(exc.status, {'estado': 'proibido' if exc.status == 403 else 'erro', 'codigo': exc.codigo,
+                                    'erro': str(exc)})
         except (ValueError, OSError, KeyError, TypeError, sqlite3.Error) as exc:
             if operation in DOWNLOADS:
                 self._auditar_download('falha')
@@ -1015,10 +1023,21 @@ def main():
         proxies_confiaveis.validar_ambiente()  # lista de proxies inválida: não sobe, com a mensagem
     except ValueError as exc:
         raise SystemExit(str(exc)) from None
+    if args.modo != 'local':
+        ambiente = os.environ.get('VLADO_AMBIENTE', '').strip()
+        try:  # with real data the hosted service does not start without real e-mail delivery (decision 12)
+            correio.conferir_partida(args.modo, ambiente if ambiente in AMBIENTES else 'homologacao')
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from None
     # Extraction and OCR in separate processes; VLADO_EXTRACAO=local keeps them in threads.
     with Servidor((args.host, args.porta), root=Path(args.dados) if args.dados else ROOT,
                   modo=args.modo, origem=args.origem,
                   extracao=os.environ.get('VLADO_EXTRACAO') or 'processos') as server:
+        if server.com_contas:
+            try:  # the daily sweep also runs at the start: invitations past their date, old activity
+                acesso.manutencao(server.root)
+            except (ValueError, OSError):
+                pass  # an unreadable store answers 503 to each request; it does not stop the start
         print(f'Mesa de apuração ({args.modo}): {server.origin}', flush=True)
         print('Encerre com Ctrl+C.', flush=True)
         if args.modo != 'piloto' and not args.sem_abrir:

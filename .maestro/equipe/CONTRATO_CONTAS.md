@@ -207,7 +207,10 @@ O papel vem antes da apuração. Assim, a recusa por papel depende só de quem p
 | Apuração inexistente, de outra redação, sem participação, sem posse registrada ou com id malformado | 404 | `{estado: "indisponivel", codigo: "caso_indisponivel", erro: "Apuração indisponível para esta conta."}` |
 | Conversa inexistente, de outro autor restrito ou de apuração fora do alcance | 400 | `codigo: "conversa_indisponivel"`, como hoje |
 | Item da lixeira ou lote fora do alcance | 400 | A mesma resposta do item ou lote inexistente, como hoje |
+| Operação sensível sem a senha de confirmação | 403 | `{estado: "proibido", codigo: "senha_necessaria"}`; não conta para o teto de tentativas |
 | Senha de confirmação errada numa operação sensível | 403 | `codigo: "senha_atual_incorreta"`; conta para o teto de tentativas |
+| Cinco senhas de confirmação erradas seguidas | 429 | `{estado: "bloqueado", codigo: "bloqueado"}` por 15 minutos, só nas operações sensíveis daquela conta; a sessão e a entrada seguem |
+| A redação ficaria sem dono ativo | 400 | `codigo: "ultimo_dono"` |
 
 As cinco causas de `caso_indisponivel` têm o mesmo corpo, byte a byte, e a mesma sequência de leituras no servidor. A causa verdadeira vai só para o registro de auditoria, no evento `acesso_negado` com `motivo` (`papel`, `sem_participacao`, `outra_redacao`, `inexistente`), para o operador enxergar tentativas de travessia. Esse evento não aparece em `equipe-atividade` nem em nenhuma resposta da Mesa: o motivo distingue "não existe" de "é de outra redação", e mostrá-lo ao dono de uma redação seria o mesmo vazamento por outro caminho. Só o operador o lê, no registro de auditoria. `caso_indisponivel` substitui `caso_nao_liberado`.
 
@@ -290,9 +293,10 @@ A coluna Tipo diz o que a operação faz: `L` lê, `B` baixa arquivo, `E` escrev
 | Rota | Resolvedor | Tipo | D | E | R | L | C | Observação |
 |---|---|---|---|---|---|---|---|---|
 | `GET /saude` | nenhum | L | pública | | | | | Só `{ok: true}`. |
-| `GET /entrar`, `/ativar/<token>`, `/aceitar/<token>`\*, `/redefinir/<token>`\*, `/primeiro-acesso`, arquivos de `rotas_estaticas.ARQUIVOS` | nenhum | L | pública | | | | | Página e arquivos estáticos, sem dado de conta nem de apuração. O token fica no caminho e é lido pelo script da página. |
+| `GET /entrar`, `/ativar/<token>`, `/aceitar/<token>`\*, `/redefinir/<token>`\*, `/confirmar-email/<token>`\*, `/primeiro-acesso`, arquivos de `rotas_estaticas.ARQUIVOS` | nenhum | L | pública | | | | | Página e arquivos estáticos, sem dado de conta nem de apuração. O token fica no caminho e é lido pelo script da página. |
 | `GET /convite/<token>` | nenhum | L | pública | | | | | 410, como hoje (convites da versão 1). |
 | `GET /api/primeiro-acesso` | nenhum | L | pública | | | | | Só no modo `local-contas`. |
+| `GET /api/entrada`\* | nenhum | L | pública | | | | | Só `{esqueci_senha}`: se a página de entrada pode oferecer "Esqueci a senha" (transporte diferente de `tela`, seção 8.1). Nada de conta nenhuma. |
 | `GET /` | nenhum | L | sim | sim | sim | sim | sim | Sem sessão: 303 para `/entrar`. Com pendência: 303 para a página que a resolve. |
 | `GET /api/sessao` | nenhum | L | sim | sim | sim | sim | sim | Seção 3. |
 | `GET /api/integracao` | nenhum | L | sim | sim | sim | sim | sim | Só capacidades do servidor. |
@@ -312,7 +316,8 @@ Operações públicas: exigem `Origin` e JSON, aceitam corpo de até 4 KB e cont
 | `convite-consultar`\* | L | `{token}` devolve redação, e-mail, papel, quem convidou, validade e versão dos termos. |
 | `convite-aceitar`\* | A | `{token, nome, senha, termos_versao}` cria a conta e abre a sessão, com a pendência de segundo fator quando for obrigatório. |
 | `senha-esqueci`\* | A | `{email}`. A resposta é sempre a mesma, exista a conta ou não. |
-| `senha-redefinir`\* | A | `{token, senha, codigo?}`. Conta com segundo fator exige também o código. |
+| `senha-redefinir`\* | A | `{token, senha, codigo?}`. Não abre sessão: encerra todas as da conta. Conta com segundo fator exige também o código. |
+| `email-confirmar`\* | A | `{token}`, o link mandado ao e-mail novo por `conta-email-trocar`. Troca o e-mail da conta e avisa o antigo. Não abre sessão. Link que não muda nada tem uma resposta só. |
 | `primeiro-admin` | A | Só `local-contas`, só de `127.0.0.1`, uma vez. Cria a redação única e o primeiro dono. |
 
 ### 5.4 A própria conta
@@ -343,8 +348,8 @@ Resolvedor `nenhum`. Toda operação age só sobre a redação da sessão. O id 
 |---|---|---|---|---|---|---|---|
 | `equipe-listar`\* | L | sim | — | — | — | — | Pessoas, papéis, apurações de cada uma, gasto do mês, convites pendentes. |
 | `equipe-convidar`\*, `equipe-convite-reenviar`\*, `equipe-convite-cancelar`\* | A | sim | — | — | — | — | Seção 8.1. Convidar com o papel dono pede a senha. |
-| `equipe-papel`\* | A | sim | — | — | — | — | Recusa rebaixar o último dono ativo. Promover a dono pede a senha. Nunca atribui `convidado`. |
-| `equipe-desativar`\*, `equipe-reativar`\*, `equipe-remover`\* | A | sim | — | — | — | — | Recusam o último dono ativo. Desativar encerra as sessões e para as execuções em curso, como hoje. |
+| `equipe-papel`\* | A | sim | — | — | — | — | Recusa rebaixar o último dono ativo. Promover a dono e mudar o papel de um dono pedem a senha (seção 5.15). Nunca atribui `convidado`. |
+| `equipe-desativar`\*, `equipe-reativar`\*, `equipe-remover`\* | A | sim | — | — | — | — | Recusam o último dono ativo. Desativar encerra as sessões e para as execuções em curso, como hoje. Desativar um dono pede a senha; remover pede sempre (seção 5.15). A própria conta não é removida aqui. |
 | `equipe-recuperar`\*, `equipe-recuperar-confirmar`\* | A | sim | — | — | — | — | Seção 8.2. Nunca devolvem link no modo `piloto`. |
 | `equipe-teto`\* | A | sim | — | — | — | — | Teto mensal por pessoa, até o teto da redação. |
 | `equipe-atividade`\* | L | sim | — | — | — | — | Acessos e ações de administração da redação, sem conteúdo (W09, regra 8). Não inclui `acesso_negado` (seção 4.3). |
@@ -354,7 +359,7 @@ Resolvedor `nenhum`. Toda operação age só sobre a redação da sessão. O id 
 | `codex-status` | L | sim | sim | sim | sim | sim | Estado da conexão com o provedor; não leva dado de redação. |
 | `codex-desligar` | A | sim | — | — | — | — | Só nos modos locais. No `piloto`, recusado a todos (`servico_nao_encerravel`), como hoje. |
 
-**Operações retiradas:** `contas-listar`, `contas-criar`, `contas-atualizar`, `contas-desativar`, `contas-reativar` e `contas-recuperar` saem de `OPERACOES_API` e passam a responder 404, como qualquer operação inexistente, para todos os papéis. As `equipe-*` as substituem. `contas-criar` e `contas-recuperar` devolviam o link a quem pedia, que é o defeito de CON-03. Elas saem na mesma integração em que a tela Equipe do Frontend entra.
+**Operações retiradas:** `contas-listar`, `contas-criar`, `contas-atualizar`, `contas-desativar`, `contas-reativar` e `contas-recuperar` saem de `OPERACOES_API` e passam a responder 404, como qualquer operação inexistente, para todos os papéis. As `equipe-*` as substituem. `contas-criar` e `contas-recuperar` devolviam o link a quem pedia, que é o defeito de CON-03. Por decisão do dono do projeto (P30, 22/11/2026), elas ficaram até o convite por e-mail e saíram junto com ele, na mesma integração. O que cada uma fazia passou a: `equipe-listar` e `equipe-atividade` (listar); `equipe-convidar` (criar; o perfil `convidado` não é mais criado pela Mesa); `equipe-papel`, `caso-incluir` e `caso-retirar` (atualizar); `equipe-desativar` e `equipe-reativar`; `equipe-recuperar` (recuperar, sem devolver link no serviço hospedado). A cota diária do perfil legado e os links de ativação ficam com o operador, no terminal.
 
 ### 5.6 Apurações: criação, participação e lixeira
 
@@ -467,7 +472,11 @@ Resolvedor `caso` em todas. O rascunho é sempre da conta da sessão: ninguém l
 
 ### 5.15 Operações sensíveis pedem a senha de novo
 
-`conta-senha-trocar`, `conta-email-trocar`, `conta-fator-iniciar`, `conta-fator-codigos`, `conta-fator-remover`, `conta-excluir`, `equipe-convidar` (ao convidar como dono), `equipe-papel` (ao promover a dono), `equipe-remover`, `equipe-recuperar`, `ia-config-salvar` e `lixeira-apagar` levam a senha da conta no corpo. Uma sessão aberta num computador esquecido, ou um conteúdo malicioso exibido na Mesa (seção 9), não consegue executá-las.
+`conta-senha-trocar`, `conta-email-trocar`, `conta-fator-iniciar`, `conta-fator-codigos`, `conta-fator-remover`, `conta-excluir`, `equipe-convidar` (ao convidar como dono), `equipe-papel` (ao promover a dono e ao mudar o papel de quem é dono), `equipe-desativar` (quando o alvo é dono), `equipe-remover`, `equipe-recuperar`, `ia-config-salvar` e `lixeira-apagar` levam a senha da conta no corpo, no campo `senha` (`senha_atual` em `conta-senha-trocar`). A senha é sempre a de quem faz, nunca a do alvo. As duas condições sobre outro dono são a primeira ressalva de P28 (seção 11). O alvo é conferido antes da senha: uma conta que não existe, ou de outra redação, responde como inexistente com ou sem senha, e a tentativa não conta. Uma sessão aberta num computador esquecido, ou um conteúdo malicioso exibido na Mesa (seção 9), não consegue executá-las.
+
+O nome da operação não é um caminho por fora. As `contas-*`, que faziam as mesmas coisas por outro nome, saíram (seção 5.5): respondem 404 em todos os modos, e com elas saiu a `contas-recuperar`, que devolvia a quem pedia um link capaz de abrir a conta de outra pessoa.
+
+Limitação conhecida e aceita: quem tem em mãos a sessão aberta de uma pessoa pode errar a senha cinco vezes e deixá-la 15 minutos sem confirmar nada. É o preço do teto de tentativas; a entrada e o resto da sessão não são afetados.
 
 ### 5.16 Operador do Vlado
 
@@ -585,7 +594,7 @@ Esta seção fixa comportamento, não implementação.
   - `smtp`: envio real, com credenciais só em variáveis de ambiente.
   Trocar de provedor é escrever outro transporte; nada mais muda.
 - **Mensagens:** convite, redefinição de senha, aviso de novo acesso, senha trocada, segundo fator alterado, recuperação de conta, muitas tentativas, confirmação de e-mail novo, aviso de conta inativa.
-- **Só texto.** Sem HTML, sem imagem, sem link que não seja da própria instalação. Os modelos são versionados, em português e inglês. Nome de pessoa e de redação entram sem quebras de linha.
+- **Só texto.** Sem HTML, sem imagem, sem link que não seja da própria instalação. Os modelos são versionados, em português e inglês. Nome de pessoa e de redação entram sem quebras de linha. Todo valor que entra num modelo é tratado como digitado por alguém: perde ponto, barra, dois-pontos e arroba, de modo que nenhum nome vire endereço, nem para quem lê nem para o programa de e-mail que transforma endereços em links. O nome de quem convida vai também sem dígitos, para não levar um telefone (decisão do dono, P32, 22/11/2026). A única exceção é o link da instalação, conferido contra a origem dela.
 - **O token só existe no link.** O servidor guarda o hash. Falha de envio aparece ao dono na Equipe, e reenviar gera um token novo e invalida o anterior.
 - **Convite:** vale 7 dias, uma única vez. O dono reenvia ou cancela. O e-mail vem do convite e não pode ser trocado ao aceitar (W10, regra 3). O convite leva papel e apurações; ao aceitar, a conta nasce com as participações.
 - **Convite para e-mail que já tem conta em outra redação:** quem convida recebe a mesma resposta de qualquer convite. O convite aparece entre os pendentes, pode ser reenviado e cancelado e vence no prazo, como os outros. Quem recebe o e-mail é a pessoa, com a explicação de que no teste uma conta pertence a uma redação só; o link não cria conta. Convite para e-mail que já é da própria redação é recusado dizendo a razão, porque o dono já vê quem é da redação. Para o convite não virar meio de encher a caixa de alguém, cada redação tem teto de convites pendentes (50) e cada convite é reenviado no máximo uma vez por hora.
@@ -615,6 +624,8 @@ Esta seção fixa comportamento, não implementação.
   - Alvo que não é dono: o dono pede e a própria pessoa confirma pelo link, que só ela recebe.
   - Alvo que é dono: outro dono pede e um terceiro dono confirma (`equipe-recuperar-confirmar`). Sem terceiro dono, quem confirma é o operador, pelo terminal.
   - Transporte `tela`: toda recuperação exige a segunda confirmação antes de o link aparecer.
+  - Mesa instalada (`local-contas`), por decisão do dono do projeto (P33, 22/11/2026): é uma máquina só, com uma redação só e, quase sempre, um dono só e sem e-mail. Ali o dono recupera quem não é dono confirmando com a própria senha, e o link aparece para ele. A dupla confirmação continua valendo quando o alvo é dono.
+  - Serviço hospedado (`piloto`): a dupla confirmação vale sempre e o link nunca volta numa resposta, com qualquer transporte. Sem envio real, ou para conta que não tem e-mail, a recuperação é feita pelo operador, pelo terminal.
   O dono nunca troca o e-mail de outra pessoa, para a recuperação não virar tomada de conta.
 - **O único dono que perdeu senha, aparelho e códigos** é recuperado pelo operador (`dono-convidar`), com aviso ao e-mail do dono e espera de 24 horas (decisão 14).
 
@@ -678,14 +689,14 @@ O mesmo cuidado vale para todo texto que uma conta escreve e outra lê: nome de 
 
 ## 10. O que muda para os outros agentes
 
-**Arquivos de Contas** (escreve só neles): `scripts/acesso.py`, `scripts/rotas_contas.py`, os demais `scripts/rotas_*.py` e `scripts/interface_pesquisa.py` (nesta onda, pela tabela "Quem escreve onde"), e os módulos novos `scripts/autorizacao.py`, `scripts/correio.py`, `scripts/segundo_fator.py` e `scripts/rotas_equipe.py`. Testes em arquivos novos (`test_matriz_contas.py`, `test_isolamento_redacoes.py`, `test_migracao_contas.py`, `test_convites.py`, `test_segundo_fator.py`, `test_sessoes_conta.py`, `test_ciclo_conta.py`, `test_correio.py`), mais `test_acesso.py` e `test_autorizacao.py`, que são de autorização.
+**Arquivos de Contas** (escreve só neles): `scripts/acesso.py`, `scripts/rotas_contas.py`, os demais `scripts/rotas_*.py` e `scripts/interface_pesquisa.py` (nesta onda, pela tabela "Quem escreve onde"), e os módulos novos `scripts/autorizacao.py`, `scripts/correio.py`, `scripts/segundo_fator.py` e `scripts/rotas_equipe.py`. Testes em arquivos novos (`test_matriz_contas.py`, `test_isolamento_redacoes.py`, `test_migracao_contas.py`, `test_convites.py`, `test_redefinicao_senha.py`, `test_recuperacao.py`, `test_segundo_fator.py`, `test_sessoes_conta.py`, `test_equipe.py`, `test_ciclo_conta.py`, `test_correio.py`), mais `test_acesso.py` e `test_autorizacao.py`, que são de autorização.
 
 **Pedidos, um por dono de arquivo. Nenhum é feito por Contas sem o aval do Maestro.**
 
 | Para | Pedido |
 |---|---|
 | Plataforma | `custo.chaves_orcamento` devolve a redação da conta; tetos simultâneos e limite diário por redação; mensagem de recusa sem contagem da instalação; `segredos.ler_chave` com a redação, e a chamada ao provedor usando a chave da redação quando houver; listas fechadas de `registro_acesso.py` com os eventos, papéis e códigos novos e o campo `organizacao`; teto de disco por redação, com PROD-05 na Onda 4 (limitação registrada na seção 4.5). |
-| Infra | Backup do banco pela cópia consistente; restauração chamando o encerramento de sessões; `manutencao` agendada; variáveis do SMTP; `cryptography` como dependência direta em `requirements.txt` e no arquivo de trava (já está nele, por via do OCR). |
+| Infra | Backup do banco pela cópia consistente; restauração chamando o encerramento de sessões; `acesso.py manutencao` agendada uma vez por dia; `VLADO_CORREIO` e as variáveis `VLADO_SMTP_*` passadas ao contêiner da Mesa (o ambiente `editorial` não sobe sem elas, seção 12); `cryptography` como dependência direta em `requirements.txt` e no arquivo de trava (já está nele, por via do OCR). |
 | Frontend | Telas W08, W09 e W10; `data-papel` com os valores novos e `capacidades`; `piloto.js` deixa de chamar `contas-*`; páginas `/aceitar/` e `/redefinir/`; campo de senha nas operações da seção 5.15; desenho do código QR a partir do endereço `otpauth://` que o servidor entrega (sem CDN); traduções dos códigos novos; condições 1 a 3 de S6. |
 | Design | Exceções por escrito ao W08 e ao W10, pelas decisões 4 e 5; estado "redação suspensa"; como o perfil legado `convidado` aparece na Equipe. Configuração da organização continua sem desenho. |
 | QA | Os oito testes de outros donos que leem `acesso.json` direto (os outros dois, `test_acesso.py` e `test_autorizacao.py`, são de Contas); bateria de S6; a matriz na suíte rápida. |
@@ -739,21 +750,76 @@ Nenhuma das duas muda uma célula da matriz.
 - `python -m unittest discover -s testes -p test_migracao_contas.py -v`: não ampliação, autoria, reversão e repetição.
 - `testes/test_acesso.py` e `testes/test_autorizacao.py`, atualizados para o modelo novo.
 
-**O que a entrega 1 ainda não tem,** e onde o código difere do texto até lá:
+**Entrega 2, em código:** a própria conta (`conta-ver`, `conta-atualizar`, `conta-senha-trocar`, `conta-sessoes`, `conta-sessao-encerrar`, `conta-sessoes-encerrar-outras`, em `scripts/rotas_contas.py`) e a tela Equipe sem e-mail (`equipe-listar`, `equipe-papel`, `equipe-desativar`, `equipe-reativar`, `equipe-remover`, `equipe-teto`, `equipe-atividade`, em `scripts/rotas_equipe.py`), com a senha pedida de novo nas operações sensíveis que esta entrega traz (`conta-senha-trocar`, `equipe-papel`, `equipe-desativar`, `equipe-remover`; seção 5.15) e a primeira ressalva de P28. Rodam hoje:
 
-- As operações de `autorizacao.PENDENTES` (`conta-*`, `equipe-*`, convite, redefinição de senha e segundo fator) respondem 404. As seis `contas-*` continuam, só para o dono e só sobre a própria redação (`autorizacao.TRANSITORIAS`), e saem quando a tela Equipe entrar (seção 5.5).
-- `contas-criar` é recusada a todos (403 `operacao_proibida`) numa instalação com mais de uma redação: o login é único na instalação, e a recusa "esse login já existe" contaria a uma redação que outra tem uma conta com ele (seção 4.5). Até o convite por e-mail entrar, nessas instalações as contas novas são criadas pelo operador, no terminal. Com uma redação só, nada muda. Nenhuma outra operação recebe campo único da instalação.
+- `-p test_sessoes_conta.py`: perfil, troca de senha e sessões, pelo servidor.
+- `-p test_equipe.py`: papéis, desativação, remoção, tetos e atividade, pelo servidor.
+- `testes/test_acesso.py`: as mesmas regras no armazenamento, a senha de confirmação e a passagem do banco da versão 1 para a 2.
+
+Do que a entrega 2 decide, além do texto das seções acima:
+
+- Remover uma pessoa (`equipe-remover`) já deixa a conta na situação `excluida`, só com o id (seção 8.4). A troca do nome por "Conta excluída" nas saídas e a exclusão pela própria pessoa (`conta-excluir`) vêm com o ciclo de vida.
+- A lista de sessões mostra o aparelho como duas palavras tiradas de listas fechadas ("Firefox · Linux"), nunca o cabeçalho que o navegador mandou. A sessão em uso não é encerrada por `conta-sessao-encerrar`: sai-se dela.
+- `equipe-teto` com `conta` define o teto da pessoa; sem `conta`, o padrão por pessoa da redação. Onde a redação não tem teto próprio, vale o da instalação.
+- A atividade de cada redação tem a própria janela de 1.000 eventos: a de uma nunca empurra para fora a de outra. O prazo de 90 dias (decisão 15) entra com a `manutencao`.
+- `equipe-atividade` não devolve número nenhum do armazenamento. O número da linha na tabela de eventos conta todas as redações, e os saltos dele diriam a uma redação quanto acontece nas outras (seção 4.5). Os eventos saem sem número, e `proximo`, que continua a página, é a posição dentro dos eventos da própria redação: só a atividade dela o move.
+- `equipe-listar` traz o gasto do mês de cada pessoa. O gasto da redação, lá e em `GET /api/cota`, só vai ao dono, e só o da própria redação: um número que soma redações não vai a ninguém (seção 4.5). Enquanto o módulo de custo contava a instalação inteira, isso só acontecia com uma redação só; com a mudança da Plataforma (`795966a`), o custo é contado por redação e cada dono vê o da sua. `convites` traz os convites pendentes da redação (entrega 3).
+- O banco de uma versão anterior posto no lugar com a Mesa em pé (um backup restaurado sem parar o serviço) é atualizado na abertura seguinte, e não só na primeira abertura de cada processo. O roteiro de restauração continua mandando parar a Mesa.
+- O perfil legado `convidado` alcança as `conta-*` da própria conta, como os demais papéis (seção 5.4): é a única coisa que ele ganha, e não toca apuração nenhuma.
+
+**Entrega 3, em código:** o e-mail transacional (`scripts/correio.py`, com os transportes `simulado`, `tela` e `smtp`) e o convite: `equipe-convidar`, `equipe-convite-reenviar` e `equipe-convite-cancelar` em `scripts/rotas_equipe.py`, e as públicas `convite-consultar` e `convite-aceitar` em `scripts/rotas_contas.py`. A conta nasce no aceite, com o e-mail do convite, que passa a ser o identificador da entrada (o login antigo continua valendo para quem o tem). Rodam hoje:
+
+- `-p test_correio.py`: modelos só de texto, os três transportes sem abrir conexão, e a regra de partida.
+- `-p test_convites.py`: as regras no armazenamento e o convite pelo servidor, com `tela` e com `simulado`.
+
+Do que a entrega 3 decide, além do texto da seção 8.1:
+
+- O transporte vem de `VLADO_CORREIO` (`smtp`, `tela` ou `simulado`); sem a variável, vale `tela`. O `smtp` lê `VLADO_SMTP_HOST`, `VLADO_SMTP_PORTA` (587 por padrão; 465 usa TLS direto), `VLADO_SMTP_USUARIO`, `VLADO_SMTP_SENHA` e `VLADO_SMTP_REMETENTE`, e nunca envia sem TLS.
+- O ambiente `editorial` do modo `piloto`, de dados reais, não sobe sem `smtp` configurado (decisão 12). A homologação e o `local-contas` sobem com `tela`. O ambiente `demonstracao`, que só tem dados sintéticos, também sobe com `tela`: a decisão 12 falava só da homologação, e o dono do projeto decidiu assim em 22/11/2026 (P31). O `editorial` continua exigindo SMTP.
+- Com `tela`, a resposta de `equipe-convidar` e de `equipe-convite-reenviar` traz o `link`; com os outros transportes, nunca. O convite guarda como foi o envio (`enviado`, `falha` ou `tela`), e o dono vê isso entre os pendentes de `equipe-listar`.
+- O link que não cria conta tem uma resposta só (400 `convite_invalido`): token desconhecido, já usado, cancelado, vencido, de e-mail que já tem conta ou de redação que não está ativa. A causa vai só ao registro de auditoria. Para o e-mail que já tem conta em outra redação, a mensagem explica e não leva link.
+- Recusas próprias: 400 `convite_duplicado` (o e-mail já é da redação ou já tem convite pendente nela) e 429 `limite_de_convites` (50 pendentes na redação; reenvio do mesmo convite antes de uma hora; ou mais de três mensagens da redação ao mesmo endereço numa hora, contando os convites cancelados, para que cancelar e convidar de novo não seja um jeito de encher a caixa de alguém). Convite de outra redação responde como inexistente.
+- O convite pendente não sobrevive a quem convidou: quando essa conta é desativada, removida ou deixa de ser dono, os convites pendentes dela são cancelados, com o evento `convite_cancelado`. Outro dono convida de novo, se for o caso.
+- `termos_versao` sai `null` em `convite-consultar` e só `null` é aceito em `convite-aceitar`, até os termos existirem (seção 8.4).
+- Apuração apagada depois do convite fica de fora no aceite; o resto do convite vale.
+- `acesso.py manutencao` vence os convites e poda a atividade com mais de 90 dias; a mesma varredura roda na partida do servidor. Um convite vencido já não funciona nem aparece entre os pendentes antes de a varredura passar.
+- `GET /aceitar/<token>` e `GET /redefinir/<token>` servem a mesma página de `/entrar` e `/ativar/<token>`, sem cache e sem referência, com o token só no caminho; as seções da página são do Frontend (W10) e entram com ele.
+
+**Entrega 3, redefinição de senha por e-mail:** `senha-esqueci` e `senha-redefinir`, públicas, em `scripts/rotas_contas.py`, e a leitura pública `GET /api/entrada`. Roda hoje `-p test_redefinicao_senha.py`. O que ela decide, além do texto das seções 5.3, 8.1 e 8.2:
+
+- `senha-esqueci {email}` responde sempre 200 `{estado: "enviado"}`, para e-mail com conta, sem conta e malformado. O armazenamento é escrito do mesmo jeito nos três casos (quando foi o último pedido para aquele endereço) e a mensagem sai em outra linha de execução, para o tempo da resposta não distinguir. Um endereço recebe no máximo uma mensagem a cada 5 minutos, e o link novo mata o anterior. Só recebe link a conta ativa, com senha, de redação ativa.
+- Com o transporte `tela`, `senha-esqueci` responde 400 `transporte_indisponivel`, igual para todo e-mail, e `GET /api/entrada` devolve `{esqueci_senha: false}`, para a página de entrada nem oferecer o link.
+- `senha-redefinir {token, senha}` não abre sessão: troca a senha, encerra todas as sessões da conta e a pessoa entra em seguida. O link vale 60 minutos e uma vez. Link desconhecido, usado ou vencido tem uma resposta só (400 `link_invalido`); senha fora do tamanho responde 400 `senha_invalida`, também em `convite-aceitar`. O campo `codigo` é aceito e ignorado até o segundo fator existir.
+- O link de redefinição pendente morre com tudo o que encerra as sessões da conta: senha trocada, desativação, recuperação e remoção.
+- Depois de `senha-redefinir` e de `conta-senha-trocar`, a pessoa recebe no e-mail da conta o aviso de senha trocada, sem link nenhum. Conta sem e-mail (as migradas) não recebe aviso nem redefine por aqui: a recuperação dela é pela administração.
+
+**Entrega 3, recuperação pelo dono e troca do próprio e-mail:** `equipe-recuperar` e `equipe-recuperar-confirmar` em `scripts/rotas_equipe.py`; `conta-email-trocar` e a pública `email-confirmar` em `scripts/rotas_contas.py`. Roda hoje `-p test_recuperacao.py`. O que ela decide, além do texto da seção 8.2:
+
+- `equipe-recuperar {conta, senha}` pede sempre a senha de quem pede, e a conta é conferida antes. Para quem não é dono e tem e-mail, com envio real, o link de recuperação vai à pessoa (resposta `{estado: "enviada", envio}`), vale 24 horas e é consumido por `senha-redefinir`; nada muda na conta até ele ser usado. Para um dono, a resposta é `{estado: "aguardando_confirmacao", recuperacao}` e o pedido espera 24 horas por um terceiro dono, que confirma com a própria senha em `equipe-recuperar-confirmar {recuperacao, senha}`; só então o link é criado. `equipe-listar` traz os pedidos pendentes em `recuperacoes`.
+- Recusa 400 `recuperacao_pelo_operador` quando não há terceiro dono para confirmar, ou quando o link não tem como chegar à pessoa (serviço hospedado sem envio real, ou conta sem e-mail). Pedido de outra redação, vencido, ou de quem deixou de ser dono responde como inexistente.
+- Na Mesa instalada, a resposta de quem recupera um não dono é `{estado: "confirmada", link}` (P33). No serviço hospedado o `link` não existe em resposta nenhuma.
+- A recuperação da própria conta não é por aqui: é `senha-esqueci` ou `conta-senha-trocar`. O dono nunca troca o e-mail de outra pessoa.
+- `conta-email-trocar {email, senha}` responde sempre `{estado: "confirmacao_enviada"}`, para endereço livre e para endereço que já é de outra conta, de qualquer redação; nesse caso o pedido fica guardado sem efeito e nada é enviado ao endereço em uso. As mensagens saem em outra linha de execução. O endereço atual é avisado do pedido e, depois, da troca. Um pedido a cada 5 minutos por conta; o link vale 60 minutos. Com o transporte `tela`, o `link` volta a quem pediu (limitação da seção 8.1).
+- `email-confirmar {token}` troca o e-mail, que passa a ser o identificador da entrada; a sessão aberta continua. Uma conta que veio sem e-mail ganha um por aqui, e o login antigo dela continua valendo.
+- `GET /confirmar-email/<token>` serve a mesma página de `/entrar`, como as outras.
+
+**O que ainda não existe,** e onde o código difere do texto até lá:
+
+- As operações de `autorizacao.PENDENTES` (segundo fator, termos, exportação e exclusão da própria conta) respondem 404. As seis `contas-*` saíram com o convite por e-mail (P30, seção 5.5): respondem 404 em todos os modos, a todos os papéis, e `autorizacao.TRANSITORIAS` ficou vazia. A tela antiga "Contas de acesso" (`piloto.js`) sai na mesma integração.
+- Quem é retirado de uma apuração (`caso-retirar`) tem as execuções em curso naquela apuração paradas, como acontecia em `contas-atualizar`.
+- O perfil legado `convidado` não é mais criado pela Mesa, nem a cota diária dele é mudada por ela: as contas que o têm continuam, e o operador as administra pelo terminal.
 - A página (`GET /`), `GET /api/sessao` e `GET /api/integracao` também passam pelo portão: de uma redação suspensa, respondem 403 `redacao_suspensa` (a página, um aviso simples, sem dado nem token).
 - `data-papel` leva `admin` para o dono enquanto a interface não conhece os papéis novos; os outros papéis vão com o próprio nome. `GET /api/sessao` já devolve os valores novos e `capacidades`.
 - `pendencias` sai sempre vazia: segundo fator e termos entram com a seção 8.
 - Tentativas de entrada: vale o bloqueio por identificador e endereço de hoje. O teto por identificador, o modo protegido e o aparelho conhecido (seção 8.2) entram com a entrada em dois passos.
+- `lixeira-apagar` e `ia-config-salvar` ainda não pedem a senha (seção 5.15). As telas de hoje não a mandam, e pedir só no servidor deixaria o dono sem apagar de vez e sem gravar a chave. O pedido entra junto com o campo na interface, na mesma integração.
 - Chave de IA: numa instalação `piloto` com mais de uma redação, `ia-config-salvar` é recusada a todos e `ia-config` não mostra os quatro últimos caracteres da chave do serviço, até a chave própria de cada redação existir (seção 8.5).
 - O registro de auditoria descarta os códigos, motivos, papéis e eventos novos até as listas fechadas de `registro_acesso.py` os receberem (pedido à Plataforma, seção 10, em andamento). O portão já grava a recusa como `acesso_negado`, com código, motivo e o id da redação (seção 4.3); enquanto a lista da Plataforma não tiver esse evento, a linha não sai. As duas mudanças precisam entrar juntas na integração.
 
-Chegam com as próximas entregas: `-p test_convites.py`, `-p test_segundo_fator.py`, `-p test_sessoes_conta.py`, `-p test_ciclo_conta.py`, `-p test_correio.py` (seção 8).
+Chegam com as próximas entregas: `-p test_segundo_fator.py`, `-p test_ciclo_conta.py` (seção 8).
 
 Portão da Onda 2: a matriz inteira coberta por teste; o Revisor tenta atravessar de uma redação para outra e não consegue; segunda leitura da matriz pelo Maestro.
 
 **Manual Follow-Up** (exige pessoa; nenhum agente marca como feito): aprovação deste contrato pelo dono do projeto; confirmação, por quem responde pela LGPD (D6), da decisão 10; contratação do envio de e-mail (D7); ensaio da migração numa cópia dos dados reais, pelo operador; conferência do segundo fator no aplicativo Android, que está congelado (D8).
 
-Status: aprovado pelo dono do projeto em 22/11/2026 (P28), com as duas ressalvas da seção 11; entrega 1 em código (seção 12). Revisão 2, de 22/11/2026, sobre `1972f1b`: decisões do dono do projeto registradas (P27); correção do achado B1 do Revisor e da família dele (seções 4.5, 5.4, 8.1 e 8.2); ressalvas do Revisor (seções 4.2, 4.3, 4.5, 5.5, 5.15 e 10); ressalvas M1 a M3 da segunda leitura do Maestro (M1 na seção 5.6; M2 nas seções 2.1, 2.4, 5.1 e 5.8; M3 nas seções 2.5, 4.2 e 4.6).
+Status: aprovado pelo dono do projeto em 22/11/2026 (P28), com as duas ressalvas da seção 11; entregas 1, 2 e 3 (convite e e-mail) em código (seção 12). Revisão 2, de 22/11/2026, sobre `1972f1b`: decisões do dono do projeto registradas (P27); correção do achado B1 do Revisor e da família dele (seções 4.5, 5.4, 8.1 e 8.2); ressalvas do Revisor (seções 4.2, 4.3, 4.5, 5.5, 5.15 e 10); ressalvas M1 a M3 da segunda leitura do Maestro (M1 na seção 5.6; M2 nas seções 2.1, 2.4, 5.1 e 5.8; M3 nas seções 2.5, 4.2 e 4.6).

@@ -42,7 +42,9 @@ function networkFailure(message, cause) {
 // operacao_negada no registro de acessos; a recusa local tem a mesma forma da do servidor.
 const SO_ADMINISTRADOR = new Set(['ambiente', 'ia-config', 'analises', 'gerenciar-listar', 'inventario', 'apuracao-notas', 'diligencias-listar', 'caderno-listar']);
 async function api(operation, data, binary = false) {
-  if (document.body.dataset.papel === 'convidado' && SO_ADMINISTRADOR.has(operation)) {
+  // Estas operações esperam a sessão (que diz o que o papel alcança): pedi-las antes só geraria uma linha operacao_negada no registro de acessos.
+  if (SO_ADMINISTRADOR.has(operation) && window.Sessao) await window.Sessao.pronta;
+  if (SO_ADMINISTRADOR.has(operation) && window.Sessao && !window.Sessao.pode(operation)) {
     const result = {estado: 'erro', erro: 'Operação não permitida para esta conta.', codigo: 'operacao_proibida'};
     const failure = new Error(window.I18N?.erro ? window.I18N.erro(result) : result.erro);
     failure.result = result;
@@ -61,6 +63,7 @@ async function api(operation, data, binary = false) {
     throw new Error(window.I18N?.erro ? window.I18N.erro({}) : 'Não foi possível completar a operação.');
   }
   if (!response.ok) {
+    window.Sessao?.recusada(result);  // 403 redacao_suspensa: o estado vale para a Mesa inteira
     // One place turns server errors into the interface language (by `codigo` in English).
     const failure = new Error(window.I18N?.erro ? window.I18N.erro(result) : result.erro || 'Não foi possível completar a operação.');
     failure.result = result;
@@ -693,6 +696,68 @@ function mostrarAreaBase(area) {
   }
 }
 window.areaMesa = Object.freeze({ir: showArea, nucleo: mostrarAreaBase});
+
+// --- A sessão da Mesa (GET /api/sessao): quem é a pessoa e o que o servidor lhe permite ---------------------------------------------------
+// A Mesa esconde o que o papel não alcança pela lista `capacidades`, nunca pelo nome do papel; o servidor continua sendo a barreira (esconder
+// não protege nada). Sem a lista (modo local, sessão que não carregou, mocks de teste), nada se esconde, exceto para o perfil antigo
+// `convidado`, que só pergunta. Elementos com `data-requer="operacao outra"` somem sem a capacidade (basta uma das listadas).
+//   Sessao.pronta            promessa dos dados da sessão (null quando não há)
+//   Sessao.pode(operacao)    a pessoa alcança a operação?
+//   Sessao.areaPermitida(a)  a pessoa alcança a área?
+//   Sessao.aplicar()         reaplica data-requer e a navegação (depois de criar elementos novos)
+//   Sessao.suspender()       o estado "Redação suspensa" para a Mesa inteira (403 redacao_suspensa em qualquer pedido)
+const CAPACIDADE_DA_AREA = {inicio: '', configuracoes: '', documentos: 'inventario', codex: 'codex-listar', achados: 'achados-catalogo',
+  quadros: 'hipoteses-quadro', apuracao: 'apuracao-listar', caderno: 'caderno-listar', diligencias: 'diligencias-listar', cadastro: 'cadastrar',
+  gerenciar: 'gerenciar-listar'};
+window.Sessao = (() => {
+  const SO_PERGUNTA = /^(codex-|conta-|rascunhos-|sessao-sair$)/;
+  let dados = null, suspensa = false;
+  const papel = () => document.body.dataset.papel || '';
+  const conhecidas = () => Array.isArray(dados?.capacidades);
+  const pode = operacao => (conhecidas() ? dados.capacidades.includes(operacao) : papel() !== 'convidado' || SO_PERGUNTA.test(operacao));
+  const areaPermitida = area => !CAPACIDADE_DA_AREA[area] || pode(CAPACIDADE_DA_AREA[area]);
+  function aplicar() {
+    for (const no of document.querySelectorAll('[data-requer]')) {
+      if (no.dataset.requer.split(/\s+/).some(pode)) no.removeAttribute('data-sem-capacidade'); else no.setAttribute('data-sem-capacidade', '');
+    }
+    window.limitarNavegacaoConvidado?.();
+    // Quem abriu um endereço de área que o papel não alcança cai na Visão geral, sem erro.
+    if (typeof currentArea === 'string' && !areaPermitida(currentArea) && papel() !== 'convidado') showArea('inicio');
+  }
+  function suspender() {
+    if (suspensa) return;
+    suspensa = true;
+    document.body.dataset.suspensa = 'true';
+    const t = pt => (window.I18N ? window.I18N.t(pt) : pt);
+    const bloco = element('section', undefined, 'estado-bloco estado-aviso estado-suspensa');
+    bloco.dataset.estado = 'suspensa'; bloco.setAttribute('role', 'status'); bloco.tabIndex = -1;
+    const titulo = element('h1', undefined, 'estado-titulo');
+    const sinal = element('span', '!', 'estado-sinal-texto'); sinal.setAttribute('aria-hidden', 'true');
+    titulo.append(sinal, element('span', t('Redação suspensa')));
+    const sair = element('button', t('Sair'), 'secondary'); sair.type = 'button';
+    sair.addEventListener('click', () => $('mesa-sair').click());
+    const acoes = element('div', undefined, 'estado-acoes'); acoes.append(sair);
+    bloco.append(titulo,
+      element('p', t('Ninguém desta redação usa a Mesa enquanto a suspensão durar. Nada foi apagado: apurações, documentos e registros continuam guardados.'), 'estado-texto'),
+      element('p', t('Fale com quem administra o serviço.'), 'estado-nota'), acoes);
+    $('conteudo').append(bloco);
+    bloco.focus();
+  }
+  // Uma falha do servidor com este código vale para a Mesa inteira: quem recebe `falha.result` repassa aqui.
+  const recusada = resultado => { if (resultado?.codigo === 'redacao_suspensa') suspender(); };
+  const pronta = document.body.dataset.modo === 'local' ? Promise.resolve(null)
+    : Promise.resolve(window.fetch('/api/sessao', {headers: {Accept: 'application/json'}, credentials: 'same-origin'}))
+      .then(async resposta => {
+        if (resposta?.ok) return resposta.json();
+        recusada(await resposta?.json?.().catch(() => null));
+        return null;
+      }).catch(() => null)
+      .then(resultado => { dados = resultado; aplicar(); window.dispatchEvent(new Event('sessao-pronta')); return resultado; });
+  // A área pedida que o papel não alcança vira a Visão geral, também quando a pessoa a pede depois da carga.
+  registrarGanchoArea({forcar: nome => (areaPermitida(nome) || papel() === 'convidado' ? nome : 'inicio')});
+  document.addEventListener('DOMContentLoaded', aplicar);
+  return {pronta, pode, areaPermitida, aplicar, suspender, recusada, dados: () => dados};
+})();
 for (const area of ['inicio','cadastro','documentos','achados','codex','gerenciar','configuracoes','caderno','apuracao','diligencias','quadros']) $('ver-' + area).addEventListener('click', () => showArea(area));
 window.addEventListener('acervo-alterado', () => {
   $('cadastro-recibo').hidden = true; $('cadastro-perguntar').hidden=true;

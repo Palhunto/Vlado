@@ -34,8 +34,6 @@ FORA_DA_TABELA = {
     'codex-desligar': 'no piloto o serviço não se encerra pela interface: recusado a todos (observação da linha)',
     'ia-config-salvar': 'com mais de uma redação, a chave do serviço não se troca pela Mesa até existir a chave própria '
                         'de cada redação (entrega seguinte)',
-    'contas-criar': 'com mais de uma redação, ninguém escolhe login pela Mesa: o login é único na instalação e a recusa '
-                    '"já existe" contaria a uma redação o que há na outra (operação em retirada; o convite a substitui)',
     'sessao-sair': 'encerra a sessão usada pelo próprio teste: conferida à parte, com uma sessão só para isso'}
 
 
@@ -112,29 +110,39 @@ class ContratoTest(unittest.TestCase):
     def test_operacoes_do_servidor_e_da_matriz_sao_as_mesmas(self):
         self.assertEqual(autorizacao.operacoes_com_sessao(), set(interface_pesquisa.OPERACOES_API))
         self.assertEqual(set(autorizacao.PUBLICAS), set(interface_pesquisa.OPERACOES_PUBLICAS))
-        self.assertEqual(self.publicas - self.novas, set(autorizacao.PUBLICAS))
+        self.assertEqual(self.publicas - set(autorizacao.PENDENTES), set(autorizacao.PUBLICAS))
+        self.assertEqual(self.publicas - self.novas, {'entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin'})
         self.assertEqual({c for c in autorizacao.MATRIZ if c.startswith('GET:')},
                          {'GET:/', 'GET:/api/sessao', 'GET:/api/integracao', 'GET:/api/catalogo', 'GET:/api/fila', 'GET:/api/cota'})
 
-    def test_operacoes_retiradas_do_contrato_sao_as_transitorias_e_so_o_dono_as_alcanca(self):
+    def test_operacoes_retiradas_do_contrato_sairam_da_matriz_e_do_servidor(self):
         texto = CONTRATO.read_text(encoding='utf-8')
         nota = texto[texto.index('**Operações retiradas:**'):].split('\n', 1)[0]
         retiradas = {nome for nome, _ in NOME.findall(nota) if nome.startswith('contas-')}
-        self.assertEqual(retiradas, set(autorizacao.TRANSITORIAS))
+        self.assertEqual(retiradas, set(autorizacao.RETIRADAS))
         self.assertEqual(len(retiradas), 6)
-        for regra in autorizacao.TRANSITORIAS.values():
-            self.assertEqual(regra.celulas, {'dono': 'sim', 'editor': '—', 'reporter': '—', 'leitor': '—', 'convidado': '—'})
+        self.assertEqual(autorizacao.TRANSITORIAS, {})  # nothing is in withdrawal any more: they left with the invitation (P30)
+        self.assertFalse(retiradas & (set(autorizacao.MATRIZ) | set(interface_pesquisa.OPERACOES_API) | set(autorizacao.PENDENTES)))
 
-    def test_coluna_do_convidado_e_o_que_o_convidado_ja_alcancava(self):
+    def test_coluna_do_convidado_e_o_que_o_convidado_ja_alcancava_mais_a_propria_conta(self):
+        # The legacy profile keeps what the guest could call; the only addition is the own account (section 5.4):
+        # nothing of any case.
         alcanca = {c.split('#')[0] for c, regra in autorizacao.MATRIZ.items()
                    if not c.startswith('GET:') and regra.celulas['convidado'] != autorizacao.NEGADO}
-        self.assertEqual(alcanca, set(interface_pesquisa.OPERACOES_CONVIDADO))
+        self.assertEqual(alcanca, set(interface_pesquisa.OPERACOES_CONVIDADO) | set(interface_pesquisa.CONTA_PROPRIA))
+        self.assertTrue(all(o.startswith('conta-') for o in interface_pesquisa.CONTA_PROPRIA))
+        for operacao in interface_pesquisa.CONTA_PROPRIA:
+            self.assertEqual(autorizacao.MATRIZ[operacao].resolvedor, frozenset({'nenhum'}))
 
     def test_capacidades_saem_da_matriz(self):
         self.assertIn('redacao-revisar', autorizacao.capacidades({'papel': 'editor'}))
         self.assertNotIn('redacao-revisar', autorizacao.capacidades({'papel': 'reporter'}))
         self.assertNotIn('cadastrar', autorizacao.capacidades({'papel': 'editor'}))
-        self.assertEqual(set(autorizacao.capacidades({'papel': 'convidado'})), set(interface_pesquisa.OPERACOES_CONVIDADO))
+        self.assertEqual(set(autorizacao.capacidades({'papel': 'convidado'})),
+                         set(interface_pesquisa.OPERACOES_CONVIDADO) | set(interface_pesquisa.CONTA_PROPRIA))
+        self.assertIn('equipe-papel', autorizacao.capacidades({'papel': 'dono'}))
+        for papel in ('editor', 'reporter', 'leitor', 'convidado'):
+            self.assertFalse([o for o in autorizacao.capacidades({'papel': papel}) if o.startswith('equipe-')], papel)
 
 
 class Pedido:
@@ -307,15 +315,24 @@ class CelulasTest(cenario.DuasRedacoes):
             'openai': {'configurada': False, 'origem': None, 'final': None}})
         self.assertEqual(autorizacao.filtrar(self.root, 'local', principal, 'ia-config', resposta), resposta)
 
-    def test_contas_criar_e_recusada_a_todos_com_mais_de_uma_redacao_e_so_ai(self):
+    def test_as_contas_antigas_respondem_como_operacao_inexistente_a_todos_os_papeis(self):
+        # Withdrawn with the invitation by e-mail (P30): the same 404 of an operation that never existed, to the
+        # dono as to anybody, with the body they would send before.
+        inexistente = self.post('dono', 'operacao-que-nunca-existiu', {})
+        self.assertEqual(inexistente[0], 404)
+        antes = self.retrato()
         for papel in autorizacao.PAPEIS:
-            status, corpo, _ = self.post(papel, 'contas-criar', {'nome': 'Pessoa', 'login': 'pessoa.nova', 'papel': 'leitor'})
-            self.assertEqual((status, corpo.get('codigo')), (403, 'operacao_proibida'), papel)
+            for operacao, dados in (('contas-listar', {}), ('contas-criar', {'nome': 'Pessoa', 'login': 'pessoa.nova', 'papel': 'admin'}),
+                                    ('contas-atualizar', {'id': self.ids['leitor'], 'papel': 'admin'}),
+                                    ('contas-desativar', {'id': self.ids['dono']}), ('contas-reativar', {'id': self.ids['leitor']}),
+                                    ('contas-recuperar', {'id': self.ids['leitor']})):
+                resposta = self.post(papel, operacao, dados)
+                self.assertEqual((resposta[0], resposta[2]), (404, inexistente[2]), (papel, operacao))
+        self.assertEqual(antes, self.retrato())
         principal = acesso.sessao(self.root, self.sessoes['dono'][0].split('=', 1)[1])
-        with patch.object(acesso, 'total_redacoes', return_value=1):  # one newsroom: its logins are all its own
-            self.assertEqual(autorizacao.conferir(self.root, 'piloto', principal, 'contas-criar', {}).operacao, 'contas-criar')
-        for operacao in ('contas-listar', 'contas-atualizar', 'contas-desativar', 'contas-reativar', 'contas-recuperar'):
-            self.assertEqual(autorizacao.conferir(self.root, 'piloto', principal, operacao, {}).operacao, operacao)
+        with self.assertRaises(autorizacao.Recusa) as recusa:
+            autorizacao.conferir(self.root, 'piloto', principal, 'contas-recuperar', {})
+        self.assertEqual(recusa.exception.status, 404)
 
     def test_sessao_devolve_papel_redacao_alcance_explicito_e_capacidades(self):
         for papel, casos in (('dono', ['alpha', 'delta', 'gama']), ('editor', ['alpha']), ('reporter', ['alpha', 'gama']),

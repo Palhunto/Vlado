@@ -19,9 +19,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acesso
 import autorizacao
 import interface_pesquisa
+import rotas_equipe
 from test_acesso import RAPIDO, SENHA, hasher_rapido
 
 ADMIN, ADMIN2, ANA, BIA, PENDENTE, DESATIVADA = ('a' * 16, 'b' * 16, 'c' * 16, 'd' * 16, 'e' * 16, 'f' * 16)
+# Operations that did not exist before the migration and reach no case the account did not reach: the own account
+# (`conta-*`, every role), and, for the dono only, the team (`equipe-*`) and who takes part in a case (`caso-*`).
+DA_PROPRIA_CONTA = set(interface_pesquisa.CONTA_PROPRIA)
+NOVAS_SEM_APURACAO_ALHEIA = DA_PROPRIA_CONTA | set(rotas_equipe.OPERACOES)
 CATALOGO = ('alpha', 'beta', 'gama')
 
 
@@ -219,8 +224,7 @@ class NaoAmpliacaoTest(Base):
 
     def test_nenhuma_conta_alcanca_depois_apuracao_ou_operacao_que_nao_alcancava_antes(self):
         antes = json.loads(self.original)
-        operacoes_de_antes = set(interface_pesquisa.OPERACOES_API) - {'caso-participantes', 'caso-incluir', 'caso-retirar',
-                                                                     'caso-responsavel'}
+        operacoes_de_antes = set(interface_pesquisa.OPERACOES_API) - NOVAS_SEM_APURACAO_ALHEIA
         for cid, conta in antes['contas'].items():
             with self.subTest(conta=conta['login']):
                 admin = conta['papel'] == 'admin'
@@ -233,10 +237,9 @@ class NaoAmpliacaoTest(Base):
                 if not conta['ativa']:
                     self.assertEqual(casos_depois, set())
                 self.assertLessEqual(casos_depois, casos_antes)
-                self.assertLessEqual(ops_depois - {'caso-participantes', 'caso-incluir', 'caso-retirar', 'caso-responsavel'},
-                                     ops_antes)
+                self.assertLessEqual(ops_depois - NOVAS_SEM_APURACAO_ALHEIA, ops_antes)
                 if not admin:  # the legacy profile: exactly what a guest could call, on its own cases only
-                    self.assertEqual(ops_depois, set(interface_pesquisa.OPERACOES_CONVIDADO))
+                    self.assertEqual(ops_depois - DA_PROPRIA_CONTA, set(interface_pesquisa.OPERACOES_CONVIDADO))
 
     def test_o_portao_recusa_ao_convidado_migrado_o_que_ele_nao_alcancava(self):
         sid = acesso.entrar(self.root, 'ana', SENHA)[0]
@@ -246,7 +249,9 @@ class NaoAmpliacaoTest(Base):
         for operacao, dados, codigo in (('codex-listar', {'caso': 'beta'}, 'caso_indisponivel'),
                                         ('apuracao-notas', {'caso': 'alpha'}, 'operacao_proibida'),
                                         ('achados-catalogo', {'caso': 'alpha'}, 'operacao_proibida'),
-                                        ('contas-listar', {}, 'operacao_proibida'),
+                                        ('equipe-listar', {}, 'operacao_proibida'),
+                                        ('equipe-convidar', {'email': 'x@exemplo.test', 'papel': 'dono'}, 'operacao_proibida'),
+                                        ('contas-listar', {}, 'operacao_inexistente'),  # withdrawn with the invitation
                                         ('cadastrar', {'novo': True}, 'operacao_proibida')):
             with self.subTest(operacao=operacao), self.assertRaises(autorizacao.Recusa) as recusa:
                 autorizacao.conferir(self.root, 'piloto', principal, operacao, dados)

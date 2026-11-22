@@ -201,10 +201,10 @@ class AutenticacaoTest(Auditoria):
 
 
 class DiaCheioTest(Auditoria):
-    """B1 de ponta a ponta: com o dia cheio de falhas anônimas, o administrador entra e cria outro administrador, e as duas
+    """B1 de ponta a ponta: com o dia cheio de falhas anônimas, o dono entra e convida outro dono, e as duas
     coisas ficam no registro."""
 
-    def test_administrador_entra_e_cria_administrador_com_o_dia_cheio(self):
+    def test_dono_entra_e_convida_outro_dono_com_o_dia_cheio(self):
         with patch.dict(os.environ, {'VLADO_REGISTRO_DIA_MAX_MB': '1'}):
             reg.iniciar_requisicao(lambda: '203.0.113.9')
             for i in range(10000):
@@ -213,15 +213,14 @@ class DiaCheioTest(Auditoria):
             self.assertTrue([l for l in self.todas() if l['evento'] == 'registro_cheio'], 'o dia está cheio de falhas')
             self.marcar()
             cookie, csrf = self.entrar('editora')
-            status, criada = self.post((cookie, csrf), 'contas-criar', {'nome': 'Outra Editora', 'login': 'outra.editora',
-                                                                        'papel': 'admin'})
+            status, criada = self.post((cookie, csrf), 'equipe-convidar', {'email': 'outra.editora@exemplo.test',
+                                                                           'papel': 'dono', 'senha': SENHA})
             self.assertEqual(status, 200, criada)
             self.publico('entrar', {'login': 'ninguem', 'senha': SENHA})  # falha anônima: descartada, sem derrubar nada
         eventos = [(l['evento'], l['resultado']) for l in self.novas()]
-        self.assertEqual(eventos, [('login_ok', 'ok'), ('conta_criada', 'ok')])
-        criacao = self.novas('conta_criada')[0]
-        self.assertEqual((criacao['por'], criacao['conta'], criacao['operacao']),
-                         (self.admin_id, criada['conta']['id'], 'contas-criar'))
+        self.assertEqual(eventos, [('login_ok', 'ok'), ('convite_enviado', 'ok')])
+        convite = self.novas('convite_enviado')[0]
+        self.assertEqual((convite['por'], convite['papel'], convite['operacao']), (self.admin_id, 'dono', 'equipe-convidar'))
 
     def inundar(self, momento_do_pedido):
         """400 pedidos anônimos do mesmo IP; `momento_do_pedido(n)` diz que horas o registro acha que são no pedido n. A agregação é por
@@ -269,52 +268,59 @@ class AdministracaoTest(Auditoria):
     def admin_posta(self, operation, data):
         return self.post(self.admin, operation, data)
 
-    def test_criar_alterar_desativar_reativar_e_recuperar(self):
-        status, criada = self.admin_posta('contas-criar', {'nome': 'Carla Souza', 'login': 'carla', 'papel': 'convidado',
-                                                           'casos': ['alpha'], 'cota_diaria': 3})
+    def test_convidar_aceitar_alterar_desativar_reativar_e_remover(self):
+        status, criada = self.admin_posta('equipe-convidar', {'email': 'carla@exemplo.test', 'papel': 'leitor', 'casos': ['alpha']})
         self.assertEqual(status, 200, criada)
-        cid, link = criada['conta']['id'], criada['link']
-        self.assertEqual(self.admin_posta('contas-atualizar', {'id': cid, 'papel': 'admin'})[0], 200)
-        self.assertEqual(self.admin_posta('contas-atualizar', {'id': cid, 'papel': 'convidado', 'casos': ['beta']})[0], 200)
-        self.assertEqual(self.admin_posta('contas-desativar', {'id': cid})[0], 200)
-        self.assertEqual(self.admin_posta('contas-reativar', {'id': cid})[0], 200)
-        status, recuperada = self.admin_posta('contas-recuperar', {'id': cid})
-        self.assertEqual(status, 200)
-        eventos = [(l['evento'], l['conta'], l['por']) for l in self.novas() if l['evento'] != 'sessao_expirada']
-        self.assertEqual(eventos, [('conta_criada', cid, self.admin_id), ('acesso_alterado', cid, self.admin_id),
-                                   ('acesso_alterado', cid, self.admin_id), ('conta_desativada', cid, self.admin_id),
-                                   ('conta_reativada', cid, self.admin_id), ('recuperacao_emitida', cid, self.admin_id)])
+        link = criada['link']  # the link on the screen: this server has no real delivery
+        token = link.rsplit('/', 1)[1]
+        status, _, aceite = self.publico('convite-aceitar', {'token': token, 'nome': 'Carla Souza', 'senha': SENHA})
+        self.assertEqual(status, 200, aceite)
+        cid = aceite['conta']['id']
+        # Promoting to dono and changing the role of a dono ask the password (contrato de contas, 5.15); removing, always.
+        self.assertEqual(self.admin_posta('equipe-papel', {'conta': cid, 'papel': 'dono', 'senha': SENHA})[0], 200)
+        self.assertEqual(self.admin_posta('equipe-papel', {'conta': cid, 'papel': 'leitor', 'senha': SENHA})[0], 200)
+        self.assertEqual(self.admin_posta('equipe-desativar', {'conta': cid})[0], 200)
+        self.assertEqual(self.admin_posta('equipe-reativar', {'conta': cid})[0], 200)
+        self.assertEqual(self.admin_posta('equipe-remover', {'conta': cid, 'senha': SENHA})[0], 200)
+        linhas = [l for l in self.novas() if l['evento'] not in ('sessao_expirada', 'login_ok')]
+        self.assertEqual([(l['evento'], l['conta'], l.get('por')) for l in linhas],
+                         [('convite_enviado', None, self.admin_id), ('convite_aceito', cid, None),
+                          ('papel_alterado', cid, self.admin_id), ('papel_alterado', cid, self.admin_id),
+                          ('conta_desativada', cid, self.admin_id), ('conta_reativada', cid, self.admin_id),
+                          ('conta_excluida', cid, self.admin_id)])
         for linha in self.novas():
             self.assertEqual((linha['ip'], linha['resultado']), ('127.0.0.1', 'ok'))
-        papel1, papel2 = self.novas('acesso_alterado')
-        # The administrator of before is the dono (contrato de contas, 2.4 and 6); `admin` is still accepted on input.
-        self.assertEqual((papel1['papel'], papel1['campos']), ('dono', ['casos', 'cota', 'papel']))
-        self.assertEqual((papel2['papel'], papel2['campos']), ('convidado', ['casos', 'cota', 'papel']))
-        self.assertEqual([l['operacao'] for l in self.novas()],
-                         ['contas-criar', 'contas-atualizar', 'contas-atualizar', 'contas-desativar', 'contas-reativar', 'contas-recuperar'])
-        for segredo in (link, recuperada['link'], link.rsplit('/', 1)[1], recuperada['link'].rsplit('/', 1)[1], 'Carla', 'carla'):
+        papel1, papel2 = self.novas('papel_alterado')
+        self.assertEqual((papel1['papel'], papel2['papel']), ('dono', 'leitor'))
+        self.assertEqual([l['operacao'] for l in linhas],
+                         ['equipe-convidar', 'convite-aceitar', 'equipe-papel', 'equipe-papel', 'equipe-desativar',
+                          'equipe-reativar', 'equipe-remover'])
+        for segredo in (link, token, 'Carla', 'carla', 'exemplo.test'):
             self.assertNotIn(segredo, self.texto())
 
     def test_operacao_de_administracao_recusada_e_registrada(self):
-        status, _ = self.admin_posta('contas-criar', {'nome': 'Outra Ana', 'login': 'ana', 'papel': 'convidado',
-                                                      'casos': ['alpha'], 'cota_diaria': 3})  # login já existe
+        status, _ = self.admin_posta('equipe-papel', {'conta': self.ana_id, 'papel': 'operador'})  # papel que não existe
         self.assertEqual(status, 400)
         linha, = self.novas('admin_recusada')
-        self.assertEqual((linha['resultado'], linha['conta'], linha['motivo'], linha['operacao']),
-                         ('falha', self.admin_id, 'validacao', 'contas-criar'))
-        status, _ = self.admin_posta('contas-desativar', {'id': self.admin_id})  # último administrador
+        self.assertEqual((linha['resultado'], linha['conta'], linha['motivo'], linha['operacao'], linha['alvo']),
+                         ('falha', self.admin_id, 'validacao', 'equipe-papel', self.ana_id))
+        status, _ = self.admin_posta('equipe-desativar', {'conta': self.admin_id, 'senha': SENHA})  # último dono
         self.assertEqual(status, 400)
         ultima = self.novas('admin_recusada')[-1]
-        self.assertEqual((ultima['operacao'], ultima['alvo']), ('contas-desativar', self.admin_id))
+        self.assertEqual((ultima['operacao'], ultima['alvo'], ultima['motivo'], ultima['codigo']),
+                         ('equipe-desativar', self.admin_id, 'ultimo_dono', 'ultimo_dono'))
+        self.assertEqual(self.admin_posta('equipe-remover', {'conta': self.ana_id, 'senha': 'senha-errada-de-teste'})[0], 403)
+        recusadas = self.novas('admin_recusada')  # the wrong password goes once, from where it is checked
+        self.assertEqual((len(recusadas), recusadas[-1]['conta'], recusadas[-1]['motivo']), (3, self.admin_id, 'senha_incorreta'))
 
     def test_convidado_tentando_administrar_e_negado_e_registrado(self):
-        for operacao in ('contas-listar', 'contas-criar', 'contas-recuperar'):
-            self.assertEqual(self.post(self.ana, operacao, {'id': self.bia_id})[0], 403)
+        operacoes = ('equipe-listar', 'equipe-convidar', 'equipe-recuperar')
+        for operacao in operacoes:
+            self.assertEqual(self.post(self.ana, operacao, {'conta': self.bia_id})[0], 403)
         negadas = self.novas('acesso_negado')  # the gate's refusal, with its reason (contrato de contas, 4.3)
         self.assertEqual([(l['conta'], l['operacao'], l['resultado'], l['codigo'], l['motivo']) for l in negadas],
-                         [(self.ana_id, o, 'negado', 'operacao_proibida', 'papel')
-                          for o in ('contas-listar', 'contas-criar', 'contas-recuperar')])
-        self.assertEqual(self.novas('conta_criada'), [], 'nada foi criado')
+                         [(self.ana_id, o, 'negado', 'operacao_proibida', 'papel') for o in operacoes])
+        self.assertEqual(self.novas('convite_enviado') + self.novas('recuperacao_pedida'), [], 'nada foi feito')
 
     def test_apuracao_nao_liberada_ao_convidado_e_negada(self):
         status, _ = self.post(self.ana, 'codex-perguntar', {'caso': 'beta', 'pergunta': 'Pergunta sintética.'})
@@ -377,11 +383,11 @@ class NadaSensivelNoRegistroTest(Auditoria):
         # Entrar, perguntar, baixar, administrar, errar, sair: tudo junto.
         conversa = self.perguntar(self.ana)
         self.post(self.admin, 'apuracao-exportar', {'caso': 'alpha', 'formato': 'md'})
-        status, criada = self.post(self.admin, 'contas-criar', {'nome': 'Dora Lima', 'login': 'dora', 'papel': 'convidado',
-                                                                'casos': ['alpha'], 'cota_diaria': 3})
+        status, criada = self.post(self.admin, 'equipe-convidar', {'email': 'dora@exemplo.test', 'papel': 'leitor',
+                                                                   'casos': ['alpha']})
         self.publico('entrar', {'login': 'dora', 'senha': SENHA})
         self.publico('entrar', {'login': 'ana', 'senha': 'errada-mas-longa'})
-        self.post(self.ana, 'contas-listar', {})
+        self.post(self.ana, 'equipe-listar', {})
         self.post(self.ana, 'sessao-sair', {})
         texto = self.texto()
         sessoes = [self.admin, self.ana, self.bia]

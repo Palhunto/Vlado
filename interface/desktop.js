@@ -5,7 +5,8 @@
   const button = document.getElementById('mesa-tema');
   const meta = document.querySelector('meta[name="theme-color"]');
   function apply(value) {
-    const theme = value === 'light' ? 'light' : 'dark';
+    // Sem valor guardado ("Do sistema", em Minha conta), vale a preferência do sistema, como na entrada; sem a consulta, o escuro de sempre.
+    const theme = value === 'light' || value === 'dark' ? value : (typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
     document.documentElement.dataset.theme = theme;
     const label = theme === 'dark' ? 'Modo claro' : 'Modo escuro';
     button.textContent = label;
@@ -288,7 +289,7 @@
     const button=element('button','Retomar trabalho →');button.type='button';button.addEventListener('click',()=>$('inicio-retomar').click());next.append(button);target.append(info,next);
     // Resume summary (continuidade.js): done and pending items, each linked to its area. Admin only.
     // Shown only when /api/integracao announces `continuidade_resumo` (Continuidade.disponivel).
-    if(window.Continuidade?.disponivel&&document.body.dataset.papel!=='convidado'){
+    if(window.Continuidade?.disponivel&&window.Sessao.pode('continuidade-resumo')){
       const slot=element('div',undefined,'mesa-resume-progress'),caso=caseData.id;target.append(slot);
       window.Continuidade.disponivel().then(ok=>{if(!ok){slot.remove();return;}if(slot.isConnected&&current()===caso)window.Continuidade.montar(slot,caso);});
     }
@@ -313,7 +314,7 @@
   }
   async function loadInventory(force=false){
     // The guest has no access to the inventory (403): ask nothing and leave the header as it is.
-    if(document.body.dataset.papel==='convidado'){window.barraMesa.definir('documentos','');return;}
+    if(!window.Sessao.pode('inventario')){window.barraMesa.definir('documentos','');return;}
     const caseId=current();if(!force&&loadedCase===caseId)return;
     const ticket=++sequence;loadedCase=caseId;inventory=null;loading=!!caseId;$('mesa-acervo-erro').hidden=true;window.barraMesa.definir('documentos','');
     $('mesa-atualizar-acervo').disabled=loading;
@@ -330,7 +331,7 @@
   let deadlineTicket=0;
   async function countDeadlines(){
     const caseId=current();
-    if(!caseId||document.body.dataset.papel==='convidado'){deadlineTicket++;window.barraMesa.definir('diligencias','','aviso');return;}
+    if(!caseId||!window.Sessao.pode('diligencias-listar')){deadlineTicket++;window.barraMesa.definir('diligencias','','aviso');return;}
     const ticket=++deadlineTicket;
     try{
       const result=await api('diligencias-listar',{caso:caseId});
@@ -367,7 +368,7 @@
   loadQuota(true);
   window.addEventListener('focus',()=>loadQuota());
   // Profile in the sidebar footer: name and role from the session; it opens Configurações (shown only when piloto.js allows it).
-  const ROLES={admin:'Administrador',convidado:'Convidado'};
+  const ROLES={admin:'Administrador',dono:'Dono',editor:'Editor',reporter:'Repórter',leitor:'Leitor',convidado:'Convidado'};
   Promise.resolve(window.fetch?.('/api/sessao')).then(res=>res?.ok?res.json():null).then(data=>{
     const account=data?.conta;if(!account?.nome)return;
     const name=String(account.nome).trim(),initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0].toUpperCase()).join('');
