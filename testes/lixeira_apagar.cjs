@@ -218,3 +218,30 @@ test('em inglês o diálogo, as categorias, o total e a linha do item vêm tradu
   assert.equal(botoes(mesa)[0].textContent, 'Cancel');
   assert.match(dlg.textContent, /Copies already in backups/);
 });
+
+const PENDENTE = 'Um apagamento definitivo desta apuração ficou pela metade e só se resolve na próxima partida da Mesa. Até lá, não é possível restaurar nem apagar este item; feche os programas que usem esses arquivos e reinicie a Mesa.';
+
+test('item com apagamento pela metade: Restaurar e Apagar desabilitados e o texto do servidor junto ao item', async () => {
+  const mesa = criarMesa({catalogo: [ALFA], url: 'http://127.0.0.1:8765/?area=gerenciar&caso=alfa', api: operacao => {
+    if (operacao === 'gerenciar-listar') return {casos: [ALFA], conversas: [], lixeira: [{...structuredClone(ITEM), apagamento_pendente: true}, {...structuredClone(ITEM), id: 'b'.repeat(32), titulo: 'Outra', apagamento_pendente: false}]};
+    return {};
+  }});
+  await mesa.esperar(12);
+  const itens = [...mesa.$('gerenciar-lixeira').querySelectorAll('li')];
+  assert.equal(itens.length, 2);
+  const pendente = itens.find(li => /Conversa velha/.test(li.textContent)), normal = itens.find(li => /Outra/.test(li.textContent));
+  assert.deepEqual([...pendente.querySelectorAll('button')].map(b => [b.textContent, b.disabled]), [['Restaurar', true], ['Apagar definitivamente…', true]]);
+  assert.equal(pendente.querySelector('.notice').textContent, PENDENTE, 'o texto do servidor, inteiro');
+  assert.deepEqual([...normal.querySelectorAll('button')].map(b => b.disabled), [false, false]);
+  assert.equal(normal.querySelector('.notice'), null);
+});
+
+test('alcance de um item com apagamento pela metade: o texto aparece no diálogo e o campo e a ação ficam desabilitados', async () => {
+  const {mesa, liberar} = await abrirDialogo({alcance: () => ({...structuredClone(ALCANCE), apagamento_pendente: true})});
+  await liberar();
+  assert.equal(estadoDoAlcance(mesa).textContent, PENDENTE, 'a razão, em texto de estado e não em cor de erro');
+  assert.equal(erro(mesa).hidden, true);
+  assert.equal(campo(mesa).disabled, true);
+  assert.equal(botoes(mesa)[1].disabled, true);
+  assert.equal(dialogo(mesa).querySelector('table'), null, 'sem tabela: não há o que confirmar');
+});
