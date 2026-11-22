@@ -47,8 +47,9 @@ const MAPA = {caso: 'alpha', divergentes: [], aviso: 'Ligações registradas por
   homonimos: [{entidades: ['P2', 'P1'], nomes: ['Lucia  PRATES', 'Lúcia Prates'], motivo: 'nome_igual', identificadores_comuns: [], identificadores_divergentes: ['matricula'],
     conferencias: [], situacao: 'pendente', aviso: 'Sugestão para conferência humana; as entidades não foram fundidas.'}]};
 
-function mesa({integracao = {quadros_evidencia: true, tabelas_apuracao: true}} = {}) {
+function mesa({integracao = {quadros_evidencia: true, tabelas_apuracao: true}, desktop = true} = {}) {
   const m = criarMesa({
+    desktop,
     scripts: [...PILHA, 'quadros.js', 'analise.js'],
     catalogo: [{id: 'alpha', titulo: 'Alfa', rodadas: [{id: 'R001', geracoes: ['g1']}]}],
     api: (operacao, dados) => ({
@@ -256,4 +257,24 @@ test('disposição do mapa: nenhum rótulo cobre nó nem outra ligação, de 2 a
     }
     assert.ok(d.pos.E0 && d.L >= 760);
   }
+});
+
+test('disposição do mapa: 28 entidades e 40 ligações custam pouco (teto de trabalho) e o desenho não é calculado com ele oculto', async () => {
+  const m = mesa();
+  const entidades = Array.from({length: 28}, (_, i) => ({id: `E${i}`, tipo: i % 2 ? 'pessoa' : 'organizacao', nome: `Entidade ${i}`}));
+  const relacoes = Array.from({length: 40}, (_, i) => ({id: `L${String(i).padStart(2, '0')}`, origem: `E${i % 28}`, destino: `E${(i * 7 + 3) % 28}`, tipo: 'Contrato 041/2025', situacao: 'documentada'}))
+    .filter(r => r.origem !== r.destino);
+  const inicio = Date.now();
+  const d = m.janela.Quadros.dispor({entidades, relacoes});
+  assert.ok(Date.now() - inicio < 300, `a disposição de 28 entidades levou ${Date.now() - inicio} ms (limite folgado: 300)`);
+  assert.equal(Object.keys(d.pos).length, 28);
+  // Abaixo de 1024 px o mapa se lê como a lista: o desenho nem é montado, e dispor não é chamado.
+  const estreito = mesa({desktop: false});
+  let chamadas = 0; const original = estreito.janela.Quadros.dispor;
+  estreito.janela.Quadros.dispor = (...argumentos) => { chamadas += 1; return original(...argumentos); };
+  estreito.$('ver-quadros').click(); await estreito.esperar(8);
+  estreito.$('quadros-aba-mapa').click(); await estreito.esperar(8);
+  assert.ok(estreito.$('quadros-mapa').querySelector('.mapa-lista'), 'a lista continua lá');
+  assert.equal(estreito.$('quadros-mapa').querySelector('.mapa-svg'), null, 'sem desenho abaixo de 1024 px');
+  assert.equal(chamadas, 0, 'dispor não é chamado com o desenho oculto');
 });
