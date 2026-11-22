@@ -2,13 +2,15 @@
 
 Cada carga de revisão (``registros_achados.carregar``, que refaz a conferência técnica de cada evidência
 indexada em toda a cadeia de revisões), cada evidência resolvida (``evidencias.resolver``, usada por Conferir,
-Pedidos e prazos e Quadros) e cada leitura do índice de achados (``indice_achados.evidencia`` e ``detalhe``)
-passavam por ``indice_sqlite.ler_passagem``, que grava um JSON em ``saidas/consultas_sqlite/``: abrir a tela
-gastava o teto de arquivos por rodada sem ninguém consultar. A procedência da evidência já está no próprio
+Pedidos e prazos e Quadros) e o detalhe do índice de achados passavam por ``indice_sqlite.ler_passagem``, que
+grava um JSON em ``saidas/consultas_sqlite/``: abrir a tela gastava o teto de arquivos por rodada sem ninguém
+consultar. O 'Ver contexto' de uma evidência (``indice_achados.evidencia``, ``achados-evidencia``) é leitura da
+pessoa e continua gravando um registro por clique (W1). A procedência da evidência já está no próprio
 registro (referência, geração, ``indice_id``, ``banco_sha256``, trecho e linhas); o registro bruto que o
 AGENTS.md manda preservar é o das consultas (busca, cobertura e leitura de contexto), e esse continua.
 Dados sintéticos apenas.
 """
+import json
 import os
 from pathlib import Path
 import sys
@@ -44,13 +46,28 @@ class ConferenciaSemRegistroTest(unittest.TestCase):
             ref = {'tipo': 'ia', 'caso_id': 'alpha', 'rodada': 'R001', 'revisao': 'r2',
                    'registros_sha256': self.segunda['manifesto']['registros_sha256'], 'evidencia_id': item['id']}
             self.assertEqual(evidencias.resolver(self.root, 'alpha', ref)['referencia'], ref)
-            indice_achados.evidencia(self.root, 'alpha', 'R001', 'r2', item['id'])
         indice_achados.detalhe(self.root, 'alpha', 'R001', 'r2', 'g2', 'A001')
 
     def test_abrir_n_vezes_nao_grava_registro_de_consulta(self):
         antes = self.registros()
         for _ in range(ABERTURAS):
             self.abrir_tudo()
+        self.assertEqual(self.registros(), antes)
+
+    def test_ver_contexto_grava_um_registro_por_clique(self):
+        # W1: 'Ver contexto' in Conferir is the person's reading of the context, which AGENTS.md keeps.
+        item = self.indexadas[0]
+        for clique in range(1, 4):
+            antes = set(self.registros())
+            resposta = indice_achados.evidencia(self.root, 'alpha', 'R001', 'r2', item['id'])
+            novos = set(self.registros()) - antes
+            self.assertEqual(len(novos), 1, f'clique {clique}')
+            registro = json.loads((self.pasta / novos.pop()).read_text(encoding='utf-8'))
+            self.assertEqual((registro['operacao'], registro['passagem']['referencia']),
+                             ('ler', item['indice']['referencia']))
+            self.assertEqual(resposta['evidencia'], item)
+        antes = self.registros()
+        self.abrir_tudo()  # the load of the review still writes nothing
         self.assertEqual(self.registros(), antes)
 
     def test_publicar_revisao_nao_grava_registro_de_consulta(self):
