@@ -13,7 +13,7 @@ DIGEST = re.compile(r'@sha256:[0-9a-f]{64}$')
 COPY_PERMITIDO = {
     'deploy/requirements.lock', 'scripts/', 'interface/', 'prompts/', 'modelos/',
     'configuracao.json', 'AGENTS.md', 'README.md', 'casos/README.md', 'casos/catalogo.json',
-    'entrada/README.md',
+    'entrada/README.md', 'scripts/backup.py',  # esta última só no estágio `backup` (age + rclone), sem o app
 }
 PROIBIDO_NA_IMAGEM = ('.maestro', '.maestri', '.claude', '.git', 'segredos', 'acesso', 'ajustes', 'testes',
                       'docs', 'instalador', 'android', 'conversas', 'execucoes', 'lixeira')
@@ -58,12 +58,22 @@ class ImagemPorDigestTest(unittest.TestCase):
         for imagem in froms:
             self.assertRegex(imagem, DIGEST, f'FROM sem digest: {imagem}')
         self.assertIn('python:3.12-slim-bookworm', texto.split('FROM ', 1)[0], 'comentário com a etiqueta de origem')
+        self.assertEqual(len(set(froms)), 1, 'os estágios partem do mesmo digest')
+
+    def test_estagio_de_backup_so_leva_o_script_de_backup(self):
+        linhas = _dockerfile()
+        inicio = next(i for i, l in enumerate(linhas) if l.upper().startswith('FROM ') and l.endswith(' AS backup'))
+        fim = next(i for i, l in enumerate(linhas) if i > inicio and l.upper().startswith('FROM '))
+        copias = [l.split()[1:] for l in linhas[inicio:fim] if l.upper().startswith('COPY ')]
+        self.assertEqual(copias, [['scripts/backup.py', './scripts/backup.py']])
+        self.assertTrue(linhas[-3].startswith('HEALTHCHECK') or any(l.startswith('CMD') for l in linhas[fim:]))
+        self.assertTrue(linhas[fim].endswith(' AS vlado'), 'o estágio do app é o último (padrão do build)')
 
     def test_caddy_por_digest_com_etiqueta_de_origem_comentada(self):
         texto = (RAIZ / 'docker-compose.yml').read_text(encoding='utf-8')
         for nome, bloco in _servicos().items():
             for imagem in re.findall(r'^\s+image:\s*(\S+)', bloco, flags=re.MULTILINE):
-                if nome == 'vlado':  # imagem construída aqui
+                if nome in ('vlado', 'backup', 'restauracao'):  # imagens construídas aqui (base por digest no Dockerfile)
                     continue
                 self.assertRegex(imagem, DIGEST, f'{nome}: imagem sem digest ({imagem})')
         self.assertIn('Etiqueta de origem: caddy:2.8', texto)
@@ -105,6 +115,22 @@ class TravaDeDependenciasTest(unittest.TestCase):
             self.assertRegex(gerar_trava.imagem_base(), r'^python:3\.12-slim-bookworm@sha256:[0-9a-f]{64}$')
         finally:
             sys.path.remove(str(RAIZ / 'deploy'))
+
+
+    def test_gerador_monta_so_os_requisitos_somente_leitura(self):
+        """O contêiner do gerador tem rede: não pode ver segredos/, acesso/, casos/ nem o repositório (I3)."""
+        sys.path.insert(0, str(RAIZ / 'deploy'))
+        try:
+            import gerar_trava
+            comando = gerar_trava.comando_docker()
+        finally:
+            sys.path.remove(str(RAIZ / 'deploy'))
+        montagens = [comando[i + 1] for i, a in enumerate(comando) if a == '-v']
+        self.assertEqual(len(montagens), 2, montagens)
+        for montagem in montagens:
+            self.assertTrue(montagem.endswith(':ro'), montagem)
+            self.assertRegex(montagem, r':/w/requirements(-opcional)?\.txt:ro$')
+        self.assertNotIn(str(RAIZ) + ':', ' '.join(comando))
 
 
 class ListaDeInclusaoTest(unittest.TestCase):
@@ -151,7 +177,7 @@ class ComposeEndurecidoTest(unittest.TestCase):
         self.servicos = _servicos()
 
     def test_servicos_esperados(self):
-        self.assertEqual(set(self.servicos), {'vlado', 'caddy'})
+        self.assertEqual(set(self.servicos), {'vlado', 'caddy', 'backup', 'restauracao'})
 
     def test_cada_servico_com_init_somente_leitura_e_sem_privilegios(self):
         for nome, bloco in self.servicos.items():
@@ -173,12 +199,31 @@ class ComposeEndurecidoTest(unittest.TestCase):
 
     def test_limites_de_memoria_cpu_processos_e_logs(self):
         for nome, bloco in self.servicos.items():
-            for chave in ('mem_limit', 'memswap_limit', 'cpus', 'pids_limit'):
+            for chave in ('mem_limit', 'memswap_limit', 'cpu_shares', 'pids_limit'):
                 self.assertRegex(bloco, rf'(?m)^    {chave}: ', f'{nome} sem {chave}')
         self.assertRegex(self.servicos['vlado'], r'stop_grace_period: ')
         texto = (RAIZ / 'docker-compose.yml').read_text(encoding='utf-8')
         self.assertIn('max-size', texto)
         self.assertIn('max-file', texto)
+
+    def test_temporarios_do_ocr_em_disco_e_nao_em_memoria(self):
+        """Um tmpfs grande conta na memória e 85 páginas coloridas esgotam 1 GB (I1): TMPDIR vai para volume."""
+        bloco = self.servicos['vlado']
+        self.assertIn('TMPDIR: /var/tmp/vlado', bloco)
+        self.assertIn('tmp_vlado:/var/tmp/vlado', bloco)
+        tamanho = re.search(r'/tmp:rw,noexec,nosuid,nodev,size=\$\{VLADO_TMP_TAMANHO:-(\d+)m\}', bloco)
+        self.assertIsNotNone(tamanho, 'o /tmp em memória tem tamanho padrão pequeno, em MB')
+        self.assertLessEqual(int(tamanho[1]), 128)
+        dockerfile = (RAIZ / 'Dockerfile').read_text(encoding='utf-8')
+        self.assertIn('/var/tmp/vlado', dockerfile.split('AS vlado', 1)[1])
+        self.assertIn('find /var/tmp/vlado -mindepth 1 -delete', dockerfile, 'esvazia os restos na partida')
+
+    def test_cpu_so_por_peso_relativo_para_subir_em_qualquer_servidor(self):
+        """`cpus` acima do número de núcleos impede o contêiner de subir (I2): o teto rígido é opcional."""
+        compose = (RAIZ / 'docker-compose.yml').read_text(encoding='utf-8')
+        self.assertNotRegex(compose, r'(?m)^\s+cpus:')
+        opcional = (RAIZ / 'deploy' / 'compose.limite-cpu.yml').read_text(encoding='utf-8')
+        self.assertRegex(opcional, r'(?m)^    cpus: \$\{VLADO_CPUS:\?')
 
     def test_volumes_de_dados_nao_viram_bind_mount_do_hospedeiro(self):
         bloco = self.servicos['vlado']

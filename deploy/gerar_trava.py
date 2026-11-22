@@ -2,7 +2,8 @@
 
 Roda pip-compile dentro da mesma imagem-base do Dockerfile (a do digest), para que os marcadores de
 plataforma e os hashes valham para Linux/CPython 3.12 mesmo quando o script é executado no Windows.
-Precisa do Docker e de rede (PyPI). Não lê segredos nem dados de casos.
+Precisa do Docker e de rede (PyPI). O contêiner tem rede, por isso monta SÓ os dois arquivos de requisitos,
+somente leitura (nada de segredos/, acesso/, casos/ nem do repositório); a trava sai pela saída padrão.
 
 Uso:  python deploy/gerar_trava.py
 """
@@ -14,6 +15,7 @@ import sys
 RAIZ = Path(__file__).resolve().parents[1]
 SAIDA = RAIZ / "deploy" / "requirements.lock"
 PIP_TOOLS = "pip-tools==7.4.1"
+ENTRADAS = ("requirements.txt", "requirements-opcional.txt")
 CABECALHO = (
     "# Trava das dependências Python da imagem (SEG-04): versões exatas e hashes SHA-256 de todas as\n"
     "# diretas e transitivas, para Linux/CPython 3.12. O Dockerfile instala com `pip --require-hashes`.\n"
@@ -31,14 +33,19 @@ def imagem_base() -> str:
     return achado.group(1)
 
 
-def main() -> int:
-    comando = [
-        "docker", "run", "--rm", "-v", f"{RAIZ}:/w:ro", "-w", "/w", imagem_base(), "sh", "-c",
+def comando_docker() -> list[str]:
+    montagens = [arg for nome in ENTRADAS for arg in ("-v", f"{RAIZ / nome}:/w/{nome}:ro")]
+    return [
+        "docker", "run", "--rm", "--security-opt", "no-new-privileges:true", *montagens, "-w", "/w", imagem_base(),
+        "sh", "-c",
         f"pip install -q --no-cache-dir --root-user-action=ignore {PIP_TOOLS} && "
         "pip-compile -q --generate-hashes --allow-unsafe --strip-extras --no-header "
-        "--output-file /tmp/trava.txt requirements.txt requirements-opcional.txt && cat /tmp/trava.txt",
+        "--output-file /tmp/trava.txt " + " ".join(ENTRADAS) + " && cat /tmp/trava.txt",
     ]
-    resultado = subprocess.run(comando, capture_output=True, text=True, encoding="utf-8")
+
+
+def main() -> int:
+    resultado = subprocess.run(comando_docker(), capture_output=True, text=True, encoding="utf-8")
     if resultado.returncode != 0:
         sys.stderr.write(resultado.stderr)
         return resultado.returncode

@@ -6,36 +6,50 @@
 # O nome do projeto (-p) prefixa os volumes: ambientes nunca compartilham dados.
 # Guia: docs/GUIA_TECNICO_IMPLANTACAO.md
 # Endurecimento (SEG-04): init como PID 1, sistema de arquivos somente leitura (só os volumes de dados e
-# um tmpfs em /tmp são graváveis), cap_drop ALL (o Caddy recupera só NET_BIND_SERVICE), no-new-privileges,
-# limites de memória/CPU/processos e rotação de logs. Ajustes por ambiente no .env: VLADO_MEM_LIMITE,
-# VLADO_CPUS, VLADO_TMP_TAMANHO (ver deploy/ambientes/*.env.example).
+# um /tmp pequeno em memória e o volume tmp_vlado, em disco, para os temporários do OCR são graváveis), cap_drop
+# ALL (o Caddy recupera só NET_BIND_SERVICE), no-new-privileges,
+# limites de memória/processos, pesos de CPU e rotação de logs. Ajustes por ambiente no .env: VLADO_MEM_LIMITE,
+# VLADO_TMP_TAMANHO (ver deploy/ambientes/*.env.example); teto de CPU opcional em deploy/compose.limite-cpu.yml.
 services:
   vlado:
-    build: .
+    build:
+      context: .
+      target: vlado
     image: vlado:${VLADO_VERSAO:-local}
     restart: unless-stopped
     # tini como PID 1: repassa SIGTERM ao Python e colhe processos filhos (OCR, Ghostscript) sem deixar zumbis.
     init: true
-    # Encerramento ordenado (a Plataforma fecha cadastros em curso no SIGTERM) antes do SIGKILL.
+    # Prazo entre o SIGTERM e o SIGKILL. Hoje o app não trata SIGTERM e termina na hora, então o prazo não é usado;
+    # ele já fica pronto para o encerramento ordenado que a Plataforma entrega na CONF-01 (fechar cadastros e
+    # execuções em curso). Se esse encerramento passar de 30 s, aumente aqui.
     stop_grace_period: 30s
     read_only: true
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
-    # O OCR de PDF grande é o pico de memória. O tmpfs de /tmp também conta neste limite.
+    # O OCR de PDF grande é o pico de memória; os temporários dele (e dos envios) vão para disco, ver TMPDIR abaixo.
     mem_limit: ${VLADO_MEM_LIMITE:-5g}
     memswap_limit: ${VLADO_MEM_LIMITE:-5g}
-    cpus: ${VLADO_CPUS:-3}
+    # Peso relativo de CPU, não teto: nunca impede o contêiner de subir em servidor com poucos núcleos. O Caddy
+    # (peso maior) mantém resposta mesmo com o OCR ocupando tudo. Teto rígido, só se o dono quiser:
+    # `-f docker-compose.yml -f deploy/compose.limite-cpu.yml` com VLADO_CPUS no .env.
+    cpu_shares: 1024
     pids_limit: 1024
+    # Temporários em DISCO (I1): um tmpfs conta na memória do contêiner e ~85 páginas coloridas digitalizadas
+    # (11,5 MB por página, medido) esgotam 1 GB, derrubando o OCRmyPDF para o motor direto, pior em tabelas.
+    # O volume tmp_vlado não é limitado por memória; precisa de espaço livre em disco (ver docs). Esvaziado a
+    # cada partida (Dockerfile). O /tmp em memória fica pequeno, só para o que não é volumoso.
     tmpfs:
-      - /tmp:rw,noexec,nosuid,nodev,size=${VLADO_TMP_TAMANHO:-1g}
+      - /tmp:rw,noexec,nosuid,nodev,size=${VLADO_TMP_TAMANHO:-64m}
     logging: &rotacao_de_logs
       driver: json-file
       options:
         max-size: "10m"
         max-file: "5"
     environment:
+      # Temporários do OCR e dos envios, em disco (volume tmp_vlado), não em memória (I1).
+      TMPDIR: /var/tmp/vlado
       VLADO_DOMINIO: ${VLADO_DOMINIO:?defina VLADO_DOMINIO no arquivo .env}
       # Set only when the client-visible HTTPS origin includes a nonstandard port.
       VLADO_ORIGEM: ${VLADO_ORIGEM:-}
@@ -54,6 +68,7 @@ services:
       - segredos:/app/segredos
       - ajustes:/app/ajustes
       - acesso:/app/acesso
+      - tmp_vlado:/var/tmp/vlado
     expose:
       - "8765"
 
@@ -73,7 +88,7 @@ services:
       - no-new-privileges:true
     mem_limit: 256m
     memswap_limit: 256m
-    cpus: 1
+    cpu_shares: 2048
     pids_limit: 512
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=16m
@@ -88,9 +103,122 @@ services:
       - ./${VLADO_CADDYFILE:-deploy/Caddyfile}:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+      # Registro de acesso do Caddy (JSON, sem segredo, com rotação própria; ver deploy/Caddyfile).
+      - caddy_logs:/var/log/caddy
     depends_on:
       vlado:
         condition: service_healthy
+
+  # Backup agendado (SEG-03). Por que um serviço do Compose e não um timer do host: viaja com o repositório, usa a
+  # mesma versão e os mesmos volumes do ambiente (-p), não depende de cron/systemd configurado à mão no servidor e
+  # fica visível no `docker compose ps` (unhealthy se o backup não estiver configurado ou passar de 30 h sem
+  # sucesso). Lê os dados em volumes SOMENTE LEITURA: não pode corrompê-los nem deixar trava presa. Só a chave
+  # PÚBLICA de cifra fica aqui; a privada fica com o dono, fora do servidor. Sem segredos/ (chaves de API) montado.
+  backup:
+    build:
+      context: .
+      target: backup
+    image: vlado-backup:${VLADO_VERSAO:-local}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: ${VLADO_BACKUP_MEM_LIMITE:-512m}
+    memswap_limit: ${VLADO_BACKUP_MEM_LIMITE:-512m}
+    cpu_shares: 256
+    pids_limit: 256
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    logging: *rotacao_de_logs
+    environment:
+      VLADO_AMBIENTE: ${VLADO_AMBIENTE:?defina VLADO_AMBIENTE (homologacao, editorial ou demonstracao)}
+      # Destino fora do servidor, no formato do rclone: `remoto:bucket/prefixo` (credenciais do remoto no
+      # arquivo de credenciais abaixo) ou um caminho absoluto (teste local).
+      VLADO_BACKUP_DESTINO: ${VLADO_BACKUP_DESTINO:-}
+      # Chave(s) PÚBLICA(S) age1... do dono (não é segredo). Nunca a chave privada.
+      VLADO_BACKUP_DESTINATARIOS: ${VLADO_BACKUP_DESTINATARIOS:-}
+      VLADO_BACKUP_HORARIO_UTC: ${VLADO_BACKUP_HORARIO_UTC:-06:30}
+      VLADO_BACKUP_RETENCAO: ${VLADO_BACKUP_RETENCAO:-diarios=7,semanais=4,mensais=6}
+      VLADO_BACKUP_PING_URL: ${VLADO_BACKUP_PING_URL:-}
+      VLADO_BACKUP_AO_INICIAR: ${VLADO_BACKUP_AO_INICIAR:-0}
+      # Chaves de API (segredos/) ficam fora por decisão declarada; para incluí-las é preciso montar o volume aqui.
+      VLADO_BACKUP_INCLUIR_SEGREDOS: ${VLADO_BACKUP_INCLUIR_SEGREDOS:-0}
+      # Quanto esperar (s) uma operação em andamento (cadastro, congelamento) terminar antes de desistir da tentativa.
+      VLADO_BACKUP_ESPERA_S: ${VLADO_BACKUP_ESPERA_S:-900}
+      # Idade máxima (h) do último backup bem-sucedido antes de o serviço ficar unhealthy.
+      VLADO_BACKUP_IDADE_MAX_H: ${VLADO_BACKUP_IDADE_MAX_H:-30}
+      # Batimento de disponibilidade (deploy/MONITORAMENTO.md): a cada minuto confere /saude do app e o disco livre e
+      # avisa um endereço externo (dead-man's switch); falha vai para <endereço>/fail na hora, e se o servidor cair os
+      # avisos deixam de chegar. Só palavras de estado trafegam. Sem VLADO_VIGIA_PING_URL, a vigia não roda.
+      VLADO_VIGIA_PING_URL: ${VLADO_VIGIA_PING_URL:-}
+      VLADO_VIGIA_URL: ${VLADO_VIGIA_URL:-http://vlado:8765/saude}
+      VLADO_VIGIA_INTERVALO_S: ${VLADO_VIGIA_INTERVALO_S:-60}
+      VLADO_VIGIA_DISCO_MIN_GB: ${VLADO_VIGIA_DISCO_MIN_GB:-5}
+      RCLONE_CONFIG: /tmp/rclone.conf
+    env_file:
+      # Credenciais do destino (variáveis RCLONE_CONFIG_<REMOTO>_*). Fora do git (deploy/ambientes/*.env).
+      - path: deploy/ambientes/${VLADO_AMBIENTE}-backup.env
+        required: false
+    volumes:
+      - casos:/app/casos:ro
+      - conversas:/app/conversas:ro
+      - execucoes:/app/execucoes:ro
+      - lixeira:/app/lixeira:ro
+      - entrada:/app/entrada:ro
+      - acesso:/app/acesso:ro
+      - ajustes:/app/ajustes:ro
+      - backup_trabalho:/trabalho
+    depends_on:
+      # Só a ordem da primeira subida: o app cria e popula os volumes de dados antes do backup montá-los.
+      vlado:
+        condition: service_started
+
+  # Restauração (não sobe sozinha: profile `restauracao`). Roda como o mesmo uid do app para que os arquivos
+  # restaurados fiquem legíveis por ele. A chave PRIVADA vem do ambiente do comando, nunca de um arquivo do
+  # servidor. Pare o app antes (`stop vlado backup`). Passo a passo: docs/GUIA_TECNICO_IMPLANTACAO.md.
+  restauracao:
+    profiles: ["restauracao"]
+    build:
+      context: .
+      target: backup
+    image: vlado-backup:${VLADO_VERSAO:-local}
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    memswap_limit: 1g
+    cpu_shares: 1024
+    pids_limit: 256
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    logging: *rotacao_de_logs
+    environment:
+      VLADO_AMBIENTE: ${VLADO_AMBIENTE:?defina VLADO_AMBIENTE (homologacao, editorial ou demonstracao)}
+      VLADO_BACKUP_DESTINO: ${VLADO_BACKUP_DESTINO:-}
+      VLADO_BACKUP_CHAVE_PRIVADA: ${VLADO_BACKUP_CHAVE_PRIVADA:-}
+      # Onde procurar o app para recusar a restauração com a Mesa no ar (a mesma da vigia).
+      VLADO_VIGIA_URL: ${VLADO_VIGIA_URL:-http://vlado:8765/saude}
+      RCLONE_CONFIG: /tmp/rclone.conf
+    env_file:
+      - path: deploy/ambientes/${VLADO_AMBIENTE}-backup.env
+        required: false
+    command: ["python", "scripts/backup.py", "restaurar", "--do-destino", "ultimo", "--identidade-env", "VLADO_BACKUP_CHAVE_PRIVADA", "--substituir"]
+    volumes:
+      - casos:/app/casos
+      - conversas:/app/conversas
+      - execucoes:/app/execucoes
+      - lixeira:/app/lixeira
+      - entrada:/app/entrada
+      - acesso:/app/acesso
+      - ajustes:/app/ajustes
+      - segredos:/app/segredos
+      - backup_trabalho:/trabalho
 
 volumes:
   casos:
@@ -103,3 +231,6 @@ volumes:
   acesso:
   caddy_data:
   caddy_config:
+  caddy_logs:
+  backup_trabalho:
+  tmp_vlado:
