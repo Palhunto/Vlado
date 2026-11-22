@@ -351,7 +351,6 @@ body{font-size:var(--text-base);line-height:1.55}
 .brand>span{color:var(--green)}
 .badge{font-size:var(--text-md)}.intro h1{max-width:28ch}
 h1,h2,h3{font-optical-sizing:auto}
-h2{font-family:var(--fonte-titulo);font-size:var(--text-2xl);font-weight:500}
 #novo-caso-campos{grid-template-columns:1fr}
 #cadastro-titulo-input{max-width:720px}
 .connection-status{font-size:var(--text-md);background:var(--soft);color:var(--green);padding:6px 12px;border-radius:var(--raio-pilula);margin:0}
@@ -879,8 +878,8 @@ a,button,summary,input,textarea,select{scroll-margin-top:110px}
 :focus-visible{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:var(--foco-afastamento)}
 p,li{line-height:1.65}
 .small,.meta{color:var(--muted);font-size:var(--text-sm)}
-h1{font:500 var(--text-2xl)/1.18 var(--fonte-titulo);letter-spacing:-1.2px;text-wrap:balance;max-width:none;margin:0 0 13px}
-h2{font:500 var(--text-xl)/1.3 var(--fonte-titulo);letter-spacing:-.5px}
+h1{font:600 var(--text-2xl)/1.2 var(--fonte-titulo);letter-spacing:-.5px;text-wrap:balance;max-width:none;margin:0 0 13px}
+h2{font:600 var(--text-xl)/1.3 var(--fonte-titulo);letter-spacing:-.5px}
 h3{font-size:var(--text-lg)}
 h1,h2,h3,h4{color:var(--ink)}
 .eyebrow{font-size:var(--text-xs);letter-spacing:1.6px;font-weight:650;margin:0 0 12px}
@@ -920,14 +919,15 @@ progress{accent-color:var(--green)}
   flex-shrink:0;
   vertical-align:middle;
 }
+/* Cabeçalho da apuração (docs/design/componentes.md#cabecalhos): 64 px, preenchimento 0 32, intervalo de 16. */
 .app-header{
-  height:86px;
-  min-height:86px;
-  padding:12px 40px;
+  height:64px;
+  min-height:64px;
+  padding:0 var(--espaco-8);
   margin:0 0 0 var(--mesa-sidebar);
   max-width:none;
   flex-wrap:nowrap;
-  gap:22px;
+  gap:var(--espaco-4);
   background:var(--white);
   border-bottom:1px solid var(--line);
   z-index:var(--camada-barra-alta);
@@ -936,12 +936,12 @@ progress{accent-color:var(--green)}
 }
 .app-header .mobile-brand,#mesa-menu{display:none}
 .persistent-context{min-width:0;max-width:480px;gap:3px;font-size:var(--text-base)}
-.persistent-context>span{font-size:var(--text-xs);letter-spacing:1.6px;color:var(--muted);font-weight:400}
+.persistent-context>span{font-size:var(--text-md);line-height:1.25;letter-spacing:.04em;color:var(--muted);font-weight:400}
 .persistent-context select{
   font-size:var(--text-base);
   font-weight:600;
   padding:0 25px 0 0;
-  min-height:30px;
+  min-height:24px;
   border:0;
   background:transparent;
   color:var(--ink);
@@ -1031,7 +1031,7 @@ progress{accent-color:var(--green)}
   vertical-align:middle;
 }
 .mesa-processing span{display:block;color:var(--muted);font-size:var(--text-xs);margin:4px 0 0 11px}
-main{padding:38px 40px 26px;max-width:1600px;min-height:calc(100dvh - 86px);margin:0 auto;min-width:0}
+main{padding:var(--espaco-8);max-width:1600px;min-height:calc(100dvh - 64px);margin:0 auto;min-width:0}
 .intro{margin:0 0 28px;max-width:none}
 .intro h1{max-width:none}
 .intro>p:last-child{max-width:800px;font-size:var(--text-base);line-height:1.65;margin:0;color:var(--muted)}
@@ -1209,7 +1209,7 @@ main{padding:38px 40px 26px;max-width:1600px;min-height:calc(100dvh - 86px);marg
 .markdown-body p{margin:0 0 18px}
 .markdown-body h3{font-size:var(--text-2xl)}
 .markdown-body h4{font-size:var(--text-xl)}
-.codex-fontes{position:sticky;top:calc(var(--mesa-header-height,86px) + 20px);padding:0;border:0;border-radius:0;background:transparent}
+.codex-fontes{position:sticky;top:calc(var(--mesa-header-height,64px) + 20px);padding:0;border:0;border-radius:0;background:transparent}
 .codex-fontes>summary{font-size:var(--text-md);color:var(--ink);padding-top:0}
 .codex-fontes>.small{font-size:var(--text-xs);margin:8px 0 16px}
 .codex-source{border-top:1px solid var(--line);padding:15px 0}
@@ -1373,7 +1373,7 @@ footer{font-size:var(--text-xs);margin-top:32px;padding-top:20px;color:var(--mut
     max-height:calc(100dvh - 140px);
     overflow-y:auto;
     position:sticky;
-    top:calc(var(--mesa-header-height,86px) + 20px);
+    top:calc(var(--mesa-header-height,64px) + 20px);
     padding-right:5px;
     overscroll-behavior:contain;
     scrollbar-gutter:stable;
@@ -1395,13 +1395,9 @@ footer{font-size:var(--text-xs);margin-top:32px;padding-top:20px;color:var(--mut
   .notebook-workspace:has(#apuracao-notas:empty) #apuracao-notas{display:none}
 }
 @media (min-width:1550px) {
-  main{padding:45px 55px}
-  .app-header{padding-inline:55px}
   .codex-workspace{grid-template-columns:minmax(0,1fr) 340px}
 }
 @media (max-width:1190px) {
-  .app-header{padding-inline:28px}
-  main{padding:30px 28px}
   .codex-workspace{grid-template-columns:minmax(0,1fr) 240px;gap:20px}
   .findings-workspace{grid-template-columns:265px minmax(0,1fr)}
   .notebook-workspace{grid-template-columns:175px minmax(0,1fr)}
@@ -1777,7 +1773,7 @@ body[data-modo="piloto"] #codex-desligar{display:none}
 }
 /* Work-area heading: the area name, then the investigation it belongs to, on one line. */
 .intro{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;margin:0 0 22px;max-width:none}
-.intro h1{font:500 var(--text-2xl)/1.2 var(--fonte-titulo);letter-spacing:-.5px;margin:0;max-width:none;text-wrap:balance}
+.intro h1{font:600 var(--text-2xl)/1.2 var(--fonte-titulo);letter-spacing:-.5px;margin:0;max-width:none;text-wrap:balance}
 .intro>#area-descricao{
   margin:0;
   max-width:60ch;
@@ -1956,8 +1952,8 @@ main:has(#area-achados:not([hidden])) .intro{margin-bottom:16px}
 #apuracao-autoria{margin:2px 0 10px}
 .notebook-sources{
   position:sticky;
-  top:calc(var(--mesa-header-height,86px) + 16px);
-  max-height:calc(100dvh - var(--mesa-header-height,86px) - 32px);
+  top:calc(var(--mesa-header-height,64px) + 16px);
+  max-height:calc(100dvh - var(--mesa-header-height,64px) - 32px);
   overflow-y:auto;
   overscroll-behavior:contain;
   min-width:0;
