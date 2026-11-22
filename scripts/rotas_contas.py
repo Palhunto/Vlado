@@ -32,7 +32,7 @@ OPERACOES_CONVIDADO = ('codex-status', 'codex-listar', 'codex-perguntar', 'codex
 # Guest operations on an existing conversation: the conversation's case is checked on every call.
 OPERACOES_CONVERSA = ('codex-eventos', 'codex-cancelar', 'codex-original', 'codex-retomar')
 # Before a session exists (hosted mode only): Origin + JSON, no CSRF, small bodies.
-OPERACOES_PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin')
+OPERACOES_PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin', 'convite-consultar', 'convite-aceitar')
 AMBIENTES = ('homologacao', 'editorial', 'demonstracao')
 SEM_SESSAO = 'Sessão expirada ou encerrada. Entre novamente.'
 # Asking and retrying both spend one of the guest's daily questions (given back if refused).
@@ -225,7 +225,8 @@ class RotasContas:
                 return conta_propria(self.server.root, operation, data, principal, ip=self._ip())
             return rotas_equipe.executar(
                 self.server.root, operation, data, principal, ip=self._ip(), parar=self._parar_execucoes,
-                gasto_da_redacao=autorizacao.gasto_da_redacao(self.server.root, self.server.modo, principal))
+                gasto_da_redacao=autorizacao.gasto_da_redacao(self.server.root, self.server.modo, principal),
+                origem=self.server.origin)
         except (acesso.SenhaIncorreta, acesso.Bloqueado):
             raise  # already audited where the password is checked (`acesso.confirmar_senha`)
         except (ValueError, OSError) as exc:
@@ -342,6 +343,22 @@ class RotasContas:
             elif operation == 'ativacao-consultar':
                 acesso.limitar_ip(self._ip(), 'consultar')
                 self._json(200, acesso.consultar_ativacao(root, data.get('token')))
+            elif operation == 'convite-consultar':
+                acesso.limitar_ip(self._ip(), 'aceitar')
+                self._json(200, acesso.consultar_convite(root, data.get('token')))
+            elif operation == 'convite-aceitar':
+                # The account is born and its first session opens, as a sign-in does. The e-mail is the invitation's.
+                acesso.limitar_ip(self._ip(), 'aceitar')
+                if set(data) - {'token', 'nome', 'senha', 'termos_versao', 'cliente'}:
+                    raise ValueError('Campos inválidos no aceite do convite.')
+                sid, csrf, conta = acesso.aceitar_convite(
+                    root, data.get('token'), data.get('nome'), data.get('senha'), data.get('termos_versao'), ip=self._ip(),
+                    cliente=data.get('cliente', 'web'),
+                    aparelho=aparelho(self.headers.get('User-Agent'), data.get('cliente', 'web')))
+                publica = {k: conta[k] for k in ('id', 'nome', 'login', 'email', 'papel', 'casos')}
+                self._send(200, json.dumps({'conta': publica, 'csrf': csrf, 'destino': autorizacao.destino_inicial(conta)},
+                                           ensure_ascii=False).encode('utf-8'),
+                           extra={'Set-Cookie': f'{COOKIE_PILOTO}={sid}; {self.server.atributos_cookie()}'})
             else:
                 acesso.limitar_ip(self._ip(), 'ativar')
                 conta = acesso.ativar(root, data.get('token'), data.get('senha'))
@@ -354,6 +371,8 @@ class RotasContas:
             self._json(401, {'estado': 'credenciais', 'codigo': 'credenciais', 'erro': str(exc)})
         except acesso.AtivacaoInvalida as exc:
             self._json(400, {'estado': 'erro', 'codigo': 'ativacao_invalida', 'erro': str(exc)})
+        except acesso.ConviteInvalido as exc:  # one answer for every link that creates nothing
+            self._json(400, {'estado': 'erro', 'codigo': 'convite_invalido', 'erro': str(exc)})
         except (ValueError, OSError) as exc:
             if operation == 'ativar':  # a refused password (too short...) is not a bad link: audited as validation
                 registro_acesso.registrar('ativacao_falha', 'falha', motivo='validacao', acesso_operacao='ativar')

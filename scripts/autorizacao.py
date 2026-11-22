@@ -99,7 +99,8 @@ _linhas(MATRIZ, 'nenhum', 'E', TODOS, 'conta-atualizar')
 # 5.5 A redação.
 _linhas(MATRIZ, 'nenhum', 'L', SO_DONO, 'ia-config equipe-listar equipe-atividade')
 _linhas(MATRIZ, 'nenhum', 'A', SO_DONO, 'ia-config-salvar codex-desligar equipe-papel equipe-desativar equipe-reativar '
-                                        'equipe-remover equipe-teto')
+                                        'equipe-remover equipe-teto equipe-convidar equipe-convite-reenviar '
+                                        'equipe-convite-cancelar')
 _linhas(MATRIZ, 'nenhum', 'L', DONO_E_REPORTER, 'ambiente')
 _linhas(MATRIZ, 'nenhum', 'L', TODOS, 'codex-status')
 # 5.6 Apurações: criação, participação e lixeira.
@@ -164,14 +165,14 @@ _linhas(MATRIZ, 'caso', 'L', MESA, 'continuidade-resumo')
 TRANSITORIAS: dict[str, Regra] = {}
 _linhas(TRANSITORIAS, 'nenhum', 'A', SO_DONO, 'contas-listar contas-criar contas-atualizar contas-desativar '
                                               'contas-reativar contas-recuperar')
-# Operações que o contrato já define e que entram nas próximas entregas (conta própria, equipe, convites, senha).
+# Operações que o contrato já define e que entram nas próximas entregas (senha por e-mail, segundo fator, ciclo de vida).
 PENDENTES = frozenset((
-    'entrar-segundo-fator convite-consultar convite-aceitar senha-esqueci senha-redefinir '
+    'entrar-segundo-fator senha-esqueci senha-redefinir '
     'conta-email-trocar conta-fator-iniciar conta-fator-confirmar conta-fator-codigos conta-fator-remover '
     'conta-termos-aceitar conta-exportar conta-excluir '
-    'equipe-convidar equipe-convite-reenviar equipe-convite-cancelar equipe-recuperar equipe-recuperar-confirmar').split())
+    'equipe-recuperar equipe-recuperar-confirmar').split())
 # Antes da sessão (seção 5.3): sem papel, conferidas em `rotas_contas._publico`.
-PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin')
+PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin', 'convite-consultar', 'convite-aceitar')
 _REGRAS = {**MATRIZ, **TRANSITORIAS}
 
 
