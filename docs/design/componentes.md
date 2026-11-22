@@ -497,6 +497,7 @@ Onde: toda a Mesa (W11). O wireframe fixa a estrutura e o texto; a aparência ab
 | Erro que a pessoa resolve | "✕" e o que houve; o que fazer e o que foi preservado; duas ações | fundo `--theme-danger-bg`, borda 1 px `--theme-danger-line`, título `--theme-danger`; ações principal e secundária |
 | Erro do serviço | "✕" e o que houve; o que foi guardado e o que não foi cobrado; "Retomar de onde parou" e "Detalhes" (o código interno fica lá) | como o anterior; "Detalhes" abre o código num `<details>`, e o `summary` tem cara de [link](#link): 14/600 `--theme-accent`, sublinhado, altura mínima 44 |
 | Limite atingido | "!" e o limite; o que continua funcionando; "Pedir mais ao dono da redação" | fundo `--theme-warning-bg`, borda 1 px `--theme-warning-line`, título `--theme-warning`; ação secundária |
+| Redação suspensa *(derivado, 22/11/2026; contrato de contas, 4.3)* | qualquer pedido responde 403 `redacao_suspensa`: o conteúdo da área dá lugar a "! Redação suspensa", "Ninguém desta redação usa a Mesa enquanto a suspensão durar. Nada foi apagado: apurações, documentos e registros continuam guardados." e "Fale com quem administra o serviço."; ação "Sair". Ao abrir a página, quem responde é o aviso simples do próprio servidor | como "Limite atingido": não é erro de ninguém; "Sair" secundário |
 
 <a id="estados-vazios"></a>
 
@@ -568,6 +569,41 @@ Os oito `confirm()` de hoje e a variante de cada um (rótulos de ação aprovado
 **"Apagar definitivamente" na Mesa** *(derivado, 22/11/2026)*: antes da tabela, enquanto o alcance chega, "Calculando o que será apagado…" em 14 `--theme-muted`; quando ele chega, o foco passa de "Cancelar" ao campo. Abaixo da tabela, o aviso de backup que o servidor manda, em 14 `--theme-muted`. "Digite «nome» para confirmar" em 16/400, só o nome em 600; o texto do campo em 16/400. Na tabela, número e unidade nunca se separam ("52,3 MB", "28 arquivos"); no celular, o nome da categoria pode quebrar. Recusa do servidor: o texto inteiro no lugar do erro, e o foco volta ao campo. A resposta é rápida (a quarentena do servidor), então o ocupado é o curto, "Apagando…", sem "Cancelar" ativo; a espera longa de P12.5 não se aplica. Apagamento pela metade (o servidor marca o item como pendente): na lixeira, "Restaurar" e "Apagar definitivamente…" ficam indisponíveis e o texto do servidor aparece inteiro junto ao item, no aviso em linha da Mesa (`.notice`: fundo `--theme-warning-bg`, filete esquerdo `--theme-notice-line`, texto `--theme-warning`, `role=status`), o mesmo de "Limitações das fontes"; no diálogo, a razão vem como linha de estado em 14 `--theme-muted`, sem tabela, com o campo e a ação indisponíveis. Não é erro: nunca nas cores de erro.
 
 "Desfazer quando possível" (W11, regra 8): excluir nota hoje não oferece desfazer (UX-16). Decisão do dono (P12.7): sem "Desfazer" por enquanto.
+
+<a id="dialogo-senha"></a>
+
+**Com senha: operações sensíveis** *(derivado, 22/11/2026; contrato de contas, 5.15)*. Quarta variante do diálogo, com as mesmas partes, o mesmo foco preso, Esc e véu. Entre o texto e as ações vem um campo:
+
+| Parte | Medida e token |
+|---|---|
+| Rótulo | "Sua senha", 16/600 |
+| Campo | o [campo de senha](#campo), com "Mostrar": 44 px no desktop, 48 no celular; `type="password"`, `autocomplete="current-password"`; aceita colar e gerenciador de senhas (W08, regra 4) |
+| Apoio | abaixo do campo, 14 `--theme-muted`: "A senha com que você entra na Mesa." |
+| Ação | desabilitada com o campo vazio; Enter envia quando ela está habilitada |
+
+Foco inicial no campo. A senha vai só naquele pedido (campo `senha`; `senha_atual` na troca de senha): a Mesa não a guarda, nem entre tentativas, e limpa o campo ao fechar o diálogo. Respostas:
+
+| Resposta | O que a tela faz |
+|---|---|
+| 403 `senha_atual_incorreta` | erro no campo, "Senha incorreta. Confira e tente de novo."; o campo é limpo e recebe o foco |
+| 403 `senha_necessaria` | não deveria chegar com o diálogo aberto; se chegar, o diálogo continua aberto com o texto do servidor ("Digite a sua senha para confirmar.") no lugar do erro |
+| 429 `bloqueado` | erro do diálogo, `role="alert"`: "Muitas senhas erradas seguidas. Por 15 minutos, as ações que pedem a senha ficam bloqueadas para a sua conta; o resto da Mesa continua." A ação fica indisponível; sobra "Cancelar" |
+| 400 `ultimo_dono` e as demais recusas | o texto do servidor no erro do diálogo ("A redação precisa de ao menos um dono ativo.", "Conta não encontrada."); ao fechar, a lista recarrega |
+
+A Mesa pede a senha antes de enviar quando sabe que a operação pede (tabela abaixo). Se uma operação responder 403 `senha_necessaria` sem a Mesa ter pedido, o diálogo abre com o título da tabela e reenvia o mesmo pedido com a senha. A Mesa nunca reenvia sozinha uma senha digitada antes.
+
+| Operação | Onde | A Mesa pede antes quando | Título | Ação |
+|---|---|---|---|---|
+| `conta-senha-trocar` | Minha conta | sempre: é o campo "Senha atual" do diálogo [Trocar senha](#minha-conta) | Trocar senha | "Trocar senha" (principal) |
+| `equipe-papel` | Equipe, papel da pessoa | o papel atual ou o novo é dono | "Tornar Ana Lima dono da redação?" ou "Mudar o papel de Rui Castro para Editor?" | "Tornar dono" (principal) ou "Mudar papel" (destrutiva) |
+| `equipe-desativar` | Equipe, Gerenciar | a pessoa é dono; sem ser dono, é a destrutiva sem senha de P12.6, "Desativar conta" | "Desativar a conta de Rui Castro?" | "Desativar conta" (destrutiva) |
+| `equipe-remover` | Equipe, Gerenciar | sempre | "Remover Ana Lima da redação?" | "Remover da redação" (destrutiva) |
+| `ia-config-salvar` | Configurações | a sessão tem conta e o pedido grava ou remove a chave; trocar só provedor ou modelo nos modos locais segue como hoje | "Salvar a chave de IA?" ou "Remover a chave de IA?" | "Salvar chave" (principal) ou "Remover chave" (destrutiva) |
+| `lixeira-apagar` | Apagar definitivamente | sempre, no mesmo diálogo: o campo "Sua senha" fica abaixo do campo do nome, e a ação só se habilita com o nome conferido e a senha preenchida. Senha errada põe o erro no campo da senha e o foco nele; o nome digitado fica | o de hoje | "Apagar definitivamente" |
+
+Textos: tornar dono, "Dono vê todas as apurações da redação, administra a equipe e apaga de vez. Vale na próxima ação de Ana Lima."; rebaixar dono, "Rui Castro deixa de administrar a redação e passa a ver só as apurações de que participa. Vale na próxima ação."; desativar, "A pessoa sai na próxima ação e as perguntas em curso dessa conta param. As apurações e os registros ficam; reativar devolve o acesso."; remover, "A conta é excluída: a pessoa perde o acesso, sai de todas as apurações e não pode ser reativada. Notas, revisões e conversas ficam com a redação. O nome continua nos registros já gravados e nos backups, que não podem ser reescritos." (decisão 10 do contrato); salvar a chave, "A chave fica guardada no servidor. A Mesa mostra só os quatro últimos caracteres."; remover a chave, "Sem ela, as perguntas deixam de usar esta chave."
+
+As operações sensíveis que a E2 ainda não tem (`conta-email-trocar`, `conta-fator-*`, `conta-excluir`, `equipe-convidar` como dono, `equipe-recuperar`) ficam fora da tela até existirem ([exceções](#contas-excecoes)).
 
 <a id="icones"></a>
 
@@ -882,6 +918,161 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 
 ---
 
+<a id="contas"></a>
+
+## Contas: Minha conta e Equipe (Onda 2)
+
+> **Derivado, 22/11/2026, a pedido do Maestro.** A estrutura vem dos wireframes W08 e W09 do canvas ([regras](#regras-dos-wireframes)) e das decisões do dono sobre o contrato de contas (P27 e P28). Os dados vêm da entrega 2 de Contas (`lancamento/contas-o2`, `92f06f1`; contrato em `.maestro/equipe/CONTRATO_CONTAS.md`, seções 5.4, 5.5, 5.15 e 8.3; formatos em `testes/test_sessoes_conta.py` e `testes/test_equipe.py`). Não há prancha. A aparência sai dos componentes acima, como nas áreas sem tela final, e a conferência é feita contra o wireframe e esta seção. Se o dono quiser outro desenho, vale o dele. O escuro é a mesma tela com os tokens do escuro.
+
+### Onde ficam
+
+- **Minha conta** abre pelo perfil no rodapé da [barra lateral](#barra-lateral) (W08, regra 1). Abaixo de 1280 px, abre pelo mesmo perfil no pé da gaveta. Com a página aberta, o perfil leva `aria-current="page"` e nenhum item de área fica selecionado. No modo `local`, sem contas, não há perfil nem Minha conta.
+- **Para o dono**, Minha conta, Equipe e Configurações são três [abas](#abas) no topo da página, nessa ordem; no celular, pílulas de 44 (P20b). Quem não é dono vê só Minha conta, sem a linha de abas. Cada aba aparece pela capacidade que `GET /api/sessao` devolve: Equipe com `equipe-listar`, Configurações com `ia-config`. A Mesa não decide pelo nome do papel.
+- O botão "Configurações" do cabeçalho leva à aba Configurações. "Contas de acesso" sai de Configurações na mesma integração em que Equipe entra, junto com as operações `contas-*` (contrato, 5.5). Em Configurações fica só a configuração da IA, com a senha da [tabela](#dialogo-senha).
+
+### Moldura comum
+
+| Parte | Medida e token |
+|---|---|
+| Conteúdo | como nas outras áreas: preenchimento 28 32, intervalo 16; no celular, 16 |
+| Título | serifa 28/600 ([título da área](#telas-aprovadas)): "Minha conta"; na Equipe, o nome da redação, com "6 pessoas" em 14 `--theme-muted` alinhado pela base |
+| Linha de estado | logo abaixo das abas, `role="status"`: o resultado da última ação, com ✓ de 16 px e o texto em 14/600 `--theme-accent` ("✓ Senha trocada. 1 outra sessão foi encerrada."). A próxima ação a limpa. Erro não vai aqui: fica junto ao que falhou |
+| Cartão | o bloco base de [estados](#estados): fundo `--theme-surface`, borda 1 px `--theme-line`, raio 12, preenchimento 16, coluna com intervalo de 8; título `<h2>` 16/600; texto 16; apoio 14 `--theme-muted` |
+| Linha com ação | grade `1fr auto`, intervalo de 12, altura mínima 44, alinhada ao centro; entre linhas, filete 1 px `--theme-line` e 8 de folga. Quando o botão não cabe, ele desce para baixo do texto, alinhado à esquerda |
+| Grade | duas colunas iguais, intervalo de 16, alinhadas pelo topo, de 1024 px para cima; abaixo, uma coluna |
+
+Cada cartão carrega sozinho. Enquanto carrega, mostra o esqueleto curto; se falha, mostra o erro do serviço de [estados](#estados) no lugar dele, e os outros cartões seguem. Sessão vencida (401) segue o comportamento geral da Mesa.
+
+<a id="minha-conta"></a>
+
+### Minha conta (W08)
+
+Ordem: à esquerda, Perfil, Entrada e segurança e Seus dados; à direita, Onde sua conta está aberta e Seu uso neste mês. Numa coluna: Perfil, Entrada e segurança, Onde sua conta está aberta, Seu uso neste mês e Seus dados.
+
+| Cartão | Conteúdo e comportamento | Dados |
+|---|---|---|
+| **Perfil** | nome em 16/600; abaixo, o e-mail em 16, ou, na conta migrada sem e-mail, "login ana.lima" em 14 `--theme-muted`; papel e redação em 14 `--theme-muted` ("Repórter · Redação Serena", como o perfil da barra). "Mudar nome" (secundário) troca a linha do nome por um campo "Nome" (44, até 120 caracteres, já preenchido), com "Salvar" (principal) e "Cancelar" (secundário); em branco, "Falta o nome. Escreva o seu nome."; recusa do servidor abaixo do campo. Abaixo, duas caixas de seleção lado a lado, com rótulo acima (W08): **Idioma** (Português, English), que muda o idioma da Mesa, como o botão do cabeçalho, e grava o idioma da conta, com o apoio "Também é o idioma dos e-mails do Vlado."; **Tema** (Do sistema, Claro, Escuro), que fica só neste navegador, como o botão do cabeçalho, e não vai ao servidor (contrato, 2.3). O e-mail não muda aqui | `conta-ver`; `conta-atualizar` com `nome` ou `idioma` (`pt`, `en`) |
+| **Entrada e segurança** | linha "Senha", com "definida há 12 dias" em 14 `--theme-muted` (de `senha_definida_em`; "definida hoje" no dia), e "Trocar senha" (secundário) à direita. As linhas do segundo fator e da chave de acesso ficam fora ([exceções](#contas-excecoes)) | `conta-ver` |
+| **Onde sua conta está aberta** | uma linha por sessão. A sessão em uso vem primeiro, com "Esta sessão" em 14/600 `--theme-muted` à direita e sem botão: sai-se dela por "Sair". As outras seguem na ordem do servidor (uso mais recente primeiro), com "Encerrar" (secundário). Cada linha tem o aparelho em 16 ("Firefox · Linux", "Aplicativo Android": o texto do servidor, `translate="no"`) e, abaixo, em 14 `--theme-muted`, o último uso e o endereço ("ontem, 21h10 · 189.40.12.7"). Com duas sessões ou mais, "Encerrar todas as outras" (secundário) no pé, e o apoio "Encerrar vale na próxima ação daquele aparelho." (contrato, 8.3). Encerrar é imediato, sem diálogo (W08, regra 5); o botão fica "Encerrando…", a linha sai e a linha de estado diz "✓ Sessão encerrada: Edge · Windows." ou "✓ 2 sessões encerradas." Se o servidor responder "Sessão não encontrada.", a lista recarrega, sem erro | `conta-sessoes`; `conta-sessao-encerrar` com `sessao`; `conta-sessoes-encerrar-outras` |
+| **Seu uso neste mês** | "Gasto com IA" em 16 e o valor em 16/600 à direita ("R$ 18,40 de R$ 50": gasto sempre com centavos; teto sem centavos quando inteiro, como na barra); [medidor](#medidor) de 6 px com `aria-label` ("37% da cota usada"); apoio "O teto é definido pelo dono da redação." Esgotada, o cartão vira o aviso da cota esgotada da barra ("! Cota esgotada", cores de aviso). Sem a rota, o cartão some. Sempre em reais, nunca em tokens (W08, regra 7) | `GET /api/cota`, bloco `conta` |
+| **Seus dados** | texto 16: "Exportar seus dados e excluir sua conta ainda não estão na Mesa. Para pedir, fale com o dono da redação." Para o dono, "fale com quem administra o serviço". Sem botões ([exceções](#contas-excecoes)) | nenhum |
+
+Datas, nesta página e na Equipe: "agora" no primeiro minuto; "hoje, 14h32"; "ontem, 21h10"; "18 de nov., 09h05"; de outro ano, "18 de nov. de 2025". Em inglês, pelo i18n.
+
+**Diálogo "Trocar senha"** (W08, regra 2). É a variante [com senha](#dialogo-senha), com três campos em coluna e intervalo de 16:
+
+- "Senha atual" (`current-password`);
+- "Nova senha" (`new-password`), com o apoio "De 12 a 256 caracteres. Pode colar ou usar o gerenciador de senhas.";
+- "Repita a nova senha" (`new-password`).
+
+Texto: "As outras sessões desta conta serão encerradas. Esta continua aberta." Ação principal "Trocar senha" ("Trocando…").
+
+Antes de enviar, a Mesa confere e põe cada erro no seu campo:
+
+- senha atual em branco: "Falta a senha atual. Digite a senha com que você entra hoje.";
+- nova senha fora do tamanho: "A senha deve ter de 12 a 256 caracteres.";
+- as duas novas diferentes: "As duas senhas não coincidem. Digite a mesma senha nos dois campos."
+
+Respostas do servidor:
+
+- `senha_atual_incorreta`: "Senha atual incorreta. Confira e tente de novo.", no campo da senha atual;
+- `bloqueado`: o texto de bloqueio da [tabela](#dialogo-senha);
+- sucesso (`{estado: "senha_trocada", sessoes_encerradas: n}`): o diálogo fecha, a lista de sessões recarrega e a linha de estado diz "✓ Senha trocada." seguido de "Nenhuma outra sessão estava aberta.", "1 outra sessão foi encerrada." ou "3 outras sessões foram encerradas."
+
+<a id="equipe"></a>
+
+### Equipe (W09)
+
+Só para quem tem `equipe-listar`, isto é, o dono. Os dados vêm de `equipe-listar` (`redacao`, `pessoas`, `gasto`, `convites`, que sai vazio na E2).
+
+**Perfil antigo.** Se alguém tem o papel `convidado`, um aviso em linha da Mesa (`.notice`, cores de aviso, `role="status"`) aparece acima da tabela: "2 pessoas ainda têm o perfil antigo de convidado: perguntam só nas apurações liberadas e veem só as próprias conversas. Escolha um papel para cada uma ou remova da redação." (contrato, 2.4, decisão 1).
+
+| Parte | Medida e conteúdo |
+|---|---|
+| Tabela, de 1024 px para cima | cartão com tabela, como a lista de [Documentos](#documentos): células com preenchimento 12 16 e filete 1 px `--theme-line`; cabeçalho 14/600 `--theme-muted` em fundo `--theme-reading`. Colunas: Pessoa, Papel, Apurações, Uso no mês e a ação, que tem rótulo só para leitor de tela ("Ações") |
+| Pessoa | nome em 16 (na própria linha, seguido de "(você)" em 14 `--theme-muted`); abaixo, e-mail ou "login rui.castro" em 14 `--theme-muted`, `translate="no"`. Quando a conta não está ativa, vem uma terceira linha, sempre com sinal e texto, em 14 `--theme-muted`: "○ Desativada"; "◐ Aguardando a senha"; com o link vencido, "◐ Link de ativação vencido" |
+| Papel | caixa de seleção de 44 px, com rótulo só para leitor de tela ("Papel de Ana Lima"): Dono, Editor, Repórter, Leitor. No perfil antigo, "Convidado (perfil antigo)" aparece selecionado e indisponível: não se escolhe de novo. Na própria linha, o papel é só texto: o próprio papel muda por outro dono |
+| Apurações | "Todas" para dono (`casos` nulo); para os demais, os títulos do catálogo separados por vírgula, até três, e depois "e mais 2"; sem nenhuma, "Nenhuma" em `--theme-muted` |
+| Uso no mês | "R$ 18,40" (`gasto.gasto_brl`); "—" quando `gasto` vem nulo. Com teto próprio, abaixo, em 14 `--theme-muted`, "teto R$ 30". Esgotado: "! R$ 50,00 · esgotada" em 14/600 `--theme-warning` |
+| Ação | "Gerenciar": `<button>` com cara de [link](#link) (16/600 `--theme-accent`, sublinhado, altura mínima 44), `aria-expanded` e `aria-controls`. A própria linha não tem |
+| Lista, abaixo de 1024 px | um cartão por pessoa, preenchimento 16, intervalo 8: nome em 600, e-mail e situação em 14 `--theme-muted`, "Papel" com rótulo visível e caixa de largura cheia, apurações e uso em 14, e "Gerenciar" (secundário, largura cheia) |
+
+**Mudar o papel.** A mudança vale ao escolher. Sem dono no meio, vai direto e a linha de estado diz "✓ Ana Lima agora é Editor. Vale na próxima ação."; enquanto o pedido corre, a caixa fica indisponível. Com dono no meio (o papel atual ou o novo), abre o diálogo [com senha](#dialogo-senha). Do perfil antigo para qualquer papel, abre antes a variante simples: "Converter Cora Dias em Leitor?", com o texto "Leitor lê também o caderno, os achados e o texto das apurações de que participa." e a ação "Converter" (princípio 9 do contrato: a leitura nova é decisão de quem converte). Cancelar ou receber uma recusa devolve a caixa ao papel anterior. Recusa `ultimo_dono`: o texto do servidor na linha de estado, em 14 `--theme-danger`, com `role="alert"`.
+
+**Gerenciar** abre uma linha abaixo da pessoa, que ocupa todas as colunas. Fundo `--theme-background`, preenchimento 16, três blocos em grade com intervalo de 24; numa coluna no celular. Cada bloco tem título 14/600 maiúsculo em `--theme-muted`:
+
+| Bloco | Conteúdo |
+|---|---|
+| APURAÇÕES | as apurações da pessoa, uma por linha com ação. Quando ela é a responsável, a linha mostra "responsável" em 14 `--theme-muted` e não tem "Retirar", com o apoio "Quem é responsável não sai da apuração por aqui." Nas demais, "Retirar" (secundário). Abaixo, "Incluir em" (caixa com as apurações da redação em que a pessoa não está) e "Incluir" (secundário). Para dono, só o texto "Todas as apurações da redação." Resultado: "✓ Ana Lima agora participa de Campo Verde." ou "✓ Ana Lima não participa mais de Campo Verde." (`caso-incluir`, `caso-retirar` com `caso` e `conta`) |
+| TETO MENSAL | campo "Teto de gasto com IA, em reais", de 44 px e até 160 px de largura, `inputmode="decimal"`, aceitando "30" e "30,50"; "Salvar" (secundário). Apoio: "Padrão da redação: R$ 50. Não passa do teto da redação." Com teto próprio, "Usar o padrão" ([link](#link)) o apaga. A Mesa envia `teto_brl` como texto com ponto ("30.50"), nunca como número, e `null` para voltar ao padrão (`equipe-teto` com `conta`). Recusa: o texto do servidor abaixo do campo |
+| ACESSO | conta ativa: "Desativar" e "Remover da redação" (destrutivos). Conta desativada: "Reativar" (secundário, sem diálogo) e "Remover da redação". Apoio: "Desativar encerra as sessões e para as perguntas em curso; as apurações ficam. Remover exclui a conta." Os diálogos estão na [tabela](#dialogo-senha) |
+
+O "Recuperar acesso" de hoje sai com as `contas-*` ([exceções](#contas-excecoes)).
+
+**Abaixo da tabela**, em grade de duas colunas:
+
+| Cartão | Conteúdo | Dados |
+|---|---|---|
+| **Gasto com IA neste mês** | com `gasto`: "R$ 24,50 de R$ 150" (16/600), o [medidor](#medidor) e o apoio "Cota da redação, definida por quem administra o serviço." Com `gasto` nulo, sem valor nem medidor, o apoio "O gasto da redação aparece aqui quando o serviço passar a contá-lo por redação. O de cada pessoa está na tabela." (contrato, 4.5). Abaixo, em todos os casos, o campo "Teto padrão por pessoa, em reais", igual ao do Gerenciar, com "Salvar"; vazio quer dizer o teto da instalação, e o apoio diz isso | `equipe-listar`; `equipe-teto` sem `conta` |
+| **Atividade recente** | largura das duas colunas. As cinco últimas ações, uma por linha: a frase em 16 e, à direita, a data em 14 `--theme-muted`. Depois, "Mostrar mais" (secundário), que traz 50 de cada vez enquanto houver `proximo`. Só acessos e administração, nunca conteúdo (W09, regra 8). Sem nenhuma: "Nenhuma ação registrada ainda." | `equipe-atividade` com `limite` e `antes` |
+
+Frases da atividade. "Fulano" é `por_nome` e "Beltrano" é `conta_nome`; quando os dois são a mesma conta, a frase usa só o nome dela.
+
+- Sem nome (conta removida): "uma conta removida".
+- Sem `por` de conta (operador ou migração): "Quem administra o serviço".
+
+| Tipo | Frase |
+|---|---|
+| `papel_alterado` | Fulano mudou o papel de Beltrano |
+| `conta_desativada` / `conta_reativada` | Fulano desativou / reativou a conta de Beltrano |
+| `conta_excluida` | Fulano removeu Beltrano da redação |
+| `conta_criada` | Fulano criou a conta de Beltrano |
+| `participacao_incluida` / `participacao_retirada` | Fulano incluiu Beltrano numa apuração / retirou Beltrano de uma apuração |
+| `responsavel_alterado` | Fulano mudou o responsável de uma apuração |
+| `teto_alterado` | Fulano mudou um teto de gasto |
+| `senha_trocada` / `senha_definida` | Beltrano trocou / definiu a senha |
+| `sessao_encerrada_a_distancia` | Beltrano encerrou sessões em outros aparelhos |
+| `conta_atualizada` | Beltrano atualizou o perfil |
+| `recuperacao_emitida` | Fulano gerou um novo link de ativação para Beltrano |
+| `login_bloqueado` | A entrada de Beltrano foi bloqueada por muitas tentativas |
+| qualquer outro | Ação de administração |
+
+**Só o dono na redação**: a tabela tem uma linha, e abaixo dela vem o texto da exceção do convite.
+
+<a id="contas-excecoes"></a>
+
+### Exceções declaradas, por falta de servidor ou por decisão do dono
+
+A conferência destas telas não barra por elas. Cada uma volta ao wireframe quando o servidor existir, e a tela é conferida de novo nesse ponto.
+
+| O que o wireframe mostra | O que a tela mostra até lá | Volta quando |
+|---|---|---|
+| W08: código do autenticador e códigos de reserva | as linhas ficam fora | houver segundo fator (contrato, 8.2) |
+| W08 e W10: chave de acesso | fora | não volta: decisão 4 do contrato (P27) |
+| W08: cidade aproximada da sessão | aparelho, último uso e endereço | não volta: decisão 5 do contrato (P27) |
+| W08: "14 perguntas" no uso do mês | só o valor em reais | `GET /api/cota` trazer a contagem |
+| W08: "Exportar meus dados" e "Excluir minha conta" | o cartão Seus dados, só com o caminho por pessoa | houver `conta-exportar` e `conta-excluir` (contrato, 8.4); "Excluir" vem com o diálogo com senha e o nome digitado |
+| W09: "Convidar pessoa", convites pendentes e "Reenviar" | nada no lugar do botão; abaixo da tabela, em 14 `--theme-muted`, "Para incluir alguém na redação, fale com quem administra o serviço." | houver convite por e-mail (contrato, 8.1) |
+| W09: cartão "Chave de IA da redação" | a chave continua em Configurações, como hoje, com a senha | houver chave por redação (contrato, 8.5, parte da Plataforma) |
+| W09: "aviso em 80%" e "redação convidada para o teste" | só o teto e a contagem de pessoas | o servidor informar o aviso e a situação do teste |
+| W09: "Ana entrou de novo aparelho" na atividade | a atividade sem esse evento | houver aparelho conhecido (contrato, 8.2 e 8.3) |
+| "Recuperar acesso" da tela de hoje | fora | houver `equipe-recuperar`, com dupla confirmação (contrato, 8.2) |
+| Autor de conta removida como "Conta excluída" | o texto de remover não promete a troca | vier o ciclo de vida (contrato, 8.4 e 12) |
+
+### Ganchos com o resto da Mesa
+
+| Gancho | Quem |
+|---|---|
+| O perfil no rodapé da barra e no pé da gaveta abre Minha conta e recebe `aria-current` | Lume (barra) e Vitral (página) |
+| O botão "Configurações" do cabeçalho leva à aba Configurações | Lume |
+| As caixas "Idioma" e "Tema" usam o mesmo estado dos botões "English" e "Modo escuro" do cabeçalho. Mudar num lugar muda no outro | Lume e Vitral |
+| O estado "Redação suspensa" ([estados](#estados)) vale para a Mesa inteira, a partir de qualquer resposta 403 `redacao_suspensa` | Lume |
+| O campo de senha no "Apagar definitivamente" (`gerenciar.js`) e em Configurações (`configuracao_ia.js`) entra na mesma integração em que o servidor passa a pedi-la | Vitral, com Contas |
+
+---
+
+<a id="regras-dos-wireframes"></a>
+
 ## Regras dos wireframes
 
 Transcrição literal das regras de cada wireframe (regra 2 do contrato: cada uma vira critério de aceite e, quando testável, um teste). W04 e W06 trazem as regras num parágrafo sem numeração; a transcrição mantém o parágrafo como está.
@@ -1000,7 +1191,7 @@ Nota do wireframe: "Muda o que existe hoje: o manifesto guarda um único domíni
 
 ## O que ainda falta desenhar
 
-Pela regra 1 do contrato, nada disto é construído antes de o Design desenhar e o dono aprovar: os formulários de resposta e de recurso dos pedidos de LAI, com o cálculo do prazo (PROD-07); fontes e capturas de site dentro da apuração; lixeira; configuração da organização; página pública; versões de celular das demais telas de desktop (e, no sentido inverso, o Entrar em desktop); faixa de 720 a 1023 px; tema escuro das telas do canvas fora as três de desktop; sem aviso com "Desfazer" por ora (P12.7). Desenhados na fase 3 e aprovados pelo dono em 21/11/2026: diálogo de confirmação, escuro de conferir achado, visão geral e design system, tablet de 1024 px e celular de 390 px de conferir achado e visão geral ([Telas derivadas](#telas-derivadas)). O conjunto de ícones (parte E) está na seção [Conjunto de ícones do Vlado](#conjunto-de-icones), com cinco ícones derivados, aprovados pelo dono em 21/11/2026. Aprovados também em 21/11/2026, em [Áreas sem tela final](#telas-aprovadas): caderno, hipóteses, tabelas, comparador, mapa e linha do tempo no celular, Pedidos e prazos e Documentos. Têm só a captura da Mesa de hoje, sem desenho: Perguntar no desktop (há o W03), Diligências, Apurações e lixeira, e Configurações (W08 e W09 em parte).
+Pela regra 1 do contrato, nada disto é construído antes de o Design desenhar e o dono aprovar: os formulários de resposta e de recurso dos pedidos de LAI, com o cálculo do prazo (PROD-07); fontes e capturas de site dentro da apuração; lixeira; configuração da organização; página pública; versões de celular das demais telas de desktop (e, no sentido inverso, o Entrar em desktop); faixa de 720 a 1023 px; tema escuro das telas do canvas fora as três de desktop; sem aviso com "Desfazer" por ora (P12.7). Desenhados na fase 3 e aprovados pelo dono em 21/11/2026: diálogo de confirmação, escuro de conferir achado, visão geral e design system, tablet de 1024 px e celular de 390 px de conferir achado e visão geral ([Telas derivadas](#telas-derivadas)). O conjunto de ícones (parte E) está na seção [Conjunto de ícones do Vlado](#conjunto-de-icones), com cinco ícones derivados, aprovados pelo dono em 21/11/2026. Aprovados também em 21/11/2026, em [Áreas sem tela final](#telas-aprovadas): caderno, hipóteses, tabelas, comparador, mapa e linha do tempo no celular, Pedidos e prazos e Documentos. Têm só a captura da Mesa de hoje, sem desenho: Perguntar no desktop (há o W03), Diligências, Apurações e lixeira, e Configurações. Minha conta, Equipe e Configurações (W08 e W09) têm especificação sem prancha em [Contas](#contas), de 22/11/2026.
 
 ## Decisões do dono (21/11/2026)
 
