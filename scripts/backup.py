@@ -58,8 +58,13 @@ PROIBIDOS = (chr(92), ':', chr(0))  # backslash (Windows separator), drive lette
 # staging folders. The current registration lock is NOT a marker: `casos/.cadastro.trava` is a file that always
 # exists and is held with an operating-system lock; see `_trava_cadastro_em_uso`.
 MARCADORES = ('.cadastro.lock', '.trava', '.lote_', '.web_', '.preparacao_', '.indice_', '.r_', '.publicacao_',
-              '.restaurando-', '.antiga-')
+              '.restaurando-', '.antiga-', '.novo_')
 TRAVA_CADASTRO = '.cadastro.trava'
+# Lock files held with an operating-system lock that always exist: not data and never part of a backup.
+# `casos/.fila/.coordenador` is the extraction queue's single-coordinator lock (CONF-02). The queue itself,
+# `casos/.fila/<lote>/` (uploads not yet published: originals, plan, state), IS part of the backup, taken before the
+# cases (see `_entradas`); `.novo_<id>` there (a batch being assembled, renamed when complete) is a marker above.
+ARQUIVOS_DE_TRAVA = (TRAVA_CADASTRO, '.coordenador')
 # A staging folder older than this is leftover of a crash (the application only clears it on its next start):
 # it is left out of the backup and reported, but it no longer makes the backup wait.
 MARCADOR_IDADE_MAX_S = 7200.0
@@ -191,7 +196,7 @@ def _entradas(root: Path, pastas: tuple[str, ...]):
                 relativo = Path(item.path).relative_to(root).as_posix()
                 if _marcador(item.name):
                     continue
-                if item.is_file(follow_symlinks=False) and (item.name == TRAVA_CADASTRO or item.name.endswith('.lock')):
+                if item.is_file(follow_symlinks=False) and (item.name in ARQUIVOS_DE_TRAVA or item.name.endswith('.lock')):
                     continue  # lock files are not data: a restored lock record would look like an abandoned lock
                 if item.is_symlink() or not (item.is_dir(follow_symlinks=False) or item.is_file(follow_symlinks=False)):
                     ignorados.append(relativo)

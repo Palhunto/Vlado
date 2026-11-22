@@ -18,7 +18,7 @@ Passo a passo para o dono e para quem opera o servidor. O que é decisão ou ato
   arquivo antes e depois: mudou, descarta a cópia e recomeça. Vale para cadastro, preparação de PDFs, congelamento de
   rodada, publicação da captura web, gestão e apagamento. O `flock` funciona entre contêineres que montam o **mesmo
   volume nomeado**; não funciona com bind mount de pasta do Windows nem em SMB/NFS antigo (use volume nomeado).
-  Pastas de preparo (`.lote_*`, `.r_*`, `.web_*`, `.preparacao_*`, `.indice_*`, `.publicacao_*`) nunca entram no
+  Pastas de preparo (`.lote_*`, `.r_*`, `.web_*`, `.preparacao_*`, `.indice_*`, `.publicacao_*`, `.novo_*`) nunca entram no
   backup; uma com menos de 2 h conta como trabalho em andamento, uma mais velha é resto de queda e só vira aviso
   no manifesto (`VLADO_BACKUP_MARCADOR_IDADE_MAX_S`). Cada arquivo é lido de forma estável (tamanho e data não mudam
   durante a leitura; JSON e SQLite são validados). Notas e caderno têm travas próprias e escrita atômica por
@@ -31,10 +31,27 @@ Passo a passo para o dono e para quem opera o servidor. O que é decisão ou ato
 
 | Entra | Fica de fora | Por quê |
 |---|---|---|
-| casos (originais, derivados, cadastros), rodadas e índices, conversas, lixeira, entrada, **contas (`acesso/`, com hashes de senha)**, ajustes | `segredos/` (chaves de API coladas na Mesa) | Uma chave de API se cola de novo (ou fica na variável de ambiente do servidor); um backup é mais fácil de vazar que um volume. O volume `segredos` nem é montado no serviço de backup. |
+| casos (originais, derivados, cadastros) **e a fila de extração `casos/.fila/`**, rodadas e índices, conversas, lixeira, entrada, **contas (`acesso/`, com hashes de senha)**, ajustes | `segredos/` (chaves de API coladas na Mesa) | Uma chave de API se cola de novo (ou fica na variável de ambiente do servidor); um backup é mais fácil de vazar que um volume. O volume `segredos` nem é montado no serviço de backup. |
 | | dados do Caddy (`caddy_data`: certificado e conta ACME) | O Caddy emite de novo sozinho. |
 | | `configuracao.json` e o código | Fazem parte da imagem (`VLADO_VERSAO`). |
-| | pastas de preparo (`.lote_*`, `.r_*`...), `casos/.cadastro.trava` e os `*.lock` | Trabalho em andamento e arquivos de trava, não dados: a Mesa recria a trava no primeiro uso. |
+| | pastas de preparo (`.lote_*`, `.r_*`, `.novo_*`...), `casos/.cadastro.trava`, `casos/.fila/.coordenador` e os `*.lock` | Trabalho em andamento e arquivos de trava, não dados: a Mesa recria a trava no primeiro uso. |
+
+### Fila de extração (`casos/.fila/`, CONF-02): entra no backup
+
+A Mesa grava os envios em `casos/.fila/<lote>/` (pedido, estado, originais recebidos, cópias de trabalho) e só depois de lidos
+e publicados eles passam para `casos/<caso>/`. **Decisão: a fila entra no backup**, no estado em que estiver. Motivo: um envio
+ainda não publicado só existe ali (o OCR de um PDF grande leva horas); sem a fila, uma restauração faria o envio sumir sem aviso.
+Restaurar um lote pendente faz a Mesa processá-lo de novo, sem dano (publicar de novo é idempotente). Detalhes:
+
+- **Fora:** `casos/.fila/.coordenador` (trava de processo, a Mesa recria ao partir) e `casos/.fila/.novo_<id>` (lote sendo
+  montado, renomeado quando completo): este é marcador de operação em andamento, então o backup espera até 15 min por ele e
+  nunca o copia; um `.novo_*` com mais de 2 h é resto de queda e só vira aviso.
+- **Ordem:** a fila é copiada **antes** das pastas dos casos (ordem alfabética: o ponto vem primeiro). Se um lote for publicado
+  durante a cópia, ele aparece nos dois lugares (inofensivo, a publicação é idempotente) e nunca em nenhum. Um teste confere
+  essa ordem; se a fila mudar de nome ou de lugar, avise a Infra.
+- **Depois de publicado**, `pedido.json`, `estado.json` e `resposta.json` ficam 24 h na fila e vão junto: são pequenos.
+- **Custo:** originais e cópias de trabalho de lotes pendentes entram no arquivo do backup; com muitos envios grandes
+  ao mesmo tempo, o backup daquela hora fica maior (e um arquivo que muda durante a leitura vira aviso no manifesto, não falha).
 
 Quem quiser incluir as chaves de API precisa montar `segredos` no serviço e definir `VLADO_BACKUP_INCLUIR_SEGREDOS=1`
 (decisão consciente; o manifesto registra `segredos_incluidos`).

@@ -273,6 +273,13 @@ class DocumentosDeOperacaoTest(unittest.TestCase):
                        'VLADO_BACKUP_STDIN_MAX_GB', '10 GB', 'age=1.1.1-1*', 'rclone=1.60.1+dfsg-2*', 'falha de propósito'):
             self.assertIn(trecho, secao, trecho)
 
+    def test_backup_registra_que_a_fila_de_extracao_entra_e_o_que_fica_de_fora(self):
+        texto = (RAIZ / 'deploy' / 'BACKUP.md').read_text(encoding='utf-8')
+        secao = texto[texto.index('### Fila de extração'):texto.index('Quem quiser incluir as chaves de API')]
+        for trecho in ('entra no backup', 'casos/.fila/.coordenador', '.novo_', 'antes', 'idempotente', 'ordem'.capitalize()):
+            self.assertIn(trecho, secao, trecho)
+        self.assertIn('`.novo_*`', texto.split('## O que entra', 1)[0], 'marcador na lista de pastas de preparo')
+
     def test_roteiro_nao_traz_chave_nem_senha_de_exemplo_reais(self):
         for nome in ('INCIDENTE.md', 'MONITORAMENTO.md', 'BACKUP.md'):
             texto = self.texto(nome)

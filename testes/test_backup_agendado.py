@@ -395,6 +395,80 @@ class RestauracaoPelaEntradaPadraoTest(Base):
         self.assertNotRegex(fonte, r'BytesIO\(sys\.stdin')
 
 
+class FilaDeExtracaoTest(Base):
+    """C7: casos/.fila/ (CONF-02) guarda envios ainda não publicados. Decisão: ENTRA no backup, com o que a
+    Mesa precisa para reprocessar o lote (pedido, estado, originais, derivados); fora ficam o `.coordenador` (trava
+    de processo, não é dado) e `.novo_<id>` (lote em montagem, marcador); e ela é copiada antes dos casos."""
+
+    LOTE = 'a1' * 16
+
+    def monta_fila(self):
+        fila = self.root / 'casos' / '.fila'
+        lote = fila / self.LOTE
+        arquivos = {'pedido.json': '{"caso": "c1", "lote": "%s"}' % self.LOTE,
+                    'estado.json': '{"estado": "processando", "arquivos": [{"indice": 0, "estado": "extraindo"}]}',
+                    'originais/0/relatorio.pdf': 'bytes do original recebido, ainda nao publicado',
+                    'derivados/0/resultado.json': '{"extracao": "parcial"}'}
+        for relativo, conteudo in arquivos.items():
+            alvo = lote / relativo
+            alvo.parent.mkdir(parents=True, exist_ok=True)
+            alvo.write_text(conteudo, encoding='utf-8')
+        (fila / '.coordenador').write_text('4242', encoding='utf-8')
+        return fila, arquivos
+
+    def membros(self, arquivo) -> list[str]:
+        with tarfile.open(arquivo) as pacote:
+            return [m.name for m in pacote.getmembers()]
+
+    def test_lote_pendente_entra_no_backup_sem_a_trava_do_coordenador(self):
+        fila, arquivos = self.monta_fila()
+        nomes = self.membros(backup.criar(self.root, self.base / 'copias'))
+        for relativo in arquivos:
+            self.assertIn(f'casos/.fila/{self.LOTE}/{relativo}', nomes, relativo)
+        self.assertNotIn('casos/.fila/.coordenador', nomes, 'trava de processo não é dado')
+        self.assertFalse([n for n in nomes if n.endswith('.coordenador')])
+
+    def test_restauracao_devolve_o_lote_pendente_igual_para_a_mesa_reprocessar(self):
+        fila, arquivos = self.monta_fila()
+        destino = self.base / 'destino'
+        backup.restaurar(destino, backup.criar(self.root, self.base / 'copias'))
+        for relativo, conteudo in arquivos.items():
+            self.assertEqual((destino / 'casos/.fila' / self.LOTE / relativo).read_text(encoding='utf-8'), conteudo)
+        self.assertFalse((destino / 'casos/.fila/.coordenador').exists(), 'o coordenador cria a própria trava ao partir')
+
+    def test_lote_em_montagem_e_marcador_fica_fora_e_faz_o_backup_esperar(self):
+        fila, _ = self.monta_fila()
+        montagem = fila / ('.novo_' + 'b2' * 16)
+        (montagem / 'originais').mkdir(parents=True)
+        (montagem / 'pedido.json').write_text('{', encoding='utf-8')
+        with self.assertRaises(backup.BackupOcupado):
+            backup.criar(self.root, self.base / 'copias')
+        # Abandonado (queda da Mesa, mais velho que o limite): fica fora e só vira aviso, sem travar o backup.
+        antigo = backup.MARCADOR_IDADE_MAX_S + 60
+        for caminho in (montagem, montagem / 'pedido.json', montagem / 'originais'):
+            os.utime(caminho, (os.stat(caminho).st_atime - antigo, os.stat(caminho).st_mtime - antigo))
+        nomes = self.membros(backup.criar(self.root, self.base / 'copias2'))
+        self.assertFalse([n for n in nomes if '.novo_' in n], 'lote em montagem nunca entra')
+        self.assertIn(f'casos/.fila/{self.LOTE}/pedido.json', nomes)
+
+    def test_fila_e_copiada_antes_dos_casos_para_um_lote_publicado_no_meio_nunca_sumir(self):
+        """Se a publicação mover um lote da fila para casos/<caso> durante a cópia, ele precisa estar em um dos dois:
+        copiando a fila primeiro, no pior caso aparece nos dois (publicar de novo é idempotente), nunca em nenhum."""
+        self.monta_fila()
+        nomes = self.membros(backup.criar(self.root, self.base / 'copias'))
+        da_fila = [i for i, n in enumerate(nomes) if n.startswith('casos/.fila')]
+        dos_casos = [i for i, n in enumerate(nomes) if n.startswith('casos/c1/')]  # as pastas dos casos
+        self.assertTrue(da_fila and dos_casos)
+        self.assertLess(max(da_fila), min(dos_casos), 'casos/.fila precisa vir antes dos casos no pacote')
+
+    def test_arquivo_da_fila_que_muda_durante_a_leitura_vira_aviso_nao_falha(self):
+        fila, _ = self.monta_fila()
+        arquivo = backup.criar(self.root, self.base / 'copias')
+        with tarfile.open(arquivo) as pacote:
+            manifesto = json.loads(pacote.extractfile('manifesto_backup.json').read())
+        self.assertIn(f'casos/.fila/{self.LOTE}/estado.json', manifesto['arquivos'])
+
+
 class RetencaoTest(unittest.TestCase):
     AGORA = datetime(2026, 11, 21, 12, 0, tzinfo=timezone.utc)
 
