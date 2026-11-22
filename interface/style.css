@@ -339,6 +339,10 @@ dialog .actions{justify-content:flex-end;margin-bottom:0}
   font-display:swap;
 }
 body{font-size:var(--text-base);line-height:1.55}
+/* Idioma padrão inglês: o corpo espera o dicionário (i18n.js marca data-i18n-pronto) para não piscar em português; a animação o mostra
+   depois de 3 s mesmo que algo falhe. */
+body[data-idioma-padrao=en]:not([data-i18n-pronto]){visibility:hidden;animation:vlado-mostrar 0s 3s forwards}
+@keyframes vlado-mostrar{to{visibility:visible}}
 .app-header{padding-top:18px;padding-bottom:18px}
 .brand{
   font-family:var(--fonte-titulo);
@@ -1506,7 +1510,8 @@ footer{font-size:var(--text-xs);margin-top:32px;padding-top:20px;color:var(--mut
   .mesa-upload-banner p{font-size:var(--text-sm)}
   .mesa-acervo-toolbar{gap:12px}
   .mesa-acervo-toolbar label:first-child{flex-basis:100%}
-  .mesa-acervo-toolbar label:nth-child(2){flex:1;min-width:120px}
+  .mesa-acervo-toolbar label:nth-child(2){flex-basis:100%}
+  .mesa-acervo-toolbar>button{flex:1 1 100%}
   .mesa-file-table th,.mesa-file-table td{padding:13px 11px}
   .mesa-file-table td:nth-child(3),.mesa-file-table th:nth-child(3){display:none}
   .mesa-file-table td:last-child{width:1%}

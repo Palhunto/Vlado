@@ -549,7 +549,7 @@
         state(data.conversa.estado);
         limitations();
         if (renderFailure) throw renderFailure;
-        if (!active && data.eventos.length < 100) { await conversations(); return; }
+        if (!active && data.eventos.length < 100) { window.atualizarCotaBarra?.(true); await conversations(); return; }
       } catch (error) {
         if (version !== view) return;
         if (error.rede) { await lostConnection(++attempt); continue; }

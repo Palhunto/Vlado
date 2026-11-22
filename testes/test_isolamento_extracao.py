@@ -336,8 +336,11 @@ class ProcessoIsoladoTest(unittest.TestCase):
         vigiar = ('t.vigiar_cpu(t.tetos.configuracao(), lambda m: print(json.dumps(m, ensure_ascii=False), flush=True))\n'
                   'while True: sum(range(10000))')
         inicio = time.monotonic()
-        codigo, saida, _ = em_processo(self.APLICAR + vigiar, env={'VLADO_EXTRACAO_TETO_CPU_S': '1'}, grupo=True)
-        self.assertLess(time.monotonic() - inicio, 30)
+        # The worker runs below-normal priority and off core 0 (by design), so on a loaded machine 1 s of CPU can take
+        # minutes of wall time (44 to 161 s seen with other agents running). The bound proves the cap ends the process
+        # long before the 7200 s default; it is not a latency target.
+        codigo, saida, _ = em_processo(self.APLICAR + vigiar, env={'VLADO_EXTRACAO_TETO_CPU_S': '1'}, grupo=True, prazo=420)
+        self.assertLess(time.monotonic() - inicio, 360)
         self.assertIn(codigo, (5, -9))  # POSIX ends its own group with signal 9
         mensagem = json.loads(saida.splitlines()[-1])
         self.assertEqual(mensagem['tipo'], 'limite')
