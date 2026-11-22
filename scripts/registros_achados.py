@@ -106,7 +106,10 @@ def _fontes(run, caso, rodada):
     return {f"entradas/{s['arquivo']}": s for s in descriptor['fontes']}
 
 
-def conferir_evidencia(root, caso, rodada, evidence, sources=None):
+def conferir_evidencia(root, caso, rodada, evidence, sources=None, *, registrar=False):
+    """Technical check of one recorded evidence against the frozen round. ``registrar=True`` only when a person asks
+    for the context (``indice_achados.evidencia``: 'Ver contexto' in Conferir): that reading goes to the raw query
+    record. Loads, boards and publication re-check without writing (T1, SEG-06)."""
     """Validate frozen source identity and observable positions, including non-FTS sources."""
     run = caminho_rodada(root, caso, rodada)
     sources = _fontes(run, caso, rodada) if sources is None else sources
@@ -166,9 +169,9 @@ def conferir_evidencia(root, caso, rodada, evidence, sources=None):
         index = evidence['indice']
         if not index:
             raise ValueError('Evidência indexada sem identidade do índice.')
-        # Technical re-check of an evidence already recorded (on every load and publication), not a reading:
-        # its provenance is the record itself, so it writes no raw query file and spends no ceiling (SEG-06).
-        result = ler_passagem(root, caso, rodada, index['referencia'], geracao=index['geracao'], registrar=False)
+        # On a load or a publication this re-checks an evidence already recorded, not a reading: its provenance is the
+        # record itself, so it writes no raw query file and spends no ceiling (SEG-06). A person's reading does.
+        result = ler_passagem(root, caso, rodada, index['referencia'], geracao=index['geracao'], registrar=registrar)
         if any(result[k] != index[k] for k in ('indice_id', 'banco_sha256')):
             raise ValueError('Identidade do índice documental divergente.')
         hit = result['passagem']

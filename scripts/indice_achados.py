@@ -240,7 +240,7 @@ def evidencia(root, caso, rodada, revisao, evidencia_id):
     item = next((e for e in data['evidencias'] if e['id'] == evidencia_id), None)
     if item is None:
         raise ValueError('Evidência não pertence a esta revisão/caso/rodada.')
-    result = conferir_evidencia(root, caso, rodada, item)
+    result = conferir_evidencia(root, caso, rodada, item, registrar=True)  # a person's reading of the context (W1)
     return recibo(caminho_rodada(root, caso, rodada), 'evidencia', caso_id=caso, rodada=rodada,
                   revisao=revisao, registros_sha256=manifest['registros_sha256'], **result)
 
