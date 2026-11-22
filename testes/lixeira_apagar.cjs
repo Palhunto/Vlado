@@ -82,9 +82,9 @@ test('o diálogo abre com a linha do item, calcula o alcance e só então libera
   assert.deepEqual(mesa.chamadas.find(c => c.operacao === 'lixeira-alcance').dados, {item: ITEM.id});
   await liberar();
   const linhas = [...dlg.querySelectorAll('tbody tr')].map(tr => [...tr.querySelectorAll('th,td')].map(c => c.textContent));
-  assert.deepEqual(linhas, [['Conversas', '2', '512 KB'], ['misterio', '1', '10 B'], ['Rodadas de análise', '1', '1,0 MB']]);
+  assert.deepEqual(linhas, [['Conversas', '2', '512\u00a0KB'], ['misterio', '1', '10\u00a0B'], ['Rodadas de análise', '1', '1,0\u00a0MB']]);
   assert.deepEqual([...dlg.querySelectorAll('thead th')].map(c => c.textContent), ['Categoria', 'Arquivos', 'Tamanho']);
-  assert.equal(dlg.querySelector('tfoot').textContent, '4 arquivos, 1,5 MB'.replace(/^/, 'Total'));
+  assert.equal(dlg.querySelector('tfoot').textContent, '4\u00a0arquivos, 1,5\u00a0MB'.replace(/^/, 'Total'));
   assert.match(dlg.textContent, /Estas rodadas continuam porque são usadas por outras conversas: R001/);
   assert.match(dlg.textContent, new RegExp(ALCANCE.aviso_backup.slice(0, 40)));
   assert.match(dlg.querySelector('label').textContent, /Digite «Conversa velha» para confirmar/);
@@ -146,7 +146,7 @@ test('o envio mostra “Apagando…”, trava Cancelar e Esc e, no sucesso, fech
   const listagens = mesa.chamadas.filter(c => c.operacao === 'gerenciar-listar').length;
   await liberar();
   assert.equal(dialogo(mesa), null);
-  assert.equal(mesa.$('gerenciar-status').textContent, 'Apagado definitivamente: 4 arquivos (1,5 MB). As cópias em backups não são apagadas.', 'o aviso de backup da resposta aparece');
+  assert.equal(mesa.$('gerenciar-status').textContent, 'Apagado definitivamente: 4\u00a0arquivos (1,5\u00a0MB). As cópias em backups não são apagadas.', 'o aviso de backup da resposta aparece');
   assert.ok(mesa.chamadas.filter(c => c.operacao === 'gerenciar-listar').length > listagens, 'lista recarregada');
   assert.equal(botaoApagar(mesa), undefined, 'o item saiu da lixeira');
   assert.equal(mesa.$('gerenciar-lixeira').querySelectorAll('li.manage-empty').length, 1);
@@ -213,7 +213,7 @@ test('em inglês o diálogo, as categorias, o total e a linha do item vêm tradu
   assert.equal(dlg.querySelector('.dialogo-titulo').textContent, 'Delete permanently');
   assert.equal(dlg.querySelector('.dialogo-linha').textContent, 'Conversation · Conversa velha', 'tipo traduzido, título como dado');
   assert.equal(dlg.querySelector('tbody th').textContent, 'Conversations');
-  assert.equal(dlg.querySelector('tfoot').textContent, 'Total4 files, 1.5 MB');
+  assert.equal(dlg.querySelector('tfoot').textContent, 'Total4\u00a0files, 1.5\u00a0MB');
   assert.match(dlg.querySelector('label').textContent, /Type “Conversa velha” to confirm/);
   assert.equal(botoes(mesa)[0].textContent, 'Cancel');
   assert.match(dlg.textContent, /Copies already in backups/);

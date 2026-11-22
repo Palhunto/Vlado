@@ -119,12 +119,13 @@
   const locale = () => (window.I18N?.idioma?.() === 'en' ? 'en' : 'pt-BR');
   const number = (value, digits = 0) => new Intl.NumberFormat(locale(), {minimumFractionDigits:digits, maximumFractionDigits:digits}).format(value);
   function size(bytes) {
-    if (bytes < 1024) return `${number(bytes)} B`;
-    if (bytes < 1024 ** 2) return `${number(Math.round(bytes / 1024))} KB`;
-    if (bytes < 1024 ** 3) return `${number(bytes / 1024 ** 2, 1)} MB`;
-    return `${number(bytes / 1024 ** 3, 1)} GB`;
+    // No-break space: the number and its unit never split across lines.
+    if (bytes < 1024) return `${number(bytes)}\u00a0B`;
+    if (bytes < 1024 ** 2) return `${number(Math.round(bytes / 1024))}\u00a0KB`;
+    if (bytes < 1024 ** 3) return `${number(bytes / 1024 ** 2, 1)}\u00a0MB`;
+    return `${number(bytes / 1024 ** 3, 1)}\u00a0GB`;
   }
-  const files = count => count === 1 ? t('1 arquivo') : t('{n} arquivos', {n:number(count)});
+  const files = count => (count === 1 ? t('1 arquivo') : t('{n} arquivos', {n:number(count)})).replace(' ', '\u00a0');
   // What leaves the project: a table by category with the total, the rounds kept for other conversations and the backup notice.
   function scopeNodes(scope) {
     const table = element('table', undefined, 'dialogo-tabela');
