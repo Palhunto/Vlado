@@ -148,6 +148,21 @@ Onde: design system, Conferir achado, mapa. `<span>` 14/600, preenchimento 4 12,
 | Lacuna | `--theme-warning` | `--theme-warning-bg` | `--theme-warning-line` | ? |
 | Sem suporte | `--theme-danger` | `--theme-danger-bg` | `--theme-danger-line` | ✕ |
 | Lida por OCR | `--theme-warning` | `--theme-warning-bg` | `--theme-warning-line` | nenhum (o texto basta) |
+| Precisa de ajuste *(derivado)* | `--theme-warning` | `--theme-warning-bg` | `--theme-warning-line` | ! |
+
+**Veredito da IA (derivado, 22/11/2026).** O canvas só desenha os selos da conferência humana (tabela acima). O veredito da IA sobre o suporte de um achado é o mesmo selo, com raio pílula, mas a forma o separa da pessoa por três sinais juntos, nunca só pela cor:
+
+- sem fundo (transparente);
+- borda 1 px **tracejada**, como em tudo o que ainda espera confirmação na Mesa ("a confirmar" do mapa, item a resolver);
+- texto começando por "IA ·" ("IA · sustentado", "AI · not supported"), sem sinal.
+
+| Veredito da IA | Texto | Borda tracejada |
+|---|---|---|
+| Sustentado | `--theme-text` | `--theme-muted` |
+| Parcial ou ilegível | `--theme-warning` | `--theme-warning` |
+| Não sustentado | `--theme-danger` | `--theme-danger` |
+
+Os selos humanos têm sempre fundo, borda contínua e o sinal da tabela. Nenhum selo usa o raio de folha (4 px), que fica só na folha do documento e no topo das barras (P11.3).
 
 Estados: só padrão (canvas). Não é interativo: sem foco, sem passar o mouse. Ocupado, erro, desabilitado e vazio não se aplicam.
 
