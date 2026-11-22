@@ -50,7 +50,8 @@ class RotasGestao:
                     with manager.lock:
                         visible = catalogo(self.server.root)
                         selected = data.get('caso')
-                        return {**visible, 'lixeira': lixeira.ativos(self.server.root),
+                        return {**visible,
+                                'lixeira': apagamento.marcar_pendentes(self.server.root, lixeira.ativos(self.server.root)),
                                 'conversas': manager.listar(selected)['conversas']
                                 if selected in {c['id'] for c in visible['casos']} else []}
                 return manager.gerenciar(operation, data)

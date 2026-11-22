@@ -25,6 +25,7 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('convite_invalido', r'^Convite inválido'),
     ('cota_diaria_esgotada', r'^Limite diário de (?P<cota>\d+) pergunta'),
     ('limite_tokens_dia', r'^Limite diário de (tokens|uso) da instalação'),
+    ('limite_tokens_dia_redacao', r'^Limite diário de (tokens|uso) da redação'),
     ('limite_tokens_consulta', r'^(Limite de tokens por consulta atingido|O limite de tokens por consulta)'),
     ('pergunta_em_andamento', r'^Já há uma pergunta em andamento'),
     ('conversa_indisponivel', r'^Conversa indisponível para este acesso'),
@@ -54,6 +55,7 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('item_fora_da_lixeira', r'^Só é possível apagar definitivamente um item que está na lixeira'),
     ('lixeira_id_invalido', r'^Identificador da lixeira inválido'),
     ('apagamento_incompleto', r'^Não foi possível apagar tudo'),
+    ('apagamento_pendente', r'^Um apagamento definitivo desta apuração ficou pela metade'),
     ('conferencia_sem_original', r'^Para marcar “Conferida no original”'),
     ('falha_leitura', r'^Falha ao ler arquivos do servidor'),
     # Evidence boards (hipoteses, linha_tempo, comparador, mapa_relacoes via rotas_evidencia).
@@ -153,7 +155,9 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('gasto_nao_registrado', r'^O gasto do mês não pode ser registrado agora'),
     ('modelo_nao_permitido', r'^O modelo .+ não está entre os permitidos nesta instalação'),
     ('execucoes_simultaneas_conta', r'^Já há (?P<limite>\d+) perguntas? em andamento nesta conta'),
-    ('execucoes_simultaneas_mesa', r'^A Mesa já está com (?P<limite>\d+) perguntas em andamento'),
+    ('execucoes_simultaneas_redacao', r'^Já há (?P<limite>\d+) perguntas? em andamento nesta redação'),
+    # No number: the installation's count adds up every newsroom (accounts contract, 4.5).
+    ('execucoes_simultaneas_mesa', r'^A Mesa está no limite de perguntas em andamento'),
     # Drafts (rascunhos): one per account, case and screen, with a growing version.
     ('rascunho_conflito', r'^O rascunho mudou em outra aba'),
     ('rascunho_sem_caso', r'^Selecione uma apuração para o rascunho'),

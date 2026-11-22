@@ -180,7 +180,13 @@ class InterfaceTest(unittest.TestCase):
         self.server.conversas.contexts[meta['id']] = {'meta': meta, 'busy': True, 'events': []}
         for scope in ({'tipo': 'caso'}, {'tipo': 'conversa', 'conversa': meta['id']},
                       {'tipo': 'rodada', 'rodada': 'R001'}):
-            self.assertEqual(self.request('/api/excluir', {'caso': 'alpha', **scope})[0], 400)
+            status, _, result = self.request('/api/excluir', {'caso': 'alpha', **scope})
+            self.assertEqual(status, 400)
+            if scope['tipo'] != 'rodada':  # R001 belongs to the conversation: refused for that first
+                # The dialog speaks of moving to the trash; the refusal says the same (English goes by the code).
+                self.assertEqual((result['erro'], result['codigo']), ('Há uma execução em andamento. Cancele-a e aguarde o '
+                                                                      'encerramento antes de mover para a lixeira.',
+                                                                      'execucao_em_andamento'))
         self.assertEqual(self.request('/api/gerenciar-listar', {'caso': 'alpha'})[2]['lixeira'], [])
         self.server.conversas.contexts[meta['id']]['busy'] = False
         self.server.conversas.contexts[meta['id']]['meta']['estado'] = 'interrompido'

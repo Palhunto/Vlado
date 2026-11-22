@@ -300,20 +300,11 @@ class QuedaTest(Base):
         self.assertEqual(self.retrato(), self.antes)  # the item in the trash untouched
 
 
-class MesaRespondeTest(Base):
-    """Through the server: the deletion's answer comes back at once and other operations that take
-    the cadastro lock and the conversations' lock answer while the files are still being removed."""
-
-    def setUp(self):
-        super().setUp()
+class ComMesa(Base):
+    def subir_mesa(self):
         import http.client
         from interface_pesquisa import Servidor
         self.http = http.client
-        grande = self.root / 'casos/alpha/derivados_grandes'
-        grande.mkdir()
-        for numero in range(1500):
-            (grande / f'f{numero:05}.txt').write_bytes(b'x' * 64)
-        self.antes = self.retrato()
         self.server = Servidor(('127.0.0.1', 0), self.root)
         thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         thread.start()
@@ -330,6 +321,100 @@ class MesaRespondeTest(Base):
             return resposta.status, json.loads(resposta.read() or b'{}')
         finally:
             con.close()
+
+
+class PendenteTest(ComMesa):
+    """The Coruja's remark: after a rename undone only in part, the trash kept offering Restore and Delete for
+    the item while the refusal said not to. Now it flags the item and refuses both until the next start."""
+
+    def pela_metade(self):
+        real, feitas = os.rename, [0]
+
+        def em_uso(origem, destino):
+            if apagamento.QUARENTENA in Path(origem).parts:  # putting a root back: in use too
+                raise PermissionError(13, 'arquivo em uso')
+            feitas[0] += 1
+            if feitas[0] > 1:  # the second root is in use
+                raise PermissionError(13, 'arquivo em uso')
+            return real(origem, destino)
+        with mock.patch('apagamento.ESPERA_S', 0), mock.patch('apagamento.os.rename', side_effect=em_uso), \
+                self.assertLogs('vlado.apagamento', 'WARNING'), \
+                self.assertRaisesRegex(ValueError, 'volta à lixeira na próxima partida'):
+            apagamento.apagar(self.root, self.item['id'], self.token(), quem='admin')
+        self.assertEqual([m['fase'] for m in self.manifestos()], ['renomeando'])
+
+    def pendentes(self):
+        return {i['id']: i['apagamento_pendente'] for i in apagamento.marcar_pendentes(self.root, lixeira.ativos(self.root))}
+
+    def test_item_pela_metade_sinalizado_e_recusado_ate_a_partida(self):
+        self.assertFalse(lixeira.alcance(self.root, self.item['id'])['apagamento_pendente'])
+        self.pela_metade()
+        manifestos = self.manifestos()
+        self.assertTrue(lixeira.alcance(self.root, self.item['id'])['apagamento_pendente'])
+        self.assertEqual(self.pendentes(), {self.item['id']: True})
+        with self.assertRaises(ValueError) as recusa:
+            lixeira.restaurar(self.root, self.item['id'])
+        self.assertEqual(str(recusa.exception), apagamento.PENDENTE)
+        with self.assertRaises(ValueError) as recusa:
+            apagamento.apagar(self.root, self.item['id'], self.token(), quem='admin')
+        self.assertEqual(str(recusa.exception), apagamento.PENDENTE)
+        self.assertEqual(self.manifestos(), manifestos)  # what the next start needs is untouched
+        self.assertEqual([i['id'] for i in lixeira.ativos(self.root)], [self.item['id']])
+        apagamento.retomar(self.root)  # the next start
+        self.assert_inteiro_na_lixeira()
+        self.assertEqual(self.pendentes(), {self.item['id']: False})
+        self.assertFalse(lixeira.alcance(self.root, self.item['id'])['apagamento_pendente'])
+        lixeira.restaurar(self.root, self.item['id'])  # now it can
+        self.assertEqual(lixeira.ativos(self.root), [])
+
+    def test_item_da_mesma_apuracao_tambem_espera_e_o_de_outra_nao(self):
+        # A conversation of the case may have its folder in that quarantine: deleting it now would be
+        # undone by the next start (the folder comes back), so it waits too. Another case does not.
+        conversa = lixeira.adicionar(self.root, 'conversa', 'alpha', 'Pergunta sintética', conversa=CHAT, rodadas=['R001'])
+        outra = lixeira.adicionar(self.root, 'caso', 'beta', 'Título beta')
+        self.pela_metade()
+        self.assertEqual(self.pendentes(), {self.item['id']: True, conversa['id']: True, outra['id']: False})
+        token = lixeira.alcance(self.root, conversa['id'])['confirmacao']
+        with self.assertRaises(ValueError) as recusa:
+            apagamento.apagar(self.root, conversa['id'], token, quem='admin')
+        self.assertEqual(str(recusa.exception), apagamento.PENDENTE)
+        with self.assertRaises(ValueError) as recusa:
+            lixeira.restaurar(self.root, conversa['id'])
+        self.assertEqual(str(recusa.exception), apagamento.PENDENTE)
+        apagamento.retomar(self.root)
+        self.assertEqual(self.pendentes(), {self.item['id']: False, conversa['id']: False, outra['id']: False})
+        self.assertEqual(self.retrato(), self.antes)
+
+    def test_pela_mesa_o_sinal_e_as_recusas_com_codigo(self):
+        self.subir_mesa()
+        self.pela_metade()
+        status, lista = self.post('gerenciar-listar', {})
+        self.assertEqual((status, [(i['id'], i['apagamento_pendente']) for i in lista['lixeira']]),
+                         (200, [(self.item['id'], True)]))
+        status, alcance = self.post('lixeira-alcance', {'item': self.item['id']})
+        self.assertEqual((status, alcance['apagamento_pendente']), (200, True))
+        esperado = (400, apagamento.PENDENTE, 'apagamento_pendente')
+        status, recusa = self.post('restaurar', {'item': self.item['id']})
+        self.assertEqual((status, recusa.get('erro'), recusa.get('codigo')), esperado)
+        status, recusa = self.post('lixeira-apagar', {'item': self.item['id'], 'confirmacao': alcance['confirmacao'],
+                                                      'nome': 'Título alpha'})
+        self.assertEqual((status, recusa.get('erro'), recusa.get('codigo')), esperado)
+        apagamento.retomar(self.root)
+        self.assert_inteiro_na_lixeira()
+
+
+class MesaRespondeTest(ComMesa):
+    """Through the server: the deletion's answer comes back at once and other operations that take
+    the cadastro lock and the conversations' lock answer while the files are still being removed."""
+
+    def setUp(self):
+        super().setUp()
+        grande = self.root / 'casos/alpha/derivados_grandes'
+        grande.mkdir()
+        for numero in range(1500):
+            (grande / f'f{numero:05}.txt').write_bytes(b'x' * 64)
+        self.antes = self.retrato()
+        self.subir_mesa()
 
     def test_mesa_responde_durante_um_apagamento_grande(self):
         real = os.unlink
