@@ -41,6 +41,7 @@ powershell -ExecutionPolicy Bypass -File deploy\vlado-local.ps1 <comando>
 | Ler os registros (últimas 200 linhas) de tudo, ou de um serviço (`vlado`, `caddy`, `backup`) | `registros` ou `registros backup` |
 | Acompanhar ao vivo | `seguir` ou `seguir vlado` |
 | Ver quem acessou (IP, caminho sem o token, status) | `acessos` |
+| Ver quem entrou, administrou ou baixou (registro de auditoria, sem conteúdo) | `auditoria` |
 | Criar os casos e contas sintéticos (e rever os links de ativação) | `semear` |
 | Fazer um backup agora | `backup` |
 | Listar os backups | `backups` |

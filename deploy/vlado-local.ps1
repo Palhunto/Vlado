@@ -3,7 +3,7 @@
   Sobe, para e cuida do VLADO local (projeto Compose vlado-local) no computador do dono. Roteiro: deploy/LOCAL.md.
 .DESCRIPTION
   Uso (na raiz do repositório):  powershell -ExecutionPolicy Bypass -File deploy\vlado-local.ps1 <comando>
-  Comandos: subir, parar, status, registros [serviço], seguir [serviço], acessos, semear, backup, backups,
+  Comandos: subir, parar, status, registros [serviço], seguir [serviço], acessos, auditoria, semear, backup, backups,
             verificar-backup, restaurar, ca, confiar-ca, esquecer-ca, apagar-tudo, ajuda.
   Só age em projeto Compose cujo nome começa com "vlado-local" e cujos contêineres foram criados por este ambiente
   (rótulo com.vlado.ambiente-local): recusa vlado-homologacao e qualquer outro. Recusa também uma etiqueta de imagem que não
@@ -131,7 +131,7 @@ function Exportar-CA {
 }
 
 # Antes de qualquer comando que mexa no Docker: projeto, arquivo de ambiente e, só então, o Docker e o dono dos contêineres.
-$Conhecidos = @('subir', 'parar', 'status', 'registros', 'seguir', 'acessos', 'semear', 'backup', 'backups', 'verificar-backup',
+$Conhecidos = @('subir', 'parar', 'status', 'registros', 'seguir', 'acessos', 'auditoria', 'semear', 'backup', 'backups', 'verificar-backup',
     'restaurar', 'ca', 'confiar-ca', 'esquecer-ca', 'apagar-tudo')
 if ($Comando -cnotin $Conhecidos) { $Comando = 'ajuda' }  # comando desconhecido: só a ajuda, sem tocar no Docker
 $cfg = $null
@@ -170,6 +170,10 @@ switch ($Comando) {
     'registros' { Compose logs --tail 200 @Resto }
     'seguir' { Compose logs --tail 50 -f @Resto }
     'acessos' { Compose exec -T caddy tail -n 100 /var/log/caddy/acesso.log }
+    'auditoria' {
+        # Registro de auditoria da Mesa (autenticação, administração, downloads; sem conteúdo): as últimas 200 linhas.
+        Compose exec -T vlado sh -c 'cat /app/registro/auditoria-*.jsonl 2>/dev/null | tail -n 200'
+    }
     'backup' { Compose exec -T backup python scripts/backup.py rodada }
     'backups' { Compose exec -T backup python scripts/backup.py listar }
     'semear' {

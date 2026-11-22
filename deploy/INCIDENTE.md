@@ -130,7 +130,7 @@ $DC ps -a > ps.txt;  docker images --digests > imagens.txt;  docker inspect $(do
 $DC logs --no-color --timestamps > logs-compose.txt
 docker cp $P-caddy-1:/var/log/caddy ./caddy-acesso            # registro de acesso (IPs, caminhos, status; sem segredos)
 # volumes de dados, lidos em modo somente leitura:
-for v in casos conversas execucoes lixeira acesso ajustes; do
+for v in casos conversas execucoes lixeira acesso ajustes registro; do
   docker run --rm -u 0 -v ${P}_$v:/d:ro -v "$PWD":/o --entrypoint tar vlado-backup:<versão> czf /o/$v.tgz -C /d .
 done
 # o host: quem entrou e o que roda
@@ -145,6 +145,10 @@ O volume `segredos` (chaves de API) fica no servidor: ele não entra na cópia, 
 
 - **Registro de acesso do Caddy:** horário, IP, método, caminho (tokens mascarados), status. Procure IPs novos, rajadas de
   `/api/entrar` com status 401, acessos a horários estranhos, `/ativar/*` repetidos.
+- **Registro de auditoria da Mesa** (volume `registro`, `auditoria-AAAA-MM-DD.jsonl`; ver `MONITORAMENTO.md`): `login_ok` e
+  `login_falha` com IP e conta, `login_bloqueado`, `recuperacao_emitida`, `acesso_alterado`, `conta_criada`, `operacao_negada`
+  e `download` (tipo, tamanho e a referência do caso, nunca o nome). Ele **não está no backup**: é a cópia da evidência (5.2)
+  que o guarda. Linha por linha, é a resposta a "quem entrou, quando, de onde e o que baixou".
 - **Eventos da conta** (`acesso/acesso.json`, campo `eventos`): logins, criação e desativação de contas, quem fez. Os
   eventos não guardam senha, token, link nem hash.
 - Compare o hash dos documentos nos casos com os do manifesto de cada caso: qualquer divergência é adulteração.
