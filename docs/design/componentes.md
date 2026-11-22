@@ -952,7 +952,7 @@ Ordem: à esquerda, Perfil, Entrada e segurança e Seus dados; à direita, Onde 
 
 | Cartão | Conteúdo e comportamento | Dados |
 |---|---|---|
-| **Perfil** | nome em 16/600; abaixo, o e-mail em 16, ou, na conta migrada sem e-mail, "login ana.lima" em 14 `--theme-muted`; papel e redação em 14 `--theme-muted` ("Repórter · Redação Serena", como o perfil da barra). "Mudar nome" (secundário) troca a linha do nome por um campo "Nome" (44, até 120 caracteres, já preenchido), com "Salvar" (principal) e "Cancelar" (secundário); em branco, "Falta o nome. Escreva o seu nome."; recusa do servidor abaixo do campo. Abaixo, duas caixas de seleção lado a lado, com rótulo acima (W08): **Idioma** (Português, English), que muda o idioma da Mesa, como o botão do cabeçalho, e grava o idioma da conta, com o apoio "Também é o idioma dos e-mails do Vlado."; **Tema** (Do sistema, Claro, Escuro), que fica só neste navegador, como o botão do cabeçalho, e não vai ao servidor (contrato, 2.3). O e-mail não muda aqui | `conta-ver`; `conta-atualizar` com `nome` ou `idioma` (`pt`, `en`) |
+| **Perfil** | nome em 16/600; abaixo, o e-mail em 16, ou, na conta migrada sem e-mail, "login ana.lima" em 14 `--theme-muted`; papel e redação em 14 `--theme-muted` ("Repórter · Redação Serena", como o perfil da barra). "Mudar nome" (secundário) troca a linha do nome por um campo "Nome" (44, até 120 caracteres, já preenchido), com "Salvar" (principal) e "Cancelar" (secundário); em branco, "Falta o nome. Escreva o seu nome."; recusa do servidor abaixo do campo. Abaixo, duas caixas de seleção lado a lado, com rótulo acima (W08): **Idioma** (Português, English), que muda o idioma da Mesa, como o botão do cabeçalho, e grava o idioma da conta, com o apoio "Também é o idioma dos e-mails do Vlado."; **Tema** (Do sistema, Claro, Escuro), que fica só neste navegador, como o botão do cabeçalho, e não vai ao servidor (contrato, 2.3). "Do sistema" apaga a escolha guardada, e a Mesa passa a seguir `prefers-color-scheme` sempre que nada está guardado, sem piscar ao abrir (UX-07; aceito em 22/11/2026 sobre `8a45f08`: antes, a Mesa sem escolha guardada abria escura). O e-mail não muda aqui | `conta-ver`; `conta-atualizar` com `nome` ou `idioma` (`pt`, `en`) |
 | **Entrada e segurança** | linha "Senha", com "definida há 12 dias" em 14 `--theme-muted` (de `senha_definida_em`; "definida hoje" no dia), e "Trocar senha" (secundário) à direita. As linhas do segundo fator e da chave de acesso ficam fora ([exceções](#contas-excecoes)) | `conta-ver` |
 | **Onde sua conta está aberta** | uma linha por sessão. A sessão em uso vem primeiro, com "Esta sessão" em 14/600 `--theme-muted` à direita e sem botão: sai-se dela por "Sair". As outras seguem na ordem do servidor (uso mais recente primeiro), com "Encerrar" (secundário). Cada linha tem o aparelho em 16 ("Firefox · Linux", "Aplicativo Android": o texto do servidor, `translate="no"`) e, abaixo, em 14 `--theme-muted`, o último uso e o endereço ("ontem, 21h10 · 189.40.12.7"). Com duas sessões ou mais, "Encerrar todas as outras" (secundário) no pé, e o apoio "Encerrar vale na próxima ação daquele aparelho." (contrato, 8.3). Encerrar é imediato, sem diálogo (W08, regra 5); o botão fica "Encerrando…", a linha sai e a linha de estado diz "✓ Sessão encerrada: Edge · Windows." ou "✓ 2 sessões encerradas." Se o servidor responder "Sessão não encontrada.", a lista recarrega, sem erro | `conta-sessoes`; `conta-sessao-encerrar` com `sessao`; `conta-sessoes-encerrar-outras` |
 | **Seu uso neste mês** | "Gasto com IA" em 16 e o valor em 16/600 à direita ("R$ 18,40 de R$ 50": gasto sempre com centavos; teto sem centavos quando inteiro, como na barra); [medidor](#medidor) de 6 px com `aria-label` ("37% da cota usada"); apoio "O teto é definido pelo dono da redação." Esgotada, o cartão vira o aviso da cota esgotada da barra ("! Cota esgotada", cores de aviso). Sem a rota, o cartão some. Sempre em reais, nunca em tokens (W08, regra 7) | `GET /api/cota`, bloco `conta` |
@@ -966,7 +966,7 @@ Datas, nesta página e na Equipe: "agora" no primeiro minuto; "hoje, 14h32"; "on
 - "Nova senha" (`new-password`), com o apoio "De 12 a 256 caracteres. Pode colar ou usar o gerenciador de senhas.";
 - "Repita a nova senha" (`new-password`).
 
-Texto: "As outras sessões desta conta serão encerradas. Esta continua aberta." Ação principal "Trocar senha" ("Trocando…").
+Texto: "As outras sessões desta conta serão encerradas. Esta continua aberta." Aqui a ação fica habilitada com os campos vazios, ao contrário da variante com senha de um campo só: os erros de campo abaixo é que dizem o que falta. Ação principal "Trocar senha" ("Trocando…").
 
 Antes de enviar, a Mesa confere e põe cada erro no seu campo:
 
@@ -992,13 +992,15 @@ Só para quem tem `equipe-listar`, isto é, o dono. Os dados vêm de `equipe-lis
 |---|---|
 | Tabela, de 1024 px para cima | cartão com tabela, como a lista de [Documentos](#documentos): células com preenchimento 12 16 e filete 1 px `--theme-line`; cabeçalho 14/600 `--theme-muted` em fundo `--theme-reading`. Colunas: Pessoa, Papel, Apurações, Uso no mês e a ação, que tem rótulo só para leitor de tela ("Ações") |
 | Pessoa | nome em 16 (na própria linha, seguido de "(você)" em 14 `--theme-muted`); abaixo, e-mail ou "login rui.castro" em 14 `--theme-muted`, `translate="no"`. Quando a conta não está ativa, vem uma terceira linha, sempre com sinal e texto, em 14 `--theme-muted`: "○ Desativada"; "◐ Aguardando a senha"; com o link vencido, "◐ Link de ativação vencido" |
-| Papel | caixa de seleção de 44 px, com rótulo só para leitor de tela ("Papel de Ana Lima"): Dono, Editor, Repórter, Leitor. No perfil antigo, "Convidado (perfil antigo)" aparece selecionado e indisponível: não se escolhe de novo. Na própria linha, o papel é só texto: o próprio papel muda por outro dono |
+| Papel | caixa de seleção de 44 px e largura mínima de 220 px, para caber "Convidado (perfil antigo)" inteiro, também com a linha de Gerenciar aberta; rótulo só para leitor de tela ("Papel de Ana Lima"): Dono, Editor, Repórter, Leitor. No perfil antigo, "Convidado (perfil antigo)" aparece selecionado e indisponível: não se escolhe de novo. Na própria linha, o papel é só texto: o próprio papel muda por outro dono |
 | Apurações | "Todas" para dono (`casos` nulo); para os demais, os títulos do catálogo separados por vírgula, até três, e depois "e mais 2"; sem nenhuma, "Nenhuma" em `--theme-muted` |
 | Uso no mês | "R$ 18,40" (`gasto.gasto_brl`); "—" quando `gasto` vem nulo. Com teto próprio, abaixo, em 14 `--theme-muted`, "teto R$ 30". Esgotado: "! R$ 50,00 · esgotada" em 14/600 `--theme-warning` |
 | Ação | "Gerenciar": `<button>` com cara de [link](#link) (16/600 `--theme-accent`, sublinhado, altura mínima 44), `aria-expanded` e `aria-controls`. A própria linha não tem |
 | Lista, abaixo de 1024 px | um cartão por pessoa, preenchimento 16, intervalo 8: nome em 600, e-mail e situação em 14 `--theme-muted`, "Papel" com rótulo visível e caixa de largura cheia, apurações e uso em 14, e "Gerenciar" (secundário, largura cheia) |
 
 **Mudar o papel.** A mudança vale ao escolher. Sem dono no meio, vai direto e a linha de estado diz "✓ Ana Lima agora é Editor. Vale na próxima ação."; enquanto o pedido corre, a caixa fica indisponível. Com dono no meio (o papel atual ou o novo), abre o diálogo [com senha](#dialogo-senha). Do perfil antigo para qualquer papel, abre antes a variante simples: "Converter Cora Dias em Leitor?", com o texto "Leitor lê também o caderno, os achados e o texto das apurações de que participa." e a ação "Converter" (princípio 9 do contrato: a leitura nova é decisão de quem converte). Cancelar ou receber uma recusa devolve a caixa ao papel anterior. Recusa `ultimo_dono`: o texto do servidor na linha de estado, em 14 `--theme-danger`, com `role="alert"`.
+
+**Textos de estado** (linha de estado, aceitos em 22/11/2026 sobre `8a45f08`): "✓ Nome atualizado.", "✓ Idioma da conta salvo.", "✓ Teto de Ana Lima salvo.", "✓ Ana Lima volta a usar o teto padrão.", "✓ Teto padrão salvo.", "✓ A conta de Ana Lima foi desativada." ou "reativada.", "✓ Ana Lima não faz mais parte da redação." Sem marca de gênero no nome da pessoa.
 
 **Gerenciar** abre uma linha abaixo da pessoa, que ocupa todas as colunas. Fundo `--theme-background`, preenchimento 16, três blocos em grade com intervalo de 24; numa coluna no celular. Cada bloco tem título 14/600 maiúsculo em `--theme-muted`:
 
@@ -1036,7 +1038,17 @@ Frases da atividade. "Fulano" é `por_nome` e "Beltrano" é `conta_nome`; quando
 | `conta_atualizada` | Beltrano atualizou o perfil |
 | `recuperacao_emitida` | Fulano gerou um novo link de ativação para Beltrano |
 | `login_bloqueado` | A entrada de Beltrano foi bloqueada por muitas tentativas |
+| `sessao_encerrada` | Beltrano saiu da Mesa |
+| `acesso_alterado` | Fulano mudou o acesso de Beltrano |
+| `caso_atribuido` | Fulano atribuiu uma apuração a uma pessoa |
+| `caso_criado` | Fulano criou uma apuração |
+| `primeiro_admin` | A redação foi criada, com Beltrano como dono |
+| `migracao_contas` | As contas foram migradas para o novo modelo de acesso |
+| `redacao_criada` | A redação foi criada |
+| `redacao_suspensa` / `redacao_reativada` / `redacao_encerrada` | A redação foi suspensa / reativada / encerrada por quem administra o serviço |
 | qualquer outro | Ação de administração |
+
+As frases de `sessao_encerrada` a `redacao_*` foram propostas pelo Vitral em `8a45f08` (achado D1 da Coruja: tipos que a E2 grava e esta tabela não previa) e aceitas pelo Design em 22/11/2026. No celular, a data vem sempre abaixo da frase, nunca ora ao lado, ora abaixo.
 
 **Só o dono na redação**: a tabela tem uma linha. Antes dos convites, abaixo dela vem o texto da exceção do convite; depois, nada: "Convidar pessoa" está no topo.
 
@@ -1175,7 +1187,7 @@ A conferência destas telas não barra por elas. Cada uma volta ao wireframe qua
 | W08: cidade aproximada da sessão | aparelho, último uso e endereço | não volta: decisão 5 do contrato (P27) |
 | W08: "14 perguntas" no uso do mês | só o valor em reais | `GET /api/cota` trazer a contagem |
 | W08: "Exportar meus dados" e "Excluir minha conta" | o cartão Seus dados, só com o caminho por pessoa | houver `conta-exportar` e `conta-excluir` (contrato, 8.4); "Excluir" vem com o diálogo com senha e o nome digitado |
-| W09: "Convidar pessoa", convites pendentes e "Reenviar" | nada no lugar do botão. Abaixo da tabela, em 14 `--theme-muted`: numa instalação com uma redação só, "Para incluir alguém, crie uma conta em Configurações, Contas de acesso.", com "Contas de acesso" como [link](#link) para a aba; com mais de uma redação, onde `contas-criar` já é recusada (`5e342fe`), "Para incluir alguém na redação, fale com quem administra o serviço." | volta com a E3 de Contas (`281a468`), já especificada em [convites](#convites). As `contas-*` e "Contas de acesso" saem na mesma integração (P30) |
+| W09: "Convidar pessoa", convites pendentes e "Reenviar" | nada no lugar do botão. Abaixo da tabela, em 14 `--theme-muted`: numa instalação com uma redação só, "Para incluir alguém, crie uma conta em Configurações, Contas de acesso.", com "Contas de acesso" como [link](#link) para a aba; com mais de uma redação, onde `contas-criar` já é recusada (`5e342fe`), "Para incluir alguém na redação, fale com quem administra o serviço." A Mesa não distingue os dois casos (as capacidades são fixas por papel e a recusa só vem na chamada), então mostra sempre o primeiro texto, com o link (aceito em 22/11/2026 sobre `84cdcef`) | volta com a E3 de Contas (`281a468`), já especificada em [convites](#convites). As `contas-*` e "Contas de acesso" saem na mesma integração (P30) |
 | W10: passo 2, "Proteja a conta com um segundo passo" (código QR, código de 6 dígitos; obrigatório para dono e editor) | o aceite termina no passo 1 e vai direto a `destino` | houver segundo fator (contrato, 8.2). Volta como passo seguinte ao aceite, com "Passo 1 de 3" nos três; no celular, telas em sequência (W10, regra 8) |
 | W10: passo 3, códigos de reserva com "Copiar" e "Baixar" | fora; o aviso "Antes de começar" do passo 3 sobe para o passo 1 | houver segundo fator |
 | W10: caixa de aceite dos termos | fora enquanto `termos_versao` vem nulo | houver termos (contrato, 8.4; texto da Documentação, D6) |
