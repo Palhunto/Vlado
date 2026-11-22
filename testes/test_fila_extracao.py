@@ -18,6 +18,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -28,6 +29,7 @@ from unittest import mock
 TESTES = Path(__file__).resolve().parent
 sys.path.insert(0, str(TESTES.parent / 'scripts'))
 import cadastrar_documentos as cadastro  # noqa: E402
+import erros  # noqa: E402
 from comum import ler_json, sha256  # noqa: E402
 from extrair_pdf import extrair_pdf  # noqa: E402
 import fila_extracao  # noqa: E402
@@ -225,7 +227,8 @@ class FilaLocalTest(Base):
         self.sem_provisorio()
         # The batch keeps only its record in the queue; the published batch has its own files.
         pasta = fila_extracao.pasta_fila(self.root) / lote
-        self.assertEqual(sorted(p.name for p in pasta.iterdir()), ['estado.json', 'pedido.json', 'resposta.json'])
+        esperar(lambda: sorted(p.name for p in pasta.iterdir()) == ['estado.json', 'pedido.json', 'resposta.json'],
+                10, 'as cópias do lote publicado ficaram na fila')
         estado = self.publico(lote)
         self.assertEqual((estado['estado'], estado['total'], estado['prontos']), ('publicado', 2, 2))
         self.assertEqual([a['extracao'] for a in estado['arquivos']], ['extraido', 'nao_necessaria'])
@@ -280,7 +283,7 @@ class FilaLocalTest(Base):
         self.assertEqual(self.manifesto.read_bytes(), antes)
         self.assertEqual(len(list((self.root / 'casos/alpha/cadastros').iterdir())), 1)
         pasta = fila_extracao.pasta_fila(self.root) / lote
-        self.assertFalse((pasta / 'originais').exists() or (pasta / 'derivados').exists())
+        esperar(lambda: not ((pasta / 'originais').exists() or (pasta / 'derivados').exists()), 10)
         self.assertEqual(fila_extracao.pendentes(self.root), [])
 
     def test_lotes_concorrentes_recalculam_ids_e_duplicatas(self):
@@ -440,6 +443,204 @@ class FilaLocalTest(Base):
             return self.fila.aguardar(lote, 20)
         except Exception as exc:  # noqa: BLE001 - the test looks at it
             return exc
+
+
+@unittest.skipUnless(HAS_PYPDF, 'Instalar requirements.txt para testar extração real')
+class RevisaoCorujaTest(Base):
+    """C1 (lote publicado sem estado final), C4 (teto da fila), C5 (motivo sem caminho), C8 (recuo)."""
+
+    def publicado(self, nome='a.pdf'):
+        lote = self.fila.receber('alpha', gravador((nome, pdf(self.arquivos, nome, marca=nome))), natureza='sinteticos')
+        resposta = self.fila.aguardar(lote, 60)
+        self.fila.encerrar(15)
+        return lote, resposta
+
+    def test_lote_publicado_sem_estado_final_e_concluido_na_partida(self):
+        for variante in ('arquivos_prontos', 'arquivos_devolvidos_a_fila'):
+            with self.subTest(variante):
+                lote, resposta = self.publicado(f'{variante}.pdf')
+                registros = ler_json(self.manifesto)['registros_cadastro']
+                pasta = fila_extracao.pasta_fila(self.root) / lote
+                # What the cut left: published, copies already removed, state still 'publicando'.
+                estado = ler_json(pasta / 'estado.json')
+                estado.update(estado='publicando', recibo=None)
+                for arquivo in estado['arquivos']:
+                    if variante == 'arquivos_devolvidos_a_fila':  # the earlier start had sent it back
+                        arquivo.update(estado='enfileirado', extracao=None)
+                (pasta / 'estado.json').write_text(json.dumps(estado), encoding='utf-8')
+                (pasta / 'resposta.json').unlink()
+                self.assertFalse((pasta / 'originais').exists())
+                self.assertEqual(fila_extracao.pendentes(self.root, 'alpha'), [lote])
+                self.fila = self.nova_fila()
+                self.fila.iniciar()
+                concluido = self.fila.aguardar(lote, 30)
+                self.assertEqual((concluido['arquivo_recibo'], concluido['corpus_id']),
+                                 (resposta['arquivo_recibo'], resposta['corpus_id']))
+                publico = self.publico(lote)
+                self.assertEqual((publico['estado'], publico['recibo']['novos']), ('publicado', 1))
+                self.assertEqual([(a['estado'], a['extracao']) for a in publico['arquivos']], [('pronto', 'extraido')])
+                self.assertEqual(fila_extracao.pendentes(self.root), [])  # a first question is accepted again
+                self.assertEqual(ler_json(self.manifesto)['registros_cadastro'], registros)  # once only
+
+    def test_queda_na_limpeza_depois_do_estado_final(self):
+        with mock.patch.object(fila_extracao.Fila, '_limpar_partes', side_effect=SystemExit):
+            lote = self.fila.receber('alpha', gravador(('a.pdf', pdf(self.arquivos, 'a.pdf'))), natureza='sinteticos')
+            resposta = self.fila.aguardar(lote, 60)  # the final state was written before the cut
+            esperar(lambda: not self.fila._thread.is_alive(), 10)
+        self.fila._dono.soltar()
+        pasta = fila_extracao.pasta_fila(self.root) / lote
+        self.assertEqual(interno(self.root, lote)['estado'], 'publicado')
+        self.assertTrue((pasta / 'originais').exists())  # left by the cut
+        nova = self.nova_fila()
+        segundo = nova.receber('alpha', gravador(('b.txt', b'Outro documento sintetico.')), natureza='sinteticos')
+        esperar(lambda: not (pasta / 'originais').exists() and not (pasta / 'derivados').exists(), 30,
+                'a partida não removeu as cópias deixadas pela queda')
+        self.assertEqual((resposta['novos'], nova.aguardar(segundo, 30)['novos']), (1, 1))
+        self.assertEqual(fila_extracao.pendentes(self.root, 'alpha'), [])
+
+    def segurar_a_fila(self):
+        patcher = mock.patch.object(fila_extracao.Fila, 'iniciar')  # batches stay queued
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_teto_de_lotes_por_apuracao_e_na_mesa(self):
+        cadastro.cadastrar(self.root, 'beta', [self.root / 'fonte.txt'], novo=True, titulo='Outro caso', natureza='sinteticos')
+        with mock.patch.dict(os.environ, {'VLADO_FILA_LOTES_POR_CASO': '2', 'VLADO_FILA_LOTES': '3'}):
+            fila = self.nova_fila()
+        self.segurar_a_fila()
+
+        def enviar(caso, nome):
+            return fila.receber(caso, gravador((nome, f'Documento sintetico {nome}.'.encode('utf-8'))), natureza='sinteticos')
+        enviar('alpha', 'a1.txt'), enviar('alpha', 'a2.txt')
+        with self.assertRaises(ValueError) as recusa:
+            enviar('alpha', 'a3.txt')
+        mensagem = str(recusa.exception)
+        self.assertTrue(mensagem.startswith('Limite de envios em processamento. Há 2 arquivos desta apuração sendo lidos.'))
+        self.assertIn('Os arquivos já enviados estão guardados', mensagem)
+        self.assertIn('Documentos, perguntas e caderno seguem funcionando', mensagem)
+        self.assertEqual(erros.codigo_de(mensagem), ('fila_limite_envios', {'arquivos': 2, 'onde': 'desta apuração'}))
+        enviar('beta', 'b1.txt')  # another case still has room
+        with self.assertRaises(ValueError) as recusa:
+            enviar('beta', 'b2.txt')
+        self.assertEqual(erros.codigo_de(str(recusa.exception)), ('fila_limite_envios', {'arquivos': 3, 'onde': 'na Mesa'}))
+        self.assertEqual([p.name for p in fila.pasta.iterdir() if p.name.startswith('.novo_')], [])
+        self.assertEqual(fila._reservas, {})
+
+    def test_teto_de_bytes_recusa_depois_de_gravar_e_nao_deixa_sobra(self):
+        with mock.patch.dict(os.environ, {'VLADO_FILA_MB_POR_CASO': '1'}):
+            fila = self.nova_fila()
+        self.segurar_a_fila()
+        metade = os.urandom(600 * 1024)
+        fila.receber('alpha', gravador(('a.txt', metade)), natureza='sinteticos')
+        with self.assertRaisesRegex(ValueError, '^Limite de envios em processamento. Há 1 arquivo desta apuração sendo lido.'):
+            fila.receber('alpha', gravador(('b.txt', os.urandom(600 * 1024))), natureza='sinteticos')
+        self.assertEqual([p.name for p in fila.pasta.iterdir() if p.name.startswith('.novo_')], [])
+
+    def test_envio_em_curso_conta_no_teto(self):
+        with mock.patch.dict(os.environ, {'VLADO_FILA_LOTES_POR_CASO': '1'}):
+            fila = self.nova_fila()
+        self.segurar_a_fila()
+        dentro, seguir, resultado = threading.Event(), threading.Event(), {}
+
+        def lento(pasta):
+            dentro.set()
+            seguir.wait(10)
+            return gravador(('lento.txt', b'Documento sintetico lento.'))(pasta)
+        primeiro = threading.Thread(target=lambda: resultado.update(lote=fila.receber('alpha', lento, natureza='sinteticos')))
+        primeiro.start()
+        self.assertTrue(dentro.wait(10))
+        with self.assertRaisesRegex(ValueError, '^Limite de envios em processamento'):
+            fila.receber('alpha', gravador(('rapido.txt', b'Documento sintetico rapido.')), natureza='sinteticos')
+        seguir.set()
+        primeiro.join(10)
+        self.assertTrue(resultado['lote'])
+
+    def test_motivo_publico_sem_caminho_do_servidor(self):
+        caminho = str(self.root / 'casos' / '.fila' / 'segredo_interno.pdf')
+
+        def quebra(tarefa, **_):
+            raise OSError(f'falha sintética ao abrir {caminho}')
+        with mock.patch.object(cadastro, 'extrair_item', quebra), self.assertLogs('vlado.fila_extracao', 'WARNING') as registro:
+            lote = self.fila.receber('alpha', gravador(('a.pdf', pdf(self.arquivos, 'a.pdf'))), natureza='sinteticos')
+            with self.assertRaises(ValueError) as recusa:
+                self.fila.aguardar(lote, 60)
+        publico = json.dumps(self.publico(lote), ensure_ascii=False)
+        self.assertNotIn(str(self.root), publico)
+        self.assertNotIn(str(self.root), str(recusa.exception))
+        self.assertIn('registro do servidor', str(recusa.exception))
+        self.assertIn(caminho, '\n'.join(registro.output))  # the detail stays in the server log
+
+    def test_coordenador_com_erro_repetido_recua(self):
+        chamadas = []
+
+        def quebra(_self):
+            chamadas.append(time.monotonic())
+            raise RuntimeError('falha sintética do coordenador')
+        with mock.patch.object(fila_extracao.Fila, '_passo', quebra), \
+                self.assertLogs('vlado.fila_extracao', 'ERROR') as registro:
+            self.fila.iniciar()
+            time.sleep(3.6)
+            inicio = time.monotonic()
+            self.fila.encerrar(5)
+            self.assertLess(time.monotonic() - inicio, 1.5, 'o recuo não notou o encerramento')
+        self.assertLessEqual(len(chamadas), 5)  # 0.5, 1, 2 s apart (it was every 0.5 s)
+        self.assertGreaterEqual(len(chamadas), 3)
+        self.assertEqual(len(registro.output), 1)  # the trace once, not every turn
+
+
+class VigiaTest(unittest.TestCase):
+    """C2 and C3: the extraction process ends with the Mesa and takes its children along."""
+
+    PREPARO = ('import os, subprocess, sys, time\n'
+               'sys.path.insert(0, sys.argv[1])\n'
+               'import trabalhador_extracao as t\n')
+
+    def processo(self, codigo, *argumentos, grupo=True):
+        opcoes = {'start_new_session': True} if grupo and os.name != 'nt' else {}
+        proc = subprocess.Popen([sys.executable, '-c', codigo, str(TESTES.parent / 'scripts'), *argumentos],
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, **opcoes)
+        self.addCleanup(lambda: (proc.poll() is None and proc.kill(), proc.wait(10), proc.stdin.close(), proc.stdout.close()))
+        return proc
+
+    def test_mesa_ja_morta_antes_da_partida_encerra_na_hora(self):
+        morta = subprocess.Popen([sys.executable, '-c', 'pass'])
+        morta.wait(10)
+        inicio = time.monotonic()
+        proc = self.processo(self.PREPARO + 't.vigiar_pai(int(sys.argv[2]))\ntime.sleep(60)', str(morta.pid))
+        self.assertIn(proc.wait(15), (3, -9))  # POSIX: its own group ends with signal 9
+        self.assertLess(time.monotonic() - inicio, 10)
+
+    def test_vigia_leva_os_filhos_quando_a_mesa_morre(self):
+        trabalhador = (self.PREPARO + 't.juntar_filhos()\n'
+                       't.vigiar_pai(int(sys.argv[2]))\n'
+                       'filho = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])\n'
+                       'print(filho.pid, flush=True)\n'
+                       'time.sleep(120)\n')
+        mesa = ('import os, subprocess, sys, time\n'
+                'opcoes = {} if os.name == "nt" else {"start_new_session": True}\n'
+                'p = subprocess.Popen([sys.executable, "-c", sys.argv[2], sys.argv[1], str(os.getpid())], '
+                'stdout=subprocess.PIPE, text=True, **opcoes)\n'
+                'print(p.pid, p.stdout.readline().strip(), flush=True)\n'
+                'time.sleep(120)\n')
+        proc = self.processo(mesa, trabalhador, grupo=False)
+        pid_trabalhador, pid_filho = map(int, proc.stdout.readline().split())
+        self.assertTrue(vivo(pid_trabalhador) and vivo(pid_filho))
+        proc.kill()  # the Mesa dies
+        esperar(lambda: not vivo(pid_trabalhador) and not vivo(pid_filho), 15,
+                'o processo de extração ou o filho dele sobreviveu à Mesa')
+
+    def test_processo_morto_pela_fila_leva_os_filhos(self):
+        trabalhador = (self.PREPARO + 't.juntar_filhos()\n'
+                       'filho = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])\n'
+                       'print(filho.pid, flush=True)\n'
+                       'time.sleep(120)\n')
+        proc = self.processo(trabalhador)
+        pid_filho = int(proc.stdout.readline())
+        executor = fila_extracao._ExecutorProcesso.__new__(fila_extracao._ExecutorProcesso)
+        executor.proc = proc
+        executor.matar()  # as the queue does on a deadline or a refused batch
+        proc.wait(10)
+        esperar(lambda: not vivo(pid_filho), 15, 'o filho sobreviveu ao processo de extração')
 
 
 class PerguntaComLoteNaFilaTest(unittest.TestCase):

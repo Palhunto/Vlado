@@ -46,14 +46,21 @@ manifesto daquele momento.
 fila uma vez e, na segunda, fica em ``falha`` com motivo. Queda da Mesa: na partida seguinte,
 depois da limpeza da trava, quem estava extraindo volta para a fila (conta uma tentativa) e quem
 estava publicando é concluído; publicar de novo é idempotente (se o manifesto já tem o recibo,
-só completa o catálogo). Encerramento ordenado devolve os arquivos em curso à fila sem contar
-tentativa e espera a publicação em curso. Um lote com registro ilegível é recusado sozinho, sem
-parar a fila. Nenhum arquivo fica preso.
+só completa o catálogo e o lote é dado por publicado, mesmo sem as cópias). O estado final é
+gravado antes de apagar as cópias do lote; o que sobrar de uma queda nesse meio a partida apaga.
+Encerramento ordenado devolve os arquivos em curso à fila sem contar tentativa e espera a
+publicação em curso. O processo de extração leva os filhos (OCRmyPDF, Tesseract) quando acaba,
+morto pela fila ou pelo vigia. Um lote com registro ilegível é recusado sozinho, sem parar a
+fila; um erro repetido do coordenador espera cada vez mais, até 30 s. Nenhum arquivo fica preso.
+Motivos de falha não trazem caminhos do servidor: o detalhe vai só para o registro.
 
 **Configuração** (variáveis de ambiente): ``VLADO_EXTRACAO_PROCESSOS`` (arquivos ao mesmo tempo,
 padrão 2), ``VLADO_EXTRACAO_PAGINAS`` (páginas de OCR ao mesmo tempo, somadas entre os arquivos,
 padrão min(4, CPUs): 4 vCPU e 8 GB da D7), ``VLADO_EXTRACAO_TEMPO_MAXIMO`` (segundos por arquivo,
-padrão 4 horas). Modo ``processos`` (Mesa pela linha de comando, contêiner) ou ``local``
+padrão 4 horas). O que pode esperar na fila: ``VLADO_FILA_LOTES_POR_CASO`` (20), ``VLADO_FILA_LOTES``
+(50), ``VLADO_FILA_MB_POR_CASO`` (250) e ``VLADO_FILA_MB`` (1000), contando também os envios sendo
+gravados; acima disso o envio é recusado na hora com a mensagem de limite (``fila_limite_envios``).
+Modo ``processos`` (Mesa pela linha de comando, contêiner) ou ``local``
 (threads da própria Mesa: testes e Mesa instalada no Windows, cujo executável congelado não sobe
 outro interpretador). Um só coordenador por pasta de dados (trava ``casos/.fila/.coordenador``):
 uma segunda Mesa na mesma pasta só enfileira e espera.
@@ -104,7 +111,13 @@ def configuracao(modo='local', **valores) -> dict:
         raise ValueError('Modo da fila de extração: local ou processos.')
     config = {'modo': modo, 'processos': inteiro('VLADO_EXTRACAO_PROCESSOS', 2, 1, 16),
               'paginas': inteiro('VLADO_EXTRACAO_PAGINAS', min(4, os.cpu_count() or 1), 1, 64),
-              'tempo_maximo': inteiro('VLADO_EXTRACAO_TEMPO_MAXIMO', 4 * 3600, 30, 7 * 24 * 3600)}
+              'tempo_maximo': inteiro('VLADO_EXTRACAO_TEMPO_MAXIMO', 4 * 3600, 30, 7 * 24 * 3600),
+              # What may wait in casos/.fila (C4): batches and megabytes, per case and in all. The
+              # bytes keep one account from filling the volume; the counts bound the waiting line.
+              'lotes_por_caso': inteiro('VLADO_FILA_LOTES_POR_CASO', 20, 1, 1000),
+              'lotes': inteiro('VLADO_FILA_LOTES', 50, 1, 10000),
+              'mb_por_caso': inteiro('VLADO_FILA_MB_POR_CASO', 250, 1, 1_000_000),
+              'mb': inteiro('VLADO_FILA_MB', 1000, 1, 10_000_000)}
     config.update({k: v for k, v in valores.items() if v is not None})
     return config
 
@@ -210,13 +223,26 @@ def _completar_catalogo(root, caso, manifest):
     cadastro._atomico(caminho, cadastro._bytes(catalogo))
 
 
+def _manifesto_com_recibo(root, plano):
+    """The case's manifest when it already names this batch's receipt (published), else None."""
+    caso, lote = plano['caso'], plano['lote']
+    recibo = f'casos/{caso}/cadastros/{lote}/recibo.json'
+    try:
+        manifesto = dentro(root, f'casos/{caso}/manifesto.json')
+    except ValueError:
+        return None
+    atual = _ler(manifesto) if manifesto.is_file() else None
+    if isinstance(atual, dict) and any(r.get('arquivo') == recibo for r in atual.get('registros_cadastro', [])):
+        return atual
+    return None
+
+
 def publicar_lote(root, plano, base, resultados):
     """Publish a queued batch; idempotent after a crash. Caller holds the cadastro lock."""
     caso, lote = plano['caso'], plano['lote']
     recibo = f'casos/{caso}/cadastros/{lote}/recibo.json'
-    manifesto = dentro(root, f'casos/{caso}/manifesto.json')
-    atual = _ler(manifesto) if manifesto.is_file() else None
-    if isinstance(atual, dict) and any(r.get('arquivo') == recibo for r in atual.get('registros_cadastro', [])):
+    atual = _manifesto_com_recibo(root, plano)
+    if atual is not None:
         _completar_catalogo(root, caso, atual)  # already published: the crash came after the manifest
         return {**ler_json(dentro(root, recibo)), 'arquivo_recibo': recibo, 'inventario': cadastro.inventario(root, caso)}
     orfao = dentro(root, f'casos/{caso}/cadastros/{lote}')
@@ -321,6 +347,19 @@ class _ExecutorProcesso(_Executor):
             self.matar()
 
 
+def mensagem_limite(arquivos, mesa=False) -> str:
+    """The queue-limit message (W11 'limite' block; code ``fila_limite_envios`` in erros)."""
+    lido = 'arquivo' if arquivos == 1 else 'arquivos'
+    sendo = 'sendo lido' if arquivos == 1 else 'sendo lidos'
+    onde = 'na Mesa' if mesa else 'desta apuração'
+    return (f'Limite de envios em processamento. Há {arquivos} {lido} {onde} {sendo}. Os arquivos já enviados '
+            'estão guardados; envie os próximos quando estes terminarem. Documentos, perguntas e caderno '
+            'seguem funcionando.')
+
+
+ERRO_EXTRACAO = 'Falha inesperada ao ler o arquivo; o detalhe está no registro do servidor.'
+
+
 # --- a fila ------------------------------------------------------------------------------------
 
 class Fila:
@@ -342,6 +381,9 @@ class Fila:
         self._executores = []
         self._locais = []  # extraction threads of the local mode
         self._varrido = 0.0
+        self._trava_recepcao = threading.Lock()
+        self._reservas = {}  # uploads being written: staging name -> (case, files, bytes)
+        self._falhas = 0  # consecutive failures of the coordinator (C8: backoff)
 
     # enfileirar ---------------------------------------------------------------------------------
     def receber(self, caso, gravar, *, titulo=None, natureza='nao_informada', novo=False, modo_fontes=None,
@@ -353,7 +395,9 @@ class Fila:
         """
         staging = self._staging()
         try:
+            self._reservar(staging, caso)  # room for one more batch, before anything big is written
             sources = gravar(staging / 'recebidos')
+            self._reservar(staging, caso, len(sources), sum(s.stat().st_size for s in sources))
             fontes_web = cadastro.validar_pedido(caso, natureza, sources, novo, modo_fontes, dominio_permitido)
             plano = cadastro.planejar(self.root, caso, sources, titulo=titulo, natureza=natureza, novo=novo,
                                       ocr_imagens=bool(ocr_imagens), fontes_web=fontes_web)
@@ -363,15 +407,63 @@ class Fila:
         except BaseException:
             _remover(staging)
             raise
+        finally:
+            self._liberar(staging)
 
     def preparar_pdfs(self, caso) -> str:
         """Enqueue the OCR/extraction of this case's preserved PDFs (new corpus version at the end)."""
         staging = self._staging()
         try:
-            return self._gravar_lote(staging, cadastro.plano_preparar_pdfs(self.root, caso))
+            self._reservar(staging, caso)
+            plano = cadastro.plano_preparar_pdfs(self.root, caso)
+            self._reservar(staging, caso, len(plano['itens']), 0)  # the originals stay in the case
+            return self._gravar_lote(staging, plano)
         except BaseException:
             _remover(staging)
             raise
+        finally:
+            self._liberar(staging)
+
+    def _ocupacao(self):
+        """{case: [batches, files, bytes]} waiting in the queue: on disk, plus uploads being written."""
+        ocupado = {}
+        try:
+            pastas = [p for p in self.pasta.iterdir() if ID_LOTE.fullmatch(p.name)]
+        except OSError:
+            pastas = []
+        for pasta in pastas:
+            estado = _ler(pasta / 'estado.json')
+            if not isinstance(estado, dict) or estado.get('estado') not in PENDENTES:
+                continue
+            pedido = _ler(pasta / 'pedido.json')
+            caso = pedido.get('caso') if isinstance(pedido, dict) else None
+            arquivos = estado.get('arquivos') or []
+            soma = ocupado.setdefault(caso, [0, 0, 0])
+            soma[0] += 1
+            soma[1] += len(arquivos)
+            soma[2] += sum(a.get('bytes') or 0 for a in arquivos if isinstance(a, dict))
+        for caso, arquivos, tamanho in self._reservas.values():
+            soma = ocupado.setdefault(caso, [0, 0, 0])
+            soma[0], soma[1], soma[2] = soma[0] + 1, soma[1] + arquivos, soma[2] + tamanho
+        return ocupado
+
+    def _reservar(self, staging, caso, arquivos=0, tamanho=0):
+        """Refuse an upload the queue has no room for (C4): batches and bytes, per case and in all."""
+        with self._trava_recepcao:
+            self._reservas.pop(staging.name, None)
+            ocupado = self._ocupacao()
+            lotes, pendentes, usado = ocupado.get(caso, [0, 0, 0])
+            total = [sum(v[i] for v in ocupado.values()) for i in range(3)]
+            mb = 1024 * 1024
+            if lotes + 1 > self.config['lotes_por_caso'] or usado + tamanho > self.config['mb_por_caso'] * mb:
+                raise ValueError(mensagem_limite(pendentes))
+            if total[0] + 1 > self.config['lotes'] or total[2] + tamanho > self.config['mb'] * mb:
+                raise ValueError(mensagem_limite(total[1], mesa=True))
+            self._reservas[staging.name] = (caso, arquivos, tamanho)
+
+    def _liberar(self, staging):
+        with self._trava_recepcao:
+            self._reservas.pop(staging.name, None)
 
     def _staging(self) -> Path:
         self.pasta.mkdir(parents=True, exist_ok=True)
@@ -470,10 +562,16 @@ class Fila:
         while True:
             try:
                 trabalho = self._passo()
+                self._falhas = 0
             except Exception:  # noqa: BLE001 - the coordinator never dies on one bad batch
-                log.exception('Fila de extração: falha no coordenador; tentando de novo.')
+                self._falhas += 1
+                if self._falhas == 1 or self._falhas % 20 == 0:  # the trace once, then now and then (C8)
+                    log.exception('Fila de extração: falha no coordenador (%s seguidas); tentando de novo.',
+                                  self._falhas)
                 trabalho = True
-                time.sleep(0.5)
+                fim = time.monotonic() + min(30.0, 0.5 * 2 ** min(self._falhas - 1, 6))  # backoff up to 30 s
+                while time.monotonic() < fim and not self._parar:
+                    time.sleep(0.1)
             if self._parar:
                 with self._trava:
                     self._encerrar_trabalho()
@@ -598,10 +696,14 @@ class Fila:
                     _remover(pasta)
                 else:
                     self._terminais.add(pasta.name)
+                    self._limpar_partes(pasta)  # cut after the final state: the copies are no longer needed
                 continue
             if not self._registrar(pasta, pedido, estado):
                 continue
             reg = self._lotes[pasta.name]
+            if estado.get('estado') == 'publicando' and self._ja_publicado(reg):
+                self._gravar(reg)
+                continue  # its files may be gone: published again idempotently, final state only
             mudou = False
             for arquivo in estado['arquivos']:
                 item = pedido['itens'][arquivo['indice']]
@@ -613,9 +715,40 @@ class Fila:
                       and not (pasta / f'derivados/{arquivo["indice"]}/resultado.json').is_file()):
                     arquivo.update(estado='enfileirado', extracao=None)
                     mudou = True
+            if estado.get('estado') == 'publicando' and any(a['estado'] not in ('pronto', 'falha')
+                                                             for a in estado['arquivos']):
+                estado['estado'], mudou = 'processando', True  # files went back to the queue: read them first
             if mudou:
                 self._gravar(reg)
         self._varrido = time.monotonic()
+
+    def _ja_publicado(self, reg) -> bool:
+        """A batch whose receipt the manifest already names (C1): its files are marked as published.
+
+        The crash came after the publication and before the final state; the files' states are
+        taken from what was published, and the publication runs again, idempotently.
+        """
+        manifesto = _manifesto_com_recibo(self.root, reg['pedido'])
+        if manifesto is None:
+            return False
+        recibo = _ler(dentro(self.root, f"casos/{reg['pedido']['caso']}/cadastros/{reg['pedido']['lote']}/recibo.json"))
+        entradas = recibo.get('arquivos', []) if isinstance(recibo, dict) else []
+        documentos = {d.get('id'): d for d in manifesto.get('documentos', [])}
+        for arquivo in reg['estado']['arquivos']:
+            if arquivo['estado'] in ('pronto', 'falha'):
+                continue
+            indice = arquivo['indice']
+            doc = documentos.get(entradas[indice].get('documento_id')) if indice < len(entradas) else None
+            extracao = next((doc[k]['estado'] for k in ('extracao_pdf', 'extracao_office', 'ocr_imagem')
+                             if doc and isinstance(doc.get(k), dict)), None)
+            arquivo.update(estado='pronto', etapa=None, pagina=None, paginas=None, motivo=None, processo=None,
+                           extracao=extracao or ('nao_necessaria' if doc else None))
+        return True
+
+    @staticmethod
+    def _limpar_partes(pasta):
+        for parte in ('originais', 'derivados'):
+            _remover(pasta / parte)
 
     def _varrer(self):
         self._varrido = time.monotonic()
@@ -703,15 +836,18 @@ class Fila:
             self._gravar(reg)
         elif tipo == 'erro':
             executor.tarefa, executor.ocioso_desde = None, time.monotonic()
+            # The exception text may carry server paths: it goes to the log, the state says a fixed text (C5).
+            log.warning('Fila de extração: erro ao ler o arquivo %s do lote %s: %s', indice, lote, mensagem.get('mensagem'))
             arquivo['tentativas'] = arquivo.get('tentativas', 0) + 1
             if arquivo['tentativas'] < MAX_TENTATIVAS:
-                arquivo.update(estado='enfileirado', motivo=mensagem.get('mensagem'))
+                arquivo.update(estado='enfileirado', motivo=ERRO_EXTRACAO)
                 self._gravar(reg)
             else:
                 # Same as the command line: an exception (not an extraction outcome) aborts the batch.
-                arquivo.update(estado='falha', motivo=mensagem.get('mensagem'))
-                self._terminar(reg, 'falha', motivo=f'Lote não cadastrado: falha ao extrair {arquivo["nome"]} '
-                                                    f'({mensagem.get("mensagem")}). Nenhum arquivo deste lote foi confirmado.')
+                arquivo.update(estado='falha', motivo=ERRO_EXTRACAO)
+                self._terminar(reg, 'falha', motivo=f'Lote não cadastrado: falha inesperada ao ler {arquivo["nome"]}. '
+                                                    'Nenhum arquivo deste lote foi confirmado; o detalhe está no '
+                                                    'registro do servidor. Envie os arquivos de novo.')
 
     def _fim(self, executor, codigo):
         if executor in self._executores:
@@ -799,24 +935,32 @@ class Fila:
         try:
             return 'publicado', publicar_lote(self.root, pedido, base, resultados)
         except ValueError as exc:
-            return 'falha', str(exc)
+            return 'falha', self._sem_caminhos(str(exc))
         except OSError as exc:
-            return 'falha', (f'Lote não cadastrado: falha ao gravar ({exc.strerror or exc}). '
+            log.warning('Fila de extração: falha ao gravar o lote %s: %s', reg['estado']['lote'], exc)
+            return 'falha', (f'Lote não cadastrado: falha ao gravar ({exc.strerror or type(exc).__name__}). '
                              'Nenhum arquivo deste lote foi confirmado.')
+
+    def _sem_caminhos(self, texto):
+        """A message without the server's data folder (C5): paths stay in the log only."""
+        for raiz in {str(self.root), self.root.as_posix()}:
+            texto = texto.replace(raiz + os.sep, '').replace(raiz + '/', '').replace(raiz, '<dados>')
+        return texto
 
     def _terminar(self, reg, estado, *, motivo=None, recibo=None):
         lote = reg['estado']['lote']
         for executor in list(self._executores):
             if executor.tarefa and executor.tarefa[0] == lote:  # the other files of a refused batch
                 self._abandonar(executor)
-        for parte in ('originais', 'derivados'):
-            _remover(reg['dir'] / parte)  # the published batch has its own (hard-linked) files
         reg['estado'].update(estado=estado, motivo=motivo, recibo=recibo)
         self._lotes.pop(lote, None)
         self._terminais.add(lote)
-        if not self._lotes and not any(e.tarefa for e in self._executores):
-            self._dono.soltar()  # before the final write: whoever was waiting may delete the folder next
+        # The final state first (C1): a crash after it only leaves copies the next start removes;
+        # a crash before it finds the receipt in the manifest and concludes the batch.
         self._gravar(reg)
+        self._limpar_partes(reg['dir'])  # the published batch has its own (hard-linked) files
+        if not self._lotes and not any(e.tarefa for e in self._executores):
+            self._dono.soltar()
 
     def _gravar(self, reg, urgente=True):
         agora = time.monotonic()
