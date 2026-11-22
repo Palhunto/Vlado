@@ -533,8 +533,9 @@ def limitar_ip(ip: str | None, operacao: str | None = None) -> None:
     try:
         _limite_ip(ip, agora())
     except Bloqueado:
-        registro_acesso.registrar('ativacao_falha' if operacao in ('ativar', 'consultar') else 'login_falha', 'falha',
-                                  motivo='limite_ip', acesso_operacao=operacao, ip=ip)
+        # One aggregated line per address and minute (not one per request): see registro_acesso.registrar_limite_ip.
+        registro_acesso.registrar_limite_ip('ativacao_falha' if operacao in ('ativar', 'consultar') else 'login_falha', ip,
+                                            _rede(ip), acesso_operacao=operacao)
         raise
 
 
@@ -651,7 +652,7 @@ def entrar(root: Path, login, senha, ip: str | None = None, cliente='web') -> tu
     try:
         _limite_ip(ip, momento)
     except Bloqueado:
-        registro_acesso.registrar('login_falha', 'falha', motivo='limite_ip', cliente=_cliente(cliente), ip=ip)
+        registro_acesso.registrar_limite_ip('login_falha', ip, _rede(ip), cliente=_cliente(cliente))
         raise
     login = login.strip().lower() if isinstance(login, str) else ''
     senha = senha if isinstance(senha, str) and len(senha) <= SENHA_MAX else ''

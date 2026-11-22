@@ -11,10 +11,19 @@ arquivo, pergunta, senha, token, cookie, chave e nome de caso não cabem nesses 
 correlacionar sem expor o texto, o login tentado (quando a conta não existe) e o caso de um download entram como
 referência: os 12 primeiros caracteres de um HMAC-SHA256 com uma chave aleatória que só existe neste volume.
 
-Onde: `<pasta>/auditoria-AAAA-MM-DD.jsonl` (um arquivo por dia UTC), em `VLADO_REGISTRO` (padrão `<raiz>/registro`; no
-Compose, o volume `registro`, que o serviço de backup NÃO monta). Retenção `VLADO_REGISTRO_RETENCAO_DIAS` (padrão 30,
-o mesmo do registro do Caddy); teto por dia `VLADO_REGISTRO_DIA_MAX_MB` (padrão 50): passado o teto, o dia grava um aviso
-`registro_cheio` e descarta o resto, em vez de encher o disco. IP é dado pessoal: trate como o registro do Caddy.
+Onde: `<pasta>/auditoria-AAAA-MM-DD.jsonl` (um arquivo por dia UTC), em `VLADO_REGISTRO` (padrão `<raiz de dados>/registro`,
+que o modo local também cria; no Compose, o volume `registro`, que o serviço de backup NÃO monta). Retenção
+`VLADO_REGISTRO_RETENCAO_DIAS` (padrão 30, o mesmo do registro do Caddy). IP é dado pessoal: trate como o registro do Caddy.
+
+Tamanho, sem dar a um anônimo o poder de apagar a auditoria: o teto por dia `VLADO_REGISTRO_DIA_MAX_MB` (padrão 50) vale só para
+os eventos que qualquer um na internet consegue gerar sem conta (`login_falha` e `ativacao_falha`); passado o teto eles são
+descartados e o dia grava um aviso `registro_cheio` (classe `anonimo`). Entrada com sucesso, administração, downloads e os demais
+eventos têm cota própria, 4 vezes maior (teto total, aviso `registro_cheio` com classe `total`), e continuam gravando com o dia
+"cheio" de falhas. Além disso, as falhas repetidas do mesmo IP acima do limite de tentativas viram UMA linha agregada por IP e por
+minuto, com a contagem (`quantidade`), em vez de uma por pedido.
+
+A chave das referências fica FORA do volume do registro: em `segredos/registro_ref.chave` (o serviço de backup não monta `segredos/`
+e o backup comum não o inclui). Quem copiar só o volume do registro não consegue conferir palpites de senha ou de caso.
 
 O registro nunca derruba um pedido: erro ao gravar vira um aviso (sem conteúdo) no log do processo, no máximo um por minuto.
 Guia: deploy/MONITORAMENTO.md e deploy/INCIDENTE.md.
@@ -30,6 +39,7 @@ import logging
 import os
 from pathlib import Path
 import re
+import atexit
 import secrets
 import threading
 import time
@@ -37,6 +47,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 RETENCAO_PADRAO_DIAS = 30
 DIA_MAX_MB_PADRAO = 50
+FATOR_TETO_TOTAL = 4   # cota dos eventos que não são falha anônima: 4 x o teto do dia
 PREFIXO = 'auditoria-'
 SUFIXO = '.jsonl'
 ARQUIVO_DIA = re.compile(r'auditoria-(\d{4}-\d{2}-\d{2})\.jsonl')
@@ -76,6 +87,10 @@ _DATA = re.compile(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?')
 _CTX = threading.local()
 _ESCRITA = threading.Lock()
 _ESTADO = {'limpeza': 0.0, 'cheio': set(), 'aviso': 0.0, 'chave': {}}
+# Falhas que um anônimo gera à vontade: só elas sofrem o teto do dia e a agregação por IP.
+ANONIMOS = frozenset({'login_falha', 'ativacao_falha'})
+_AGREGADOS: dict = {}
+_AGREGA = threading.Lock()
 
 
 # --- contexto da requisição ---------------------------------------------------------------------
@@ -157,11 +172,19 @@ def _avisar(mensagem: str) -> None:
 
 # --- referências (HMAC) -------------------------------------------------------------------------
 
-def _chave(destino: Path) -> bytes:
-    em_memoria = _ESTADO['chave'].get(str(destino))
+def arquivo_da_chave() -> Path:
+    """`segredos/registro_ref.chave` (ao lado de chaves.json): fora do volume do registro e fora do backup comum."""
+    explicito = os.environ.get('VLADO_REGISTRO_CHAVE', '').strip()
+    if explicito:
+        return Path(explicito)
+    import segredos
+    return segredos.caminho(getattr(_CTX, 'raiz', ROOT)).parent / 'registro_ref.chave'
+
+
+def _chave(arquivo: Path) -> bytes:
+    em_memoria = _ESTADO['chave'].get(str(arquivo))
     if em_memoria:
         return em_memoria
-    arquivo = destino / '.chave_ref'
     try:
         bruto = arquivo.read_text(encoding='ascii').strip()
         chave = bytes.fromhex(bruto) if len(bruto) == 64 else b''
@@ -169,20 +192,20 @@ def _chave(destino: Path) -> bytes:
         chave = b''
     if not chave:
         chave = secrets.token_bytes(32)
-        destino.mkdir(parents=True, exist_ok=True)
+        arquivo.parent.mkdir(parents=True, exist_ok=True)
         descritor = os.open(arquivo, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, 'O_BINARY', 0), 0o600)
         with os.fdopen(descritor, 'w', encoding='ascii') as saida:
             saida.write(chave.hex() + '\n')
-    _ESTADO['chave'][str(destino)] = chave
+    _ESTADO['chave'][str(arquivo)] = chave
     return chave
 
 
-def referencia(espaco: str, valor, destino: Path | None = None) -> str | None:
-    """12 hex de HMAC-SHA256(chave do volume, espaço:valor): correlaciona sem revelar o texto."""
+def referencia(espaco: str, valor, arquivo_chave: Path | None = None) -> str | None:
+    """12 hex de HMAC-SHA256(chave guardada em segredos/, espaço:valor): correlaciona sem revelar o texto."""
     if not isinstance(valor, str) or not valor:
         return None
     try:
-        chave = _chave(destino or pasta())
+        chave = _chave(arquivo_chave or arquivo_da_chave())
     except OSError:
         return None
     return hmac.new(chave, f'{espaco}:{valor}'.encode('utf-8'), hashlib.sha256).hexdigest()[:12]
@@ -230,12 +253,14 @@ def montar(evento: str, resultado: str = 'ok', conta=None, momento: datetime | N
     momento = (momento or datetime.now(timezone.utc)).astimezone(timezone.utc)
     contexto = _contexto()
     ip_dado = extras.pop('ip', None)  # IP já conhecido de quem chama (entrar); senão o da requisição
+    origem = extras.pop('origem', None)
     try:
         ip = str(ipaddress.ip_address(str(ip_dado))) if ip_dado else _ip_do_contexto()
     except ValueError:
         ip = _ip_do_contexto()
     linha = {'em': momento.strftime('%Y-%m-%dT%H:%M:%SZ'), 'evento': evento, 'resultado': resultado,
-             'conta': _id(conta), 'ip': ip, 'origem': contexto.get('origem', 'cli')}
+             'conta': _id(conta), 'ip': ip,
+             'origem': origem if origem in ('web', 'cli', 'servidor') else contexto.get('origem', 'cli')}
     campos = {k: v for k, v in {'operacao': contexto.get('operacao'), 'caso_ref': contexto.get('caso_ref'),
                                 **extras}.items() if v is not None}
     for nome, valor in campos.items():
@@ -250,13 +275,67 @@ def montar(evento: str, resultado: str = 'ok', conta=None, momento: datetime | N
 
 def registrar(evento: str, resultado: str = 'ok', conta=None, momento: datetime | None = None, **extras) -> None:
     """Grava uma linha. Nunca levanta: o registro não derruba o pedido."""
+    destino = extras.pop('destino', None)  # pasta já resolvida (agregação em outra thread)
     try:
         linha = montar(evento, resultado, conta, momento, **extras)
         if linha is None:
             return
-        _gravar(pasta(), linha, momento or datetime.now(timezone.utc))
+        _gravar(destino or pasta(), linha, momento or datetime.now(timezone.utc))
     except Exception as exc:  # noqa: BLE001 - audit must never break the request
         _avisar(f'não consegui gravar ({type(exc).__name__}).')
+    if destino is None:
+        descarregar()  # aproveita para fechar as janelas de agregação já vencidas
+
+
+def registrar_limite_ip(evento: str, ip, chave=None, **extras) -> None:
+    """Falha por excesso de tentativas do mesmo IP: UMA linha por IP e por minuto, com a contagem (`quantidade`).
+
+    Sem isso, cada pedido anônimo acima do limite seria uma linha e o dia encheria de ruído. A linha do minuto é gravada quando a
+    janela fecha (no próximo evento, na próxima falha ou ao encerrar o processo). `chave` agrupa o IP (para IPv6, a rede /64).
+    """
+    if evento not in ANONIMOS:
+        return
+    try:
+        momento = datetime.now(timezone.utc)
+        minuto = momento.replace(second=0, microsecond=0)
+        contexto = _contexto()
+        grupo = (evento, str(chave or ip))
+        with _AGREGA:
+            atual = _AGREGADOS.get(grupo)
+            if atual and atual['minuto'] == minuto:
+                atual['quantidade'] += 1
+                return
+            if atual:  # janela anterior deste IP: fecha antes de abrir a nova
+                _fechar(grupo, atual)
+            _AGREGADOS[grupo] = {'minuto': minuto, 'quantidade': 1, 'ip': ip, 'destino': pasta(),
+                                 'origem': contexto.get('origem', 'cli'),
+                                 'extras': {**{k: v for k, v in extras.items() if v is not None},
+                                            **({'operacao': contexto['operacao']} if contexto.get('operacao') else {})}}
+        descarregar()
+    except Exception as exc:  # noqa: BLE001
+        _avisar(f'não consegui agregar ({type(exc).__name__}).')
+
+
+def _fechar(grupo, janela) -> None:
+    """Grava a linha agregada de uma janela (quem chama segura _AGREGA ou já tirou a janela do dicionário)."""
+    _AGREGADOS.pop(grupo, None)
+    registrar(grupo[0], 'falha', None, janela['minuto'], motivo='limite_ip', quantidade=janela['quantidade'],
+              ip=janela['ip'], origem=janela['origem'], destino=janela['destino'], **janela['extras'])
+
+
+def descarregar(tudo: bool = False, agora: datetime | None = None) -> int:
+    """Fecha as janelas de agregação vencidas (ou todas, ao encerrar). Devolve quantas linhas gravou."""
+    momento = (agora or datetime.now(timezone.utc)).replace(second=0, microsecond=0)
+    fechadas = 0
+    with _AGREGA:
+        for grupo, janela in list(_AGREGADOS.items()):
+            if tudo or janela['minuto'] < momento:
+                _fechar(grupo, janela)
+                fechadas += 1
+    return fechadas
+
+
+atexit.register(lambda: descarregar(tudo=True))
 
 
 def referencia_do_login(login) -> str | None:
@@ -283,16 +362,21 @@ def _gravar(destino: Path, linha: dict, momento: datetime) -> None:
         pass
     arquivo = destino / f'{PREFIXO}{momento.astimezone(timezone.utc):%Y-%m-%d}{SUFIXO}'
     dado = _serializar(linha)
+    anonimo = linha['evento'] in ANONIMOS
+    # Falha anônima: teto do dia. Todo o resto: cota própria (4x), para que um dia "cheio" de falhas nunca apague a
+    # entrada de um administrador nem a criação de uma conta (B1 da revisão).
+    teto = dia_max_bytes() if anonimo else dia_max_bytes() * FATOR_TETO_TOTAL
     with _ESCRITA:
         try:
             tamanho = arquivo.stat().st_size
         except FileNotFoundError:
             tamanho = 0
-        if tamanho >= dia_max_bytes():
-            if str(arquivo) not in _ESTADO['cheio']:
-                _ESTADO['cheio'].add(str(arquivo))
+        if tamanho >= teto:
+            aviso = (str(arquivo), 'anonimo' if anonimo else 'total')
+            if aviso not in _ESTADO['cheio']:
+                _ESTADO['cheio'].add(aviso)
                 _anexar(arquivo, _serializar({'em': linha['em'], 'evento': 'registro_cheio', 'resultado': 'falha',
-                                              'conta': None, 'ip': None, 'origem': 'servidor'}))
+                                              'conta': None, 'ip': None, 'origem': 'servidor', 'classe': aviso[1]}))
             return
         _anexar(arquivo, dado)
         _limpar_se_preciso(destino, momento)
@@ -332,7 +416,7 @@ def podar(destino: Path | None = None, momento: datetime | None = None) -> list[
             if datetime.strptime(achado[1], '%Y-%m-%d').date() < limite:
                 item.unlink()
                 removidos.append(item.name)
-                _ESTADO['cheio'].discard(str(item))
+                _ESTADO['cheio'].difference_update({(str(item), 'anonimo'), (str(item), 'total')})
         except (OSError, ValueError):
             continue
     return removidos

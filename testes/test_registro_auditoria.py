@@ -25,8 +25,9 @@ class Base(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.base = Path(temp.name)
         self.pasta = self.base / 'registro'
+        self.chave = self.base / 'segredos' / 'registro_ref.chave'  # fora da pasta do registro, como em produção
         env = patch.dict(os.environ, {'VLADO_REGISTRO': str(self.pasta), 'VLADO_REGISTRO_RETENCAO_DIAS': '',
-                                      'VLADO_REGISTRO_DIA_MAX_MB': ''})
+                                      'VLADO_REGISTRO_DIA_MAX_MB': '', 'VLADO_REGISTRO_CHAVE': str(self.chave)})
         env.start()
         self.addCleanup(env.stop)
         reg._ESTADO.update(limpeza=0.0, aviso=0.0)
@@ -35,6 +36,8 @@ class Base(unittest.TestCase):
         reg.permitir_operacoes(['contas-atualizar', 'apuracao-exportar', 'contas-criar'])
         reg._ESTADO['cheio'].clear()
         reg._ESTADO['chave'].clear()
+        reg._AGREGADOS.clear()
+        self.addCleanup(reg._AGREGADOS.clear)
         self.addCleanup(reg.encerrar_requisicao)
 
     def linhas(self) -> list[dict]:
@@ -152,15 +155,27 @@ class ReferenciasTest(Base):
         self.assertNotEqual(a, reg.referencia('login', 'vila_serena'), 'espaços diferentes não se confundem')
         import hashlib
         self.assertNotEqual(a, hashlib.sha256(b'caso:vila_serena').hexdigest()[:12], 'sem a chave não dá para conferir um palpite')
-        chave = self.pasta / '.chave_ref'
+        chave = self.chave
         self.assertRegex(chave.read_text(encoding='ascii').strip(), r'^[0-9a-f]{64}$')
+        self.assertNotEqual(chave.parent, self.pasta, 'a chave não fica no volume do registro')
+        self.assertFalse(list(self.pasta.glob('*chave*')) if self.pasta.exists() else [], 'nada de chave junto do registro')
         if os.name != 'nt':
             self.assertEqual(chave.stat().st_mode & 0o777, 0o600)
+
+    def test_a_chave_mora_em_segredos_ao_lado_de_chaves_json_e_nunca_na_pasta_do_registro(self):
+        with patch.dict(os.environ, {'VLADO_REGISTRO_CHAVE': ''}):
+            reg.lembrar_raiz(self.base / 'dados')
+            self.assertEqual(reg.arquivo_da_chave(), self.base / 'dados' / 'segredos' / 'registro_ref.chave')
+            with patch.dict(os.environ, {'VLADO_SEGREDOS': str(self.base / 'vol' / 'chaves.json')}):
+                self.assertEqual(reg.arquivo_da_chave(), self.base / 'vol' / 'registro_ref.chave')
+            self.assertNotEqual(reg.arquivo_da_chave().parent, self.pasta)
+        reg.referencia('caso', 'x')
+        self.assertFalse([p for p in self.pasta.rglob('*') if 'chave' in p.name] if self.pasta.exists() else [])
 
     def test_outra_instalacao_tem_outra_chave(self):
         a = reg.referencia('caso', 'vila_serena')
         reg._ESTADO['chave'].clear()
-        outra = self.base / 'outra'
+        outra = self.base / 'outra' / 'registro_ref.chave'
         self.assertNotEqual(a, reg.referencia('caso', 'vila_serena', outra))
 
     def test_login_digitado_nunca_aparece_so_a_referencia(self):
@@ -205,7 +220,7 @@ class RotacaoERetencaoTest(Base):
         with patch.dict(os.environ, {'VLADO_REGISTRO_RETENCAO_DIAS': '0'}):
             self.assertEqual(reg.retencao_dias(), 1)
 
-    def test_teto_por_dia_nao_enche_o_disco_e_avisa_uma_vez(self):
+    def test_teto_por_dia_das_falhas_anonimas_nao_enche_o_disco_e_avisa_uma_vez(self):
         with patch.dict(os.environ, {'VLADO_REGISTRO_DIA_MAX_MB': '1'}):
             reg.iniciar_requisicao(lambda: '203.0.113.9')
             for _ in range(20000):
@@ -213,7 +228,7 @@ class RotacaoERetencaoTest(Base):
         tamanho = sum(a.stat().st_size for a in reg.arquivos(self.pasta))
         self.assertLess(tamanho, (1 << 20) + 2000, 'não passa do teto do dia (mais uma linha)')
         cheios = [l for l in self.linhas() if l['evento'] == 'registro_cheio']
-        self.assertEqual(len(cheios), 1, 'um único aviso de registro cheio')
+        self.assertEqual([c['classe'] for c in cheios], ['anonimo'], 'um único aviso, da classe das falhas anônimas')
         # No dia seguinte volta a gravar.
         amanha = datetime.now(timezone.utc) + timedelta(days=1)
         reg.registrar('logout', 'ok', 'a1b2c3d4e5f60718', momento=amanha)
@@ -297,6 +312,107 @@ class JanelaDeEventosDoAcessoTest(Base):
         self.assertNotIn(token, self.texto())
 
 
+class DiaCheioDeFalhasTest(Base):
+    """B1: um anônimo não pode encher o dia e fazer a auditoria descartar o que importa (entrada de administrador, criação de
+    conta). O teto do dia vale só para a falha que qualquer um gera; o resto tem cota própria; e o excesso de tentativas do
+    mesmo IP vira uma linha por IP e por minuto."""
+
+    def encher_com_falhas_anonimas(self, mb='1'):
+        with patch.dict(os.environ, {'VLADO_REGISTRO_DIA_MAX_MB': mb}):
+            reg.iniciar_requisicao(lambda: '203.0.113.9')
+            for i in range(10000):  # cada linha ~200 bytes: passa de 1 MB
+                reg.registrar('login_falha', 'falha', None, motivo='credenciais', login_ref=f'{i:012x}')
+        return mb
+
+    def test_dia_cheio_de_falhas_ainda_grava_login_e_criacao_de_administrador(self):
+        mb = self.encher_com_falhas_anonimas()
+        antes = len(self.linhas())
+        admin, nova = 'a1b2c3d4e5f60718', 'f0e1d2c3b4a59687'
+        with patch.dict(os.environ, {'VLADO_REGISTRO_DIA_MAX_MB': mb}):
+            reg.iniciar_requisicao(lambda: '198.51.100.20')
+            reg.registrar('login_falha', 'falha', None, motivo='credenciais', login_ref='ffffffffffff')  # anônimo: descartado
+            reg.registrar('login_ok', 'ok', admin, cliente='web')
+            reg.registrar('conta_criada', 'ok', nova, por=admin)
+            reg.registrar('acesso_alterado', 'ok', nova, por=admin, campos=['papel'], papel='admin')
+            reg.registrar('recuperacao_emitida', 'ok', nova, por=admin)
+            reg.registrar('download', 'ok', admin, tipo='original', bytes=10)
+        novas = self.linhas()[antes:]
+        self.assertEqual([l['evento'] for l in novas],
+                         ['login_ok', 'conta_criada', 'acesso_alterado', 'recuperacao_emitida', 'download'],
+                         'o login e a criação do administrador estão gravados; a falha anônima, não')
+        self.assertEqual(novas[1]['por'], admin)
+        avisos = [l for l in self.linhas() if l['evento'] == 'registro_cheio']
+        self.assertEqual([a['classe'] for a in avisos], ['anonimo'], 'um único aviso, só da classe das falhas')
+
+    def test_o_resto_tem_cota_propria_de_quatro_vezes_e_tambem_avisa_uma_vez(self):
+        with patch.dict(os.environ, {'VLADO_REGISTRO_DIA_MAX_MB': '1'}):
+            reg.iniciar_requisicao(lambda: '203.0.113.9')
+            for _ in range(30000):  # ~ 5 MB de eventos legítimos: passa dos 4 MB da cota total
+                reg.registrar('login_ok', 'ok', 'a1b2c3d4e5f60718', cliente='web')
+        tamanho = sum(a.stat().st_size for a in reg.arquivos(self.pasta))
+        self.assertLess(tamanho, 4 * (1 << 20) + 2000)
+        self.assertEqual([l['classe'] for l in self.linhas() if l['evento'] == 'registro_cheio'], ['total'])
+
+    def test_excesso_de_tentativas_do_mesmo_ip_vira_uma_linha_por_ip_e_por_minuto(self):
+        reg.iniciar_requisicao(lambda: None)
+        for _ in range(5000):
+            reg.registrar_limite_ip('login_falha', '203.0.113.9', '203.0.113.9', cliente='web')
+        for _ in range(7):
+            reg.registrar_limite_ip('login_falha', '198.51.100.4', '198.51.100.4', cliente='web')
+        for _ in range(3):
+            reg.registrar_limite_ip('ativacao_falha', '203.0.113.9', '203.0.113.9', acesso_operacao='ativar')
+        self.assertEqual(self.linhas(), [], 'a janela do minuto só fecha no fim do minuto (ou ao encerrar)')
+        self.assertEqual(reg.descarregar(tudo=True), 3)
+        linhas = {(l['evento'], l['ip']): l for l in self.linhas()}
+        self.assertEqual(len(linhas), 3)
+        a = linhas[('login_falha', '203.0.113.9')]
+        self.assertEqual((a['quantidade'], a['motivo'], a['resultado'], a['cliente']), (5000, 'limite_ip', 'falha', 'web'))
+        self.assertEqual(linhas[('login_falha', '198.51.100.4')]['quantidade'], 7)
+        self.assertEqual(linhas[('ativacao_falha', '203.0.113.9')]['quantidade'], 3)
+        self.assertLess(len(self.texto()), 1500, '5010 pedidos, três linhas pequenas')
+
+    def test_a_janela_fecha_no_proximo_evento_depois_do_minuto(self):
+        reg.iniciar_requisicao(lambda: None)
+        reg.registrar_limite_ip('login_falha', '203.0.113.9', '203.0.113.9')
+        reg.registrar_limite_ip('login_falha', '203.0.113.9', '203.0.113.9')
+        depois = datetime.now(timezone.utc) + timedelta(minutes=2)
+        self.assertEqual(reg.descarregar(agora=depois), 1)
+        linha, = self.linhas()
+        self.assertEqual((linha['quantidade'], linha['em'][-4:]), (2, ':00Z'), 'o horário é o começo da janela do minuto')
+        self.assertEqual(reg.descarregar(agora=depois), 0, 'não grava duas vezes')
+
+    def test_um_evento_qualquer_tambem_fecha_janelas_vencidas(self):
+        reg.iniciar_requisicao(lambda: None)
+        reg.registrar_limite_ip('login_falha', '203.0.113.9', '203.0.113.9')
+        with reg._AGREGA:
+            for janela in reg._AGREGADOS.values():
+                janela['minuto'] -= timedelta(minutes=2)
+        reg.registrar('logout', 'ok', 'a1b2c3d4e5f60718')
+        self.assertEqual([l['evento'] for l in self.linhas()], ['logout', 'login_falha'])
+
+    def test_registrar_limite_so_aceita_falhas_anonimas_e_nunca_levanta(self):
+        reg.registrar_limite_ip('login_ok', '203.0.113.9')
+        reg.registrar_limite_ip('login_falha', 'nao-e-ip', 'nao-e-ip')
+        reg.registrar_limite_ip('login_falha', None, None)
+        reg.descarregar(tudo=True)
+        self.assertTrue(all(l['evento'] == 'login_falha' and l['ip'] is None for l in self.linhas()))
+
+    def test_acesso_entrar_agrega_o_que_passa_do_limite(self):
+        hasher_rapido(self)
+        acesso.limpar_limites()
+        raiz = self.base / 'dados'
+        for numero in range(300):  # 20 por minuto passam como credenciais, o resto é o excesso
+            with self.assertRaises(ValueError):
+                acesso.entrar(raiz, f'ninguem{numero}', SENHA, ip='203.0.113.9')
+        reg.descarregar(tudo=True)
+        linhas = self.linhas()
+        credenciais = [l for l in linhas if l.get('motivo') == 'credenciais']
+        limite = [l for l in linhas if l.get('motivo') == 'limite_ip']
+        self.assertEqual(len(credenciais), 20)
+        self.assertEqual([l['quantidade'] for l in limite], [280])
+        self.assertEqual(len(linhas), 21, '300 pedidos: 20 linhas de falha e uma agregada')
+
+
 class ComposeEBackupTest(unittest.TestCase):
     """O Compose monta o volume do registro só no app; o backup não o vê (decisão registrada em deploy/BACKUP.md)."""
 
@@ -315,7 +431,8 @@ class ComposeEBackupTest(unittest.TestCase):
             self.assertNotIn('/app/registro', servicos[nome], nome)
         for linha in ('VLADO_REGISTRO: /app/registro', 'VLADO_REGISTRO_RETENCAO_DIAS: ${VLADO_REGISTRO_RETENCAO_DIAS:-30}',
                       'VLADO_REGISTRO_DIA_MAX_MB: ${VLADO_REGISTRO_DIA_MAX_MB:-50}',
-                      'VLADO_PROXIES_CONFIAVEIS: ${VLADO_PROXIES_CONFIAVEIS:-}'):
+                      'VLADO_PROXIES_CONFIAVEIS: ${VLADO_PROXIES_CONFIAVEIS:-}',
+                      'VLADO_PROXIES_CONFIAVEIS_AMPLAS: ${VLADO_PROXIES_CONFIAVEIS_AMPLAS:-}'):
             self.assertIn(linha, servicos['vlado'], linha)
         volumes = (self.RAIZ / 'docker-compose.yml').read_text(encoding='utf-8').split('\nvolumes:\n', 1)[1]
         self.assertRegex(volumes, r'(?m)^  registro:$')
@@ -351,6 +468,13 @@ class ComposeEBackupTest(unittest.TestCase):
             exemplo = (self.RAIZ / 'deploy' / 'ambientes' / f'{nome}.env.example').read_text(encoding='utf-8')
             for variavel in ('VLADO_REGISTRO_RETENCAO_DIAS', 'VLADO_REGISTRO_DIA_MAX_MB', 'VLADO_PROXIES_CONFIAVEIS'):
                 self.assertIn(f'# {variavel}=', exemplo, f'{nome}: {variavel}')
+        for trecho in ('fora do volume do registro', 'segredos/registro_ref.chave', 'cota própria, 4 vezes maior', 'uma única linha por IP e por minuto',
+                       'VLADO_PROXIES_CONFIAVEIS_AMPLAS=1', 'Modo local (sem Docker)', '<pasta de dados>/registro/'):
+            self.assertIn(trecho, monitoramento, trecho)
+        self.assertIn('segredos/registro_ref.chave', backup)
+        local = (self.RAIZ / 'deploy' / 'LOCAL.md').read_text(encoding='utf-8')
+        self.assertIn('Fora do Docker', local)
+        self.assertIn('`registro/` dentro da pasta de dados', local)
         self.assertIn('registro de auditoria', (self.RAIZ / 'deploy' / 'INCIDENTE.md').read_text(encoding='utf-8').lower())
 
     def test_imagem_do_app_cria_a_pasta_e_o_contexto_do_docker_nao_a_leva(self):

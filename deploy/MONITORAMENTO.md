@@ -102,21 +102,31 @@ JSON por evento, no volume `registro` (`/app/registro`, arquivo `auditoria-AAAA-
 | Autenticação | `login_ok`, `login_falha` (motivo: `credenciais`, `bloqueado`, `limite_ip`), `login_bloqueado`, `logout`, `sessao_expirada` (motivo `expirada` ou `inatividade`, uma linha por sessão), `senha_definida`, `ativacao_falha` |
 | Administração | `conta_criada`, `conta_desativada`, `conta_reativada`, `acesso_alterado` (campos mudados e o papel novo), `recuperacao_emitida`, `primeiro_admin`, `admin_recusada` (operação recusada), `operacao_negada` (convidado tentando o que não pode) |
 | Downloads | `download` (tipo `original` ou `exportacao`, operação, tamanho em bytes, resultado `ok`, `falha` ou `interrompido`) |
-| Do registro | `evento_arquivado` (um evento que saiu da janela de 1000 do `acesso.json`), `registro_cheio` |
+| Do registro | `evento_arquivado` (um evento que saiu da janela de 1000 do `acesso.json`), `registro_cheio` (com a `classe` que estourou: `anonimo` ou `total`) |
 
 **O que nunca entra, por construção:** só uma lista fechada de campos é aceita, cada um com formato estrito; senha, token,
 link de ativação, cookie, chave, pergunta, conteúdo e nome de documento ou de arquivo, e o **nome do caso** não cabem e são
 descartados. Duas referências com chave existem para correlacionar sem expor o texto: `login_ref` (login digitado de uma
 conta que não existe: pode ser a senha digitada no campo errado) e `caso_ref` (o caso de um download), 12 caracteres de um
-HMAC-SHA256 com uma chave aleatória guardada só neste volume (`.chave_ref`). A mesma referência aparece sempre que o mesmo
-texto é usado, o que mostra uma varredura de senhas ou quem baixou do mesmo caso, sem revelar nada. O `log_message` do
-servidor continua sem registrar consultas.
+HMAC-SHA256 com uma chave aleatória guardada **fora do volume do registro**, em `segredos/registro_ref.chave` (o serviço de
+backup não monta `segredos/` e o backup comum não o inclui): quem copiar só o registro não consegue conferir um palpite de senha
+ou de caso. A mesma referência aparece sempre que o mesmo texto é usado, o que mostra uma varredura de senhas ou quem baixou do
+mesmo caso, sem revelar nada. O `log_message` do servidor continua sem registrar consultas.
 
-**Retenção e tamanho:** 30 dias (`VLADO_REGISTRO_RETENCAO_DIAS`, o mesmo do Caddy), apagados sozinhos; no máximo
-`VLADO_REGISTRO_DIA_MAX_MB` (50) por dia: passado o teto o dia grava um aviso `registro_cheio` e descarta o resto, em vez de
-encher o disco (um ataque de força bruta com 20 tentativas por minuto por IP não chega perto). **IP é dado pessoal**: trate
+**Retenção e tamanho:** 30 dias (`VLADO_REGISTRO_RETENCAO_DIAS`, o mesmo do Caddy), apagados sozinhos. Um anônimo não pode
+apagar a auditoria enchendo o dia: (1) o teto `VLADO_REGISTRO_DIA_MAX_MB` (50 por dia) vale **só para as falhas que qualquer um
+gera sem conta** (`login_falha`, `ativacao_falha`); passado o teto elas são descartadas e o dia grava um aviso `registro_cheio`
+(classe `anonimo`); (2) entrada com sucesso, administração, downloads e os demais eventos têm **cota própria, 4 vezes maior**, e
+continuam gravando com o dia cheio de falhas (aviso `registro_cheio`, classe `total`, só se essa cota também estourar); (3) as
+falhas repetidas do mesmo IP **acima do limite de 20 por minuto** viram **uma única linha por IP e por minuto**, com a contagem
+(`quantidade`), em vez de uma por pedido. Um `registro_cheio` é alerta de inundação: veja o `ip` e a `quantidade` das linhas
+agregadas. **IP é dado pessoal**: trate
 como o registro do Caddy (acesso restrito, 30 dias) e informe a retenção na política de privacidade. O registro **não entra
 no backup** (ver `BACKUP.md`) e a falha ao gravar nunca derruba um pedido (aviso sem conteúdo no log do contêiner).
+
+**Modo local (sem Docker):** a Mesa instalada no Windows ou iniciada a partir do código também grava o registro, em
+`<pasta de dados>/registro/` (criada no primeiro evento; fica fora do git, com a chave em `<pasta de dados>/segredos/`).
+Vale para o modo `local-contas` e para os downloads do modo `local`: são os mesmos eventos, com o IP `127.0.0.1`.
 
 Para ler (no servidor, só quem opera):
 
@@ -141,7 +151,9 @@ VLADO_PROXIES_CONFIAVEIS=172.18.0.0/16, 203.0.113.0/24      # a rede do Compose 
 ```
 
 - A lista aceita IPs e redes (IPv4 e IPv6), separados por vírgula, espaço ou ponto e vírgula. Lista inválida **impede a Mesa de
-  subir**, com a mensagem dizendo qual item.
+  subir**, com a mensagem dizendo qual item. Uma rede que cobre quase toda a internet (`0.0.0.0/0`, `::/0`, IPv4 menor que /8,
+  IPv6 menor que /16) também **impede a partida**: confiar nela deixaria qualquer cliente escolher o próprio IP e escapar do
+  limite e da auditoria. Só `VLADO_PROXIES_CONFIAVEIS_AMPLAS=1` a confirma, por decisão consciente.
 - Com a lista, o `X-Forwarded-For` só vale se o par TCP (o Caddy) estiver nela, e o cliente é o **primeiro salto que não está na
   lista, lendo da direita para a esquerda**: o que o cliente escreve à esquerda não é levado em conta, então ele não consegue
   forjar o IP. Um salto ilegível interrompe a leitura e vale o par TCP.

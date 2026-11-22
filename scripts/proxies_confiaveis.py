@@ -9,6 +9,10 @@
   saltos mais à esquerda são do cliente e podem ser forjados, então não contam depois de um salto não confiável;
 - um salto ilegível interrompe a leitura e vale o par TCP (nunca um valor que o cliente escolheu).
 
+Uma rede que cobre (quase) toda a internet (`0.0.0.0/0`, `::/0`, IPv4 menor que /8, IPv6 menor que /16) é RECUSADA: confiar
+nela deixaria qualquer cliente escolher o próprio IP e escapar do limite e da auditoria. Só com a confirmação explícita
+`VLADO_PROXIES_CONFIAVEIS_AMPLAS=1` ela passa.
+
 Sem a lista, nada muda (comportamento anterior, controlado por `VLADO_CONFIAR_PROXY`). A lista tem de incluir o Caddy, que
 é o par TCP da Mesa (a rede do Compose, por exemplo `172.18.0.0/16`: `docker network inspect <projeto>_default`) e, atrás de
 CDN ou WAF, as faixas dela, que o Caddy também precisa confiar (`trusted_proxies`; ver deploy/MONITORAMENTO.md).
@@ -20,11 +24,16 @@ import os
 import re
 
 VARIAVEL = 'VLADO_PROXIES_CONFIAVEIS'
+CONFIRMACAO = 'VLADO_PROXIES_CONFIAVEIS_AMPLAS'
+PREFIXO_MINIMO = {4: 8, 6: 16}
 SEPARADOR = re.compile(r'[,\s;]+')
 
 
-def analisar(texto: str | None) -> tuple | None:
-    """Redes da lista; None se a variável está vazia ou ausente. Entrada inválida levanta ValueError (com o item)."""
+def analisar(texto: str | None, confirmar_amplo: bool | None = None) -> tuple | None:
+    """Redes da lista; None se a variável está vazia ou ausente. Entrada inválida, ou uma rede ampla demais sem a
+    confirmação explícita (VLADO_PROXIES_CONFIAVEIS_AMPLAS=1), levanta ValueError (com o item)."""
+    if confirmar_amplo is None:
+        confirmar_amplo = os.environ.get(CONFIRMACAO, '').strip() == '1'
     itens = [i for i in SEPARADOR.split((texto or '').strip()) if i]
     if not itens:
         return None
@@ -34,6 +43,12 @@ def analisar(texto: str | None) -> tuple | None:
             redes.append(ipaddress.ip_network(item, strict=False))
         except ValueError:
             raise ValueError(f'{VARIAVEL}: {item!r} não é um IP nem uma rede (use 172.18.0.0/16, 203.0.113.7, 2001:db8::/32).') from None
+    if not confirmar_amplo:
+        for rede in redes:
+            if rede.prefixlen < PREFIXO_MINIMO[rede.version]:
+                raise ValueError(f'{VARIAVEL}: {str(rede)!r} cobre (quase) toda a internet; confiar nela deixa qualquer cliente '
+                                 f'escolher o próprio IP. Use as faixas reais do proxy ou da CDN. Se é mesmo isso que quer, defina '
+                                 f'{CONFIRMACAO}=1.')
     return tuple(redes)
 
 

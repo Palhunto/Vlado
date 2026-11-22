@@ -43,7 +43,9 @@ entra no backup.** Motivos: (1) tem **IP de pessoas**, retido por 30 dias; o bac
 `diarios=7,semanais=4,mensais=6`), então incluí-lo quebraria a promessa de retenção; (2) o registro serve para investigar o que
 aconteceu, não para restaurar o estado; (3) uma restauração troca a pasta de dados e, se o registro morasse junto, **apagaria o
 histórico justamente quando ele é mais necessário**. Por isso ele fica num volume à parte, que o serviço `backup` nem monta, e
-a restauração não o toca. Para um incidente, copie o volume `registro` como evidência (`INCIDENTE.md` 5.2).
+a restauração não o toca. A chave das referências do registro fica em `segredos/registro_ref.chave`, fora desse volume e fora do
+backup comum (só entra se alguém ligar `VLADO_BACKUP_INCLUIR_SEGREDOS=1`, a decisão consciente de sempre). Para um incidente,
+copie o volume `registro` como evidência (`INCIDENTE.md` 5.2).
 
 ### Fila de extração (`casos/.fila/`, CONF-02): entra no backup
 

@@ -31,12 +31,15 @@ class Auditoria(Http):
         self.addCleanup(temp.cleanup)
         self.pasta_registro = Path(temp.name) / 'registro'
         env = patch.dict(os.environ, {'VLADO_REGISTRO': str(self.pasta_registro), 'VLADO_REGISTRO_RETENCAO_DIAS': '',
-                                      'VLADO_REGISTRO_DIA_MAX_MB': '', 'VLADO_PROXIES_CONFIAVEIS': ''})
+                                      'VLADO_REGISTRO_DIA_MAX_MB': '', 'VLADO_PROXIES_CONFIAVEIS': '',
+                                      'VLADO_REGISTRO_CHAVE': str(Path(temp.name) / 'segredos' / 'registro_ref.chave')})
         env.start()
         self.addCleanup(env.stop)
         reg._ESTADO.update(limpeza=0.0, aviso=0.0)
         reg._ESTADO['cheio'].clear()
         reg._ESTADO['chave'].clear()
+        reg._AGREGADOS.clear()
+        self.addCleanup(reg._AGREGADOS.clear)
         super().setUp()
         self.inicio = len(self.todas())
 
@@ -117,13 +120,16 @@ class AutenticacaoTest(Auditoria):
         ultima = self.novas('login_falha')[-1]
         self.assertEqual((ultima['motivo'], ultima['conta']), ('bloqueado', self.bia_id))
 
-    def test_limite_de_tentativas_por_ip(self):
+    def test_limite_de_tentativas_por_ip_vira_uma_linha_agregada_por_ip_e_minuto(self):
         acesso.limpar_limites()
-        for numero in range(21):
+        for numero in range(45):
             self.publico('entrar', {'login': f'ninguem{numero}', 'senha': SENHA})
+        reg.descarregar(tudo=True)
+        self.assertEqual(len(self.novas('login_falha', motivo='credenciais')), 20, 'as 20 primeiras, uma linha cada')
         limite = self.novas('login_falha', motivo='limite_ip')
-        self.assertEqual(len(limite), 1)
-        self.assertEqual((limite[0]['ip'], limite[0]['resultado']), ('127.0.0.1', 'falha'))
+        self.assertEqual(len(limite), 1, 'as 25 acima do limite: uma só linha, com a contagem')
+        self.assertEqual((limite[0]['ip'], limite[0]['resultado'], limite[0]['quantidade'], limite[0]['operacao']),
+                         ('127.0.0.1', 'falha', 25, 'entrar'))
 
     def test_sair_registra_logout(self):
         self.post(self.ana, 'sessao-sair', {})
@@ -174,6 +180,41 @@ class AutenticacaoTest(Auditoria):
         acesso.criar_primeiro_admin(raiz, 'Chefe', 'chefe', SENHA)
         linha = self.novas('primeiro_admin')[0]
         self.assertEqual((linha['por'], linha['origem']), ('primeiro_acesso', 'cli'))
+
+
+class DiaCheioTest(Auditoria):
+    """B1 de ponta a ponta: com o dia cheio de falhas anônimas, o administrador entra e cria outro administrador, e as duas
+    coisas ficam no registro."""
+
+    def test_administrador_entra_e_cria_administrador_com_o_dia_cheio(self):
+        with patch.dict(os.environ, {'VLADO_REGISTRO_DIA_MAX_MB': '1'}):
+            reg.iniciar_requisicao(lambda: '203.0.113.9')
+            for i in range(10000):
+                reg.registrar('login_falha', 'falha', None, motivo='credenciais', login_ref=f'{i:012x}')
+            reg.encerrar_requisicao()
+            self.assertTrue([l for l in self.todas() if l['evento'] == 'registro_cheio'], 'o dia está cheio de falhas')
+            self.marcar()
+            cookie, csrf = self.entrar('editora')
+            status, criada = self.post((cookie, csrf), 'contas-criar', {'nome': 'Outra Editora', 'login': 'outra.editora',
+                                                                        'papel': 'admin'})
+            self.assertEqual(status, 200, criada)
+            self.publico('entrar', {'login': 'ninguem', 'senha': SENHA})  # falha anônima: descartada, sem derrubar nada
+        eventos = [(l['evento'], l['resultado']) for l in self.novas()]
+        self.assertEqual(eventos, [('login_ok', 'ok'), ('conta_criada', 'ok')])
+        criacao = self.novas('conta_criada')[0]
+        self.assertEqual((criacao['por'], criacao['conta'], criacao['operacao']),
+                         (self.admin_id, criada['conta']['id'], 'contas-criar'))
+
+    def test_inundar_com_pedidos_anonimos_nao_chega_perto_do_teto(self):
+        """Os 300 mil pedidos da prova da revisão: do mesmo IP, agora, são poucas linhas."""
+        acesso.limpar_limites()
+        antes = len(self.todas())
+        for numero in range(400):
+            self.publico('entrar', {'login': f'ninguem{numero}', 'senha': SENHA})
+        reg.descarregar(tudo=True)
+        novas = self.todas()[antes:]
+        self.assertLessEqual(len(novas), 21, '400 pedidos do mesmo IP: 20 falhas e uma linha agregada')
+        self.assertEqual(sum(l.get('quantidade', 1) for l in novas), 400)
 
 
 class AdministracaoTest(Auditoria):

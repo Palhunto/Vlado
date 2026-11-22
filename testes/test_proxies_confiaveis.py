@@ -45,6 +45,35 @@ class AnaliseDaListaTest(unittest.TestCase):
             pc.validar_ambiente()
 
 
+class RedeAmplaDemaisTest(unittest.TestCase):
+    """Confiar em toda a internet deixaria qualquer cliente escolher o IP: recusado, ou só com confirmação explícita."""
+
+    def test_recusa_redes_que_cobrem_quase_toda_a_internet(self):
+        for ampla in ('0.0.0.0/0', '::/0', '0.0.0.0/1', '128.0.0.0/2', '0.0.0.0/7', '::/8', '2000::/15', '10.0.0.0/8, 0.0.0.0/0'):
+            with self.subTest(ampla=ampla):
+                with self.assertRaisesRegex(ValueError, r'VLADO_PROXIES_CONFIAVEIS.*toda a internet.*VLADO_PROXIES_CONFIAVEIS_AMPLAS=1'):
+                    pc.analisar(ampla)
+
+    def test_redes_razoaveis_passam_sem_confirmacao(self):
+        for boa in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '203.0.113.7', '2001:db8::/32', '2606:4700::/32'):
+            self.assertIsNotNone(pc.analisar(boa), boa)
+
+    def test_com_a_confirmacao_explicita_passa(self):
+        with patch.dict(os.environ, {'VLADO_PROXIES_CONFIAVEIS_AMPLAS': '1'}):
+            self.assertEqual([str(r) for r in pc.analisar('0.0.0.0/0')], ['0.0.0.0/0'])
+        self.assertIsNotNone(pc.analisar('::/0', confirmar_amplo=True))
+        with patch.dict(os.environ, {'VLADO_PROXIES_CONFIAVEIS_AMPLAS': 'sim'}):
+            with self.assertRaises(ValueError):  # só o "1" confirma
+                pc.analisar('0.0.0.0/0')
+
+    def test_ambiente_com_rede_ampla_impede_a_partida_e_no_pedido_vale_so_o_par_tcp(self):
+        with patch.dict(os.environ, {'VLADO_PROXIES_CONFIAVEIS': '0.0.0.0/0', 'VLADO_PROXIES_CONFIAVEIS_AMPLAS': ''}):
+            with self.assertRaises(ValueError):
+                pc.validar_ambiente()
+            self.assertEqual(pc.do_ambiente(), (), 'nunca "confiar em todos"')
+            self.assertEqual(pc.ip_do_cliente('198.51.100.20', '1.2.3.4', pc.do_ambiente()), '198.51.100.20')
+
+
 class PrimeiroSaltoNaoConfiavelTest(unittest.TestCase):
     LISTA = '172.18.0.0/16, 203.0.113.0/24'  # o Caddy e a faixa da CDN
 
