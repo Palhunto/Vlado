@@ -360,7 +360,7 @@ Regras que vêm dos wireframes: nunca cobre o conteúdo (W03, regra 2; UX-19: re
 | Padrão | acima | canvas |
 | Foco | anel de foco na área de texto (escuro: ocre `#e6bc7a`) | canvas |
 | Ocupado | o compositor não muda: continua com "Enviar" e com "rascunho salvo" na linha de custo; o "Parar" fica no bloco de progresso da resposta, junto do gasto até agora (ver [resposta no celular](#resposta-celular)) | wireframe W03 |
-| Erro | mensagem de campo abaixo ("Escreva a pergunta antes de enviar.") | derivado de W11 (regra 5) |
+| Erro | mensagem de campo abaixo ("Falta a pergunta. Escreva o que quer saber dos documentos.") | derivado de W11 (regra 5) |
 | Desabilitado | cota acabou: campo e botão desabilitados, com o bloco "Limite atingido" acima | wireframe W11 |
 | Vazio | botão "Enviar" desabilitado até haver texto | derivado |
 
@@ -842,6 +842,15 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 | Ocupado | o cartão de envio, com `aria-busy`, uma barra por arquivo e a etapa por extenso | wireframe W02 e W11, regra 2 |
 | Erro | por arquivo, no cartão de envio, com o que houve, o que foi preservado e "O que fazer" | wireframe W02, regra 6, e W11, regra 4 |
 | Limite | "12 de 60" chega a "60 de 60": a área de envio vira o estado "Limite atingido" ([estados](#estados)) | derivado (W11, regra 7) |
+
+**Detalhes do envio por arquivo** *(derivado, 22/11/2026)*:
+
+- Linha que falhou não tem medidor: o texto do erro ocupa o lugar da barra (grade de 260 px, 1fr e `auto`) e "O que fazer" fica à direita, como secundário de 44 px; no celular, abaixo do texto, alinhado à esquerda. Vale também para o arquivo recusado antes do envio (nome com caracteres que a Mesa não aceita, arquivo acima de 50 MB).
+- Resultado em 16, como o nome; só a linha do recibo é 14. "Ver recibo" é [link](#link) 14/600, à direita, também no celular.
+- Cabeçalho: "Enviando 3 arquivos" (600) e o aviso em 14 `--theme-muted` na mesma linha, alinhados pela base, intervalo de 8, quebrando quando não cabem. Concluído, o título vira "Envio de 3 arquivos", o aviso sai e o cartão perde o `aria-busy`.
+- "Cancelar envio" (secundário) aparece enquanto os bytes sobem (W11, regra 3) e sai quando a leitura passa ao servidor, que não se cancela.
+- "Até 50 MB por arquivo" continua a ser o que a pessoa lê. A Mesa divide o envio em lotes de até 50 MB e 100 arquivos, e recusa no navegador o arquivo acima de 50 MB.
+- Textos do resultado: "✓ Pronto, 14 pág."; "Lida por OCR: confira números" quando o texto veio do OCR; "Lida em parte: confira as páginas sem texto no original." quando parte das páginas ficou sem texto (sinal parcial, `--theme-warning` 600 nos dois); "Sem texto lido. O original ficou guardado." para a imagem sem leitura, até existir a rota de "Ler com OCR".
 
 ---
 
