@@ -25,11 +25,18 @@ EVENTOS = ('acesso_negado', 'caso_criado', 'caso_atribuido', 'participacao_inclu
            'conta_atualizada', 'conta_excluida', 'conta_exportada', 'conta_expirada', 'sessao_encerrada_a_distancia',
            'convite_enviado', 'convite_reenviado', 'convite_cancelado', 'convite_aceito', 'fator_ativado',
            'fator_removido', 'fator_recusado', 'codigo_reserva_usado', 'recuperacao_pedida', 'recuperacao_confirmada',
-           'termos_aceitos', 'chave_redacao_alterada')
+           'termos_aceitos', 'chave_redacao_alterada',
+           # E3 (convite, e-mail, redefinição, troca de e-mail) e E4 (segundo fator, dois passos, ciclo de vida)
+           'convite_expirado', 'redefinicao_pedida', 'email_troca_pedida', 'email_trocado', 'email_enviado',
+           'email_falhou', 'aparelho_novo', 'login_protegido', 'fator_codigos_gerados', 'conta_inativa_avisada')
 PAPEIS = ('dono', 'editor', 'reporter', 'leitor')
 CODIGOS = ('caso_indisponivel', 'conversa_indisponivel', 'lote_inexistente', 'redacao_suspensa', 'pendencia_de_conta',
-           'operacao_inexistente', 'acesso_indisponivel', 'senha_atual_incorreta', 'ultimo_dono')
-MOTIVOS = ('sem_participacao', 'outra_redacao', 'inexistente', 'redacao_suspensa', 'senha_incorreta', 'ultimo_dono')
+           'operacao_inexistente', 'acesso_indisponivel', 'senha_atual_incorreta', 'ultimo_dono', 'senha_necessaria',
+           'convite_duplicado', 'limite_de_convites', 'transporte_indisponivel', 'codigo_invalido', 'fator_necessario')
+MOTIVOS = ('sem_participacao', 'outra_redacao', 'inexistente', 'redacao_suspensa', 'senha_incorreta', 'ultimo_dono',
+           'link_expirado', 'email_em_uso', 'limite', 'codigo_invalido', 'protegido', 'pendencia')
+MENSAGENS = ('convite', 'redefinicao', 'novo_acesso', 'senha_trocada', 'fator_alterado', 'recuperacao',
+             'muitas_tentativas', 'email_novo', 'conta_inativa')
 
 
 class ListasDoContratoTest(unittest.TestCase):
@@ -99,6 +106,32 @@ class ListasDoContratoTest(unittest.TestCase):
         linha = r.montar('redacao_suspensa', 'ok', CONTA, por='operador', organizacao=ORG)
         self.assertEqual(linha['por'], 'operador')
         self.assertNotIn('por', r.montar('redacao_suspensa', 'ok', CONTA, por='Fulano'))
+
+    def test_conta_atualizada_com_nome_e_idioma(self):
+        # E2: conta-atualizar manda os dois juntos; um campo fora da lista derrubaria a lista inteira.
+        self.assertEqual(r.montar('conta_atualizada', 'ok', CONTA, campos=['nome', 'idioma'])['campos'], ['idioma', 'nome'])
+
+    def test_tipo_do_email_enviado_ou_falho_nunca_o_endereco(self):
+        for evento in ('email_enviado', 'email_falhou'):
+            for mensagem in MENSAGENS:
+                with self.subTest(evento=evento, mensagem=mensagem):
+                    self.assertEqual(r.montar(evento, 'ok', CONTA, mensagem=mensagem)['mensagem'], mensagem)
+            for fora in ('ana@exemplo.invalid', 'Convite para a redação', 'boas_vindas', '', None, 3):
+                with self.subTest(evento=evento, fora=fora):
+                    self.assertNotIn('mensagem', r.montar(evento, 'falha', CONTA, mensagem=fora))
+
+    def test_operacoes_de_acesso_do_convite_e_do_segundo_fator(self):
+        for operacao in ('aceitar', 'redefinir', 'esqueci', 'confirmar_email', 'segundo_fator'):
+            with self.subTest(operacao=operacao):
+                linha = r.montar('ativacao_falha', 'falha', None, acesso_operacao=operacao, motivo='link_invalido')
+                self.assertEqual((linha['acesso_operacao'], linha['motivo']), (operacao, 'link_invalido'))
+
+    def test_manutencao_como_autor(self):
+        # A varredura diária (acesso.py manutencao) vence convites, avisa e desativa conta inativa.
+        for evento in ('convite_expirado', 'conta_inativa_avisada', 'conta_desativada'):
+            with self.subTest(evento=evento):
+                self.assertEqual(r.montar(evento, 'ok', CONTA, por='manutencao')['por'], 'manutencao')
+        self.assertNotIn('por', r.montar('convite_expirado', 'ok', CONTA, por='sistema'))
 
     def test_fora_das_listas_continua_descartado(self):
         linha = r.montar('acesso_negado', 'negado', CONTA, motivo='porque sim', codigo='inventado', nome_caso='Caso X')
