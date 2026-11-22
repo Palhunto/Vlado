@@ -255,18 +255,99 @@
     g.append(svg('path', {d: Q.CAMINHOS[nome] || Q.CAMINHOS['relacao-vinculo']}));
     return g;
   }
-  function diagrama(casoId, mapa, nomes, saida) {
-    const n = mapa.entidades.length, L = 640, A = 520, LARG = 184, ALT = 68, cx = L / 2, cy = A / 2;
-    const rx = Math.max(0, cx - LARG / 2 - 10), ry = Math.max(0, cy - ALT / 2 - 30);
-    // A entidade mais ligada vai ao centro e as demais ao redor, para as ligações saírem dela como raios e os rótulos não caírem sobre os nós.
-    const grau = {}; for (const r of mapa.relacoes) { grau[r.origem] = (grau[r.origem] || 0) + 1; grau[r.destino] = (grau[r.destino] || 0) + 1; }
+  // Disposição do mapa (componentes.md#mapa, "Rótulo não cobre nó nem outra ligação"): a entidade mais ligada vai ao centro e as demais ao anel; a
+  // ordem no anel e o ponto de cada rótulo na sua ligação são escolhidos para que nenhuma pílula cubra um nó nem outra ligação, e as ligações
+  // se cruzem o mínimo. Determinística (mesma entrada, mesmo desenho), de modo que o teste confere o custo.
+  const NO_L = 200, NO_A = 80, PILULA_A = 28;
+  const larguraPilula = texto => Math.round(34 + cortar(texto, 22).length * 7.8);
+  const retNo = ([x, y]) => [x - NO_L / 2, y - NO_A / 2, x + NO_L / 2, y + NO_A / 2];
+  // Segmento (a→b) contra retângulo [x0,y0,x1,y1]: método de Liang–Barsky.
+  function cortaRet(a, b, [x0, y0, x1, y1]) {
+    let t0 = 0, t1 = 1; const dx = b[0] - a[0], dy = b[1] - a[1];
+    for (const [p, q] of [[-dx, a[0] - x0], [dx, x1 - a[0]], [-dy, a[1] - y0], [dy, y1 - a[1]]]) {
+      if (p === 0) { if (q < 0) return false; continue; }
+      const r = q / p;
+      if (p < 0) { if (r > t1) return false; if (r > t0) t0 = r; } else { if (r < t0) return false; if (r < t1) t1 = r; }
+    }
+    return true;
+  }
+  const cruza = (a, b, c, d) => {
+    const o = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
+    return o(a, b, c) !== o(a, b, d) && o(c, d, a) !== o(c, d, b);
+  };
+  const sobrepoe = (r1, r2) => r1[0] < r2[2] && r2[0] < r1[2] && r1[1] < r2[3] && r2[1] < r1[3];
+  function dispor(mapa) {
+    const n = mapa.entidades.length, grau = {};
+    for (const r of mapa.relacoes) { grau[r.origem] = (grau[r.origem] || 0) + 1; grau[r.destino] = (grau[r.destino] || 0) + 1; }
     const centro = n >= 3 ? [...mapa.entidades].sort((a, b) => (grau[b.id] || 0) - (grau[a.id] || 0))[0] : null;
-    const anel = mapa.entidades.filter(e => e !== centro);
-    const pos = Object.fromEntries(mapa.entidades.map(e => {
-      if (e === centro || n === 1) return [e.id, [cx, cy]];
-      const i = anel.indexOf(e), ang = -Math.PI / 2 + (2 * Math.PI * i) / Math.max(anel.length, 1);
-      return [e.id, [Math.round(cx + rx * Math.cos(ang)), Math.round(cy + ry * Math.sin(ang))]];
-    }));
+    const anel = mapa.entidades.filter(e => e !== centro), m = anel.length;
+    // Os nós têm 200 de largura, então o anel vira duas fileiras (acima e abaixo do centro, até três por fileira): as ligações descem ou sobem
+    // com bastante espaço vertical para o rótulo, que seria espremido entre dois nós vizinhos na horizontal.
+    const L = 760, D1 = 170, D2 = 140, niveis = m <= 5 ? 2 : Math.ceil(m / 2);
+    const A = 2 * (D1 + (Math.ceil(niveis / 2) - 1) * D2 + NO_A / 2 + 24), cx = L / 2, cy = A / 2;
+    const contagem = Array.from({length: niveis}, (_, j) => Math.max(0, Math.ceil((m - j) / niveis)));
+    const lugares = [];
+    for (let rank = 0; lugares.length < m; rank += 1) for (let j = 0; j < niveis; j += 1) {
+      if (rank >= contagem[j]) continue;
+      const k = contagem[j], dx = k === 1 ? 0 : k === 2 ? (rank ? 1 : -1) * 210 : (rank - 1) * (NO_L + 40);
+      lugares.push([cx + dx, cy + (j % 2 ? 1 : -1) * (D1 + Math.floor(j / 2) * D2)]);
+    }
+    const fracoes = [0.5, 0.62, 0.38, 0.72, 0.28, 0.8, 0.2, 0.88, 0.12, 0.56, 0.44, 0.68, 0.32];
+    const avaliar = pos => {
+      let custo = 0; const pilulas = {};
+      const seg = Object.fromEntries(mapa.relacoes.map(r => [r.id, [pos[r.origem] || [cx, cy], pos[r.destino] || [cx, cy]]]));
+      const nos = mapa.entidades.map(e => [e.id, retNo(pos[e.id])]);
+      for (const [i, e] of mapa.entidades.entries()) for (const [id2, ret2] of nos.slice(i + 1)) if (sobrepoe(retNo(pos[e.id]), ret2) && id2) custo += 100000;
+      for (const r of mapa.relacoes) {
+        const [p, q] = seg[r.id];
+        for (const [id, ret] of nos) if (id !== r.origem && id !== r.destino && cortaRet(p, q, ret)) custo += 400;   // a linha atravessa um nó que não é dela
+        for (const o of mapa.relacoes) if (o.id > r.id && o.origem !== r.origem && o.origem !== r.destino && o.destino !== r.origem && o.destino !== r.destino && cruza(p, q, ...seg[o.id])) custo += 60;
+      }
+      const largura = Object.fromEntries(mapa.relacoes.map(r => [r.id, larguraPilula(r.tipo)]));
+      // Cada rótulo escolhe o ponto da própria ligação que não cobre nó, outra ligação nem outro rótulo; duas passadas, a segunda já sabendo
+      // onde ficaram todos os outros.
+      const escolher = r => {
+        const [p, q] = seg[r.id], doCentro = centro && r.destino === centro.id ? [q, p] : [p, q];
+        let melhor = null;
+        for (const [k, f] of fracoes.entries()) {
+          const mx = Math.round(doCentro[0][0] + (doCentro[1][0] - doCentro[0][0]) * f), my = Math.round(doCentro[0][1] + (doCentro[1][1] - doCentro[0][1]) * f);
+          const ret = [mx - largura[r.id] / 2 - 2, my - PILULA_A / 2 - 2, mx + largura[r.id] / 2 + 2, my + PILULA_A / 2 + 2];
+          let c = k;   // desempate: a primeira fração (mais perto do meio ou do ponto preferido)
+          for (const [, rn] of nos) if (sobrepoe(ret, rn)) c += 5000;
+          for (const o of mapa.relacoes) if (o.id !== r.id && cortaRet(...seg[o.id], ret)) c += 3000;
+          for (const [id, outra] of Object.entries(pilulas)) if (id !== r.id && sobrepoe(ret, outra.ret)) c += 5000;
+          if (!melhor || c < melhor.c) melhor = {c, mx, my, ret};
+        }
+        pilulas[r.id] = {x: melhor.mx, y: melhor.my, largura: largura[r.id], ret: melhor.ret, c: melhor.c};
+      };
+      for (let passada = 0; passada < 2; passada += 1) for (const r of mapa.relacoes) escolher(r);
+      for (const r of mapa.relacoes) custo += pilulas[r.id].c;
+      return {custo, pilulas};
+    };
+    const montar = ordem => {
+      const pos = {}; if (centro) pos[centro.id] = [cx, cy]; else if (n === 1) pos[mapa.entidades[0].id] = [cx, cy];
+      ordem.forEach((e, i) => { pos[e.id] = lugares[i].map(Math.round); });
+      return pos;
+    };
+    let melhor = null;
+    for (const inicio of [anel, [...anel].reverse(), [...anel].sort((a, b) => (grau[b.id] || 0) - (grau[a.id] || 0))]) {
+      let ordem = [...inicio], atual = avaliar(montar(ordem));
+      for (let volta = 0; volta < 12 && m > 1; volta += 1) {
+        let mudou = false;
+        for (let i = 0; i < m; i += 1) for (let j = i + 1; j < m; j += 1) {
+          const troca = [...ordem]; [troca[i], troca[j]] = [troca[j], troca[i]];
+          const c = avaliar(montar(troca));
+          if (c.custo < atual.custo) { ordem = troca; atual = c; mudou = true; }
+        }
+        if (!mudou) break;
+      }
+      if (!melhor || atual.custo < melhor.custo) melhor = {...atual, pos: montar(ordem)};
+    }
+    return {L, A, pos: melhor.pos, pilulas: melhor.pilulas, custo: melhor.custo, centro};
+  }
+  Q.dispor = dispor;   // exposto para o teste: nenhuma pílula cobre nó nem outra ligação
+  function diagrama(casoId, mapa, nomes, saida) {
+    const {L, A, pos, pilulas} = dispor(mapa), LARG = NO_L, ALT = NO_A;
     const desenho = svg('svg', {viewBox: `0 0 ${L} ${A}`, class: 'mapa-svg', role: 'group', 'aria-label': t('Diagrama do mapa. A lista ao lado traz as mesmas ligações.')});
     const rotulos = [];
     for (const r of mapa.relacoes) {
@@ -276,13 +357,10 @@
       g.dataset.relacao = r.id;
       g.append(svg('line', {x1, y1, x2, y2, class: 'mapa-linha'}), svg('line', {x1, y1, x2, y2, class: 'mapa-alvo'}));
       // Rótulo da ligação: pílula com o ícone do tipo e o texto do tipo, no meio da linha; segue a ligação (ativa, foco).
-      const texto = cortar(r.tipo, 20), largura = Math.round(34 + texto.length * 7.4);
-      // Ligação que sai da entidade central: o rótulo fica a 62% do caminho, longe do nó do centro; as demais, no meio.
-      const doCentro = centro && r.origem === centro.id ? 1 : centro && r.destino === centro.id ? 2 : 0, f = doCentro ? 0.62 : 0.5;
-      const [bx, by, ex, ey] = doCentro === 2 ? [x2, y2, x1, y1] : [x1, y1, x2, y2], mx = Math.round(bx + (ex - bx) * f), my = Math.round(by + (ey - by) * f);
+      const texto = cortar(r.tipo, 22), {x: mx, y: my, largura} = pilulas[r.id];
       const pilula = svg('g', {class: `mapa-pilula traco-${traco(r.situacao)}`, transform: `translate(${mx - largura / 2} ${my - 14})`, 'aria-hidden': 'true'});
-      pilula.append(svg('rect', {width: largura, height: 28, rx: 14, class: 'mapa-pilula-fundo'}), icone(iconeRelacao(r.tipo), 16, 14, 14, 'mapa-pilula-icone'));
-      const rotuloTexto = svg('text', {x: 28, y: 19, class: 'mapa-pilula-texto', translate: 'no'}); rotuloTexto.textContent = texto; pilula.append(rotuloTexto);
+      pilula.append(svg('rect', {width: largura, height: 28, rx: 14, class: 'mapa-pilula-fundo'}), icone(iconeRelacao(r.tipo), 17, 14, 14, 'mapa-pilula-icone'));
+      const rotuloTexto = svg('text', {x: 30, y: 19, class: 'mapa-pilula-texto', translate: 'no'}); rotuloTexto.textContent = texto; pilula.append(rotuloTexto);
       const abrir = () => {
         for (const outro of desenho.querySelectorAll('.mapa-ligacao')) { outro.classList.remove('is-ativa'); outro.setAttribute('aria-pressed', 'false'); }
         for (const outra of desenho.querySelectorAll('.mapa-pilula')) outra.classList.remove('is-ativa');
@@ -352,13 +430,13 @@
     secao.append(lista);
     return secao;
   }
-  function legenda() {
+  // Legenda no pé do mapa (componentes.md#mapa): o que o mapa usa, e "Suporte parcial ou não revisado" só se houver ligação pontilhada.
+  function legenda(mapa) {
     const l = element('ul', undefined, 'mapa-legenda');
     l.setAttribute('aria-label', t('Legenda'));
-    for (const [classe, texto] of [['pessoa', 'Pessoa (círculo)'], ['organizacao', 'Organização (quadrado)'], ['traco-solido', 'Ligação documentada (linha contínua)'],
-      ['traco-tracejado', 'Ligação inferida (linha tracejada)'], ['traco-pontilhado', 'Suporte parcial, não revisado ou indisponível (pontilhada)']]) {
-      l.append(element('li', t(texto), `legenda-${classe}`));
-    }
+    const itens = [['pessoa', 'Pessoa'], ['organizacao', 'Organização'], ['traco-solido', 'Ligação com documento'], ['traco-tracejado', 'A confirmar, sem documento']];
+    if (mapa.relacoes.some(r => traco(r.situacao) === 'pontilhado')) itens.push(['traco-pontilhado', 'Suporte parcial ou não revisado']);
+    for (const [classe, texto] of itens) l.append(element('li', t(texto), `legenda-${classe}`));
     return l;
   }
   Q.registrarAba({id: 'mapa', rotulo: t('Mapa de relações'), carregar: Q.quadro('quadros_evidencia', async (painel, casoId, vigente) => {
@@ -370,7 +448,7 @@
     saida.append(element('p', t('Escolha uma ligação para ver as evidências.'), 'small'));
     const layout = element('div', undefined, 'mapa-layout');
     const visual = element('div', undefined, 'mapa-visual');
-    visual.append(legenda(), diagrama(casoId, mapa, nomes, saida));
+    visual.append(diagrama(casoId, mapa, nomes, saida), legenda(mapa));
     const lado = element('div', undefined, 'mapa-lateral');
     lado.append(element('h4', t('Lista de pessoas e organizações')), listaMapa(casoId, mapa, nomes, saida), homonimos(mapa));
     layout.append(visual, lado);

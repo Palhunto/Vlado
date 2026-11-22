@@ -169,7 +169,11 @@ test('mapa: SVG sem biblioteca, forma por tipo, traço por situação e evidênc
   assert.match(detalhe.textContent, /Lúcia Prates, fiscal do contrato\./);
   detalhe.querySelector('button').click(); await m.esperar();
   assert.equal(m.chamadas.at(-1).operacao, 'achados-original');
-  assert.match(painel.querySelector('.mapa-legenda').textContent, /Pessoa \(círculo\)/);
+  // Legenda no pé do mapa (depois do desenho), com os textos do Design; "Suporte parcial ou não revisado" só aparece se houver ligação pontilhada.
+  const legenda = painel.querySelector('.mapa-legenda');
+  assert.match(legenda.textContent, /PessoaOrganizaçãoLigação com documentoA confirmar, sem documento$/);
+  const visual = [...painel.querySelector('.mapa-visual').children];
+  assert.ok(visual.indexOf(legenda) > visual.indexOf(painel.querySelector('.mapa-svg')), 'a legenda vem depois do mapa');
   assert.doesNotMatch(painel.textContent, /fraude|culpado/i);
 });
 
@@ -203,7 +207,7 @@ test('textos das telas de análise têm tradução para o inglês', () => {
   const m = mesa();
   const textos = m.janela.VLADO_I18N_EN.textos;
   for (const chave of ['Comparador', 'Tabelas', 'Mapa de relações', 'Diferença de valor', 'Comparar', 'Documento A', 'Documento B', 'Cálculos declarados',
-    'Possíveis homônimos para conferência', 'Pessoa (círculo)', 'Organização (quadrado)', 'Ver evidências', 'Conferência pendente', 'Destacar células usadas',
+    'Possíveis homônimos para conferência', 'Ligação com documento', 'A confirmar, sem documento', 'Suporte parcial ou não revisado', 'Ver evidências', 'Conferência pendente', 'Destacar células usadas',
     'Leve o foco a uma célula para ver a fonte, o estado e a última correção.', 'Lista de pessoas e organizações']) {
     assert.ok(textos[chave], `tradução de “${chave}”`);
   }
@@ -222,4 +226,34 @@ test('ícone da relação pelo texto do tipo: sócio, parentesco, cargo, pagamen
   assert.equal(icone('Vinculada'), 'relacao-vinculo');
   assert.equal(icone('fiscal de contrato com'), 'contrato');
   assert.equal(icone(''), 'relacao-vinculo');
+});
+
+test('disposição do mapa: nenhum rótulo cobre nó nem outra ligação, de 2 a 8 entidades', () => {
+  const m = mesa();
+  const dispor = m.janela.Quadros.dispor;
+  const sobrepoe = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  const corta = (p, q, [x0, y0, x1, y1]) => {
+    let t0 = 0, t1 = 1; const dx = q[0] - p[0], dy = q[1] - p[1];
+    for (const [d, r] of [[-dx, p[0] - x0], [dx, x1 - p[0]], [-dy, p[1] - y0], [dy, y1 - p[1]]]) {
+      if (d === 0) { if (r < 0) return false; continue; }
+      const k = r / d; if (d < 0) { if (k > t1) return false; if (k > t0) t0 = k; } else { if (k < t0) return false; if (k < t1) t1 = k; }
+    }
+    return true;
+  };
+  for (let n = 2; n <= 8; n += 1) {
+    const entidades = Array.from({length: n}, (_, i) => ({id: `E${i}`, tipo: i % 2 ? 'pessoa' : 'organizacao', nome: `Entidade ${i}`}));
+    // Uma entidade central ligada a todas, mais algumas ligações entre as do anel (o caso do canvas: Carlos–João atravessava outra ligação).
+    const relacoes = entidades.slice(1).map((e, i) => ({id: `L${i}`, origem: 'E0', destino: e.id, tipo: ['Sócio', 'Irmãos? A confirmar', 'Contrato 041/2025', 'Servidora até 2023'][i % 4], situacao: i % 3 === 1 ? 'inferida' : 'documentada'}));
+    if (n >= 4) relacoes.push({id: 'LX', origem: 'E1', destino: 'E2', tipo: 'Irmãos? A confirmar', situacao: 'inferida'});
+    const d = dispor({entidades, relacoes});
+    const nos = entidades.map(e => [d.pos[e.id][0] - 100, d.pos[e.id][1] - 40, d.pos[e.id][0] + 100, d.pos[e.id][1] + 40]);
+    for (let i = 0; i < nos.length; i += 1) for (let j = i + 1; j < nos.length; j += 1) assert.ok(!sobrepoe(nos[i], nos[j]), `n=${n}: os nós ${i} e ${j} não se sobrepõem`);
+    for (const r of relacoes) {
+      const ret = d.pilulas[r.id].ret;
+      nos.forEach((no, i) => assert.ok(!sobrepoe(ret, no), `n=${n}: o rótulo de ${r.id} não cobre o nó ${i}`));
+      for (const o of relacoes) if (o.id !== r.id) assert.ok(!corta(d.pos[o.origem], d.pos[o.destino], ret), `n=${n}: o rótulo de ${r.id} não cobre a ligação ${o.id}`);
+      for (const o of relacoes) if (o.id < r.id) assert.ok(!sobrepoe(ret, d.pilulas[o.id].ret), `n=${n}: os rótulos de ${o.id} e ${r.id} não se tocam`);
+    }
+    assert.ok(d.pos.E0 && d.L >= 760);
+  }
 });

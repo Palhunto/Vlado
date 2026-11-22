@@ -2372,23 +2372,19 @@ html{scroll-padding-top:calc(var(--faixa-ambiente) + 96px)}
 .quadro-selo.suporte-sustentado{border-color:var(--green);font-weight:600}
 .quadro-vazio{color:var(--muted)}
 .quadro-contexto,.quadro-indisponiveis{margin-top:var(--espaco-3)}
-.tempo-filtro-caixa{margin:0 0 var(--espaco-4)}
-.tempo-filtro-caixa>summary{min-height:44px;display:flex;align-items:center;gap:var(--espaco-2)}
-.tempo-filtro-caixa>summary::before{content:'▸';transition:transform var(--duracao-rapida)}
-.tempo-filtro-caixa[open]>summary::before{transform:rotate(90deg)}
-@media (prefers-reduced-motion:reduce) {
-  .tempo-filtro-caixa>summary::before{transition:none}
-}
-.tempo-filtro-caixa[open]>summary{margin-bottom:var(--espaco-2)}
-/* Filtro por tipo de data: "Tudo" e uma pílula por tipo (a caixa de seleção segue sendo o controle, com o rótulo desenhado como pílula). */
 .tempo-filtro{display:flex;flex-wrap:wrap;gap:var(--espaco-2);border:0;padding:0;margin:0 0 var(--espaco-4)}
 .tempo-filtro legend{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-.tempo-filtro .tempo-opcao,.tempo-tudo{position:relative;display:inline-flex;flex-direction:row;align-items:center;min-height:44px;padding:0 var(--espaco-4);border:1px solid var(--theme-input-line);border-radius:var(--raio-pilula);background:var(--white);color:var(--theme-text);font-size:var(--text-base);font-weight:400;cursor:pointer}
+.tempo-filtro .tempo-opcao,.tempo-tudo{position:relative;display:inline-flex;flex-direction:row;align-items:center;min-height:44px;padding:0 var(--espaco-4);border:1px solid var(--theme-input-line);border-radius:var(--raio-pilula);background:var(--theme-surface);color:var(--theme-text);font-size:var(--text-base);font-weight:400;cursor:pointer}
 .tempo-filtro input{position:absolute;inset:0;width:100%;height:100%;min-height:0;margin:0;opacity:0;cursor:pointer}
 .tempo-filtro .tempo-opcao:has(input:checked),.tempo-tudo[aria-pressed=true]{background:var(--green);border-color:var(--green);color:var(--theme-on-primary);font-weight:600}
-/* Com tudo marcado, o filtro está desligado: as pílulas dos tipos ficam suaves e só "Tudo" aparece cheia. */
-.tempo-filtro[data-todos=true] .tempo-opcao:has(input:checked){background:var(--soft);border-color:var(--theme-accent-line);color:var(--theme-accent);font-weight:400}
 .tempo-filtro .tempo-opcao:has(input:focus-visible){outline:var(--foco-largura) solid var(--theme-focus);outline-offset:var(--foco-afastamento)}
+.tempo-como-ler{display:flex;flex-wrap:wrap;align-items:center;gap:var(--espaco-1) var(--espaco-5);margin:0 0 var(--espaco-3)}
+.tempo-como-ler .eyebrow{margin:0}
+.tempo-como-ler-lista{display:flex;flex-wrap:wrap;gap:var(--espaco-1) var(--espaco-5);list-style:none;margin:0;padding:0;font-size:var(--text-md)}
+.tempo-como-ler-lista li{display:flex;align-items:center;gap:var(--espaco-2)}
+.tempo-marca{box-sizing:border-box;flex:none;width:20px;height:20px;border:2px solid var(--tempo-marco-exato);border-radius:50%;background:var(--tempo-marco-exato)}
+.tempo-marca.parcial{background:var(--tempo-marco-parcial)}
+.tempo-data-cartao{display:none}
 /* Linha do tempo (componentes.md#linha-do-tempo): ano, três colunas (data, marco, cartão), marco cheio para data exata e vazado para parcial. */
 .tempo-linha{margin:var(--espaco-4) 0}
 .tempo-ano{margin:0 0 var(--espaco-6)}
@@ -2419,12 +2415,17 @@ html{scroll-padding-top:calc(var(--faixa-ambiente) + 96px)}
 @media (max-width:719px) {
   .tempo-ano-filete{display:none}
   .tempo-ano-conta{white-space:normal}
-  .tempo-evento{grid-template-columns:36px minmax(0,1fr);gap:0 var(--espaco-3)}
-  .tempo-evento::before{left:17px}
-  .tempo-data{grid-column:2;grid-row:1;flex-direction:row;gap:var(--espaco-2);align-items:baseline;padding-top:0;text-align:left}
-  .tempo-marco{grid-column:1;grid-row:1 / span 2;margin-top:0}
-  .tempo-cartao{grid-column:2;grid-row:2;flex-direction:column;align-items:stretch;margin-top:var(--espaco-2)}
+  /* Celular (componentes.md, "Linha do tempo, 390"): marco de 32 com ícone de 16 à esquerda; a data e a qualificação entram no cartão, acima do acontecimento. */
+  .tempo-evento{grid-template-columns:32px minmax(0,1fr);gap:0 var(--espaco-3)}
+  .tempo-evento::before{left:15px;top:40px}
+  .tempo-data{display:none}
+  .tempo-marco{grid-column:1;width:32px;height:32px;margin-top:0}
+  .tempo-marco-icone{width:16px;height:16px}
+  .tempo-cartao{grid-column:2;flex-direction:column;align-items:stretch}
+  .tempo-data-cartao{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 var(--espaco-2);margin:0 0 var(--espaco-1)}
+  .tempo-data-cartao-dia{font-size:var(--text-base);font-weight:600}
   .tempo-fonte{max-width:none}
+}
 }
 /* Analysis boards (analise.js): comparator, verifiable table, relationship map. */
 .comparar-form{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:var(--espaco-3);align-items:end;margin:var(--espaco-4) 0}
@@ -2500,55 +2501,66 @@ ins.comparar-incluido,p.comparar-incluido{
 .tabela-calculo h5{font-size:var(--text-base);margin:0}
 .tabela-expressao{font-variant-numeric:tabular-nums;font-weight:600}
 .tabela-usadas{margin:var(--espaco-1) 0 var(--espaco-2);padding-left:var(--espaco-5)}
-.mapa-layout{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(260px,1fr);gap:var(--espaco-5);align-items:start}
-.mapa-svg{display:block;width:100%;max-width:720px;margin-inline:auto;height:auto;background:var(--quadro-coluna-fundo);border-radius:var(--raio-cartao)}
-@media (max-width:1279px) {
-  .mapa-layout{grid-template-columns:minmax(0,1fr)}
+/* O desenho tem 760 de largura própria e o texto dos nós e rótulos fica em 14 px ou mais só com o desenho em escala 1: por isso ele ocupa a largura
+   toda (a lista de pessoas vem abaixo) e some abaixo de 1024 px, onde o mapa se lê como a lista (componentes.md, "Mapa, 390"). */
+.mapa-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--espaco-5);align-items:start}
+.mapa-svg{display:block;width:100%;max-width:760px;margin-inline:auto;height:auto;background:var(--quadro-coluna-fundo);border-radius:var(--raio-cartao)}
+@media (max-width:1023px) {
+  .mapa-visual{display:none}
 }
 /* Nó do mapa (componentes.md#mapa): caixa com o ícone do tipo (círculo para pessoa, quadrado de canto arredondado para organização), nome e tipo. */
 .mapa-cartao{box-sizing:border-box;display:flex;align-items:center;gap:var(--espaco-3);width:100%;height:100%;padding:var(--espaco-2) var(--espaco-3);background:var(--theme-surface);border:1px solid var(--theme-input-line);border-radius:var(--raio-cartao);color:var(--ink);font-size:var(--text-md);line-height:1.25;overflow:hidden}
 .mapa-ico{display:inline-grid;place-items:center;flex:none;width:36px;height:36px;color:var(--theme-on-primary)}
 .mapa-no.pessoa .mapa-ico{border-radius:50%;background:var(--mapa-pessoa)}
 .mapa-no.organizacao .mapa-ico{border-radius:var(--raio-controle);background:var(--mapa-organizacao)}
-.mapa-ico-svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.mapa-ico-svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .mapa-cartao-texto{display:flex;flex-direction:column;min-width:0}
-.mapa-nome{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-weight:700;overflow-wrap:anywhere}
+.mapa-nome{font-size:var(--text-base);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-weight:700;overflow-wrap:anywhere}
 .mapa-sub{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Rótulo da ligação: pílula com o ícone do tipo e o texto do tipo; a ligação aberta ganha o fundo de acento. */
 .mapa-pilula{cursor:pointer}
 .mapa-pilula-fundo{fill:var(--mapa-rotulo-fundo);stroke:var(--theme-input-line);stroke-width:1}
 .mapa-pilula-icone{fill:none;stroke:var(--ink);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .mapa-pilula-texto{fill:var(--ink);font-size:var(--text-md);font-weight:600}
-.mapa-pilula.is-ativa .mapa-pilula-fundo{fill:var(--theme-accent);stroke:var(--theme-accent)}
+.mapa-pilula.is-ativa .mapa-pilula-fundo{fill:var(--theme-accent);stroke:none}
 .mapa-pilula.is-ativa .mapa-pilula-icone{stroke:var(--theme-on-primary)}
 .mapa-pilula.is-ativa .mapa-pilula-texto{fill:var(--theme-on-primary)}
-.mapa-pilula.traco-tracejado .mapa-pilula-fundo{stroke:var(--theme-warning);stroke-dasharray:4 3}
+.mapa-pilula.traco-tracejado .mapa-pilula-fundo{fill:var(--theme-warning-bg);stroke:var(--theme-warning);stroke-dasharray:4 3}
+.mapa-pilula.traco-tracejado .mapa-pilula-icone{stroke:var(--theme-warning)}
+.mapa-pilula.traco-tracejado .mapa-pilula-texto{fill:var(--theme-warning)}
+.mapa-pilula.traco-tracejado.is-ativa .mapa-pilula-fundo{fill:var(--theme-accent);stroke:none}
+.mapa-pilula.traco-tracejado.is-ativa .mapa-pilula-icone{stroke:var(--theme-on-primary)}
+.mapa-pilula.traco-tracejado.is-ativa .mapa-pilula-texto{fill:var(--theme-on-primary)}
 .mapa-linha{stroke:var(--mapa-ligacao);stroke-width:2}
 .mapa-alvo{stroke:transparent;stroke-width:16;cursor:pointer}
-.mapa-ligacao.traco-tracejado .mapa-linha{stroke-dasharray:8 5}
+.mapa-ligacao.traco-tracejado .mapa-linha{stroke:var(--theme-warning);stroke-dasharray:6 6}
 .mapa-ligacao.traco-pontilhado .mapa-linha{stroke-dasharray:2 5}
 /* No box outline around the SVG group (it drew a rectangle across the map); focus is a halo on the line itself. */
 .mapa-ligacao:focus,.mapa-ligacao:focus-visible{outline:none}
 .mapa-ligacao:focus-visible .mapa-alvo{stroke:var(--mapa-ligacao-destaque);stroke-opacity:.35;stroke-width:14}
 /* Focus (keyboard) and hover: 4 px in the focus colour, plus the halo on focus. The open link (its evidence is in
-   the panel) is drawn differently: 6 px in the accent colour, and marked aria-pressed="true". Dashes keep meaning the situation. */
+   the panel) is drawn differently: 4 px in the accent colour (componentes.md#mapa), and marked aria-pressed="true". Dashes keep meaning the situation. */
 .mapa-ligacao:focus-visible .mapa-linha,.mapa-ligacao:hover .mapa-linha{stroke:var(--mapa-ligacao-destaque);stroke-width:4}
-.mapa-ligacao.is-ativa .mapa-linha{stroke:var(--mapa-ligacao-aberta);stroke-width:6}
-.mapa-ligacao.is-ativa:focus-visible .mapa-linha{stroke:var(--mapa-ligacao-aberta);stroke-width:6}
+.mapa-ligacao.is-ativa .mapa-linha{stroke:var(--mapa-ligacao-aberta);stroke-width:4}
+.mapa-ligacao.is-ativa:focus-visible .mapa-linha{stroke:var(--mapa-ligacao-aberta);stroke-width:4}
 .mapa-legenda{
   display:flex;
   flex-wrap:wrap;
-  gap:var(--espaco-1) var(--espaco-4);
+  gap:var(--espaco-2) var(--espaco-6);
   list-style:none;
-  margin:0 0 var(--espaco-2);
-  padding:0;
-  font-size:var(--text-sm);
+  margin:var(--espaco-3) 0 0;
+  padding:14px 18px;
+  background:var(--theme-surface);
+  border:1px solid var(--theme-line);
+  border-radius:var(--raio-cartao);
+  font-size:var(--text-md);
 }
-.mapa-legenda li::before{content:'';display:inline-block;width:14px;height:14px;margin-right:var(--espaco-1);vertical-align:-2px}
+.mapa-legenda li{display:flex;align-items:center;gap:var(--espaco-2)}
+.mapa-legenda li::before{content:'';flex:none;width:14px;height:14px}
 .mapa-legenda .legenda-pessoa::before{border-radius:50%;background:var(--mapa-pessoa)}
 .mapa-legenda .legenda-organizacao::before{border-radius:3px;background:var(--mapa-organizacao)}
 .mapa-legenda [class^=legenda-traco]::before{width:24px;height:0;border-top:2px solid var(--mapa-ligacao)}
-.mapa-legenda .legenda-traco-tracejado::before{border-top-style:dashed}
+.mapa-legenda .legenda-traco-tracejado::before{border-top-color:var(--theme-warning);border-top-style:dashed}
 .mapa-legenda .legenda-traco-pontilhado::before{border-top-style:dotted}
 .mapa-lista,.mapa-ligacoes{list-style:none;margin:0;padding:0}
 .mapa-entidade{

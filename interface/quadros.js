@@ -252,35 +252,40 @@ window.Quadros = (() => {
     return data.precisao === 'dia' ? `${Number(d)} ${MESES[Number(m) - 1]}` : data.precisao === 'mes' ? MESES[Number(m) - 1] : a;
   };
   const anoDe = data => String(data.valor).slice(0, 4);
-  let tipos = null, escolhidos = null, filtroAberto = null;
-  // The filter sits in a <details>: open on wide screens, closed on phones (it would push the events
-  // a screen down); the summary says how many types are chosen, and the choice survives reloads.
+  let tipos = null, escolhidos = null;
+  // Filtro por tipo de data (componentes.md#linha-do-tempo): "Tudo" fica ligado enquanto nenhum tipo foi escolhido e os tipos ficam desligados;
+  // ligar um tipo desliga "Tudo"; desligar o último volta a "Tudo". As pílulas ficam sempre à vista, no celular também.
   function filtro(painel, casoId, carregar) {
-    const gaveta = element('details', undefined, 'tempo-filtro-caixa');
-    filtroAberto ??= !window.matchMedia?.('(max-width:719px)').matches;
-    gaveta.open = filtroAberto;
-    gaveta.addEventListener('toggle', () => { filtroAberto = gaveta.open; });
-    const total = Object.keys(tipos).length;
-    gaveta.append(element('summary', escolhidos ? t('Tipos de data: {n} de {total}', {n: escolhidos.length, total}) : t('Tipos de data: todos ({total})', {total})));
-    const campo = element('fieldset', undefined, 'tempo-filtro'); campo.dataset.todos = String(!escolhidos);
-    gaveta.append(campo);
+    const campo = element('fieldset', undefined, 'tempo-filtro');
     campo.append(element('legend', t('Tipos de data')));
     const tudo = element('button', t('Tudo'), 'tempo-tudo'); tudo.type = 'button'; tudo.setAttribute('aria-pressed', String(!escolhidos));
     tudo.addEventListener('click', () => { escolhidos = null; carregar(painel, casoId); });
     campo.append(tudo);
     for (const [tipo, rotulo] of Object.entries(tipos)) {
       const caixa = element('input'); caixa.type = 'checkbox'; caixa.value = tipo; caixa.id = `tempo-tipo-${tipo}`;
-      caixa.checked = !escolhidos || escolhidos.includes(tipo);
+      caixa.checked = !!escolhidos && escolhidos.includes(tipo);
       const etiqueta = element('label', undefined, 'tempo-opcao'); etiqueta.setAttribute('for', caixa.id);
       etiqueta.append(caixa, element('span', t(rotulo)));
       caixa.addEventListener('change', () => {
         const marcados = [...campo.querySelectorAll('input')].filter(c => c.checked).map(c => c.value);
-        escolhidos = marcados.length === Object.keys(tipos).length ? null : marcados;
+        escolhidos = marcados.length ? marcados : null;
         carregar(painel, casoId);
       });
       campo.append(etiqueta);
     }
-    return gaveta;
+    return campo;
+  }
+  // "Como ler": as duas marcas do marco, com o texto (nunca só a forma).
+  function comoLer() {
+    const caixa = element('div', undefined, 'tempo-como-ler');
+    caixa.append(element('p', t('Como ler'), 'eyebrow'));
+    const lista = element('ul', undefined, 'tempo-como-ler-lista');
+    for (const [classe, texto] of [['exato', 'Data exata no documento'], ['parcial', 'Data parcial: só mês ou ano']]) {
+      const item = element('li'); const marca = element('span', undefined, `tempo-marca ${classe}`); marca.setAttribute('aria-hidden', 'true');
+      item.append(marca, element('span', t(texto))); lista.append(item);
+    }
+    caixa.append(lista);
+    return caixa;
   }
   function entrada(casoId, e) {
     const li = element('li', undefined, 'tempo-evento');
@@ -298,7 +303,10 @@ window.Quadros = (() => {
     // Cartão: o acontecimento em serifa, o tipo de data e a observação, e o selo da fonte à direita.
     const cartao = element('div', undefined, 'tempo-cartao');
     const texto = element('div', undefined, 'tempo-cartao-texto');
-    texto.append(Q.dado('h4', e.descricao), element('p', t(e.data.rotulo || e.data.tipo), 'small tempo-tipo'));
+    // No celular a data e o qualificador entram no cartão, acima do acontecimento (a coluna da data some); nos dois tamanhos só um deles aparece.
+    const noCartao = element('p', undefined, 'tempo-data-cartao'); noCartao.setAttribute('aria-hidden', 'true');
+    noCartao.append(element('span', quandoCurto(e.data), 'tempo-data-cartao-dia'), element('span', qualificador, `tempo-qualificador${exata ? '' : ' is-parcial'}`));
+    texto.append(noCartao, Q.dado('h4', e.descricao), element('p', t(e.data.rotulo || e.data.tipo), 'small tempo-tipo'));
     if (e.data.observacao) texto.append(Q.dado('p', e.data.observacao, 'small'));
     if (e.divergente) texto.append(element('p', t('Há datas divergentes do mesmo tipo neste evento. O quadro não escolhe uma: confira as fontes.'), 'notice'));
     if (e.retirado) { const aviso = element('p', `${t('Evento retirado:')} `, 'notice'); aviso.append(Q.dado('span', e.motivo_retirada)); texto.append(aviso); }
@@ -345,7 +353,7 @@ window.Quadros = (() => {
     const dados = await api('linha-tempo-listar', pedido);
     if (!vigente()) return;
     tipos = dados.tipos_data || tipos || {};
-    const corpo = [filtro(painel, casoId, carregar), element('p', t(dados.aviso || ''), 'small quadro-aviso')];
+    const corpo = [filtro(painel, casoId, carregar), comoLer(), element('p', t(dados.aviso || ''), 'small quadro-aviso')];
     if (!dados.entradas?.length) corpo.push(escolhidos ? Q.estado(element('div'), 'vazio', t('Nenhum acontecimento tem os tipos de data escolhidos.'), {acao: {rotulo: t('Mostrar tudo'), aoClicar: () => { escolhidos = null; carregar(painel, casoId); }}})
       : Q.estado(element('div'), 'vazio', t('A linha do tempo reúne os acontecimentos datados que os documentos registram.'), {titulo: t('Nenhum acontecimento com data ainda'), acao: Q.perguntar()}));
     else {

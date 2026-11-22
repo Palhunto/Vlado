@@ -117,11 +117,12 @@ test('marcas do mapa e o foco delas alcançam 3:1 sobre o fundo do próprio mapa
   }
 });
 
-test('no mapa, a ligação aberta se distingue do foco por cor e espessura, não só pelo halo (N7)', () => {
+test('no mapa, a ligação aberta se distingue do foco pela cor e pelo rótulo cheio, não só pelo halo (N7; componentes.md#mapa: aberta 4 px em acento)', () => {
   const regra = seletor => (css.match(new RegExp(`${seletor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\{([^}]*)\\}`)) || [])[1] || '';
   const aberta = regra('.mapa-ligacao.is-ativa .mapa-linha'), foco = regra('.mapa-ligacao:focus-visible .mapa-linha,.mapa-ligacao:hover .mapa-linha');
   assert.match(aberta, /stroke:var\(--mapa-ligacao-aberta\)/);
-  assert.match(aberta, /stroke-width:6/);
+  assert.match(aberta, /stroke-width:4/);   // o Design pede 4 px para a ligação selecionada; a espessura deixa de ser o que a separa do foco
+  assert.match(css, /\.mapa-pilula\.is-ativa \.mapa-pilula-fundo\{[^}]*fill:var\(--theme-accent\)/, 'o rótulo da ligação aberta fica cheio de acento');
   assert.match(foco, /stroke:var\(--mapa-ligacao-destaque\)/);
   assert.match(foco, /stroke-width:4/);
   for (const tema of [claro, escuro]) assert.notEqual(cor(tema, '--mapa-ligacao-aberta'), cor(tema, '--mapa-ligacao-destaque'));
