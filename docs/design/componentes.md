@@ -862,9 +862,11 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 
 | O que a prancha mostra | O que a tela mostra até lá | Volta quando |
 |---|---|---|
-| Busca "Buscar no texto dos documentos" no topo, antes da primeira pergunta (W02, regra 4) | a busca fica como a segunda aba, "Pesquisar no conteúdo" | houver rota de busca no texto do acervo sem análise |
+| Busca "Buscar no texto dos documentos" no topo, antes da primeira pergunta (W02, regra 4) | a busca no texto fica como a segunda aba, "Pesquisar no conteúdo" (W02, regra 1, manda a aba sumir); o campo do topo à direita é "Encontrar documento", que filtra pelo nome, no mesmo lugar e medida | houver busca no texto do acervo sem rodada de análise |
 | "12 de 60" ao lado do título (documentos usados e o limite da redação, PROD-05) | só a contagem ("12 documentos"), sem limite; o estado "Limite" da tabela acima não aparece | o servidor informar o limite de documentos da redação |
 | "Ler com OCR" (secundário) na imagem sem leitura | "○ Imagem sem leitura" sem ação; no envio, "Sem texto lido. O original ficou guardado." | houver rota para pedir OCR de um documento |
+
+**Mais dois estados de leitura** *(derivado, 22/11/2026)*, além dos três da prancha, sempre com sinal e texto (W02, regra 5): PDF com parte das páginas sem texto, "Lida em parte: confira as páginas sem texto" com o ícone `sinal-parcial` em `--theme-warning` 600; erro de leitura ou PDF protegido, "Não foi lido. O original ficou guardado." com o ícone `sinal-sem-suporte` em `--theme-danger` 600. Os dois têm "Abrir original".
 
 ---
 
