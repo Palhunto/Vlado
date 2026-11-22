@@ -34,7 +34,7 @@ OPERACOES_CONVIDADO = ('codex-status', 'codex-listar', 'codex-perguntar', 'codex
 OPERACOES_CONVERSA = ('codex-eventos', 'codex-cancelar', 'codex-original', 'codex-retomar')
 # Before a session exists (hosted mode only): Origin + JSON, no CSRF, small bodies.
 OPERACOES_PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin', 'convite-consultar', 'convite-aceitar',
-                      'senha-esqueci', 'senha-redefinir')
+                      'senha-esqueci', 'senha-redefinir', 'email-confirmar')
 ESQUECI_ENVIADO = 'Se houver uma conta com esse e-mail, a mensagem para redefinir a senha foi enviada.'
 ESQUECI_DESLIGADO = 'Nesta instalação a senha é recuperada por quem administra a redação.'
 AMBIENTES = ('homologacao', 'editorial', 'demonstracao')
@@ -45,9 +45,10 @@ ATIVOS_CONVERSA = frozenset({'preparando', 'executando', 'publicando'})
 COOKIE_PILOTO ='vlado_sessao'
 # Each person on the own account (contract, 5.4): the account is always the session's, never one named in the body.
 CONTA_PROPRIA = ('conta-ver', 'conta-atualizar', 'conta-senha-trocar', 'conta-sessoes', 'conta-sessao-encerrar',
-                 'conta-sessoes-encerrar-outras')
+                 'conta-sessoes-encerrar-outras', 'conta-email-trocar')
 _CAMPOS_DA_CONTA = {'conta-ver': set(), 'conta-atualizar': {'nome', 'idioma'}, 'conta-senha-trocar': {'senha_atual', 'senha_nova'},
-                    'conta-sessoes': set(), 'conta-sessao-encerrar': {'sessao'}, 'conta-sessoes-encerrar-outras': set()}
+                    'conta-sessoes': set(), 'conta-sessao-encerrar': {'sessao'}, 'conta-sessoes-encerrar-outras': set(),
+                    'conta-email-trocar': {'email', 'senha'}}
 _NAVEGADORES = (('Edg/', 'Edge'), ('OPR/', 'Opera'), ('Firefox/', 'Firefox'), ('Chrome/', 'Chrome'), ('Safari/', 'Safari'))
 _SISTEMAS = (('Android', 'Android'), ('iPhone', 'iOS'), ('iPad', 'iOS'), ('Windows', 'Windows'), ('Mac OS X', 'macOS'),
              ('Linux', 'Linux'))
@@ -64,7 +65,24 @@ def aparelho(agente, cliente='web'):
     return f'{navegador} · {sistema}' if sistema else navegador
 
 
-def conta_propria(root, operation, data, principal, ip=None):
+def _trocar_email(root, conta, data, ip, origem):
+    """``conta-email-trocar``: asks the password; the change only happens when the link sent to the NEW address is
+    used (``email-confirmar``). The answer is the same whether the address is free or already of another account,
+    and the messages leave in another thread, so its time is the same too; nothing is ever sent to an address in
+    use. The current address is told of the request. With the transport ``tela`` the link goes back to who asked."""
+    pedido = acesso.pedir_troca_de_email(root, conta, data.get('email'), data.get('senha'), ip)
+    link = f'{(origem or "").rstrip("/")}/confirmar-email/{pedido["token"]}'
+    if pedido['antigo']:
+        correio.enviar_depois('email_aviso', pedido['antigo'], pedido['idioma'], {}, conta=conta, raiz=root)
+    if not rotas_equipe.com_envio():
+        return {'estado': 'confirmacao_enviada', 'link': link}
+    if pedido['enviar']:
+        correio.enviar_depois('email_novo', pedido['novo'], pedido['idioma'],
+                              {'link': link, 'origem': origem, 'minutos': acesso.REDEFINICAO_MINUTOS}, conta=conta, raiz=root)
+    return {'estado': 'confirmacao_enviada'}
+
+
+def conta_propria(root, operation, data, principal, ip=None, origem=None):
     """``POST /api/conta-*``: the person on the own account. ``principal`` is the session; nothing here takes the id
     of an account, and the session that asks is told apart by its public id (never the cookie)."""
     if operation not in CONTA_PROPRIA or not isinstance(data, dict):
@@ -78,6 +96,8 @@ def conta_propria(root, operation, data, principal, ip=None):
         return {**acesso.ver_conta(root, conta), 'sessao': atual}
     if operation == 'conta-atualizar':
         return acesso.atualizar_perfil(root, conta, nome=data.get('nome'), idioma=data.get('idioma'))
+    if operation == 'conta-email-trocar':
+        return _trocar_email(root, conta, data, ip, origem)
     if operation == 'conta-senha-trocar':
         encerradas = acesso.trocar_senha(root, conta, data.get('senha_atual'), data.get('senha_nova'), atual, ip)
         perfil = acesso.ver_conta(root, conta)['conta']
@@ -237,11 +257,11 @@ class RotasContas:
         operation is audited once (`admin_recusada`, with the reason: validation, wrong password, last dono, blocked)."""
         try:
             if operation in CONTA_PROPRIA:
-                return conta_propria(self.server.root, operation, data, principal, ip=self._ip())
+                return conta_propria(self.server.root, operation, data, principal, ip=self._ip(), origem=self.server.origin)
             return rotas_equipe.executar(
                 self.server.root, operation, data, principal, ip=self._ip(), parar=self._parar_execucoes,
                 gasto_da_redacao=autorizacao.gasto_da_redacao(self.server.root, self.server.modo, principal),
-                origem=self.server.origin)
+                origem=self.server.origin, modo=self.server.modo)
         except (acesso.SenhaIncorreta, acesso.Bloqueado):
             raise  # already audited where the password is checked (`acesso.confirmar_senha`)
         except (ValueError, OSError) as exc:
@@ -396,6 +416,15 @@ class RotasContas:
                 if quem['email']:
                     correio.enviar_depois('senha_trocada', quem['email'], quem['idioma'], {}, conta=quem['id'], raiz=root)
                 self._json(200, {'estado': 'senha_redefinida'})
+            elif operation == 'email-confirmar':
+                # The link sent to the new address: the e-mail of the account changes, and the old address is told.
+                acesso.limitar_ip(self._ip(), 'confirmar_email')
+                if set(data) - {'token'}:
+                    raise ValueError('Campos inválidos na confirmação do e-mail.')
+                feito = acesso.confirmar_email(root, data.get('token'))
+                if feito['antigo']:
+                    correio.enviar_depois('email_trocado', feito['antigo'], feito['idioma'], {}, conta=feito['conta'], raiz=root)
+                self._json(200, {'estado': 'email_confirmado'})
             else:
                 acesso.limitar_ip(self._ip(), 'ativar')
                 conta = acesso.ativar(root, data.get('token'), data.get('senha'))

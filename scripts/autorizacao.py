@@ -93,14 +93,15 @@ MATRIZ: dict[str, Regra] = {}
 _linhas(MATRIZ, 'nenhum', 'L', TODOS, 'GET:/ GET:/api/sessao GET:/api/integracao GET:/api/catalogo GET:/api/cota')
 _linhas(MATRIZ, 'lote+caso+nenhum', 'L', TODOS, 'GET:/api/fila')
 # 5.4 A própria conta.
-_linhas(MATRIZ, 'nenhum', 'A', TODOS, 'sessao-sair conta-senha-trocar conta-sessao-encerrar conta-sessoes-encerrar-outras')
+_linhas(MATRIZ, 'nenhum', 'A', TODOS, 'sessao-sair conta-senha-trocar conta-sessao-encerrar conta-sessoes-encerrar-outras '
+                                      'conta-email-trocar')
 _linhas(MATRIZ, 'nenhum', 'L', TODOS, 'conta-ver conta-sessoes')
 _linhas(MATRIZ, 'nenhum', 'E', TODOS, 'conta-atualizar')
 # 5.5 A redação.
 _linhas(MATRIZ, 'nenhum', 'L', SO_DONO, 'ia-config equipe-listar equipe-atividade')
 _linhas(MATRIZ, 'nenhum', 'A', SO_DONO, 'ia-config-salvar codex-desligar equipe-papel equipe-desativar equipe-reativar '
                                         'equipe-remover equipe-teto equipe-convidar equipe-convite-reenviar '
-                                        'equipe-convite-cancelar')
+                                        'equipe-convite-cancelar equipe-recuperar equipe-recuperar-confirmar')
 _linhas(MATRIZ, 'nenhum', 'L', DONO_E_REPORTER, 'ambiente')
 _linhas(MATRIZ, 'nenhum', 'L', TODOS, 'codex-status')
 # 5.6 Apurações: criação, participação e lixeira.
@@ -165,15 +166,14 @@ _linhas(MATRIZ, 'caso', 'L', MESA, 'continuidade-resumo')
 TRANSITORIAS: dict[str, Regra] = {}
 _linhas(TRANSITORIAS, 'nenhum', 'A', SO_DONO, 'contas-listar contas-criar contas-atualizar contas-desativar '
                                               'contas-reativar contas-recuperar')
-# Operações que o contrato já define e que entram nas próximas entregas (senha por e-mail, segundo fator, ciclo de vida).
+# Operações que o contrato já define e que entram nas próximas entregas (segundo fator, ciclo de vida).
 PENDENTES = frozenset((
     'entrar-segundo-fator '
-    'conta-email-trocar conta-fator-iniciar conta-fator-confirmar conta-fator-codigos conta-fator-remover '
-    'conta-termos-aceitar conta-exportar conta-excluir '
-    'equipe-recuperar equipe-recuperar-confirmar').split())
+    'conta-fator-iniciar conta-fator-confirmar conta-fator-codigos conta-fator-remover '
+    'conta-termos-aceitar conta-exportar conta-excluir').split())
 # Antes da sessão (seção 5.3): sem papel, conferidas em `rotas_contas._publico`.
 PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin', 'convite-consultar', 'convite-aceitar',
-            'senha-esqueci', 'senha-redefinir')
+            'senha-esqueci', 'senha-redefinir', 'email-confirmar')
 _REGRAS = {**MATRIZ, **TRANSITORIAS}
 
 

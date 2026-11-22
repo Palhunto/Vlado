@@ -13,7 +13,9 @@ ficam a lista fechada dos campos e o despacho para ``acesso``, que guarda as reg
   (campo ``senha``); a senha errada conta para o teto de tentativas;
 - o convite (``equipe-convidar``, ``equipe-convite-reenviar``, ``equipe-convite-cancelar``) leva e-mail, papel e
   apurações; convidar como dono pede a senha. A mensagem sai por ``correio``; o link só volta na resposta com o
-  transporte ``tela``.
+  transporte ``tela``;
+- a recuperação do acesso de outra pessoa (``equipe-recuperar``, ``equipe-recuperar-confirmar``) pede sempre a
+  senha e tem sempre duas partes; o link vai à pessoa por e-mail e só aparece na tela na Mesa instalada.
 
 As respostas levam nomes, e-mails e gasto de colegas da própria redação e nada das apurações. Sem modelo; a única
 saída para a rede é o e-mail do convite, pelo transporte ``smtp``. Nenhum caminho vem do cliente. Este módulo não lê
@@ -28,7 +30,7 @@ import custo
 OPERACOES_CASO = ('caso-participantes', 'caso-incluir', 'caso-retirar', 'caso-responsavel')
 OPERACOES_EQUIPE = ('equipe-listar', 'equipe-papel', 'equipe-desativar', 'equipe-reativar', 'equipe-remover',
                     'equipe-teto', 'equipe-atividade', 'equipe-convidar', 'equipe-convite-reenviar',
-                    'equipe-convite-cancelar')
+                    'equipe-convite-cancelar', 'equipe-recuperar', 'equipe-recuperar-confirmar')
 OPERACOES = (*OPERACOES_CASO, *OPERACOES_EQUIPE)
 _CAMPOS = {'caso-participantes': {'caso'}, 'caso-incluir': {'caso', 'conta'}, 'caso-retirar': {'caso', 'conta'},
            'caso-responsavel': {'caso', 'conta'},
@@ -36,7 +38,8 @@ _CAMPOS = {'caso-participantes': {'caso'}, 'caso-incluir': {'caso', 'conta'}, 'c
            'equipe-reativar': {'conta'}, 'equipe-remover': {'conta', 'senha'}, 'equipe-teto': {'conta', 'teto_brl'},
            'equipe-atividade': {'limite', 'antes'},
            'equipe-convidar': {'email', 'papel', 'casos', 'idioma', 'senha'}, 'equipe-convite-reenviar': {'convite'},
-           'equipe-convite-cancelar': {'convite'}}
+           'equipe-convite-cancelar': {'convite'},
+           'equipe-recuperar': {'conta', 'senha'}, 'equipe-recuperar-confirmar': {'recuperacao', 'senha'}}
 _ACOES = {'caso-incluir': acesso.incluir_participante, 'caso-retirar': acesso.retirar_participante,
           'caso-responsavel': acesso.definir_responsavel}
 
@@ -84,7 +87,40 @@ def _convite(root, operation, data, redacao, quem, ip, origem):
     return {'convite': {**convite, 'envio': envio}, **({'link': link} if envio == 'tela' else {})}
 
 
-def executar(root, operation, data, principal, ip=None, parar=None, gasto_da_redacao=False, origem=None):
+def com_envio():
+    """Whether messages really leave (any transport but ``tela``); a wrong mail configuration reads as no."""
+    try:
+        return correio.transporte() != 'tela'
+    except ValueError:
+        return False
+
+
+def _recuperacao(root, operation, data, redacao, quem, ip, origem, modo):
+    """Recovery of another person's access (contrato de contas, 8.2): always two parties and the password of who
+    acts. The link goes to the person by e-mail; it is shown on the screen only in the installed Mesa
+    (``local-contas``), never in the hosted service, whatever the transport."""
+    contexto = {'com_envio': com_envio(), 'na_tela': modo == 'local-contas'}
+    if operation == 'equipe-recuperar':
+        feito = acesso.pedir_recuperacao(root, redacao, quem, data.get('conta'), data.get('senha'), ip, **contexto)
+        if feito['estado'] == 'aguardando_confirmacao':
+            return feito
+    else:
+        feito = acesso.confirmar_recuperacao(root, redacao, quem, data.get('recuperacao'), data.get('senha'), ip, **contexto)
+    pessoa, link = feito['destinatario'], f'{(origem or "").rstrip("/")}/redefinir/{feito["token"]}'
+    if not feito['por_email']:
+        if modo != 'local-contas':  # the store already refuses it; the hosted service never hands a link over
+            raise acesso.SoPeloOperador(acesso.SO_PELO_OPERADOR)
+        return {'estado': 'confirmada', 'conta': pessoa['id'], 'link': link}
+    try:
+        correio.enviar('recuperacao', pessoa['email'], pessoa['idioma'],
+                       {'link': link, 'origem': origem, 'horas': acesso.RECUPERACAO_HORAS}, conta=pessoa['id'])
+        envio = 'enviado'
+    except (correio.FalhaDeEnvio, correio.ErroDeCorreio):
+        envio = 'falha'  # the dono sees it and asks again in a few minutes
+    return {'estado': 'enviada', 'conta': pessoa['id'], 'envio': envio}
+
+
+def executar(root, operation, data, principal, ip=None, parar=None, gasto_da_redacao=False, origem=None, modo=None):
     """``principal`` é a conta da sessão: dele vêm a redação e quem faz, nunca do corpo do pedido. ``parar`` é
     chamado com o id de uma conta desativada ou removida, para o servidor parar as execuções dela em curso.
     ``origem`` é o endereço da própria instalação, para o link do convite."""
@@ -106,6 +142,8 @@ def executar(root, operation, data, principal, ip=None, parar=None, gasto_da_red
         return acesso.atividade(root, redacao, data.get('limite', 50), data.get('antes'))
     if 'convi' in operation:
         return _convite(root, operation, data, redacao, quem, ip, origem)
+    if 'recuperar' in operation:
+        return _recuperacao(root, operation, data, redacao, quem, ip, origem, modo)
     alvo = data.get('conta')
     if operation == 'equipe-teto':
         if 'teto_brl' not in data:

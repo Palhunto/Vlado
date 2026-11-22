@@ -706,7 +706,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 # Public, before any session: what the sign-in page may offer. Nothing of any account.
                 self._json(200, {'esqueci_senha': self._esqueci_ligado()})
                 return
-            if path == '/entrar' or re.fullmatch(r'/ativar(/[A-Za-z0-9_-]{1,100})?|/(aceitar|redefinir)/[A-Za-z0-9_-]{1,100}', path):
+            if path == '/entrar' or re.fullmatch(r'/ativar(/[A-Za-z0-9_-]{1,100})?|/(aceitar|redefinir|confirmar-email)/[A-Za-z0-9_-]{1,100}', path):
                 # Static page without case data; the token stays in the path, read by entrar.js. Like every answer,
                 # it goes with `Cache-Control: no-store` and `Referrer-Policy: no-referrer` (`_send`).
                 self._send(200, rotas_estaticas.conteudo('entrar.html'), 'text/html; charset=utf-8')

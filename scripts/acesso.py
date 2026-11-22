@@ -91,7 +91,8 @@ ATIVIDADE_DIAS = 90  # the newsroom's activity is kept for 90 days (decision 15)
 REDEFINICAO_MINUTOS = 60  # a password-reset link is valid for one hour, once (decision 15)
 REDEFINICAO_INTERVALO_MINUTOS = 5  # the same address is sent at most one reset message in this time
 CHAVE_ESQUECI = '#esqueci|'  # when a reset was last asked for an address, whether an account has it or not
-ESQUEMA = 4  # PRAGMA user_version of the store; `_ATUALIZACOES` takes an older store up to it
+RECUPERACAO_HORAS = 24  # a recovery asked by a dono: how long it waits for the second dono, and how long its link lives
+ESQUEMA = 5  # PRAGMA user_version of the store; `_ATUALIZACOES` takes an older store up to it
 ESPERA_BD_S = 10
 NOME_PADRAO_REDACAO = 'Redação'
 CREDENCIAIS = 'Login ou senha incorretos.'
@@ -179,8 +180,13 @@ CREATE INDEX convites_por_organizacao ON convites (organizacao, estado);
 CREATE INDEX convites_por_email ON convites (email);
 CREATE TABLE links (
     token_sha256 TEXT PRIMARY KEY, tipo TEXT NOT NULL, conta TEXT NOT NULL REFERENCES contas(id),
-    criado_em TEXT NOT NULL, expira_em TEXT NOT NULL);
+    criado_em TEXT NOT NULL, expira_em TEXT NOT NULL, dado TEXT);
 CREATE INDEX links_por_conta ON links (conta, tipo);
+CREATE TABLE recuperacoes (
+    id TEXT PRIMARY KEY, organizacao TEXT NOT NULL REFERENCES organizacoes(id), conta TEXT NOT NULL REFERENCES contas(id),
+    pedida_por TEXT NOT NULL, pedida_em TEXT NOT NULL, expira_em TEXT NOT NULL, estado TEXT NOT NULL DEFAULT 'pendente',
+    confirmada_por TEXT, encerrada_em TEXT);
+CREATE INDEX recuperacoes_por_organizacao ON recuperacoes (organizacao, estado);
 """
 # From each older version of the store to the next one (applied in order, each in one transaction).
 _ATUALIZACOES = {1: ('ALTER TABLE contas ADD COLUMN idioma TEXT',
@@ -198,7 +204,12 @@ _ATUALIZACOES = {1: ('ALTER TABLE contas ADD COLUMN idioma TEXT',
                      'CREATE INDEX convites_por_email ON convites (email)'),
                  3: ('CREATE TABLE links (token_sha256 TEXT PRIMARY KEY, tipo TEXT NOT NULL,'
                      ' conta TEXT NOT NULL REFERENCES contas(id), criado_em TEXT NOT NULL, expira_em TEXT NOT NULL)',
-                     'CREATE INDEX links_por_conta ON links (conta, tipo)')}
+                     'CREATE INDEX links_por_conta ON links (conta, tipo)'),
+                 4: ('ALTER TABLE links ADD COLUMN dado TEXT',
+                     'CREATE TABLE recuperacoes (id TEXT PRIMARY KEY, organizacao TEXT NOT NULL REFERENCES organizacoes(id),'
+                     ' conta TEXT NOT NULL REFERENCES contas(id), pedida_por TEXT NOT NULL, pedida_em TEXT NOT NULL,'
+                     " expira_em TEXT NOT NULL, estado TEXT NOT NULL DEFAULT 'pendente', confirmada_por TEXT, encerrada_em TEXT)",
+                     'CREATE INDEX recuperacoes_por_organizacao ON recuperacoes (organizacao, estado)')}
 
 
 class RegistroIlegivel(ValueError):
@@ -280,9 +291,15 @@ class LinkInvalido(ValueError):
     """One refusal for every password-reset link that changes nothing: unknown, used, expired, or of an account
     that is no longer active. `motivo` goes to the audit log only."""
 
-    def __init__(self, motivo='link_invalido'):
-        super().__init__(LINK_INVALIDO)
+    def __init__(self, motivo='link_invalido', mensagem=None):
+        super().__init__(mensagem or LINK_INVALIDO)
         self.motivo = motivo
+
+
+class SoPeloOperador(Recusada):
+    """A recovery the Mesa cannot complete with two parties (no other dono to confirm, or no way to hand the link to
+    the person): it is done by the operator of the service, at the terminal."""
+    status, codigo, motivo = 400, 'recuperacao_pelo_operador', 'validacao'
 
 
 def agora() -> datetime:
@@ -1295,7 +1312,8 @@ def equipe(root: Path, organizacao: str) -> dict:
             ultimo = tx.um('SELECT MAX(ultimo_uso) AS em FROM sessoes WHERE conta = ?', conta['id'])['em']
             pessoas.append({**_publico(tx, conta, momento), 'responsavel_de': _alcance(tx, conta)[1],
                             'sessao_aberta': bool(ultimo), 'ultimo_uso': ultimo})
-        return {'redacao': dict(redacao), 'pessoas': pessoas, 'convites': _convites_pendentes(tx, organizacao, momento)}
+        return {'redacao': dict(redacao), 'pessoas': pessoas, 'convites': _convites_pendentes(tx, organizacao, momento),
+                'recuperacoes': [_recuperacao_publica(tx, r) for r in _recuperacoes_pendentes(tx, organizacao, momento)]}
 
 
 def mudar_papel(root: Path, cid, papel, por: str, organizacao: str, senha=None, ip=None) -> dict:
@@ -1653,7 +1671,11 @@ def manutencao(root: Path) -> dict:
             tx.depois.append(lambda copia=copia: registro_acesso.arquivar_evento(copia))
             tx.ex('DELETE FROM eventos WHERE n = ?', antigo['n'])
             podados += 1
-        return {'convites_vencidos': vencidos, 'eventos_podados': podados}
+        # Recovery requests nobody confirmed in time, and links past their date, are just cleared.
+        recuperacoes = tx.ex("UPDATE recuperacoes SET estado = 'expirada', encerrada_em = ? WHERE estado = 'pendente'"
+                             ' AND expira_em <= ?', _iso(momento), _iso(momento)).rowcount
+        tx.ex('DELETE FROM links WHERE expira_em <= ?', _iso(momento))
+        return {'convites_vencidos': vencidos, 'eventos_podados': podados, 'recuperacoes_vencidas': recuperacoes}
 
 
 # --- password reset by e-mail (senha-esqueci, senha-redefinir) ------------------------------------
@@ -1698,33 +1720,37 @@ def pedir_redefinicao(root: Path, email) -> tuple[str, dict] | None:
         return token, _destinatario(conta)
 
 
-def _por_link(tx: _Tx, token, tipo: str, momento: datetime):
-    """The account of a link that can still be used, or LinkInvalido."""
+def _por_link(tx: _Tx, token, tipos: tuple, momento: datetime, mensagem=None):
+    """(link, account) of a link that can still be used, or LinkInvalido."""
     if not isinstance(token, str) or not 20 <= len(token) <= 100:
-        raise LinkInvalido()
-    link = tx.um('SELECT * FROM links WHERE token_sha256 = ? AND tipo = ?', _hash(token), tipo)
-    if not link:
-        raise LinkInvalido()
+        raise LinkInvalido(mensagem=mensagem)
+    link = tx.um('SELECT * FROM links WHERE token_sha256 = ?', _hash(token))
+    if not link or link['tipo'] not in tipos:
+        raise LinkInvalido(mensagem=mensagem)
     if _data(link['expira_em']) <= momento:
-        raise LinkInvalido('link_expirado')
+        raise LinkInvalido('link_expirado', mensagem)
     conta = tx.um('SELECT * FROM contas WHERE id = ?', link['conta'])
     if not conta or not conta['ativa'] or conta['excluida_em']:
-        raise LinkInvalido()
-    return conta
+        raise LinkInvalido(mensagem=mensagem)
+    return link, conta
+
+
+LINKS_DE_SENHA = ('redefinicao', 'recuperacao')  # the person asked ("esqueci a senha") or a dono asked for the person
 
 
 def redefinir_senha(root: Path, token, senha) -> dict:
-    """Set a new password from the link of the reset message: every session of the account ends, the link (and any
-    other pending one) dies, and the person signs in next. Returns who to tell that the password changed."""
+    """Set a new password from the link of the reset message, or of the recovery a dono asked: every session of the
+    account ends, the link (and any other pending one) dies, and the person signs in next. Returns who to tell
+    that the password changed."""
     senha = _validar_senha(senha)
     try:
         with _bd(root) as tx:
-            _por_link(tx, token, 'redefinicao', agora())  # refuse before spending time on the hash
+            _por_link(tx, token, LINKS_DE_SENHA, agora())  # refuse before spending time on the hash
         with _VezDoHash():
             senha_hash = _HASHER.hash(senha)
         with _bd(root, escrever=True) as tx:
             momento = agora()
-            conta = _por_link(tx, token, 'redefinicao', momento)
+            _, conta = _por_link(tx, token, LINKS_DE_SENHA, momento)
             cid = conta['id']
             tx.ex('UPDATE contas SET senha_hash = ?, senha_definida_em = ?, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
                   ' ativacao_motivo = NULL WHERE id = ?', senha_hash, _iso(momento), cid)
@@ -1735,6 +1761,180 @@ def redefinir_senha(root: Path, token, senha) -> dict:
             return _destinatario(conta)
     except LinkInvalido as exc:
         registro_acesso.registrar('ativacao_falha', 'falha', motivo=exc.motivo, acesso_operacao='redefinir')
+        raise
+
+
+# --- recovery asked by a dono (equipe-recuperar, equipe-recuperar-confirmar) ----------------------
+
+RECUPERACAO_INEXISTENTE = 'Pedido de recuperação não encontrado.'
+SO_PELO_OPERADOR = 'Essa recuperação é feita pelo operador do serviço, pelo terminal.'
+
+
+def _link_de_recuperacao(tx: _Tx, conta, momento: datetime) -> str:
+    """A fresh recovery link of the account (the one before dies). Nothing of the account changes until it is used."""
+    token = secrets.token_urlsafe(32)
+    tx.ex("DELETE FROM links WHERE conta = ? AND tipo = 'recuperacao'", conta['id'])
+    tx.ex("INSERT INTO links (token_sha256, tipo, conta, criado_em, expira_em) VALUES (?, 'recuperacao', ?, ?, ?)",
+          _hash(token), conta['id'], _iso(momento), _iso(momento + timedelta(hours=RECUPERACAO_HORAS)))
+    return token
+
+
+def _recuperacao_publica(tx: _Tx, linha) -> dict:
+    nomes = {c['id']: c['nome'] for c in tx.todos('SELECT id, nome FROM contas WHERE id IN (?, ?) AND excluida_em IS NULL',
+                                                  linha['conta'], linha['pedida_por'])}
+    return {'id': linha['id'], 'conta': linha['conta'], 'conta_nome': nomes.get(linha['conta']),
+            'pedida_por': linha['pedida_por'], 'pedida_por_nome': nomes.get(linha['pedida_por']),
+            'pedida_em': linha['pedida_em'], 'expira_em': linha['expira_em'], 'estado': linha['estado']}
+
+
+def _recuperacoes_pendentes(tx: _Tx, organizacao: str, momento: datetime) -> list:
+    linhas = tx.todos("SELECT * FROM recuperacoes WHERE organizacao = ? AND estado = 'pendente' ORDER BY pedida_em, rowid",
+                      organizacao)
+    return [linha for linha in linhas if _data(linha['expira_em']) > momento]
+
+
+def _outros_donos(tx: _Tx, organizacao: str, *exceto) -> int:
+    return len([c for c in tx.todos("SELECT id FROM contas WHERE organizacao = ? AND papel = 'dono' AND ativa = 1"
+                                    ' AND excluida_em IS NULL AND senha_hash IS NOT NULL', organizacao)
+                if c['id'] not in exceto])
+
+
+def pedir_recuperacao(root: Path, organizacao: str, por: str, cid, senha=None, ip: str | None = None, *,
+                      com_envio: bool, na_tela: bool = False) -> dict:
+    """A dono asks the recovery of another person's access. Always two parties (contract, 8.2), always the password
+    of who asks, and the account is checked before the password.
+
+    - The person is not a dono, has an e-mail and there is real delivery (`com_envio`): the link goes to the person,
+      who is the second party; nothing changes until it is used. Returns `{estado: 'enviada', token, destinatario,
+      por_email: True}`.
+    - The person is not a dono and the link may be shown on the screen (`na_tela`: the installed Mesa, one machine
+      and one newsroom, never the hosted service): the password of who asks is the confirmation, and the link is
+      handed to who asked (decision P33). Returns `{estado: 'confirmada', ..., por_email: False}`.
+    - The person is a dono: the request waits RECUPERACAO_HORAS for a third dono (`confirmar_recuperacao`); returns
+      `{estado: 'aguardando_confirmacao', recuperacao}`. It is only accepted when, once confirmed, the link has a way
+      to the person (her e-mail with real delivery, or the screen where allowed).
+    - No third dono, or no way to hand the link over (the hosted service never shows it): SoPeloOperador."""
+    def conferir(tx, momento):
+        alvo = _conta(tx, cid, organizacao)
+        if cid == por:
+            raise ValueError('Para a sua própria senha, use "Esqueci a senha" ou a página Minha conta.')
+        if not alvo['ativa']:
+            raise ValueError('Reative a conta antes de recuperar o acesso dela.')
+        por_email = bool(com_envio and alvo['email'])
+        direto = alvo['papel'] != 'dono' and (por_email or na_tela)
+        if not direto:
+            if not (por_email or na_tela) or not _outros_donos(tx, organizacao, por, cid):
+                raise SoPeloOperador(SO_PELO_OPERADOR)
+            if any(r['conta'] == cid for r in _recuperacoes_pendentes(tx, organizacao, momento)):
+                raise ValueError('Já há um pedido de recuperação à espera de confirmação para essa conta.')
+        elif tx.um("SELECT 1 FROM links WHERE conta = ? AND tipo = 'recuperacao' AND criado_em > ?", cid,
+                   _iso(momento - timedelta(minutes=REDEFINICAO_INTERVALO_MINUTOS))):
+            raise ValueError('Um link de recuperação acabou de ser enviado a essa pessoa. Espere alguns minutos.')
+        return alvo, direto, por_email
+    with _bd(root) as tx:
+        conferir(tx, agora())  # an unknown account, or one of another newsroom, is refused before the password
+    confirmar_senha(root, por, senha, ip)
+    with _bd(root, escrever=True) as tx:
+        momento = agora()
+        alvo, direto, por_email = conferir(tx, momento)
+        _evento(tx, 'recuperacao_pedida', cid, por, momento)
+        if direto:
+            return {'estado': 'enviada' if por_email else 'confirmada', 'token': _link_de_recuperacao(tx, alvo, momento),
+                    'destinatario': _destinatario(alvo), 'por_email': por_email}
+        rid = secrets.token_hex(8)
+        while tx.um('SELECT 1 FROM recuperacoes WHERE id = ?', rid):
+            rid = secrets.token_hex(8)
+        tx.ex('INSERT INTO recuperacoes (id, organizacao, conta, pedida_por, pedida_em, expira_em) VALUES (?, ?, ?, ?, ?, ?)',
+              rid, organizacao, cid, por, _iso(momento), _iso(momento + timedelta(hours=RECUPERACAO_HORAS)))
+        return {'estado': 'aguardando_confirmacao',
+                'recuperacao': _recuperacao_publica(tx, tx.um('SELECT * FROM recuperacoes WHERE id = ?', rid))}
+
+
+def confirmar_recuperacao(root: Path, organizacao: str, por: str, rid, senha=None, ip: str | None = None, *,
+                          com_envio: bool, na_tela: bool = False) -> dict:
+    """A third dono (neither who asked nor the person) confirms a pending recovery, with the own password; the link
+    is then made. Returns `{estado, token, destinatario, por_email}`: with `por_email` the caller sends the link to
+    the person; without it (only where `na_tela` is allowed) the caller shows it to who confirmed.
+    An unknown request, one of another newsroom, an expired one and one whose asker is no longer a dono are the same."""
+    def conferir(tx, momento):
+        linha = (tx.um("SELECT * FROM recuperacoes WHERE id = ? AND organizacao = ? AND estado = 'pendente'", rid, organizacao)
+                 if isinstance(rid, str) else None)
+        if not linha or _data(linha['expira_em']) <= momento:
+            raise ValueError(RECUPERACAO_INEXISTENTE)
+        pediu = tx.um("SELECT 1 FROM contas WHERE id = ? AND organizacao = ? AND papel = 'dono' AND ativa = 1"
+                      ' AND excluida_em IS NULL', linha['pedida_por'], organizacao)
+        alvo = tx.um('SELECT * FROM contas WHERE id = ? AND excluida_em IS NULL', linha['conta'])
+        if not pediu or not alvo or not alvo['ativa']:
+            raise ValueError(RECUPERACAO_INEXISTENTE)
+        if por in (linha['pedida_por'], linha['conta']):
+            raise ValueError('A confirmação precisa vir de outro dono: nem de quem pediu, nem da própria pessoa.')
+        por_email = bool(com_envio and alvo['email'])
+        if not por_email and not na_tela:
+            raise SoPeloOperador(SO_PELO_OPERADOR)
+        return linha, alvo, por_email
+    with _bd(root) as tx:
+        conferir(tx, agora())
+    confirmar_senha(root, por, senha, ip)
+    with _bd(root, escrever=True) as tx:
+        momento = agora()
+        linha, alvo, por_email = conferir(tx, momento)
+        tx.ex("UPDATE recuperacoes SET estado = 'confirmada', confirmada_por = ?, encerrada_em = ? WHERE id = ?",
+              por, _iso(momento), linha['id'])
+        _evento(tx, 'recuperacao_confirmada', alvo['id'], por, momento)
+        return {'estado': 'enviada' if por_email else 'confirmada', 'token': _link_de_recuperacao(tx, alvo, momento),
+                'destinatario': _destinatario(alvo), 'por_email': por_email}
+
+
+# --- the own e-mail (conta-email-trocar, email-confirmar) -----------------------------------------
+
+LINK_DE_EMAIL_INVALIDO = 'Link inválido, usado ou vencido. Peça outro em Minha conta.'
+
+
+def pedir_troca_de_email(root: Path, cid, email, senha=None, ip: str | None = None) -> dict:
+    """The person asks to change the own e-mail (or to give one, for an account that came without): asks the
+    password, and the change only happens when the link sent to the NEW address is used.
+
+    An address that another account already has, of any newsroom, gets the same answer as a free one: the request
+    is kept, without effect, and `enviar` tells the caller to send nothing to it. Returns
+    `{token, novo, idioma, enviar, antigo}`; `antigo` is the current address, to be told of the request."""
+    novo = _validar_email(email)
+    confirmar_senha(root, cid, senha, ip)
+    token = secrets.token_urlsafe(32)
+    with _bd(root, escrever=True) as tx:
+        conta = _conta(tx, cid)
+        momento = agora()
+        if conta['email'] == novo:
+            raise ValueError('Esse já é o e-mail da conta.')
+        if tx.um("SELECT 1 FROM links WHERE conta = ? AND tipo = 'email' AND criado_em > ?", cid,
+                 _iso(momento - timedelta(minutes=REDEFINICAO_INTERVALO_MINUTOS))):
+            raise ValueError('Você pediu essa troca há pouco. Espere alguns minutos para pedir de novo.')
+        em_uso = bool(tx.um('SELECT 1 FROM contas WHERE email = ?', novo))
+        tx.ex("DELETE FROM links WHERE conta = ? AND tipo = 'email'", cid)
+        tx.ex("INSERT INTO links (token_sha256, tipo, conta, criado_em, expira_em, dado) VALUES (?, 'email', ?, ?, ?, ?)",
+              _hash(token), cid, _iso(momento), _iso(momento + timedelta(minutes=REDEFINICAO_MINUTOS)), novo)
+        _evento(tx, 'email_troca_pedida', cid, cid, momento, **({'motivo': 'email_em_uso'} if em_uso else {}))
+        return {'token': token, 'novo': novo, 'idioma': conta['idioma'] or IDIOMAS[0], 'enviar': not em_uso,
+                'antigo': conta['email'], 'conta': cid}
+
+
+def confirmar_email(root: Path, token) -> dict:
+    """The link sent to the new address was opened: the account's e-mail changes, and with it the identifier of the
+    sign-in. Every pending link of the account dies. A link of an address that got an account meanwhile changes
+    nothing, with the refusal of any dead link."""
+    try:
+        with _bd(root, escrever=True) as tx:
+            momento = agora()
+            link, conta = _por_link(tx, token, ('email',), momento, LINK_DE_EMAIL_INVALIDO)
+            if tx.um('SELECT 1 FROM contas WHERE email = ?', link['dado']):
+                raise LinkInvalido('email_em_uso', LINK_DE_EMAIL_INVALIDO)
+            antigo = conta['email']
+            _limpar_tentativas(tx, conta)
+            tx.ex('UPDATE contas SET email = ? WHERE id = ?', link['dado'], conta['id'])
+            tx.ex('DELETE FROM links WHERE conta = ?', conta['id'])
+            _evento(tx, 'email_trocado', conta['id'], conta['id'], momento, campos=['email'])
+            return {'conta': conta['id'], 'novo': link['dado'], 'antigo': antigo, 'idioma': conta['idioma'] or IDIOMAS[0]}
+    except LinkInvalido as exc:
+        registro_acesso.registrar('ativacao_falha', 'falha', motivo=exc.motivo, acesso_operacao='confirmar_email')
         raise
 
 

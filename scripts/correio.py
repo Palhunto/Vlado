@@ -74,6 +74,44 @@ MODELOS = {
                'To choose a new password, open this address:\n{link}\n\n'
                'The address is valid for {minutos} minutes and can be used only once.\n'
                'If it was not you, ignore this message: your password stays the same.\n')}),
+    'recuperacao': ('recuperacao', {
+        'pt': ('Recuperação do seu acesso ao Vlado',
+               'Quem administra a sua redação no Vlado pediu a recuperação do seu acesso.\n\n'
+               'Para escolher uma senha nova, abra este endereço:\n{link}\n\n'
+               'O endereço vale por {horas} horas e só pode ser usado uma vez. Nada muda na sua conta até você usá-lo.\n'
+               'Se você não esperava esta mensagem, ignore-a e avise quem administra a redação.\n'),
+        'en': ('Recovery of your access to Vlado',
+               'Whoever runs your newsroom on Vlado asked for the recovery of your access.\n\n'
+               'To choose a new password, open this address:\n{link}\n\n'
+               'The address is valid for {horas} hours and can be used only once. Nothing changes in your account until '
+               'you use it.\nIf you were not expecting this message, ignore it and tell whoever runs the newsroom.\n')}),
+    'email_novo': ('email_novo', {
+        'pt': ('Confirme o novo e-mail da sua conta no Vlado',
+               'Alguém pediu para usar este endereço como e-mail de uma conta do Vlado.\n\n'
+               'Para confirmar, abra este endereço:\n{link}\n\n'
+               'O endereço vale por {minutos} minutos e só pode ser usado uma vez.\n'
+               'Se não foi você, ignore esta mensagem: nada muda.\n'),
+        'en': ('Confirm the new e-mail of your Vlado account',
+               'Someone asked to use this address as the e-mail of a Vlado account.\n\n'
+               'To confirm, open this address:\n{link}\n\n'
+               'The address is valid for {minutos} minutes and can be used only once.\n'
+               'If it was not you, ignore this message: nothing changes.\n')}),
+    'email_aviso': ('email_novo', {
+        'pt': ('Pedido de troca do e-mail da sua conta no Vlado',
+               'Alguém, com a senha da sua conta no Vlado, pediu para trocar o e-mail dela por outro endereço. A troca só '
+               'acontece se o novo endereço for confirmado.\n\n'
+               'Se não foi você, troque a sua senha agora e avise quem administra a sua redação.\n'),
+        'en': ('Request to change the e-mail of your Vlado account',
+               'Someone, with the password of your Vlado account, asked to change its e-mail to another address. The '
+               'change only happens if the new address is confirmed.\n\n'
+               'If it was not you, change your password now and tell whoever runs your newsroom.\n')}),
+    'email_trocado': ('email_novo', {
+        'pt': ('O e-mail da sua conta no Vlado foi trocado',
+               'O e-mail da sua conta no Vlado foi trocado por outro endereço, e este deixou de valer para entrar.\n\n'
+               'Se não foi você, avise quem administra a sua redação agora.\n'),
+        'en': ('The e-mail of your Vlado account was changed',
+               'The e-mail of your Vlado account was changed to another address, and this one no longer signs in.\n\n'
+               'If it was not you, tell whoever runs your newsroom now.\n')}),
     'senha_trocada': ('senha_trocada', {
         'pt': ('A senha da sua conta no Vlado foi trocada',
                'A senha da sua conta no Vlado acaba de ser trocada, e as outras sessões da conta foram encerradas.\n\n'
