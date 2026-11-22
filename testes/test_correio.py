@@ -148,12 +148,12 @@ class ModelosTest(Base):
             self.assertIn(link, corpo)
             self.assertIn(prazo, corpo)
             self.assertEqual(corpo.count('http'), 1)
-        for tipo in ('email_aviso', 'email_trocado', 'senha_trocada'):  # notices: nothing to click
+        for tipo in ('email_aviso', 'email_trocado', 'senha_trocada', 'fator_alterado'):  # notices: nothing to click
             for idioma in correio.IDIOMAS:
                 self.assertNotIn('http', correio.montar(tipo, idioma, {})[1])
         # What goes to the audit log is the kind of message, out of a closed list.
         self.assertEqual({rotulo for rotulo, _ in correio.MODELOS.values()},
-                         {'convite', 'redefinicao', 'recuperacao', 'email_novo', 'senha_trocada'})
+                         {'convite', 'redefinicao', 'recuperacao', 'email_novo', 'senha_trocada', 'fator_alterado'})
 
     def test_enviar_depois_nao_faz_quem_chamou_esperar_e_guarda_o_transporte_do_pedido(self):
         with correio.usar('simulado'):

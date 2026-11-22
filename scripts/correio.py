@@ -112,6 +112,13 @@ MODELOS = {
         'en': ('The e-mail of your Vlado account was changed',
                'The e-mail of your Vlado account was changed to another address, and this one no longer signs in.\n\n'
                'If it was not you, tell whoever runs your newsroom now.\n')}),
+    'fator_alterado': ('fator_alterado', {
+        'pt': ('O segundo fator da sua conta no Vlado foi alterado',
+               'O segundo fator da sua conta no Vlado (o aplicativo autenticador ou os códigos de reserva) acaba de ser '
+               'alterado.\n\nSe não foi você, troque a sua senha agora e avise quem administra a sua redação.\n'),
+        'en': ('The second factor of your Vlado account was changed',
+               'The second factor of your Vlado account (the authenticator app or the reserve codes) has just been '
+               'changed.\n\nIf it was not you, change your password now and tell whoever runs your newsroom.\n')}),
     'senha_trocada': ('senha_trocada', {
         'pt': ('A senha da sua conta no Vlado foi trocada',
                'A senha da sua conta no Vlado acaba de ser trocada, e as outras sessões da conta foram encerradas.\n\n'

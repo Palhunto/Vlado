@@ -32,7 +32,7 @@ OPERACOES_CONVIDADO = ('codex-status', 'codex-listar', 'codex-perguntar', 'codex
 OPERACOES_CONVERSA = ('codex-eventos', 'codex-cancelar', 'codex-original', 'codex-retomar')
 # Before a session exists (hosted mode only): Origin + JSON, no CSRF, small bodies.
 OPERACOES_PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin', 'convite-consultar', 'convite-aceitar',
-                      'senha-esqueci', 'senha-redefinir', 'email-confirmar')
+                      'senha-esqueci', 'senha-redefinir', 'email-confirmar', 'entrar-segundo-fator')
 ESQUECI_ENVIADO = 'Se houver uma conta com esse e-mail, a mensagem para redefinir a senha foi enviada.'
 ESQUECI_DESLIGADO = 'Nesta instalação a senha é recuperada por quem administra a redação.'
 AMBIENTES = ('homologacao', 'editorial', 'demonstracao')
@@ -43,10 +43,14 @@ ATIVOS_CONVERSA = frozenset({'preparando', 'executando', 'publicando'})
 COOKIE_PILOTO ='vlado_sessao'
 # Each person on the own account (contract, 5.4): the account is always the session's, never one named in the body.
 CONTA_PROPRIA = ('conta-ver', 'conta-atualizar', 'conta-senha-trocar', 'conta-sessoes', 'conta-sessao-encerrar',
-                 'conta-sessoes-encerrar-outras', 'conta-email-trocar')
+                 'conta-sessoes-encerrar-outras', 'conta-email-trocar', 'conta-fator-iniciar', 'conta-fator-confirmar',
+                 'conta-fator-codigos', 'conta-fator-remover')
 _CAMPOS_DA_CONTA = {'conta-ver': set(), 'conta-atualizar': {'nome', 'idioma'}, 'conta-senha-trocar': {'senha_atual', 'senha_nova'},
                     'conta-sessoes': set(), 'conta-sessao-encerrar': {'sessao'}, 'conta-sessoes-encerrar-outras': set(),
-                    'conta-email-trocar': {'email', 'senha'}}
+                    'conta-email-trocar': {'email', 'senha'}, 'conta-fator-iniciar': {'senha', 'codigo'},
+                    'conta-fator-confirmar': {'codigo'}, 'conta-fator-codigos': {'senha', 'codigo'},
+                    'conta-fator-remover': {'senha'}}
+COOKIE_SEGUNDO_PASSO = 'vlado_passo2'  # the ticket between the right password and the second factor (five minutes)
 _NAVEGADORES = (('Edg/', 'Edge'), ('OPR/', 'Opera'), ('Firefox/', 'Firefox'), ('Chrome/', 'Chrome'), ('Safari/', 'Safari'))
 _SISTEMAS = (('Android', 'Android'), ('iPhone', 'iOS'), ('iPad', 'iOS'), ('Windows', 'Windows'), ('Mac OS X', 'macOS'),
              ('Linux', 'Linux'))
@@ -80,6 +84,25 @@ def _trocar_email(root, conta, data, ip, origem):
     return {'estado': 'confirmacao_enviada'}
 
 
+def _fator(root, operation, conta, data, ip):
+    """``conta-fator-*``: the own second factor. The seed and the reserve codes go out once, in the answer of the
+    operation that makes them, and never again; the person is told by e-mail of every change."""
+    if operation == 'conta-fator-iniciar':
+        return acesso.iniciar_fator(root, conta, data.get('senha'), data.get('codigo'), ip)
+    if operation == 'conta-fator-confirmar':
+        resposta = {'estado': 'fator_ativado', 'codigos_de_reserva': acesso.confirmar_fator(root, conta, data.get('codigo'), ip)}
+    elif operation == 'conta-fator-codigos':
+        resposta = {'estado': 'codigos_gerados',
+                    'codigos_de_reserva': acesso.novos_codigos_do_fator(root, conta, data.get('senha'), data.get('codigo'), ip)}
+    else:
+        acesso.remover_fator(root, conta, data.get('senha'), ip)
+        resposta = {'estado': 'fator_removido'}
+    perfil = acesso.ver_conta(root, conta)['conta']
+    if perfil['email']:
+        correio.enviar_depois('fator_alterado', perfil['email'], perfil['idioma'], {}, conta=conta, raiz=root)
+    return resposta
+
+
 def conta_propria(root, operation, data, principal, ip=None, origem=None):
     """``POST /api/conta-*``: the person on the own account. ``principal`` is the session; nothing here takes the id
     of an account, and the session that asks is told apart by its public id (never the cookie)."""
@@ -96,6 +119,8 @@ def conta_propria(root, operation, data, principal, ip=None, origem=None):
         return acesso.atualizar_perfil(root, conta, nome=data.get('nome'), idioma=data.get('idioma'))
     if operation == 'conta-email-trocar':
         return _trocar_email(root, conta, data, ip, origem)
+    if operation.startswith('conta-fator-'):
+        return _fator(root, operation, conta, data, ip)
     if operation == 'conta-senha-trocar':
         encerradas = acesso.trocar_senha(root, conta, data.get('senha_atual'), data.get('senha_nova'), atual, ip)
         perfil = acesso.ver_conta(root, conta)['conta']
@@ -128,6 +153,15 @@ class RotasContas:
         except (ValueError, OSError):
             self.acesso_indisponivel = True  # answered with 503, never with a dropped connection
             return None, sid
+
+    def _bilhete_do_segundo_passo(self):
+        cookie = SimpleCookie()
+        try:
+            cookie.load(self.headers.get('Cookie', ''))
+        except Exception:  # noqa: BLE001 - a malformed cookie header means no ticket
+            return None
+        morsel = cookie.get(COOKIE_SEGUNDO_PASSO)
+        return morsel.value if morsel else None
 
     def _endereco_socket(self):
         """The TCP peer, never a forwarded header."""
@@ -314,6 +348,16 @@ class RotasContas:
                 self._send(200, json.dumps({'conta': publica, 'csrf': csrf, 'destino': autorizacao.destino_inicial(conta)},
                                            ensure_ascii=False).encode('utf-8'),
                            extra={'Set-Cookie': f'{COOKIE_PILOTO}={sid}; {self.server.atributos_cookie()}'})
+            elif operation == 'entrar-segundo-fator':
+                # The second step: the ticket is in a cookie of its own, good for this operation only.
+                if set(data) - {'codigo'}:
+                    raise ValueError('Campos inválidos no segundo passo da entrada.')
+                sid, csrf, conta = acesso.entrar_segundo_fator(root, self._bilhete_do_segundo_passo(), data.get('codigo'),
+                                                               ip=self._ip())
+                publica = {k: conta[k] for k in ('id', 'nome', 'login', 'papel', 'casos')}
+                self._send(200, json.dumps({'conta': publica, 'csrf': csrf, 'destino': autorizacao.destino_inicial(conta)},
+                                           ensure_ascii=False).encode('utf-8'),
+                           extra={'Set-Cookie': f'{COOKIE_PILOTO}={sid}; {self.server.atributos_cookie()}'})
             elif operation == 'ativacao-consultar':
                 acesso.limitar_ip(self._ip(), 'consultar')
                 self._json(200, acesso.consultar_ativacao(root, data.get('token')))
@@ -351,7 +395,7 @@ class RotasContas:
                 acesso.limitar_ip(self._ip(), 'redefinir')
                 if set(data) - {'token', 'senha', 'codigo'}:
                     raise ValueError('Campos inválidos na redefinição de senha.')
-                quem = acesso.redefinir_senha(root, data.get('token'), data.get('senha'))
+                quem = acesso.redefinir_senha(root, data.get('token'), data.get('senha'), data.get('codigo'), self._ip())
                 if quem['email']:
                     correio.enviar_depois('senha_trocada', quem['email'], quem['idioma'], {}, conta=quem['id'], raiz=root)
                 self._json(200, {'estado': 'senha_redefinida'})
@@ -368,10 +412,19 @@ class RotasContas:
                 acesso.limitar_ip(self._ip(), 'ativar')
                 conta = acesso.ativar(root, data.get('token'), data.get('senha'))
                 self._json(200, {'estado': 'senha_definida', 'login': conta['login']})
+        except acesso.PedeSegundoFator as passo:
+            # The password was right and the account has a second factor: no session, only the five-minute ticket.
+            self._send(200, json.dumps({'estado': 'segundo_fator'}).encode('utf-8'), extra={
+                'Set-Cookie': f'{COOKIE_SEGUNDO_PASSO}={passo.bilhete}; {self.server.atributos_cookie()}; '
+                              f'Max-Age={acesso.ENTRADA_MINUTOS * 60}'})
         except acesso.RegistroIlegivel:
             self._json(503, {'estado': 'indisponivel', 'erro': 'Registro de acesso indisponível. Avise a administração.'})
         except acesso.Bloqueado as exc:
             self._json(429, {'estado': 'bloqueado', 'codigo': 'bloqueado', 'erro': str(exc)})
+        except acesso.EntradaExpirada as exc:
+            self._json(401, {'estado': 'credenciais', 'codigo': 'entrada_expirada', 'erro': str(exc)})
+        except acesso.CodigoInvalido as exc:  # the second factor, in the second step or in a reset by e-mail
+            self._json(403, {'estado': 'proibido', 'codigo': 'codigo_invalido', 'erro': str(exc)})
         except acesso.CredenciaisInvalidas as exc:
             self._json(401, {'estado': 'credenciais', 'codigo': 'credenciais', 'erro': str(exc)})
         except acesso.AtivacaoInvalida as exc:

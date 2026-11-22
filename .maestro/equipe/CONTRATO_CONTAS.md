@@ -689,7 +689,7 @@ O mesmo cuidado vale para todo texto que uma conta escreve e outra lê: nome de 
 
 ## 10. O que muda para os outros agentes
 
-**Arquivos de Contas** (escreve só neles): `scripts/acesso.py`, `scripts/rotas_contas.py`, os demais `scripts/rotas_*.py` e `scripts/interface_pesquisa.py` (nesta onda, pela tabela "Quem escreve onde"), e os módulos novos `scripts/autorizacao.py`, `scripts/correio.py`, `scripts/segundo_fator.py` e `scripts/rotas_equipe.py`. Testes em arquivos novos (`test_matriz_contas.py`, `test_isolamento_redacoes.py`, `test_migracao_contas.py`, `test_convites.py`, `test_redefinicao_senha.py`, `test_recuperacao.py`, `test_segundo_fator.py`, `test_sessoes_conta.py`, `test_equipe.py`, `test_ciclo_conta.py`, `test_correio.py`), mais `test_acesso.py` e `test_autorizacao.py`, que são de autorização.
+**Arquivos de Contas** (escreve só neles): `scripts/acesso.py`, `scripts/rotas_contas.py`, os demais `scripts/rotas_*.py` e `scripts/interface_pesquisa.py` (nesta onda, pela tabela "Quem escreve onde"), e os módulos novos `scripts/autorizacao.py`, `scripts/correio.py`, `scripts/segundo_fator.py` e `scripts/rotas_equipe.py`. Testes em arquivos novos (`test_matriz_contas.py`, `test_isolamento_redacoes.py`, `test_migracao_contas.py`, `test_convites.py`, `test_redefinicao_senha.py`, `test_recuperacao.py`, `test_segundo_fator.py`, `test_fator_contas.py`, `test_sessoes_conta.py`, `test_equipe.py`, `test_ciclo_conta.py`, `test_correio.py`), mais `test_acesso.py` e `test_autorizacao.py`, que são de autorização.
 
 **Pedidos, um por dono de arquivo. Nenhum é feito por Contas sem o aval do Maestro.**
 
@@ -803,9 +803,21 @@ Do que a entrega 3 decide, além do texto da seção 8.1:
 - `email-confirmar {token}` troca o e-mail, que passa a ser o identificador da entrada; a sessão aberta continua. Uma conta que veio sem e-mail ganha um por aqui, e o login antigo dela continua valendo.
 - `GET /confirmar-email/<token>` serve a mesma página de `/entrar`, como as outras.
 
+**Entrega 4a, segundo fator (primeira parte):** `scripts/segundo_fator.py` (as contas de TOTP, os códigos de reserva e a semente cifrada), as operações `conta-fator-iniciar`, `conta-fator-confirmar`, `conta-fator-codigos` e `conta-fator-remover` e a entrada em dois passos, com a pública `entrar-segundo-fator`. Rodam hoje `-p test_segundo_fator.py` e `-p test_fator_contas.py`. O que ela decide, além do texto da seção 8.2:
+
+- O cadastro tem dois tempos. `conta-fator-iniciar {senha}` devolve a semente uma vez, como texto (`segredo`) e como endereço `otpauth://`; nada muda até `conta-fator-confirmar {codigo}` provar que o aplicativo a tem, o que devolve os dez códigos de reserva, mostrados uma vez. Um cadastro não confirmado em 15 minutos recomeça. Quem já tem o fator e troca de aparelho manda também um código do fator atual (ou um de reserva) em `conta-fator-iniciar`; o fator antigo vale até o novo ser confirmado.
+- `conta-fator-codigos {senha, codigo}` gera dez códigos novos e os antigos param de valer. `conta-fator-remover {senha}` é negada a dono e editor pela matriz.
+- Um código errado responde 403 `codigo_invalido` e conta: cinco seguidos bloqueiam por 15 minutos o segundo fator daquela conta nas operações que o pedem (429), num contador separado do da senha de confirmação e do da entrada.
+- Entrada: com a senha certa numa conta que tem o fator, `entrar` responde `{estado: "segundo_fator"}` sem abrir sessão e manda o bilhete do segundo passo num cookie próprio (`vlado_passo2`, `HttpOnly`, 5 minutos), que não é uma sessão e só serve a `entrar-segundo-fator {codigo}`. Código do aplicativo ou de reserva; resposta igual à de `entrar`. Bilhete desconhecido, vencido, já usado ou morto por cinco códigos errados responde 401 `entrada_expirada`. Os códigos errados contam também no contador de tentativas da entrada daquele identificador e endereço.
+- Nem o código do aplicativo nem o de reserva vale duas vezes: o armazenamento guarda o último passo aceito e a data de uso de cada código de reserva.
+- `senha-redefinir` de conta com o fator pede também `codigo` (403 `codigo_invalido` sem ele). O link de recuperação pedido por um dono (seção 8.2) não pede: ele retira o fator, que a pessoa cadastra de novo. A recuperação feita pelo operador, no terminal, também o retira.
+- A pessoa é avisada por e-mail a cada mudança do fator (ativado, removido, códigos novos), sem link.
+- A semente fica cifrada no banco, com a chave em `segredos/contas.chave`; os códigos de reserva e o bilhete do segundo passo ficam só como SHA-256. Remover a conta apaga o fator dela.
+- **Ainda não nesta parte:** a obrigação para dono e editor no `piloto` (a pendência `segundo_fator`), que entra num commit próprio porque muda todo cenário de teste do modo `piloto` e só pode ser integrada com a tela do Frontend; o teto por identificador com o modo protegido e o aparelho conhecido; e o teto global dos contadores sem conta (segunda ressalva de P28).
+
 **O que ainda não existe,** e onde o código difere do texto até lá:
 
-- As operações de `autorizacao.PENDENTES` (segundo fator, termos, exportação e exclusão da própria conta) respondem 404. As seis `contas-*` saíram com o convite por e-mail (P30, seção 5.5): respondem 404 em todos os modos, a todos os papéis, e `autorizacao.TRANSITORIAS` ficou vazia. A tela antiga "Contas de acesso" (`piloto.js`) sai na mesma integração.
+- As operações de `autorizacao.PENDENTES` (termos, exportação e exclusão da própria conta) respondem 404. As seis `contas-*` saíram com o convite por e-mail (P30, seção 5.5): respondem 404 em todos os modos, a todos os papéis, e `autorizacao.TRANSITORIAS` ficou vazia. A tela antiga "Contas de acesso" (`piloto.js`) sai na mesma integração.
 - Quem é retirado de uma apuração (`caso-retirar`) tem as execuções em curso naquela apuração paradas, como acontecia em `contas-atualizar`.
 - O perfil legado `convidado` não é mais criado pela Mesa, nem a cota diária dele é mudada por ela: as contas que o têm continuam, e o operador as administra pelo terminal.
 - A página (`GET /`), `GET /api/sessao` e `GET /api/integracao` também passam pelo portão: de uma redação suspensa, respondem 403 `redacao_suspensa` (a página, um aviso simples, sem dado nem token).

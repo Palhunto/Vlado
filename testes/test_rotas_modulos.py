@@ -37,6 +37,7 @@ OPERACOES = {
     'conta-ver', 'equipe-atividade', 'equipe-desativar', 'equipe-listar', 'equipe-papel', 'equipe-reativar',
     'equipe-remover', 'equipe-teto', 'equipe-convidar', 'equipe-convite-reenviar', 'equipe-convite-cancelar',
     'equipe-recuperar', 'equipe-recuperar-confirmar', 'conta-email-trocar',
+    'conta-fator-iniciar', 'conta-fator-confirmar', 'conta-fator-codigos', 'conta-fator-remover',
     'caderno-documentos', 'caderno-exportar', 'caderno-listar', 'caderno-original', 'caderno-salvar',
     'cobertura', 'codex-caderno-previa', 'codex-cancelar', 'codex-corpus-previa', 'codex-desligar',
     'codex-diligencias-previa', 'codex-documentos-cadastrar', 'codex-eventos', 'codex-listar',
@@ -59,11 +60,11 @@ OPERACOES = {
 
 
 class RotasModulosTest(unittest.TestCase):
-    def test_lista_branca_tem_as_131_operacoes(self):
+    def test_lista_branca_tem_as_135_operacoes(self):
         # The 114 of before without the six `contas-*`, withdrawn with the invitation by e-mail (P30), plus the four
-        # `caso-*` (contrato de contas, 5.6), seven `conta-*` (5.4) and twelve `equipe-*` (5.5).
-        self.assertEqual(len(OPERACOES), 131)
-        self.assertEqual(len(interface_pesquisa.OPERACOES_API), 131, 'operação repetida na lista branca')
+        # `caso-*` (contrato de contas, 5.6), eleven `conta-*` (5.4) and twelve `equipe-*` (5.5).
+        self.assertEqual(len(OPERACOES), 135)
+        self.assertEqual(len(interface_pesquisa.OPERACOES_API), 135, 'operação repetida na lista branca')
         self.assertFalse([o for o in interface_pesquisa.OPERACOES_API if o.startswith('contas-')])
         self.assertEqual(set(interface_pesquisa.OPERACOES_API), OPERACOES)
 

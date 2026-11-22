@@ -94,7 +94,8 @@ _linhas(MATRIZ, 'nenhum', 'L', TODOS, 'GET:/ GET:/api/sessao GET:/api/integracao
 _linhas(MATRIZ, 'lote+caso+nenhum', 'L', TODOS, 'GET:/api/fila')
 # 5.4 A própria conta.
 _linhas(MATRIZ, 'nenhum', 'A', TODOS, 'sessao-sair conta-senha-trocar conta-sessao-encerrar conta-sessoes-encerrar-outras '
-                                      'conta-email-trocar')
+                                      'conta-email-trocar conta-fator-iniciar conta-fator-confirmar conta-fator-codigos')
+_linhas(MATRIZ, 'nenhum', 'A', '—|—|sim|sim|sim', 'conta-fator-remover')  # negado a quem tem o segundo fator obrigatório
 _linhas(MATRIZ, 'nenhum', 'L', TODOS, 'conta-ver conta-sessoes')
 _linhas(MATRIZ, 'nenhum', 'E', TODOS, 'conta-atualizar')
 # 5.5 A redação.
@@ -167,12 +168,10 @@ TRANSITORIAS: dict[str, Regra] = {}
 RETIRADAS = ('contas-listar', 'contas-criar', 'contas-atualizar', 'contas-desativar', 'contas-reativar', 'contas-recuperar')
 # Operações que o contrato já define e que entram nas próximas entregas (segundo fator, ciclo de vida).
 PENDENTES = frozenset((
-    'entrar-segundo-fator '
-    'conta-fator-iniciar conta-fator-confirmar conta-fator-codigos conta-fator-remover '
     'conta-termos-aceitar conta-exportar conta-excluir').split())
 # Antes da sessão (seção 5.3): sem papel, conferidas em `rotas_contas._publico`.
 PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin', 'convite-consultar', 'convite-aceitar',
-            'senha-esqueci', 'senha-redefinir', 'email-confirmar')
+            'senha-esqueci', 'senha-redefinir', 'email-confirmar', 'entrar-segundo-fator')
 _REGRAS = {**MATRIZ, **TRANSITORIAS}
 
 
