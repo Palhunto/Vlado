@@ -4,6 +4,7 @@
 // P11.4: órgão público em ameixa (#b0508a no claro, #d46a9c no escuro) no lugar de #3d4a45.
 // P11.5: altura mínima no lugar de altura fixa onde o texto não cabia (nó do mapa, perfil da barra lateral).
 // P11.7: caminhoDeVolta() põe "‹ Apuração" antes do título "Quadros" nas telas do canvas.
+// P15.1: cinco abas nos quadros; o Comparador entra depois de Tabelas nas telas do canvas (Mapa, Tempo), no mesmo desenho.
 // P15.7: barra lateral de 256 px no lugar de 232 (mudança no canvas autorizada pelo dono em 21/11/2026), para o item ativo,
 // a cota e o perfil caberem numa linha; rótulo e contador do item não quebram.
 const PROPS = /^(padding|padding-top|padding-right|padding-bottom|padding-left|margin|margin-top|margin-right|margin-bottom|margin-left|gap|row-gap|column-gap)$/;
@@ -24,6 +25,7 @@ function aplicarDecisoes(html, {escuro = false} = {}) {
   return html
     .replace(/gap: 10px; height: 44px; padding: 0 8px/g, 'gap: 10px; min-height: 44px; padding: 0 8px')  // P11.5: perfil da barra lateral
     .replace(/(<nav aria-label="Áreas" style="width: )232px/g, '$1256px')  // P15.7: barra lateral de 256 px
+    .replace(/(<a href="#" style="([^"]*height: 44px; padding: 0 14px[^"]*)">Tabelas<\/a>)/g, '$1<a href="#" style="$2">Comparador</a>')  // P15.1: quinta aba
     .replace(/style="([^"]*)"/g, (m, s) => `style="${declaracoes(s)}"`)
     .replace(/<style>([\s\S]*?)<\/style>/g, (m, s) => `<style>${declaracoes(s)}</style>`)
     .replace(/#3d4a45/gi, ameixa)

@@ -39,7 +39,7 @@ NODE_PATH=.ferramentas/node/node_modules node docs/design/referencia/ferramentas
 
 ## Qual imagem o Frontend usa para conferir
 
-- **`com-decisoes/`**: as sete telas finais do canvas com as decisões do dono de 21/11/2026 aplicadas (grade de 4 px por arredondamento para cima, raio de 12 px em todo cartão, órgão público em ameixa, altura mínima no nó do mapa e no perfil, caminho de volta "‹ Apuração" nos quadros, Entrar em página inteira). **É contra estas que o Frontend confere** as telas do canvas (regra 5 do contrato). Geradas por `ferramentas/renderizar_com_decisoes.cjs`, que aplica `../novas/ferramentas/decisoes.cjs` ao HTML de `canvas/`.
+- **`com-decisoes/`**: as sete telas finais do canvas com as decisões do dono de 21/11/2026 aplicadas (grade de 4 px por arredondamento para cima, raio de 12 px em todo cartão, órgão público em ameixa, altura mínima no nó do mapa e no perfil, caminho de volta "‹ Apuração" nos quadros, Entrar em página inteira, barra lateral de 256 px e quinta aba "Comparador" nos quadros, P15.7 e P15.1). **É contra estas que o Frontend confere** as telas do canvas (regra 5 do contrato). Geradas por `ferramentas/renderizar_com_decisoes.cjs`, que aplica `../novas/ferramentas/decisoes.cjs` ao HTML de `canvas/`.
 - **`telas/`**: o canvas aprovado como está, sem as decisões. Continua sendo a fonte e o registro do contrato; não é substituído. Uma captura do Frontend difere destas imagens por regra nas medidas, nos raios e nas cores que as decisões mudaram.
 - **`../novas/telas/`**: as telas que o canvas não tem (diálogo, escuro do desktop, tablet, celular), aprovadas pelo dono e já com as decisões.
 - **`wireframes/`**: estrutura e regras; a cor e a medida vêm das imagens acima.

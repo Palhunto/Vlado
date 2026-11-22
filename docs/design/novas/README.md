@@ -8,7 +8,7 @@ related: ['[[componentes]]', '[[referencia/README]]', '[[mudancas-de-token]]']
 
 # Pranchas derivadas da Onda 3
 
-**Derivado, aprovado pelo dono em 21/11/2026.** As 27 pranchas foram aprovadas e regeneradas com as decisões P11 e P12 (`../componentes.md`, "Decisões do dono"): grade de 4 px, 12 px nos cartões, ameixa no órgão público, altura mínima, gaveta abaixo de 1280 px, verde cheio no item ativo do escuro. Cada imagem traz, abaixo, a faixa "Derivado · aprovado pelo dono em 21/11/2026". Elas passam a valer como referência ao lado de `../referencia/`.
+**Derivado, aprovado pelo dono em 21/11/2026.** As 27 pranchas foram aprovadas e regeneradas com as decisões P11 e P12 (`../componentes.md`, "Decisões do dono"): grade de 4 px, 12 px nos cartões, ameixa no órgão público, altura mínima, gaveta abaixo de 1280 px, verde cheio no item ativo do escuro; depois, a barra lateral de 256 px (P15.7). Cada imagem traz, abaixo, a faixa "Derivado · aprovado pelo dono em 21/11/2026". Elas passam a valer como referência ao lado de `../referencia/`.
 
 A especificação está em [`../componentes.md`](../componentes.md), seções [Diálogo de confirmação](../componentes.md#dialogo) e [Telas derivadas](../componentes.md#telas-derivadas).
 

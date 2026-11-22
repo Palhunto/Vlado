@@ -141,7 +141,7 @@ Regra que acompanha: rótulo e contador do item não quebram linha (`white-space
 
 **Decisão do dono (P12.2):** no escuro, o item ativo também é verde cheio (`#a8c79d`) com texto `#172315`; o padrão de hoje (`style.css:174`) sai.
 
-A cor do item ativo não muda no claro: `.areas>a[aria-current=page]` já tem fundo `--green` e peso 600 (`style.css:118`); o texto usa `--white` (`#fffefa`, 9,52:1), e o canvas usa branco puro (`#ffffff`, 9,61:1), diferença que não se vê. No escuro, hoje o item ativo tem fundo `--theme-active`, texto verde e uma barra interna de 3 px à esquerda (`style.css:174`); o canvas não desenha a barra lateral no escuro, então isso fica como está.
+A cor do item ativo não muda no claro: `.areas>a[aria-current=page]` já tem fundo `--green` e peso 600 (`style.css:118`); o texto usa `--white` (`#fffefa`, 9,52:1), e o canvas usa branco puro (`#ffffff`, 9,61:1), diferença que não se vê. No escuro, hoje o item ativo tem fundo `--theme-active`, texto verde e uma barra interna de 3 px à esquerda (`style.css:174`). O canvas não desenha a barra lateral no escuro; pela P12.2 o item ativo passa a verde cheio, fundo `--theme-accent` (`#a8c79d`) com texto `--theme-on-primary` (`#172315`, 8,79:1), e a barra interna sai.
 
 O que o canvas acrescenta é o contador à direita do rótulo, em 14 px, nestas formas:
 
@@ -163,7 +163,7 @@ Rótulo e contador não quebram linha (`white-space: nowrap`; contador com `flex
 --aba-ativa-fundo:var(--theme-soft); --aba-ativa-texto:var(--theme-accent);
 ```
 
-As abas dos quadros (Hipóteses, Linha do tempo, Mapa de relações, Tabelas) usam o verde suave com texto verde (8,14:1), não o verde cheio.
+As abas dos quadros (Hipóteses, Linha do tempo, Mapa de relações, Tabelas e Comparador, P15.1) usam o verde suave com texto verde (8,14:1), não o verde cheio.
 
 ## 9. Trecho citado no PDF: contorno opaco
 
