@@ -34,7 +34,7 @@ test('as fontes são WOFF2 latinas, com a mesma URL versionada no @font-face e n
   assert.equal(faces.length, 2, 'duas faces: Source Sans 3 e Source Serif 4');
   for (const face of faces) {
     assert.match(face, /format\('woff2'\)/, 'formato woff2');
-    assert.match(face, /font-weight:200 900/, 'eixo variável inteiro');
+    assert.match(face, /font-weight:400 800/, 'a declaração diz o mesmo que o arquivo: eixo de peso recortado a 400-800');
     assert.match(face, /font-display:swap/);
     const url = face.match(/url\('([^']+)'\)/)[1];
     assert.match(url, /^\/fonts\/Source(Sans3|Serif4)-latin\.woff2\?v=__V:Source(Sans3|Serif4)-latin\.woff2__$/);
@@ -45,6 +45,9 @@ test('as fontes são WOFF2 latinas, com a mesma URL versionada no @font-face e n
     const preload = [...html.matchAll(/<link rel="preload" href="([^"]+)" as="font" type="font\/woff2" crossorigin>/g)].map(m => m[1]);
     assert.ok(preload.includes(url), `o preload usa a mesma URL do @font-face: ${url}`);
   }
+  // Nenhum peso fora da faixa do arquivo (200 ou 900 sairiam sintetizados).
+  const pesos = [...css.replace(/@font-face\{[^}]*\}/g, '').matchAll(/font-weight:\s*(\d{3})/g)].map(m => Number(m[1]));
+  assert.ok(pesos.length > 20 && pesos.every(p => p >= 400 && p <= 800), `pesos usados em style.css: ${[...new Set(pesos)].join(', ')}`);
   assert.doesNotMatch(css, /\.(ttf|otf)/, 'o CSS não pede mais a fonte inteira');
   assert.match(html, /<meta name="vlado-versoes" content='__VERSOES__'>/);
 });
