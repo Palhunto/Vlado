@@ -165,6 +165,44 @@ class EnvioEmFluxoTest(Base):
         self.assertEqual(status, 403)  # elsewhere the batch type is not JSON: refused like any other type
 
 
+class NaturezaTest(Base):
+    """W02: the Documents screen has no nature field; a batch for an existing case says nothing of it."""
+
+    def natureza_do_caso(self):
+        return json.loads((self.root / 'casos/alpha/manifesto.json').read_text(encoding='utf-8'))['natureza_informada']
+
+    def test_natureza_omitida_usa_a_da_apuracao(self):
+        self.assertEqual(self.natureza_do_caso(), 'sinteticos')
+        corpo = json.dumps({'caso': 'alpha', 'arquivos': [{'nome': 'omitida.txt', 'tamanho': 18}]}).encode() + b'\n'
+        status, resposta = self.enviar(corpo + b'Documento omitido.')
+        self.assertEqual(status, 200, resposta)
+        self.assertNotIn('aviso_natureza', resposta)
+        documento = next(d for d in json.loads((self.root / 'casos/alpha/manifesto.json').read_text(encoding='utf-8'))
+                         ['documentos'] if d['nome_recebido'] == 'omitida.txt')
+        self.assertEqual(documento['natureza_informada'], 'sinteticos')
+        self.assertEqual(self.natureza_do_caso(), 'sinteticos')  # the case keeps its nature
+
+    def test_natureza_diferente_e_aceita_com_aviso_claro(self):
+        status, resposta = self.enviar(self.lote([('publico.txt', b'Documento publico.')], natureza='publicos'))
+        self.assertEqual(status, 200, resposta)
+        self.assertIn('informados como públicos, diferente da apuração (sintéticos)', resposta['aviso_natureza'])
+        self.assertEqual(self.natureza_do_caso(), 'nao_informada')
+
+    def test_mesma_natureza_sem_aviso(self):
+        status, resposta = self.enviar(self.lote([('igual.txt', b'Documento igual.')], natureza='sinteticos'))
+        self.assertEqual(status, 200, resposta)
+        self.assertNotIn('aviso_natureza', resposta)
+        self.assertEqual(self.natureza_do_caso(), 'sinteticos')
+
+    def test_caso_novo_sem_natureza_fica_nao_informada(self):
+        corpo = json.dumps({'novo': True, 'titulo': 'Apuração sintética nova',
+                            'arquivos': [{'nome': 'novo.txt', 'tamanho': 15}]}).encode() + b'\n'
+        status, resposta = self.enviar(corpo + b'Documento novo.')
+        self.assertEqual(status, 200, resposta)
+        manifesto = json.loads((self.root / 'casos' / resposta['caso_id'] / 'manifesto.json').read_text(encoding='utf-8'))
+        self.assertEqual(manifesto['natureza_informada'], 'nao_informada')
+
+
 class PrazoDoCorpoTest(Base):
     maximo_conexoes = 2
 
