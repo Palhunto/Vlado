@@ -55,7 +55,7 @@ Serifa = `--fonte-titulo` *(novo)*, Source Serif 4. Sem serifa = `--fonte-interf
 
 - Espaços do canvas: 4, 8, 12, 16, 24, 32 e 48 px na escala. **Decisão do dono (P11.8):** preenchimento, intervalo e margem fora da grade de 4 px arredondam para cima na implementação: 6 → 8, 10 → 12, 14 → 16, 18 → 20, 22 → 24 (e 2 → 4, 42 → 44). As tabelas desta especificação mostram a medida do canvas; o Frontend aplica o arredondamento, e a conferência aceita essa diferença como regra, não como divergência.
 - Raios: controle 8 px (`--raio-controle`), cartão 12 px (`--raio-cartao`), pílula (`--raio-pilula`). **Decisão do dono (P11.3):** 12 px em todos os cartões, inclusive os que o canvas desenha com 10 px (achados, caixa da pergunta, cota); 4 px só na folha do documento e no topo das barras (`--raio-folha`).
-- Alvo de toque: 44 px de altura em desktop; 48 px nos controles principais do celular e do Entrar.
+- Alvo de toque: 44 px de altura no mínimo, em toda largura; 48 px nos controles principais do celular e do Entrar. Controle principal é a ação que conclui a tarefa da tela: o botão principal, as ações empilhadas do achado aberto, "Conferir agora", "Escolher arquivos". Navegação dentro da tela, como as abas em pílula do celular (P20b), não é controle principal e fica no mínimo de 44 px.
 
 ### Foco
 
