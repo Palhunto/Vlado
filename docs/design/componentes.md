@@ -1004,8 +1004,9 @@ A resposta é sempre `{estado: "confirmacao_enviada"}`, para endereço livre e p
 **Página "Confirmar e-mail"** (`/confirmar-email/<token>`): mais uma seção do Entrar, como [aceitar convite](#aceitar-convite).
 
 - Ao abrir, a página chama `email-confirmar` com o token.
-- Sucesso: "E-mail trocado. Use o e-mail novo para entrar." e a ação principal "Abrir a Mesa". A sessão aberta continua.
-- Link inválido, usado ou vencido: o estado "Este link não vale mais", com o texto do servidor ("Link inválido, usado ou vencido. Peça outro em Minha conta.").
+- Sucesso: o cartão do Entrar com o título "E-mail confirmado", o texto "O e-mail da sua conta foi trocado. Use o novo e-mail para entrar." e o [link](#link) "Ir para a Mesa". A sessão aberta continua.
+- Link inválido, usado ou vencido: o estado "Este link não vale mais", com o texto do servidor ("Link inválido, usado ou vencido. Peça outro em Minha conta.") e o link "Ir para a entrada".
+- Textos aceitos em 22/11/2026 sobre `7c2345c` (Lume), no lugar dos que esta seção trazia.
 
 <a id="equipe"></a>
 
@@ -1163,6 +1164,8 @@ O resultado depende de como o convite saiu (campo `envio`):
 
 A tela não distingue o convite para um e-mail que tem conta em outra redação: a resposta do servidor é a mesma de qualquer outro, e a tela também (contrato, 8.1).
 
+**E-mail em título ou texto corrido** (diálogos de convite, cancelar e link): o endereço quebra só depois de "@" ou antes de um ponto (`<wbr>` nesses lugares), nunca no meio de um nome ("redacaoserena.or / g?"). Ressalva sobre `7971606`, sem barrar.
+
 **Convites pendentes** ficam na mesma tabela das pessoas, depois delas (W09), em `equipe-listar`, campo `convites`:
 
 | Coluna | Conteúdo |
@@ -1171,7 +1174,7 @@ A tela não distingue o convite para um e-mail que tem conta em outra redação:
 | Papel | o papel em texto, sem caixa: para mudar, cancela-se e convida-se de novo |
 | Apurações | como nas pessoas; "Todas" para dono |
 | Uso no mês | "—" |
-| Ação | "Reenviar" e "Cancelar convite", os dois com cara de [link](#link) e altura mínima 44, um ao lado do outro, com intervalo de 16 e quebra |
+| Ação | "Reenviar" e "Cancelar convite", os dois com cara de [link](#link) e altura mínima 44, um ao lado do outro, com intervalo de 16, numa coluna de ações com largura mínima de 204 px (aceito em 22/11/2026 sobre `7971606`) |
 
 No celular, cada convite vira um cartão depois dos cartões das pessoas, com as duas ações em botões secundários de largura cheia.
 
@@ -1195,7 +1198,9 @@ A atividade não leva o e-mail, que é dado de quem ainda não é da redação.
 
 ### Aceitar convite (W10) e redefinir a senha
 
-*(Derivado, 22/11/2026.)* São seções novas da página do Entrar (`entrar.html`), irmãs de "Definir sua senha" e "Criar administrador". Usam o mesmo [formulário de entrada](#entrar), com a mesma página, cartão, campos de 48 px, botão grande e rodapé. No desktop, que o canvas não desenha, o cartão fica centrado, com até 440 px de largura. O token vem do caminho da página e é lido pelo script; tem 43 caracteres (letras, números, `_` e `-`). A página não carrega nada de fora (W10 e contrato, 5.2). Combinado com Contas em 22/11/2026: `GET /aceitar/<token>` e `GET /redefinir/<token>` servem o mesmo `entrar.html` de `/entrar` e `/ativar/<token>`, com `Referrer-Policy: no-referrer` e `Cache-Control: no-store`; o script abre a seção pelo caminho.
+*(Derivado, 22/11/2026.)* **Foco ao trocar de estado:** quando o cartão troca de estado ("Este convite não vale mais", "E-mail confirmado", "Senha nova salva"), o foco vai para o título, para o leitor de tela anunciar. O título recebe `tabindex="-1"` e **não mostra o anel** (`outline: none` só em `[tabindex="-1"]:focus`). O anel é sinal de controle, e um título não é controle. Em todo elemento interativo o anel continua como está.
+
+São seções novas da página do Entrar (`entrar.html`), irmãs de "Definir sua senha" e "Criar administrador". Usam o mesmo [formulário de entrada](#entrar), com a mesma página, cartão, campos de 48 px, botão grande e rodapé. No desktop, que o canvas não desenha, o cartão fica centrado, com até 440 px de largura. O token vem do caminho da página e é lido pelo script; tem 43 caracteres (letras, números, `_` e `-`). A página não carrega nada de fora (W10 e contrato, 5.2). Combinado com Contas em 22/11/2026: `GET /aceitar/<token>` e `GET /redefinir/<token>` servem o mesmo `entrar.html` de `/entrar` e `/ativar/<token>`, com `Referrer-Policy: no-referrer` e `Cache-Control: no-store`; o script abre a seção pelo caminho.
 
 **Aceitar convite** (`/aceitar/<token>`). Ao abrir, a página chama `convite-consultar` com o token. Enquanto espera, o cartão mostra o esqueleto curto. O idioma da página é o do convite (`idioma`); "English" ou "Português" no rodapé troca.
 
@@ -1207,7 +1212,7 @@ A atividade não leva o e-mail, que é dado de quem ainda não é da redação.
 | E-mail | não é campo: o e-mail do convite está no texto e não muda aqui (W10, regra 3). Um `input` oculto com `autocomplete="username"` e o e-mail permite ao gerenciador de senhas guardar o par certo |
 | Seu nome | campo, `autocomplete="name"`, até 120 caracteres; recebe o foco inicial |
 | Crie uma senha | [campo de senha](#campo) com "Mostrar", `autocomplete="new-password"`; apoio "De 12 a 256 caracteres. Pode colar ou usar o gerenciador de senhas." (W10). Um campo só, como no W10 |
-| Termos | caixa de marcar "Li e aceito os termos de uso e a política de privacidade do teste.", com os dois links da própria instalação, obrigatória, só quando `termos_versao` não é nulo; envia a versão lida ([exceções](#contas-excecoes)) |
+| Termos | caixa de marcar "Li e aceito os termos de uso e a política de privacidade do teste.", obrigatória, só quando `termos_versao` não é nulo; envia a versão lida ([exceções](#contas-excecoes)). "termos de uso" leva a `/termos` e "política de privacidade" a `/privacidade`, páginas da própria instalação que entram com os textos da Documentação (D6). Os dois abrem em outra aba, para o formulário não se perder (`target="_blank"`, `rel="noopener"`), e o nome acessível de cada um termina em "(abre em nova aba)". Enquanto `termos_versao` vier nulo, a caixa não aparece; a caixa sem os links, como está em `7c2345c`, não chega a ser vista e não barra. Os links entram junto com as páginas |
 | Ação | principal grande "Criar conta e entrar" ("Criando a conta…") |
 | Aviso de teste | abaixo da ação, o bloco de aviso do Entrar, com o texto do passo 3 do W10: "Antes de começar" (16/600) e "O Vlado está em teste. Use só documentos públicos: trechos são enviados ao provedor de IA." (14) |
 
@@ -1243,7 +1248,7 @@ A resposta de `senha-esqueci` é sempre 200 `{estado: "enviado", mensagem}`, igu
 
 A ação é a principal grande "Salvar a senha nova" ("Salvando…"). Respostas:
 
-- sucesso (200 `{estado: "senha_redefinida"}`): o cartão mostra "Senha nova salva. As sessões abertas desta conta foram encerradas. Entre com a senha nova." e a ação principal "Entrar", que leva ao Entrar;
+- sucesso (200 `{estado: "senha_redefinida"}`): o título do cartão passa a "Senha nova salva", o texto é "As sessões abertas desta conta foram encerradas. Entre com a senha nova." e a ação principal "Entrar" leva ao Entrar;
 - link desconhecido, usado ou vencido (400 `link_invalido`, uma resposta só): o estado "Este link não vale mais", com o texto do servidor ("Link inválido, usado ou vencido. Peça outro em Esqueci a senha.") e o link "Pedir outro link", que abre "Esqueci a senha";
 - 400 `senha_invalida`: o texto abaixo do campo; 400 `requisicao_invalida`: caixa de aviso;
 - senha fora do tamanho, 429 e 503: como no aceite.
