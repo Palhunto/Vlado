@@ -486,8 +486,11 @@ $('cadastro').addEventListener('submit', async event => {
   if (cadastroBusy) return;
   const files = Array.from($('cadastro-arquivos').files);
   if (!files.length) return;
+  // Ocupado antes de qualquer espera: um segundo clique durante a consulta ao servidor não manda o lote duas vezes.
+  cadastroBusy = true;
   const byStream = !!(window.Envio && await window.Envio.disponivel());
   if (!byStream && files.reduce((sum, file) => sum + file.size, 0) > 50 * 1024 * 1024) {
+    cadastroBusy = false;
     uploadError('O lote excede 50 MB. Divida o envio em lotes menores; nenhum arquivo foi enviado.'); return;
   }
   const isNew = !$('cadastro-caso').value;
@@ -495,7 +498,7 @@ $('cadastro').addEventListener('submit', async event => {
   const scope = {novo:isNew, caso:isNew ? draftCaseId : $('cadastro-caso').value,
     titulo:$('cadastro-titulo-input').value, natureza:$('cadastro-natureza').value,
     ...(isNew ? window.FontesWeb?.escopoNovo() : {})};
-  cadastroBusy = true; $('cadastro-preparar').disabled = true;
+  $('cadastro-preparar').disabled = true;
   ++inventorySequence;
   for (const control of $('cadastro').elements) control.disabled = true;
   $('cadastro-recibo').hidden = true; $('cadastro-perguntar').hidden=true;

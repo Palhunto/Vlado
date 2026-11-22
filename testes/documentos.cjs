@@ -29,7 +29,10 @@ function abrir({fluxo = true, papel = 'admin', desktop = true} = {}) {
       janela.setTimeout = (funcao, ms, ...resto) => (ms === 1500 ? setImmediate(funcao) : setTimeout(funcao, ms, ...resto));
       const original = janela.fetch;
       janela.fetch = async (endereco, opcoes) => {
-        if (String(endereco) === '/api/integracao') return {ok: true, json: async () => (fluxo ? {envio_fluxo: true} : {})};
+        if (String(endereco) === '/api/integracao') {
+          const resposta = {ok: true, json: async () => (fluxo ? {envio_fluxo: true} : {})};
+          return janela.__segurar ? janela.__segurar.then(() => resposta) : resposta;
+        }
         if (String(endereco).startsWith('/api/fila?lote=')) {
           return {ok: true, json: async () => ({lote: {lote: 'L1', caso: 'alfa', estado: 'publicado', recibo: {recebidos: 1, novos: 1, duplicados: 0, corpus_id: 'c2'},
             arquivos: [{indice: 0, estado: 'pronto', extracao: 'extraido', paginas: 2}]}})};
@@ -156,4 +159,15 @@ test('a contagem aparece uma vez só, no topo; a nota do acervo e o pé da tabel
   assert.equal(mesa.$('mesa-acervo-status').textContent, 'Os originais estão preservados; a extração não substitui a conferência.');
   assert.equal(mesa.$('mesa-acervo-lista').querySelector('.mesa-table-foot'), null);
   assert.doesNotMatch(mesa.$('mesa-acervo').textContent.replace(mesa.$('docs-contagem').textContent, ''), /\d+ documentos? (cadastrado|nesta seleção)/);
+});
+
+test('soltar arquivos duas vezes enquanto a Mesa consulta o servidor manda o lote uma vez só (B1 da Coruja)', async () => {
+  const mesa = abrir();
+  await mesa.esperar(12);
+  mesa.janela.__segurar = new Promise(resolver => { mesa.liberar = resolver; });
+  const soltar = () => { const e = new Evento('drop', {bubbles: true, cancelable: true}); e.dataTransfer = {files: [{name: 'novo.pdf', size: 500}]}; mesa.$('documentos-zona').dispatchEvent(e); };
+  soltar(); soltar();
+  await mesa.esperar(4);
+  mesa.liberar(); await mesa.esperar(8);
+  assert.equal(mesa.pedidos.length, 1);
 });

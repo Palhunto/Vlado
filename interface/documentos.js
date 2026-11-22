@@ -140,9 +140,9 @@
   let ocupado = false;
   async function enviar(arquivos, {caso, alvo, alvoRecibo, aoConcluir, aoIndisponivel}) {
     if (ocupado) return null;
-    if (!window.Envio || !(await window.Envio.disponivel())) { aoIndisponivel?.(); return null; }
-    ocupado = true;
+    ocupado = true;   // antes de qualquer espera: um segundo clique durante a consulta ao servidor não manda o lote duas vezes
     try {
+      if (!window.Envio || !(await window.Envio.disponivel())) { aoIndisponivel?.(); return null; }
       // Sem "natureza": o servidor usa a que a apuração já tem.
       const resultado = await window.Envio.enviar({escopo: {novo: false, caso}, arquivos, alvo, alvoRecibo});
       if (resultado.recebidos) { window.Envio.renderRecibo(alvoRecibo, resultado); await aoConcluir?.(resultado); }

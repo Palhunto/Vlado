@@ -99,12 +99,17 @@
       const nomeConfere = () => !campo || comparavel(campo.value) === comparavel(opcoes.nome);
       function atualizar() {
         const livre = estado === 'aberto';
-        if (campo) campo.disabled = !livre;
-        botaoAcao.disabled = !livre || !nomeConfere();
+        // Na espera nada recebe `disabled` onde há foco: o campo fica só leitura e a ação, aria-disabled; assim o foco não vai para o corpo da
+        // página (o Tab e o Esc continuam presos no diálogo) e o clique na ação é ignorado por `confirmar`.
+        if (campo) campo.readOnly = !livre;
+        botaoAcao.disabled = livre && !nomeConfere();
+        botaoAcao.setAttribute('aria-disabled', String(!livre));
         botaoCancelar.disabled = estado === 'cancelando' || (estado === 'ocupado' && !opcoes.longa);
         botaoAcao.textContent = t(estado === 'ocupado' && opcoes.ocupado ? opcoes.ocupado : (opcoes.acao || 'Confirmar'));
         if (estado === 'ocupado' || estado === 'cancelando') caixa.setAttribute('aria-busy', 'true'); else caixa.removeAttribute('aria-busy');
         progresso.hidden = !(opcoes.longa && (estado === 'ocupado' || estado === 'cancelando'));
+        const ativo = document.activeElement;
+        if (!livre && (!caixa.contains(ativo) || ativo.disabled)) (botaoCancelar.disabled ? botaoAcao : botaoCancelar).focus();
       }
       function mostrarErro(mensagem) {
         erro.textContent = mensagem ? t(mensagem) : '';
@@ -181,7 +186,8 @@
         inertes.push([irmao, !!irmao.inert]); irmao.inert = true;
       }
       atualizar();
-      caixa.showModal();
+      // Se o navegador recusar o showModal, a página não pode ficar inerte: desfaz tudo e devolve "cancelado".
+      try { caixa.showModal(); } catch (falha) { caixa.remove(); for (const [elemento, antes] of inertes) elemento.inert = antes; estado = 'fechado'; resolver(false); return; }
       const inicial = variante === 'simples' ? botaoAcao : variante === 'campo' ? campo : botaoCancelar;
       inicial.focus();
     });

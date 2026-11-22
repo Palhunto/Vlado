@@ -245,7 +245,10 @@ async function abrirCadastro({fluxo}) {
       janela.setTimeout = (funcao, ms, ...resto) => (ms === 1500 ? setImmediate(funcao) : setTimeout(funcao, ms, ...resto));   // o intervalo da fila
       const original = janela.fetch;   // o /api/integracao é lido no carregamento: a troca vem antes dos scripts
       janela.fetch = async (endereco, opcoes) => {
-        if (String(endereco) === '/api/integracao') return {ok: true, json: async () => (fluxo ? {envio_fluxo: true} : {})};
+        if (String(endereco) === '/api/integracao') {
+          const resposta = {ok: true, json: async () => (fluxo ? {envio_fluxo: true} : {})};
+          return janela.__segurar ? janela.__segurar.then(() => resposta) : resposta;   // a resposta lenta, liberada pelo teste
+        }
         if (String(endereco).startsWith('/api/fila?lote=')) return {ok: true, json: async () => ({lote})};
         return original(endereco, opcoes);
       };
@@ -298,4 +301,41 @@ test('recibo conferido: só a contagem do lote e Detalhes técnicos, plural conc
   assert.equal(destino.querySelectorAll('p')[0].textContent, '1 novo · 1 duplicado');
   mesa.janela.Envio.renderRecibo(destino, lote(0, 2, ['a.pdf', 'b.pdf']));
   assert.equal(destino.querySelectorAll('p')[0].textContent, 'nenhum novo · 2 duplicados');
+});
+
+test('clique duplo em Enviar enquanto a Mesa consulta o servidor manda o lote uma vez só, no envio em fluxo (B1 da Coruja)', async () => {
+  const mesa = await abrirCadastro({fluxo: true});
+  mesa.janela.__segurar = new Promise(resolver => { mesa.liberar = resolver; });
+  Object.defineProperty(mesa.$('cadastro-arquivos'), 'files', {value: [arquivo('a.pdf', 100)]});
+  mesa.$('cadastro-caso').value = 'alfa';
+  mesa.$('cadastro').requestSubmit();
+  mesa.$('cadastro').requestSubmit();
+  await mesa.esperar(4);
+  mesa.liberar(); await mesa.esperar(8);
+  assert.equal(mesa.pedidos.length, 1, 'um segundo clique na espera não manda o lote de novo');
+  mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', caso: 'alfa', estado: 'enfileirado', arquivos: []}});
+  await mesa.esperar(20);
+  assert.equal(mesa.$('enviar-documentos').disabled, false, 'a tela volta a ficar livre ao terminar');
+});
+
+test('clique duplo no envio em JSON de antes também manda um pedido só, e uma saída antecipada solta o ocupado', async () => {
+  const mesa = await abrirCadastro({fluxo: false});
+  mesa.janela.FileReader = class { readAsDataURL() { this.result = 'data:;base64,AAAA'; this.onload(); } };
+  mesa.janela.__segurar = new Promise(resolver => { mesa.liberar = resolver; });
+  Object.defineProperty(mesa.$('cadastro-arquivos'), 'files', {value: [arquivo('a.pdf', 100)], configurable: true});
+  mesa.$('cadastro-caso').value = 'alfa';
+  mesa.$('cadastro').requestSubmit();
+  mesa.$('cadastro').requestSubmit();
+  await mesa.esperar(4);
+  mesa.liberar(); await mesa.esperar(12);
+  assert.equal(mesa.chamadas.filter(c => c.operacao === 'cadastrar').length, 1, 'um pedido só');
+  // Lote acima de 50 MB no envio antigo: a recusa sai cedo e a tela não fica presa em "ocupado".
+  Object.defineProperty(mesa.$('cadastro-arquivos'), 'files', {value: [arquivo('enorme.pdf', 60 * 1024 * 1024)], configurable: true});
+  mesa.janela.__segurar = null;
+  mesa.$('cadastro').requestSubmit();
+  await mesa.esperar(8);
+  assert.match(mesa.$('cadastro-erro').textContent, /O lote excede 50 MB/);
+  mesa.$('cadastro').requestSubmit();
+  await mesa.esperar(8);
+  assert.match(mesa.$('cadastro-erro').textContent, /O lote excede 50 MB/, 'um novo envio ainda é tentado (não ficou preso)');
 });
