@@ -58,7 +58,7 @@ from indice_sqlite import ID_CASO, caminho_rodada, cobertura, ler_passagem, pesq
 from rotas_caderno import CADERNO_OPERACOES, DILIGENCIAS_OPERACOES
 from rotas_contas import (RotasContas, CONTAS_OPERACOES, OPERACOES_CONVIDADO, OPERACOES_CONVERSA,  # noqa: F401
                           OPERACOES_PUBLICAS, AMBIENTES, SEM_SESSAO, OPERACOES_COM_COTA, ATIVOS_CONVERSA,
-                          COOKIE_PILOTO)
+                          COOKIE_PILOTO, CONTA_PROPRIA)
 from rotas_conversa import RotasConversa, RESPONDIDO, CAMPOS_INTERNOS_CONVERSA, _sem_internos  # noqa: F401
 import rotas_documentos
 from rotas_documentos import MAX_UPLOAD, catalogo, receber_documentos  # noqa: F401
@@ -118,7 +118,7 @@ ROTAS_GET_COM_PARAMETROS = ('/api/catalogo', '/api/fila', '/api/cota')  # each o
 OPERACOES_API = (*rotas_conversa.OPERACOES, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES,
                  *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, *rotas_redacao.OPERACOES,
                  *rascunhos.OPERACOES, *fontes_web.OPERACOES, *rotas_gestao.OPERACOES, *CONTAS_OPERACOES, 'sessao-sair',
-                 *rotas_achados.OPERACOES, *CONSULTA_OPERACOES, *rotas_equipe.OPERACOES)
+                 *rotas_achados.OPERACOES, *CONSULTA_OPERACOES, *rotas_equipe.OPERACOES, *CONTA_PROPRIA)
 registro_acesso.permitir_operacoes((*OPERACOES_API, *OPERACOES_PUBLICAS))  # SEG-02: o registro só aceita nomes que existem
 
 
@@ -857,8 +857,8 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 result = self._cadastro_na_fila(operation, data)
             elif operation in rotas_gestao.OPERACOES:
                 result = self._gestao(operation, data, principal, concedido)
-            elif operation in rotas_equipe.OPERACOES:
-                result = rotas_equipe.executar(self.server.root, operation, data, principal)
+            elif operation in rotas_equipe.OPERACOES or operation in CONTA_PROPRIA:
+                result = self._equipe(operation, data, principal)
             elif operation in rotas_conversa.OPERACOES:
                 result = self._conversa(operation, data, dono, casos_liberados, consulta_contada,
                                         conta=principal['conta'])
@@ -889,6 +889,11 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             self._json(409, {'estado': 'erro', 'codigo': 'conflito', 'erro': str(exc), 'atual': exc.atual})
         except rascunhos.ConflitoRascunho as exc:
             self._json(409, {'estado': 'erro', 'codigo': 'rascunho_conflito', 'erro': str(exc), 'atual': exc.atual})
+        except acesso.Bloqueado as exc:  # too many wrong passwords on a sensitive operation
+            self._json(429, {'estado': 'bloqueado', 'codigo': 'bloqueado', 'erro': str(exc)})
+        except acesso.Recusada as exc:  # a refusal with its own status and code (password asked again, last dono)
+            self._json(exc.status, {'estado': 'proibido' if exc.status == 403 else 'erro', 'codigo': exc.codigo,
+                                    'erro': str(exc)})
         except (ValueError, OSError, KeyError, TypeError, sqlite3.Error) as exc:
             if operation in DOWNLOADS:
                 self._auditar_download('falha')

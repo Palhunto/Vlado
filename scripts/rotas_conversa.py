@@ -47,7 +47,8 @@ class RotasConversa:
         try:
             autorizacao.conferir(self.server.root, self.server.modo, principal, 'GET:/api/cota', {})
             self._json(200, custo.situacao(self.server.root, principal['conta'],
-                                           administrador=autorizacao.ve_redacao(principal)))
+                                           administrador=autorizacao.gasto_da_redacao(self.server.root, self.server.modo,
+                                                                                      principal)))
         except autorizacao.Recusa as recusa:
             self._recusado(recusa, principal)
         except ValueError as exc:
