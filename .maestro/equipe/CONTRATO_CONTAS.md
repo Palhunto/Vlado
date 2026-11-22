@@ -293,7 +293,7 @@ A coluna Tipo diz o que a operação faz: `L` lê, `B` baixa arquivo, `E` escrev
 | Rota | Resolvedor | Tipo | D | E | R | L | C | Observação |
 |---|---|---|---|---|---|---|---|---|
 | `GET /saude` | nenhum | L | pública | | | | | Só `{ok: true}`. |
-| `GET /entrar`, `/ativar/<token>`, `/aceitar/<token>`\*, `/redefinir/<token>`\*, `/primeiro-acesso`, arquivos de `rotas_estaticas.ARQUIVOS` | nenhum | L | pública | | | | | Página e arquivos estáticos, sem dado de conta nem de apuração. O token fica no caminho e é lido pelo script da página. |
+| `GET /entrar`, `/ativar/<token>`, `/aceitar/<token>`\*, `/redefinir/<token>`\*, `/confirmar-email/<token>`\*, `/primeiro-acesso`, arquivos de `rotas_estaticas.ARQUIVOS` | nenhum | L | pública | | | | | Página e arquivos estáticos, sem dado de conta nem de apuração. O token fica no caminho e é lido pelo script da página. |
 | `GET /convite/<token>` | nenhum | L | pública | | | | | 410, como hoje (convites da versão 1). |
 | `GET /api/primeiro-acesso` | nenhum | L | pública | | | | | Só no modo `local-contas`. |
 | `GET /api/entrada`\* | nenhum | L | pública | | | | | Só `{esqueci_senha}`: se a página de entrada pode oferecer "Esqueci a senha" (transporte diferente de `tela`, seção 8.1). Nada de conta nenhuma. |
@@ -317,6 +317,7 @@ Operações públicas: exigem `Origin` e JSON, aceitam corpo de até 4 KB e cont
 | `convite-aceitar`\* | A | `{token, nome, senha, termos_versao}` cria a conta e abre a sessão, com a pendência de segundo fator quando for obrigatório. |
 | `senha-esqueci`\* | A | `{email}`. A resposta é sempre a mesma, exista a conta ou não. |
 | `senha-redefinir`\* | A | `{token, senha, codigo?}`. Não abre sessão: encerra todas as da conta. Conta com segundo fator exige também o código. |
+| `email-confirmar`\* | A | `{token}`, o link mandado ao e-mail novo por `conta-email-trocar`. Troca o e-mail da conta e avisa o antigo. Não abre sessão. Link que não muda nada tem uma resposta só. |
 | `primeiro-admin` | A | Só `local-contas`, só de `127.0.0.1`, uma vez. Cria a redação única e o primeiro dono. |
 
 ### 5.4 A própria conta
@@ -623,6 +624,8 @@ Esta seção fixa comportamento, não implementação.
   - Alvo que não é dono: o dono pede e a própria pessoa confirma pelo link, que só ela recebe.
   - Alvo que é dono: outro dono pede e um terceiro dono confirma (`equipe-recuperar-confirmar`). Sem terceiro dono, quem confirma é o operador, pelo terminal.
   - Transporte `tela`: toda recuperação exige a segunda confirmação antes de o link aparecer.
+  - Mesa instalada (`local-contas`), por decisão do dono do projeto (P33, 22/11/2026): é uma máquina só, com uma redação só e, quase sempre, um dono só e sem e-mail. Ali o dono recupera quem não é dono confirmando com a própria senha, e o link aparece para ele. A dupla confirmação continua valendo quando o alvo é dono.
+  - Serviço hospedado (`piloto`): a dupla confirmação vale sempre e o link nunca volta numa resposta, com qualquer transporte. Sem envio real, ou para conta que não tem e-mail, a recuperação é feita pelo operador, pelo terminal.
   O dono nunca troca o e-mail de outra pessoa, para a recuperação não virar tomada de conta.
 - **O único dono que perdeu senha, aparelho e códigos** é recuperado pelo operador (`dono-convidar`), com aviso ao e-mail do dono e espera de 24 horas (decisão 14).
 
@@ -686,7 +689,7 @@ O mesmo cuidado vale para todo texto que uma conta escreve e outra lê: nome de 
 
 ## 10. O que muda para os outros agentes
 
-**Arquivos de Contas** (escreve só neles): `scripts/acesso.py`, `scripts/rotas_contas.py`, os demais `scripts/rotas_*.py` e `scripts/interface_pesquisa.py` (nesta onda, pela tabela "Quem escreve onde"), e os módulos novos `scripts/autorizacao.py`, `scripts/correio.py`, `scripts/segundo_fator.py` e `scripts/rotas_equipe.py`. Testes em arquivos novos (`test_matriz_contas.py`, `test_isolamento_redacoes.py`, `test_migracao_contas.py`, `test_convites.py`, `test_redefinicao_senha.py`, `test_segundo_fator.py`, `test_sessoes_conta.py`, `test_equipe.py`, `test_ciclo_conta.py`, `test_correio.py`), mais `test_acesso.py` e `test_autorizacao.py`, que são de autorização.
+**Arquivos de Contas** (escreve só neles): `scripts/acesso.py`, `scripts/rotas_contas.py`, os demais `scripts/rotas_*.py` e `scripts/interface_pesquisa.py` (nesta onda, pela tabela "Quem escreve onde"), e os módulos novos `scripts/autorizacao.py`, `scripts/correio.py`, `scripts/segundo_fator.py` e `scripts/rotas_equipe.py`. Testes em arquivos novos (`test_matriz_contas.py`, `test_isolamento_redacoes.py`, `test_migracao_contas.py`, `test_convites.py`, `test_redefinicao_senha.py`, `test_recuperacao.py`, `test_segundo_fator.py`, `test_sessoes_conta.py`, `test_equipe.py`, `test_ciclo_conta.py`, `test_correio.py`), mais `test_acesso.py` e `test_autorizacao.py`, que são de autorização.
 
 **Pedidos, um por dono de arquivo. Nenhum é feito por Contas sem o aval do Maestro.**
 
@@ -790,9 +793,19 @@ Do que a entrega 3 decide, além do texto da seção 8.1:
 - O link de redefinição pendente morre com tudo o que encerra as sessões da conta: senha trocada, desativação, recuperação e remoção.
 - Depois de `senha-redefinir` e de `conta-senha-trocar`, a pessoa recebe no e-mail da conta o aviso de senha trocada, sem link nenhum. Conta sem e-mail (as migradas) não recebe aviso nem redefine por aqui: a recuperação dela é pela administração.
 
+**Entrega 3, recuperação pelo dono e troca do próprio e-mail:** `equipe-recuperar` e `equipe-recuperar-confirmar` em `scripts/rotas_equipe.py`; `conta-email-trocar` e a pública `email-confirmar` em `scripts/rotas_contas.py`. Roda hoje `-p test_recuperacao.py`. O que ela decide, além do texto da seção 8.2:
+
+- `equipe-recuperar {conta, senha}` pede sempre a senha de quem pede, e a conta é conferida antes. Para quem não é dono e tem e-mail, com envio real, o link de recuperação vai à pessoa (resposta `{estado: "enviada", envio}`), vale 24 horas e é consumido por `senha-redefinir`; nada muda na conta até ele ser usado. Para um dono, a resposta é `{estado: "aguardando_confirmacao", recuperacao}` e o pedido espera 24 horas por um terceiro dono, que confirma com a própria senha em `equipe-recuperar-confirmar {recuperacao, senha}`; só então o link é criado. `equipe-listar` traz os pedidos pendentes em `recuperacoes`.
+- Recusa 400 `recuperacao_pelo_operador` quando não há terceiro dono para confirmar, ou quando o link não tem como chegar à pessoa (serviço hospedado sem envio real, ou conta sem e-mail). Pedido de outra redação, vencido, ou de quem deixou de ser dono responde como inexistente.
+- Na Mesa instalada, a resposta de quem recupera um não dono é `{estado: "confirmada", link}` (P33). No serviço hospedado o `link` não existe em resposta nenhuma.
+- A recuperação da própria conta não é por aqui: é `senha-esqueci` ou `conta-senha-trocar`. O dono nunca troca o e-mail de outra pessoa.
+- `conta-email-trocar {email, senha}` responde sempre `{estado: "confirmacao_enviada"}`, para endereço livre e para endereço que já é de outra conta, de qualquer redação; nesse caso o pedido fica guardado sem efeito e nada é enviado ao endereço em uso. As mensagens saem em outra linha de execução. O endereço atual é avisado do pedido e, depois, da troca. Um pedido a cada 5 minutos por conta; o link vale 60 minutos. Com o transporte `tela`, o `link` volta a quem pediu (limitação da seção 8.1).
+- `email-confirmar {token}` troca o e-mail, que passa a ser o identificador da entrada; a sessão aberta continua. Uma conta que veio sem e-mail ganha um por aqui, e o login antigo dela continua valendo.
+- `GET /confirmar-email/<token>` serve a mesma página de `/entrar`, como as outras.
+
 **O que ainda não existe,** e onde o código difere do texto até lá:
 
-- As operações de `autorizacao.PENDENTES` (troca de e-mail, segundo fator, termos, exportação e exclusão da própria conta, recuperação pelo dono) respondem 404. As seis `contas-*` continuam, só para o dono e só sobre a própria redação (`autorizacao.TRANSITORIAS`), com a senha pedida nos casos da seção 5.15, e saem com o convite por e-mail (P30, seção 5.5).
+- As operações de `autorizacao.PENDENTES` (segundo fator, termos, exportação e exclusão da própria conta) respondem 404. As seis `contas-*` continuam, só para o dono e só sobre a própria redação (`autorizacao.TRANSITORIAS`), com a senha pedida nos casos da seção 5.15, e saem com o convite por e-mail (P30, seção 5.5).
 - `contas-criar` é recusada a todos (403 `operacao_proibida`) numa instalação com mais de uma redação: o login é único na instalação, e a recusa "esse login já existe" contaria a uma redação que outra tem uma conta com ele (seção 4.5). Até o convite por e-mail entrar, nessas instalações as contas novas são criadas pelo operador, no terminal. Com uma redação só, nada muda. Nenhuma outra operação recebe campo único da instalação.
 - A página (`GET /`), `GET /api/sessao` e `GET /api/integracao` também passam pelo portão: de uma redação suspensa, respondem 403 `redacao_suspensa` (a página, um aviso simples, sem dado nem token).
 - `data-papel` leva `admin` para o dono enquanto a interface não conhece os papéis novos; os outros papéis vão com o próprio nome. `GET /api/sessao` já devolve os valores novos e `capacidades`.

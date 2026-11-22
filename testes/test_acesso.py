@@ -673,7 +673,8 @@ class EsquemaTest(DuasRedacoes):
     def para_a_versao_1(self):
         con = sqlite3.connect(acesso.caminho_bd(self.root))
         try:
-            con.execute('DROP TABLE links')  # version 4
+            con.execute('DROP TABLE recuperacoes')  # version 5
+            con.execute('DROP TABLE links')  # version 4 (and its column of version 5)
             con.execute('DROP TABLE convites')  # version 3
             con.execute('DROP INDEX eventos_por_organizacao')  # version 2, as the columns below
             for tabela, coluna in (('contas', 'idioma'), ('contas', 'excluida_em'), ('sessoes', 'aparelho'),

@@ -18,7 +18,7 @@ import registro_acesso
 ORIGEM = 'https://vlado.test'
 LINK = ORIGEM + '/aceitar/' + 'T' * 43
 DADOS = {'redacao': 'Redação Alfa', 'convidado_por': 'Dona Alfa', 'papel': 'reporter', 'validade': '2026-11-29',
-         'link': LINK, 'origem': ORIGEM, 'minutos': 60}
+         'link': LINK, 'origem': ORIGEM, 'minutos': 60, 'horas': 24}
 SMTP = {'VLADO_CORREIO': 'smtp', 'VLADO_SMTP_HOST': 'smtp.exemplo.test', 'VLADO_SMTP_PORTA': '587',
         'VLADO_SMTP_USUARIO': 'vlado', 'VLADO_SMTP_SENHA': 'senha-do-smtp-de-teste', 'VLADO_SMTP_REMETENTE': 'nao-responda@vlado.test'}
 SEM_CORREIO = {chave: '' for chave in SMTP}
@@ -107,7 +107,7 @@ class ModelosTest(Base):
                  'h​ttps://golpe.example', 'golpe . example', 'https:\\\\golpe.example', '//golpe.example')
         for tipo in correio.MODELOS:
             for idioma in correio.IDIOMAS:
-                for campo in ('convidado_por', 'redacao', 'papel', 'validade', 'minutos'):
+                for campo in ('convidado_por', 'redacao', 'papel', 'validade', 'minutos', 'horas'):
                     for nome in nomes:
                         with self.subTest(tipo=tipo, idioma=idioma, campo=campo, nome=nome):
                             assunto, corpo = correio.montar(tipo, idioma, {**DADOS, campo: nome})
@@ -139,6 +139,21 @@ class ModelosTest(Base):
             aviso = correio.montar('senha_trocada', idioma, {})[1]
             self.assertNotIn('http', aviso)  # a notice carries no link: nothing to click in a message nobody asked for
         self.assertIn('foi trocada', correio.montar('senha_trocada', 'pt', {})[0])
+
+    def test_recuperacao_e_troca_de_email_so_levam_link_onde_ha_o_que_confirmar(self):
+        com_link = {'recuperacao': ('/redefinir/', 'vale por 24 horas'), 'email_novo': ('/confirmar-email/', 'vale por 60 minutos')}
+        for tipo, (caminho, prazo) in com_link.items():
+            link = ORIGEM + caminho + 'T' * 43
+            corpo = correio.montar(tipo, 'pt', {'link': link, 'origem': ORIGEM, 'horas': 24, 'minutos': 60})[1]
+            self.assertIn(link, corpo)
+            self.assertIn(prazo, corpo)
+            self.assertEqual(corpo.count('http'), 1)
+        for tipo in ('email_aviso', 'email_trocado', 'senha_trocada'):  # notices: nothing to click
+            for idioma in correio.IDIOMAS:
+                self.assertNotIn('http', correio.montar(tipo, idioma, {})[1])
+        # What goes to the audit log is the kind of message, out of a closed list.
+        self.assertEqual({rotulo for rotulo, _ in correio.MODELOS.values()},
+                         {'convite', 'redefinicao', 'recuperacao', 'email_novo', 'senha_trocada'})
 
     def test_enviar_depois_nao_faz_quem_chamou_esperar_e_guarda_o_transporte_do_pedido(self):
         with correio.usar('simulado'):

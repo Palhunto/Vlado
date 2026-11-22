@@ -265,7 +265,7 @@ class ArmazenamentoTest(test_acesso.DuasRedacoes):
         self.gravar("INSERT INTO eventos (em, tipo, conta, por, organizacao) VALUES (?, 'conta_criada', 'x', 'cli', ?)",
                     acesso._iso(acesso.agora() - test_acesso.timedelta(days=acesso.ATIVIDADE_DIAS + 1)), self.a)
         with patch.object(acesso.registro_acesso, 'arquivar_evento') as arquivar:
-            self.assertEqual(acesso.manutencao(self.root), {'convites_vencidos': 0, 'eventos_podados': 1})
+            self.assertEqual(acesso.manutencao(self.root), {'convites_vencidos': 0, 'eventos_podados': 1, 'recuperacoes_vencidas': 0})
         self.assertEqual(arquivar.call_count, 1)  # what leaves goes to the audit log
         self.assertEqual(len(self.tipos()), antes)
 
