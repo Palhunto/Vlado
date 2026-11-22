@@ -133,5 +133,7 @@ def uso_da_resposta(uso) -> dict:
         doze = getattr(validades, 'ttl_12h_tokens', 0) or 0
         resultado.update(cache_escrita_12h=doze, cache_escrita_30m=max(0, escritos - doze))
     else:
-        resultado.update(cache_escrita_30m=escritos, cache_escrita_12h=0, cache_escrita_30m_suposto=escritos)
+        resultado.update(cache_escrita_30m=escritos, cache_escrita_12h=0)
+        if escritos:  # writes without the retention breakdown: counted as 30 minutes, and said so
+            resultado['cache_escrita_30m_suposto'] = escritos
     return resultado

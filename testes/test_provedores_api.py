@@ -104,7 +104,9 @@ class AnthropicTest(unittest.TestCase):
         self.assertEqual(complemento, {'type': 'text', 'text': 'Complemento.'})
         self.assertEqual(deltas, ['Pronto.'])
         self.assertEqual((resposta.texto, resposta.chamadas, resposta.modelo), ('Pronto.', (), 'claude-sintetico'))
-        self.assertEqual(resposta.uso, {'entrada': 11, 'saida': 7, 'cache_leitura': 5, 'cache_escrita': 0})
+        # CUS-01: the priced kinds too (here input_tokens excludes the cache; no write, so no validity).
+        self.assertEqual(resposta.uso, {'entrada': 11, 'saida': 7, 'cache_leitura': 5, 'cache_escrita': 0,
+                                        'entrada_sem_cache': 11, 'cache_escrita_5m': 0, 'cache_escrita_1h': 0})
 
     def test_tool_use_vira_chamada_neutra(self):
         final = mensagem_anthropic([NS(type='text', text='Busco.'),
@@ -230,7 +232,10 @@ class OpenAITest(unittest.TestCase):
         self.assertEqual(entrada[4]['content'][0]['text'], 'Complemento.')
         self.assertEqual(deltas, ['Pron', 'to.'])
         self.assertEqual((resposta.texto, resposta.modelo), ('Pronto.', 'gpt-sintetico'))
-        self.assertEqual(resposta.uso, {'entrada': 20, 'saida': 9, 'cache_leitura': 4, 'raciocinio': 3})
+        # CUS-01: the priced kinds too (here input_tokens includes the 4 cached tokens; no write).
+        self.assertEqual(resposta.uso, {'entrada': 20, 'saida': 9, 'cache_leitura': 4, 'raciocinio': 3,
+                                        'entrada_sem_cache': 16, 'cache_escrita': 0, 'cache_escrita_30m': 0,
+                                        'cache_escrita_12h': 0})
 
     def test_function_call_vira_chamada_e_raciocinio_e_preservado_para_reenvio(self):
         final = resposta_openai([Raciocinio(type='reasoning', id='rs_1', encrypted_content='cifrado'),
