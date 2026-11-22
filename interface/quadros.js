@@ -303,8 +303,8 @@ window.Quadros = (() => {
     // Cartão: o acontecimento em serifa, o tipo de data e a observação, e o selo da fonte à direita.
     const cartao = element('div', undefined, 'tempo-cartao');
     const texto = element('div', undefined, 'tempo-cartao-texto');
-    // No celular a data e o qualificador entram no cartão, acima do acontecimento (a coluna da data some); nos dois tamanhos só um deles aparece.
-    const noCartao = element('p', undefined, 'tempo-data-cartao'); noCartao.setAttribute('aria-hidden', 'true');
+    // No celular a data e o qualificador entram no cartão, acima do acontecimento (a coluna da data some, com display:none); nos dois tamanhos só um deles está na árvore de acessibilidade, então a data é lida uma vez.
+    const noCartao = element('p', undefined, 'tempo-data-cartao');
     noCartao.append(element('span', quandoCurto(e.data), 'tempo-data-cartao-dia'), element('span', qualificador, `tempo-qualificador${exata ? '' : ' is-parcial'}`));
     texto.append(noCartao, Q.dado('h4', e.descricao), element('p', t(e.data.rotulo || e.data.tipo), 'small tempo-tipo'));
     if (e.data.observacao) texto.append(Q.dado('p', e.data.observacao, 'small'));

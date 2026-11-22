@@ -152,7 +152,14 @@ test('filtro de tipos de data: pílulas sempre à vista (sem gaveta, nem no celu
     assert.ok(painel.querySelector('.tempo-evento'));
     // Celular: a data e a qualificação entram no cartão, acima do acontecimento (a coluna da data some por CSS).
     const noCartao = painel.querySelector('.tempo-evento .tempo-cartao .tempo-data-cartao');
-    assert.ok(noCartao && noCartao.getAttribute('aria-hidden') === 'true', 'a cópia da data no cartão não é lida duas vezes');
+    assert.ok(noCartao, 'a data entra no cartão');
+    assert.equal(noCartao.getAttribute('aria-hidden'), null, 'a cópia do cartão é a que o leitor de tela lê no celular (a coluna some com display:none)');
+    assert.match(noCartao.textContent, /mar|jun|ago|out|nov|20\d\d/, 'com o dia, o mês ou o ano');
+    assert.match(noCartao.textContent, /data exata|dia não informado|mês e dia não informados/, 'e o qualificador');
+    // Nenhum dos dois pode ser lido junto com o outro: um tamanho de tela mostra a coluna, o outro a cópia, e o que fica oculto é display:none.
+    const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'interface', 'style.css'), 'utf8');
+    assert.match(css, /\.tempo-data-cartao\{display:none\}/, 'a cópia fica fora da árvore no desktop');
+    assert.match(css, /@media \(max-width:719px\) \{[^@]*\.tempo-data\{display:none\}/, 'e a coluna sai da árvore no celular');
   }
 });
 

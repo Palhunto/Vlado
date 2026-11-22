@@ -258,7 +258,7 @@
   // Disposição do mapa (componentes.md#mapa, "Rótulo não cobre nó nem outra ligação"): a entidade mais ligada vai ao centro e as demais ao anel; a
   // ordem no anel e o ponto de cada rótulo na sua ligação são escolhidos para que nenhuma pílula cubra um nó nem outra ligação, e as ligações
   // se cruzem o mínimo. Determinística (mesma entrada, mesmo desenho), de modo que o teste confere o custo.
-  const NO_L = 200, NO_A = 80, PILULA_A = 28;
+  const NO_L = 200, NO_A = 80, PILULA_A = 28, GRANDE_MAPA = 8;
   const larguraPilula = texto => Math.round(34 + cortar(texto, 22).length * 7.8);
   const retNo = ([x, y]) => [x - NO_L / 2, y - NO_A / 2, x + NO_L / 2, y + NO_A / 2];
   // Segmento (a→b) contra retângulo [x0,y0,x1,y1]: método de Liang–Barsky.
@@ -330,9 +330,13 @@
       return pos;
     };
     let melhor = null;
-    for (const inicio of [anel, [...anel].reverse(), [...anel].sort((a, b) => (grau[b.id] || 0) - (grau[a.id] || 0))]) {
+    // Teto de trabalho: a busca por trocas custa muito com o número de entidades (28 entidades e 40 ligações levavam 50 s). Até GRANDE_MAPA entidades
+    // ela roda inteira (e o teste prova a regra do rótulo); acima disso a disposição é uma só, ordenada pelo grau, sem trocas.
+    const porGrau = [...anel].sort((a, b) => (grau[b.id] || 0) - (grau[a.id] || 0));
+    const busca = n <= GRANDE_MAPA;
+    for (const inicio of busca ? [anel, [...anel].reverse(), porGrau] : [porGrau]) {
       let ordem = [...inicio], atual = avaliar(montar(ordem));
-      for (let volta = 0; volta < 12 && m > 1; volta += 1) {
+      for (let volta = 0; busca && volta < 12 && m > 1; volta += 1) {
         let mudou = false;
         for (let i = 0; i < m; i += 1) for (let j = i + 1; j < m; j += 1) {
           const troca = [...ordem]; [troca[i], troca[j]] = [troca[j], troca[i]];
@@ -347,7 +351,7 @@
   }
   Q.dispor = dispor;   // exposto para o teste: nenhuma pílula cobre nó nem outra ligação
   function diagrama(casoId, mapa, nomes, saida) {
-    const {L, A, pos, pilulas} = dispor(mapa), LARG = NO_L, ALT = NO_A;
+    const {L, A, pos, pilulas} = Q.dispor(mapa), LARG = NO_L, ALT = NO_A;
     const desenho = svg('svg', {viewBox: `0 0 ${L} ${A}`, class: 'mapa-svg', role: 'group', 'aria-label': t('Diagrama do mapa. A lista ao lado traz as mesmas ligações.')});
     const rotulos = [];
     for (const r of mapa.relacoes) {
@@ -448,7 +452,12 @@
     saida.append(element('p', t('Escolha uma ligação para ver as evidências.'), 'small'));
     const layout = element('div', undefined, 'mapa-layout');
     const visual = element('div', undefined, 'mapa-visual');
-    visual.append(diagrama(casoId, mapa, nomes, saida), legenda(mapa));
+    // O desenho só existe de 1024 px para cima (abaixo, o mapa se lê como a lista): não se calcula a disposição com ele oculto, e ele se monta
+    // se a janela passar a ser larga.
+    const consulta = window.matchMedia?.('(min-width:1024px)');
+    const desenhar = () => { if (visual.dataset.pronto) return; visual.dataset.pronto = 'sim'; visual.append(diagrama(casoId, mapa, nomes, saida), legenda(mapa)); };
+    if (!consulta || consulta.matches) desenhar();
+    else consulta.addEventListener?.('change', evento => { if (evento.matches) desenhar(); });
     const lado = element('div', undefined, 'mapa-lateral');
     lado.append(element('h4', t('Lista de pessoas e organizações')), listaMapa(casoId, mapa, nomes, saida), homonimos(mapa));
     layout.append(visual, lado);
