@@ -139,6 +139,19 @@ class EnvioEmFluxoTest(Base):
             pass  # closed with what was unread: a reset after the answer
         self.assertLess(time.monotonic() - inicio, 2)
 
+    def test_a_mesa_anuncia_o_envio_em_fluxo_e_a_fila_por_caso(self):
+        # The page uses the stream only when the server says so (an older server keeps the JSON upload).
+        con = http.client.HTTPConnection('127.0.0.1', self.server.server_port, timeout=10)
+        try:
+            con.request('GET', '/api/integracao', headers={'Cookie': f'apuracao_session={self.server.token}'})
+            resposta = con.getresponse()
+            corpo = json.loads(resposta.read())
+        finally:
+            con.close()
+        self.assertEqual(resposta.status, 200, corpo)
+        self.assertIs(corpo['envio_fluxo'], True)
+        self.assertIs(corpo['fila_por_caso'], True)
+
     def test_taxa_minima_padrao_deixa_passar_64_kbit_s(self):
         self.assertLessEqual(interface_pesquisa.TAXA_MINIMA_CORPO, 8 * 1024)  # weak 3G or EDGE still sends
 

@@ -681,6 +681,9 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                              'revisao_humana': True, 'continuar_observacoes': True, 'continuar_documentos': True, 'caderno_humano': True, 'diligencias': True, 'quadros_evidencia': True,
                              'tabelas_apuracao': True, 'continuidade_resumo': True, 'conferencia_redacao': True, 'entrevistas': True,
                              'fontes_web': True,
+                             # CONF-03 and UX-05: the batch streamed as application/vnd.vlado.lote, and GET
+                             # /api/fila by case for whoever sees the case; a page reads these before using them.
+                             'envio_fluxo': True, 'fila_por_caso': True,
                              'extracao_pdf': self.server.ambiente['extracao_pdf']})
             return
         if path == '/api/fila':
