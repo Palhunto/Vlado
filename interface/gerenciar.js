@@ -60,13 +60,13 @@
         const rounds = chat.rodadas || [], blocked = running.has(chat.estado);
         $('gerenciar-conversas').append(row(chat.titulo,
           `${Leitura.quantidade(rounds.length, 'rodada')}${blocked ? ' · Execução em andamento' : ''}`,
-          [{text:'Excluir', kind:'danger', blocked, run:() => window.excluirItem({tipo:'conversa', caso:selected.id, conversa:chat.id}, chat.titulo)}], chat));
+          [{text:'Excluir', kind:'danger', blocked, run:button => window.excluirItem({tipo:'conversa', caso:selected.id, conversa:chat.id}, chat.titulo, button)}], chat));
       }
       const owned = new Set(data.conversas.flatMap(c => c.rodadas || []));
       for (const round of selected.rodadas.filter(r => !owned.has(r.id))) {
         const title = `Rodada ${parseInt(round.id.slice(1), 10)}`;
         $('gerenciar-rodadas').append(row(title, selected.titulo,
-          [{text:'Excluir', kind:'danger', blocked:active, run:() => window.excluirItem({tipo:'rodada', caso:selected.id, rodada:round.id}, title)}], round));
+          [{text:'Excluir', kind:'danger', blocked:active, run:button => window.excluirItem({tipo:'rodada', caso:selected.id, rodada:round.id}, title, button)}], round));
       }
       emptyList('gerenciar-conversas', 'Nenhuma conversa nesta apuração.');
       emptyList('gerenciar-rodadas', 'Nenhuma análise avulsa nesta apuração.');
@@ -188,24 +188,27 @@
     } finally { deleting = false; }
   }
 
-  window.excluirItem = async (scope, title) => {
-    const dialog = $('excluir-dialogo');
-    if (dialog.open || busy) return false;
-    $('excluir-titulo').textContent = `Excluir ${labels[scope.tipo].toLowerCase()}?`;
+  // Move to the trash (Dialogo, destructive variant, executar mode): the answer of the server stays in the dialog if it refuses.
+  let moving = false;
+  window.excluirItem = async (scope, title, opener) => {
+    if (busy || moving) return false;
+    moving = true;
     const effect = scope.tipo === 'caso' ? 'A apuração, suas conversas e rodadas sairão das listas.'
       : scope.tipo === 'conversa' ? 'A conversa, suas perguntas complementares e rodadas sairão das listas.'
       : 'Esta rodada e seus achados sairão das consultas.';
-    $('excluir-descricao').textContent = `“${title}” — ${effect}`;
-    dialog.returnValue = '';
-    const answer = new Promise(resolve => dialog.addEventListener('close', () => resolve(dialog.returnValue), {once:true}));
-    dialog.showModal();
-    if (await answer !== 'excluir') return false;
-    return mutate('excluir', scope);
+    try {
+      return await window.Dialogo.confirmar({
+        variante:'destrutivo', rubrica:'Mover para a lixeira', titulo:'Mover {item} para a lixeira?', item:title, texto:effect,
+        nota:'Você poderá restaurar em Apurações e lixeira. Documentos e registros serão preservados.',
+        acao:'Mover para a lixeira', ocupado:'Movendo…', gatilho:opener,
+        executar:async () => { if (!await mutate('excluir', scope)) throw new Error('Há outra operação em andamento. Aguarde e tente de novo.'); },
+      });
+    } finally { moving = false; }
   };
   $('gerenciar-excluir-caso').addEventListener('click', async () => {
     const selected = data?.casos.find(c => c.id === $('gerenciar-caso').value);
     if (!selected) return;
-    try { await window.excluirItem({tipo:'caso', caso:selected.id}, selected.titulo); }
+    try { await window.excluirItem({tipo:'caso', caso:selected.id}, selected.titulo, $('gerenciar-excluir-caso')); }
     catch (error) { fail(error.message); }
   });
   $('gerenciar-atualizar').addEventListener('click', load);
