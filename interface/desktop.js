@@ -221,12 +221,19 @@
   const active=()=>new URL(location.href).searchParams.get('area')||'inicio';
   const current=()=>window.contextoCaso?.()||'';
   const navigate=name=>showArea(name);
-  function closeMenu(){
+  // Drawer (below 1280 px, docs/design/componentes.md#tablet): while it is open everything behind it is inert and Tab cycles inside it.
+  const behindDrawer=()=>[document.querySelector('.skip-link'),$('mesa-ambiente'),document.querySelector('.app-header'),$('conteudo')].filter(Boolean);
+  const drawerItems=()=>[...$('mesa-sidebar').querySelectorAll('.areas button,.areas a,.mesa-perfil')].filter(node=>!node.hidden);
+  function closeMenu(restoreFocus){
+    const wasOpen=document.body.classList.contains('mesa-menu-open');
     document.body.classList.remove('mesa-menu-open');$('mesa-menu').setAttribute('aria-expanded','false');$('mesa-menu').setAttribute('aria-label','Abrir navegação');
+    for(const node of behindDrawer())node.inert=false;
     window.camadaMesa?.fechada('menu');
+    if(wasOpen&&restoreFocus===true)$('mesa-menu').focus();
   }
   function openMenu(){
     document.body.classList.add('mesa-menu-open');$('mesa-menu').setAttribute('aria-expanded','true');$('mesa-menu').setAttribute('aria-label','Fechar navegação');
+    for(const node of behindDrawer())node.inert=true;
     // Back closes the drawer (Android); focus moves into it for keyboard and screen readers.
     window.camadaMesa?.abrir('menu',()=>{closeMenu();$('mesa-menu').focus();return true;});
     $('mesa-sidebar').querySelector('.areas button:not([hidden]),.areas a:not([hidden])')?.focus();
@@ -355,15 +362,27 @@
     // Guests only ask questions; every other step is closed to them.
     $('mesa-etapas').hidden=stage===undefined||document.body.dataset.papel==='convidado';
     if(stage!==undefined&&$('mesa-etapas').dataset.stage!==String(stage)){$('mesa-etapas').dataset.stage=String(stage);$('mesa-etapas').replaceChildren(...stages.map(([name,label],i)=>{const a=element('a');a.href=window.enderecoAreaMesa(name);a.dataset.mesaArea=name;a.append(element('span',String(i+1)),document.createTextNode(label));if(i===stage)a.setAttribute('aria-current','step');return a;}));}
-    closeMenu();loadInventory();countDeadlines();
+    closeMenu(true);loadInventory();countDeadlines();
   }
   $('mesa-menu').replaceChildren(svg('menu'));
   $('mesa-menu').addEventListener('click',()=>{if(document.body.classList.contains('mesa-menu-open'))closeMenu();else openMenu();});
-  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.body.classList.contains('mesa-menu-open')){closeMenu();$('mesa-menu').focus();}});
+  document.addEventListener('keydown',event=>{
+    if(!document.body.classList.contains('mesa-menu-open'))return;
+    if(event.key==='Escape'){closeMenu(true);return;}
+    if(event.key!=='Tab')return;
+    // Focus stays in the drawer: Tab on the last item goes to the first, Shift+Tab on the first to the last.
+    const items=drawerItems(),first=items[0],last=items[items.length-1],current=document.activeElement;
+    if(!first)return;
+    if(!items.includes(current)){event.preventDefault();first.focus();}
+    else if(event.shiftKey&&current===first){event.preventDefault();last.focus();}
+    else if(!event.shiftKey&&current===last){event.preventDefault();first.focus();}
+  });
+  // Widening the window past 1280 px turns the drawer back into the fixed bar: nothing may stay inert.
+  matchMedia('(min-width:1280px)').addEventListener?.('change',event=>{if(event.matches)closeMenu();});
   document.addEventListener('click',event=>{
     const link=event.target.closest('a[data-mesa-area]');
     if(link&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey&&event.button===0){event.preventDefault();navigate(link.dataset.mesaArea);}
-    if(document.body.classList.contains('mesa-menu-open')&&!event.target.closest('.sidebar,#mesa-menu'))closeMenu();
+    if(document.body.classList.contains('mesa-menu-open')&&!event.target.closest('.sidebar,#mesa-menu'))closeMenu(true);
   });
   // "Trocar de apuração" opens the list of investigations (and the trash), which left the sidebar.
   $('inicio-trocar').addEventListener('click',()=>navigate('gerenciar'));
