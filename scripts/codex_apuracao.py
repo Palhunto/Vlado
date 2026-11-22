@@ -122,10 +122,22 @@ def evento_curado(texto):
     return {'mensagem': texto, 'publica': texto}
 
 
-# Aviso sem `publica` que parece conter caminho, nome de arquivo ou erro de sistema: para o convidado vira texto fixo.
+# Aviso sem `publica` que parece conter caminho, nome de arquivo ou erro de sistema: para o convidado vira texto fixo. É a rede de
+# segurança (o caminho certo é passar por registrar_falha ou evento_curado), então erra para o lado de omitir:
+#  - caminho absoluto POSIX (/qualquer/raiz/...), de unidade do Windows (C:\..., C:/...) ou UNC (\\servidor\...);
+#  - caminho relativo da Mesa (casos/, execucoes/, saidas/, indice/ ...) e barra invertida entre dois nomes;
+#  - erro de sistema (Errno, Traceback, WinError) e extensão de arquivo que a Mesa lê ou grava.
+EXTENSOES = ('pdf', 'docx?', 'xlsx?', 'pptx?', 'odt', 'ods', 'rtf', 'csv', 'tsv', 'json', 'jsonl', 'txt', 'md', 'log', 'xml', 'html?',
+             'ya?ml', 'sqlite3?', 'db', 'lock', 'tmp', 'age', 'gz', 'tar', 'zip', 'png', 'jpe?g', 'tiff?', 'gif', 'webp', 'bmp', 'svg')
+SUSPEITO = re.compile(
+    r"(?:(?<![\w.)\]/-])/[A-Za-z_~$.][\w.$~-]*"                                   # /dados, /dados/vlado/execucoes/...
+    r"|(?<![\w])[A-Za-z]:[\\/]"                                                      # C:\ ou C:/
+    r"|\\\\[\w.$-]+\\"                                                           # \\servidor\compartilhamento
+    r"|[\w.$-]+\\[\w.$-]+"                                                          # pasta\arquivo
+    r"|\b(?:casos|execucoes|conversas|entrada|entradas|lixeira|ajustes|segredos|acesso|saidas|indice|derivados|originais)/"
+    r"|Errno|WinError|Traceback"
+    r"|\.(?:" + "|".join(EXTENSOES) + r")\b)", re.IGNORECASE)
 AVISO_OMITIDO = 'Aviso interno omitido; o detalhe está no registro do servidor.'
-SUSPEITO = re.compile(r"(?:[A-Za-z]:[\\/]|(?<![\w.])/(?:app|home|var|usr|tmp|etc|opt|srv|mnt|root|casos|execucoes|conversas|"
-                      r"entrada|lixeira|ajustes|segredos|acesso)\b|Errno|Traceback|\.(?:pdf|docx?|xlsx?|csv|json|sqlite)\b)")
 
 
 def sanear_texto(texto):
@@ -965,7 +977,11 @@ class Conversas:
                 if stage in pipeline.accepted:
                     break
                 pipeline.last_error = pipeline.last_error or f'A etapa {stage} terminou sem uma entrega validada por guardar.'
-                self._event(identifier, 'aviso', {'mensagem': pipeline.last_error + (' Nova tentativa automática.' if attempt == 1 else ' Limite de tentativas atingido.')})
+                continuacao = ' Nova tentativa automática.' if attempt == 1 else ' Limite de tentativas atingido.'
+                # last_error é o texto de QUALQUER exceção ao guardar a etapa (caminho, trecho de documento): vai inteiro para o
+                # administrador e para o log; o convidado lê só o texto fixo.
+                self._event(identifier, 'aviso', registrar_falha(pipeline.last_error + continuacao,
+                                                                 publica=f'A etapa {stage} terminou sem uma entrega validada.' + continuacao))
             if stage not in pipeline.accepted:
                 self._finish(identifier, 'incompleto')
                 return
