@@ -21,9 +21,16 @@ no provedor simulado e mudaria o que se mede. Com a extração longa, os dez cad
 travasse a Mesa, o tempo saltaria para perto do tempo do arquivo longo (15 s ou mais), enquanto
 ``T_ref`` fica perto de 3 s numa máquina livre; numa máquina carregada os dois sobem juntos. Os dois
 tempos saem na saída do teste. Só quando ``T_ref`` passa de ``SATURADA`` o teste pula, com o motivo
-explícito ("máquina saturada: T_ref = X s"): aí a máquina não deixa medir, e o processo de extração,
-que roda abaixo da prioridade normal (SEG-01), pode nem receber CPU para começar. Fora disso, a
-falha é falha, a de começar a ler o arquivo longo (linha do prazo de 60 s) inclusive. Medido no
+explícito ("máquina saturada: T_ref = X s"): aí a máquina não deixa medir. Fora disso, a falha é
+falha.
+
+**Prioridade baixa.** O processo de extração roda abaixo da prioridade normal e sem o núcleo 0
+(SEG-01), para não tirar CPU da Mesa; com a máquina saturada por outros processos ele pode nem
+começar, e ``T_ref`` (a Mesa, de prioridade normal) não vê isso. Só quando o arquivo longo não começa
+a ser lido em 60 s, uma sonda nas mesmas condições (prioridade abaixo do normal, sem o núcleo 0)
+pede ``SONDA_CPU`` s de CPU: se não os tem em ``SONDA_PRAZO`` s, o teste pula com o motivo explícito
+("máquina saturada para processos de prioridade baixa: X s"); se os tem, a extração que não começou
+é falha. Medido no
 Windows de 4 núcleos (22/11): ``T_ref`` de 0,9 a 1,7 s com nenhum, dois ou os quatro núcleos ocupados
 por outros processos; os dez cadastros com a extração longa, de 1,6 a 5,9 s.
 
@@ -33,6 +40,7 @@ import base64
 import http.client
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import threading
@@ -53,6 +61,30 @@ SESSOES = 10
 LIMITE = 2.0
 LIMITE_CADASTROS = 12.0
 SATURADA = 6.0  # T_ref above this (measured 0.9 to 1.7 s, even with all 4 cores busy): too loaded to judge
+SONDA_CPU = 0.2  # seconds of CPU the low-priority probe asks for ...
+SONDA_PRAZO = 10.0  # ... within this (a free core gives them in about 0.2 s)
+SONDA = """
+import os, sys, time
+prazo, pedido = float(sys.argv[1]), float(sys.argv[2])
+if os.name == 'nt':
+    import ctypes
+    k32 = ctypes.windll.kernel32
+    k32.GetCurrentProcess.restype = ctypes.c_void_p
+    processo = k32.GetCurrentProcess()
+    k32.SetPriorityClass(ctypes.c_void_p(processo), 0x4000)  # BELOW_NORMAL_PRIORITY_CLASS, as the extraction
+    nucleos = os.cpu_count() or 1
+    if nucleos > 1:  # without core 0, as the extraction
+        k32.SetProcessAffinityMask(ctypes.c_void_p(processo), ctypes.c_size_t(sum(1 << n for n in range(1, min(nucleos, 64)))))
+else:
+    os.nice(10)
+    nucleos = sorted(os.sched_getaffinity(0)) if hasattr(os, 'sched_getaffinity') else []
+    if len(nucleos) > 1:
+        os.sched_setaffinity(0, nucleos[1:])
+inicio, base = time.monotonic(), time.process_time()
+while time.process_time() - base < pedido and time.monotonic() - inicio < prazo:
+    pass
+print(f'{time.monotonic() - inicio:.2f} {time.process_time() - base:.2f}')
+"""
 
 
 @unittest.skipUnless(HAS_PYPDF, 'Instalar requirements.txt para testar extração real')
@@ -133,6 +165,14 @@ class PortaoFilaTest(unittest.TestCase):
         self.assertEqual(len(tempos), SESSOES)
         return max(tempos)
 
+    @staticmethod
+    def sonda_prioridade_baixa():
+        """(wall seconds, CPU seconds) a process at the extraction's priority and cores gets, asking for
+        SONDA_CPU s of CPU within SONDA_PRAZO s."""
+        saida = subprocess.run([sys.executable, '-c', SONDA, str(SONDA_PRAZO), str(SONDA_CPU)], capture_output=True,
+                               text=True, timeout=SONDA_PRAZO + 60, check=True).stdout.split()
+        return float(saida[0]), float(saida[1])
+
     def test_dez_sessoes_com_extracao_longa_em_curso(self):
         # The same ten uploads with no extraction in course: the reference of this machine, this minute.
         referencia = self.cadastros_simultaneos('referencia')
@@ -150,7 +190,13 @@ class PortaoFilaTest(unittest.TestCase):
         limite = time.monotonic() + 60
         while not (fila_extracao._ler(fila_extracao.pasta_fila(self.root) / lote / 'estado.json') or {}).get(
                 'arquivos', [{}])[0].get('pagina'):
-            self.assertLess(time.monotonic(), limite, f'o processo de extração não começou a ler (T_ref = {referencia:.2f} s)')
+            if time.monotonic() >= limite:
+                demora, cpu = self.sonda_prioridade_baixa()  # only now: whether low priority gets CPU at all
+                if cpu < SONDA_CPU:
+                    self.skipTest(f'máquina saturada para processos de prioridade baixa: {demora:.1f} s para '
+                                  f'{cpu:.2f} s de CPU (pedidos {SONDA_CPU} s; T_ref = {referencia:.2f} s)')
+                self.fail(f'o processo de extração não começou a ler em 60 s, e um processo de prioridade baixa '
+                          f'teve {cpu:.2f} s de CPU em {demora:.2f} s (T_ref = {referencia:.2f} s)')
             time.sleep(0.05)
         texto = base64.b64encode('Documento sintético avulso.'.encode('utf-8')).decode('ascii')
         inicio = time.monotonic()
