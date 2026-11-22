@@ -56,6 +56,7 @@ test('recusa antes do envio: nome que a Mesa não aceita e arquivo acima de 50 M
   assert.match(resultado(ruim), /Renomeie/);
   assert.match(resultado(enorme), /Passa de 50 MB/);
   assert.equal(ruim.querySelector('svg.estado-sinal') !== null, true, 'a recusa leva sinal, não só cor');
+  assert.equal(ruim.querySelector('[role="progressbar"]').hidden, true, 'linha recusada não tem medidor');
   mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', estado: 'publicado', arquivos: [{indice: 0, estado: 'pronto', extracao: 'extraido', paginas: 3}], recibo: {recebidos: 1, novos: 1, duplicados: 0, corpus_id: 'c1'}}});
   const final = await promessa;
   assert.equal(final.recusados, 2);
@@ -128,11 +129,38 @@ test('a falha de um arquivo não derruba os outros: resultado com sinal e texto,
   assert.match(resultado(erro), /Não foi possível ler este arquivo\. O original ficou guardado\./);
   assert.equal(erro.querySelector('.envio-resultado').dataset.tom, 'erro');
   assert.ok(erro.querySelector('svg.estado-sinal'));
-  assert.equal(erro.querySelector('details').hidden, false, '"O que fazer" aparece só onde há erro');
-  assert.equal(ok.querySelector('details').hidden, true);
+  assert.equal(erro.querySelector('.envio-ajuda').hidden, false, '"O que fazer" aparece só onde há erro');
+  assert.equal(erro.querySelector('.envio-ajuda').className.includes('secondary'), true, '"O que fazer" é botão secundário');
+  assert.equal(ok.querySelector('.envio-ajuda').hidden, true);
+  assert.equal(erro.querySelector('[role="progressbar"]').hidden, true, 'linha que falhou não tem medidor: a barra cheia leria como sucesso');
+  assert.equal(erro.dataset.falha, 'true');
+  assert.equal(ok.querySelector('[role="progressbar"]').hidden, false);
+  const explicacao = erro.querySelector('.envio-explicacao'), ajuda = erro.querySelector('.envio-ajuda');
+  assert.equal(explicacao.hidden, true);
+  ajuda.click();
+  assert.equal(explicacao.hidden, false); assert.equal(ajuda.getAttribute('aria-expanded'), 'true');
+  assert.match(explicacao.textContent, /O original está guardado no caso/);
+  const link = mesa.$('alvo').querySelector('.envio-recibo a');
+  assert.equal(link.textContent, 'Ver recibo'); assert.equal(link.localName, 'a', '"Ver recibo" é link, não botão');
+  assert.equal(mesa.$('alvo').querySelector('.envio-cabeca').children.length, 2, 'título e aviso na mesma linha');
   assert.match(resultado(parcial), /Lida em parte/);
   assert.equal(parcial.querySelector('.envio-resultado').dataset.tom, 'aviso', 'aviso nas cores de aviso, nunca de erro (regra 6)');
   assert.equal(final.pendentes, 1, 'só o com erro é pendente no recibo do lote; o lido em parte é aviso, não pendência');
+});
+
+test('texto que passou pelo OCR vira "Lida por OCR: confira números", com sinal parcial e cor de aviso', async () => {
+  let estado = {lote: 'L1', estado: 'processando', arquivos: [{indice: 0, estado: 'ocr', etapa: 'reconhecimento', pagina: 1, paginas: 3, extracao: null}]};
+  const mesa = abrir({fila: () => estado});
+  const promessa = mesa.janela.Envio.enviar({escopo: {caso: 'alfa'}, arquivos: [arquivo('digitalizado.pdf')], alvo: mesa.$('alvo')});
+  await livre(mesa);
+  mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', estado: 'enfileirado', arquivos: []}});
+  await livre(mesa);
+  estado = {lote: 'L1', estado: 'publicado', recibo: {recebidos: 1, novos: 1, duplicados: 0}, arquivos: [{indice: 0, estado: 'pronto', extracao: 'extraido', paginas: 3}]};
+  await promessa;
+  const li = linhas(mesa)[0];
+  assert.match(resultado(li), /Lida por OCR: confira números/);
+  assert.equal(li.querySelector('.envio-resultado').dataset.tom, 'aviso');
+  assert.ok(li.querySelector('svg.estado-sinal'));
 });
 
 test('lotes: mais de 50 MB somados ou 100 arquivos viram mais de um lote, em ordem', () => {
