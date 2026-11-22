@@ -1,0 +1,36 @@
+/* Componentes novos da Onda 3, partes B e D (docs/design/componentes.md). Carregado depois do style.css; só tokens. */
+
+/* === Diálogo de confirmação (componentes.md#dialogo; dialogo.js) === */
+.dialogo{
+  width:min(480px,calc(100% - 2 * var(--espaco-4)));
+  max-height:calc(100% - 2 * var(--espaco-4));
+  padding:var(--espaco-6);
+  border:1px solid var(--theme-line);
+  border-radius:var(--raio-cartao);
+  background:var(--theme-surface);
+  color:var(--theme-text);
+  box-shadow:var(--sombra-dialogo);
+  overflow:auto;
+}
+.dialogo[open]{display:flex;flex-direction:column;gap:var(--espaco-4)}
+.dialogo::backdrop{background:var(--theme-backdrop)}
+.dialogo :is(h2,p){margin:0;overflow-wrap:anywhere}
+.dialogo-rubrica{font-size:var(--text-md);font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--theme-muted)}
+.dialogo-titulo{font:600 var(--text-xl)/1.25 var(--fonte-titulo);color:var(--theme-text)}
+.dialogo-texto{font-size:var(--text-base);line-height:1.5}
+.dialogo-nota{font-size:var(--text-md);line-height:1.5;color:var(--theme-muted)}
+.dialogo-campo{display:flex;flex-direction:column;gap:var(--espaco-2);font-size:var(--text-base)}
+.dialogo-campo input{width:100%;min-height:44px;box-sizing:border-box}
+.dialogo-erro{font-size:var(--text-md);line-height:1.5;color:var(--theme-danger)}
+.dialogo-erro[hidden],.dialogo-progresso[hidden]{display:none}
+.dialogo-acoes{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--espaco-2);padding-top:var(--espaco-2)}
+.dialogo-progresso{display:flex;flex-direction:column;gap:var(--espaco-2)}
+.dialogo-etapa{font-size:var(--text-base);line-height:1.5}
+
+/* === Barra de progresso (componentes.md#medidor: 8 px na espera longa e no envio) === */
+.medidor-progresso{height:8px;border-radius:var(--raio-pilula);background:var(--theme-line);overflow:hidden}
+.medidor-progresso::before{content:'';display:block;height:100%;width:var(--uso,0%);border-radius:inherit;background:var(--theme-accent);
+  transition:width var(--duracao-media) var(--curva-padrao)}
+@media (prefers-reduced-motion:reduce) {
+  .medidor-progresso::before{transition:none}
+}
