@@ -1721,6 +1721,7 @@ body[data-papel="convidado"] .first-use,
 body[data-papel="convidado"] #codex-desligar,
 body[data-papel="convidado"] #codex-excluir,
 body[data-papel="convidado"] #codex-continuar-documentos,
+body[data-papel="convidado"] #codex-inventario-detalhes,
 body[data-papel="convidado"] #mesa-etapas{
   display:none;
 }
