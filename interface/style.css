@@ -877,6 +877,12 @@ input:disabled,select:disabled,textarea:disabled{background:var(--theme-sidebar)
 textarea{font:inherit;line-height:1.65;padding:12px;resize:vertical;max-width:100%}
 a,button,summary,input,textarea,select{scroll-margin-top:110px}
 :focus-visible{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:var(--foco-afastamento)}
+/* Foco dentro de contêiner com corte (docs/design/mudancas-de-token.md, item 2): o anel vai para dentro, deixando 2 px do fundo do próprio
+   elemento entre a borda e o anel. Nunca em botão principal (ocre sobre verde, 1,62:1): só em elemento de fundo claro. */
+:is(.finding-choice,.mesa-table-wrap,.tabela-rolagem,.markdown-table,#codex-fontes,#codex-atividades,#caderno-cruzamento-fontes,#diligencias-documentos,#original-conteudo,.review-context>.context,.technical,#apuracao-adicionar-texto)
+  :is(a,summary,input,select,textarea,label,[tabindex],.finding-open,button:is(.secondary,.danger,.recusa,.mesa-document-name)):focus-visible{
+  outline-offset:calc(-1 * var(--foco-largura) - 2px);
+}
 p,li{line-height:1.65}
 .small,.meta{color:var(--muted);font-size:var(--text-sm)}
 h1{font:600 var(--text-2xl)/1.2 var(--fonte-titulo);text-wrap:balance;max-width:none;margin:0 0 13px}
@@ -2193,7 +2199,7 @@ body[data-ambiente] .sidebar{top:var(--faixa-ambiente);height:calc(100dvh - var(
   border-radius:8px;
   touch-action:pan-x pan-y pinch-zoom;
 }
-.pdf-stage:focus-visible{outline-offset:-3px}
+.pdf-stage:focus-visible{outline-offset:calc(-1 * var(--foco-largura) - 2px)}
 .pdf-page{position:relative;margin:0 auto;background:var(--pdf-pagina);box-shadow:0 2px 12px var(--theme-shadow-soft)}
 .pdf-page canvas{display:block}
 .pdf-text-layer{
