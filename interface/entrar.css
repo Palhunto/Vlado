@@ -5,7 +5,6 @@
 .entrar-topo{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-bottom:24px}
 .entrar-topo .brand{font-size:var(--text-2xl)}
 .entrar-preferencias{display:flex;gap:8px;flex-wrap:wrap}
-.entrar-preferencias button{font-size:var(--text-sm);padding:8px 12px}
 .entrar-cartao section{background:var(--white);border:1px solid var(--line);border-radius:10px;padding:24px}
 .entrar-cartao h1{font-size:var(--text-xl);margin-top:0}
 .entrar-cartao form{display:flex;flex-direction:column;gap:18px;margin-top:18px}
