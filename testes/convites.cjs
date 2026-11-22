@@ -307,3 +307,19 @@ test('atividade: as frases dos convites, sem o e-mail; em inglês, o diálogo, o
   assert.ok(texto(dialogo(mesa)).includes('Reads and asks.') && texto(dialogo(mesa)).includes('Invitation language'));
   assert.deepEqual([...c.papel.querySelectorAll('option')].map(o => o.textContent), ['Reader', 'Reporter', 'Editor', 'Owner']);
 });
+
+test('e-mail em título, tabela e linha de estado só quebra depois do @ ou antes de ponto (<wbr>), sem mudar o texto', async () => {
+  const f = await abrirEquipe(com([ANA(), RUI()], [convite('a'.repeat(16), 'bia.nunes@redacaoserena.org')]));
+  const tabelaMesa = f.mesa.doc.querySelector('.equipe-tabela');
+  const emailNaTabela = [...tabelaMesa.querySelectorAll('[translate="no"]')].find(e => e.textContent === 'bia.nunes@redacaoserena.org');
+  assert.ok(emailNaTabela, 'o texto do e-mail segue inteiro');
+  assert.deepEqual([...emailNaTabela.childNodes].map(n => (n.localName === 'wbr' ? '|' : n.data)), ['bia', '|', '.nunes@', '|', 'redacaoserena', '|', '.org'],
+    'wbr antes de cada ponto e depois do @');
+  botaoPorTexto(celulas(linhaDoConvite(f.mesa, 'a'.repeat(16)))[4], 'Cancelar convite').click(); await esperar(f.mesa);
+  const titulo = dialogo(f.mesa).querySelector('.dialogo-titulo');
+  assert.equal(titulo.textContent, 'Cancelar o convite de bia.nunes@redacaoserena.org?');
+  assert.equal(titulo.querySelectorAll('wbr').length, 3, 'o e-mail do título também quebra só nos lugares certos');
+  acoes(f.mesa)[1].click(); await esperar(f.mesa);
+  assert.equal(texto(estado(f.mesa)), '✓ Convite de bia.nunes@redacaoserena.org cancelado.');
+  assert.ok(estado(f.mesa).querySelectorAll('wbr').length >= 3, 'a linha de estado também');
+});

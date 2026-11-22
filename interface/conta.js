@@ -27,7 +27,13 @@
     if (aoClicar) controle.addEventListener('click', aoClicar);
     return controle;
   }
-  const dado = (texto, etiqueta = 'span') => { const elemento = no(etiqueta, '', texto); elemento.setAttribute('translate', 'no'); return elemento; };
+  // Dado de fora (nome, e-mail, aparelho): não se traduz; um e-mail só quebra depois do @ ou antes de ponto.
+  const dado = (texto, etiqueta = 'span') => {
+    const elemento = no(etiqueta);
+    if (window.Dialogo?.quebraveis && String(texto).includes('@')) elemento.append(window.Dialogo.quebraveis(texto)); else elemento.textContent = texto;
+    elemento.setAttribute('translate', 'no');
+    return elemento;
+  };
   const lingua = () => (window.I18N?.idioma?.() === 'en' ? 'en' : 'pt');
 
   // Papéis por extenso: o servidor manda o nome interno ('dono', 'reporter'); a barra e esta página mostram o rótulo.
@@ -126,7 +132,11 @@
     linhaDeEstado.hidden = !texto;
     linhaDeEstado.dataset.tom = erro ? 'erro' : aviso ? 'aviso' : 'ok';
     linhaDeEstado.setAttribute('role', erro ? 'alert' : 'status');
-    if (texto) linhaDeEstado.append(...(erro || aviso ? [] : [no('span', 'conta-estado-marca', '✓'), ' ']), no('span', '', texto));
+    if (texto) {
+      const corpo = no('span');
+      if (window.Dialogo?.quebraveis && texto.includes('@')) corpo.append(window.Dialogo.quebraveis(texto)); else corpo.textContent = texto;  // e-mail na frase: sem quebra no meio
+      linhaDeEstado.append(...(erro || aviso ? [] : [no('span', 'conta-estado-marca', '✓'), ' ']), corpo);
+    }
   }
   // `acao`: um botão que fica no título, à direita (Convidar pessoa, na Equipe); sem ela, qualquer ação do título anterior sai.
   let acaoDoTitulo = null;

@@ -43,11 +43,20 @@
     if (texto !== undefined && texto !== null) elemento.textContent = texto;
     return elemento;
   }
+  // Um e-mail só quebra de linha depois do @ ou antes de um ponto (<wbr> nesses lugares), nunca no meio da palavra; o texto não muda (wbr não tem texto).
+  function quebraveis(texto) {
+    const alvo = document.createDocumentFragment();
+    String(texto).split(/(\S+@\S+)/).forEach((pedaco, indice) => {
+      if (indice % 2 === 0) { if (pedaco) alvo.append(pedaco); return; }
+      pedaco.split(/(?<=@)|(?=\.[A-Za-z0-9])/).forEach((parte, ordem) => { if (ordem) alvo.append(document.createElement('wbr')); if (parte) alvo.append(parte); });
+    });
+    return alvo;
+  }
   // Título com o nome do item no lugar de {item}.
   function preencherTitulo(destino, titulo, item, aspas = true) {
     const [antes, depois] = String(titulo).split('{item}');
     if (depois === undefined || !item) { destino.textContent = String(titulo).replace('{item}', item ?? ''); return; }
-    const nome = no('span', 'dialogo-item', aspas ? `“${item}”` : item);
+    const nome = no('span', 'dialogo-item'); nome.append(quebraveis(aspas ? `“${item}”` : item));
     nome.setAttribute('translate', 'no');
     destino.replaceChildren(antes, nome, depois);
   }
@@ -387,5 +396,5 @@
     return confirmado ? resultado : null;
   }
 
-  window.Dialogo = {confirmar, comSenha, recusaDaSenha};
+  window.Dialogo = {confirmar, comSenha, recusaDaSenha, quebraveis};
 })();

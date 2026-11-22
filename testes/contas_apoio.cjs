@@ -6,7 +6,7 @@ const {criarMesa, Evento, PILHA} = require('./dom_minimo.cjs');
 const SCRIPTS = PILHA.flatMap(nome => (nome === 'gerenciar.js' ? [nome, 'conta.js', 'equipe.js'] : [nome]));
 const DIA = 86400000;
 const ID = {ana: 'a'.repeat(16), rui: 'b'.repeat(16), cora: 'c'.repeat(16), davi: 'd'.repeat(16), eva: 'e'.repeat(16)};
-const CAPACIDADES_DONO = ['conta-ver', 'conta-atualizar', 'conta-sessoes', 'equipe-listar', 'equipe-atividade', 'equipe-convidar', 'equipe-convite-reenviar', 'equipe-convite-cancelar', 'ia-config'];
+const CAPACIDADES_DONO = ['conta-ver', 'conta-atualizar', 'conta-sessoes', 'equipe-listar', 'equipe-atividade', 'equipe-convidar', 'equipe-convite-reenviar', 'equipe-convite-cancelar', 'equipe-recuperar', 'equipe-recuperar-confirmar', 'ia-config'];
 const CAPACIDADES_REPORTER = ['conta-ver', 'conta-atualizar', 'conta-sessoes'];
 
 const sessaoDe = (papel = 'dono', extra = {}) => ({

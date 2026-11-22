@@ -3,7 +3,8 @@
 // 1024 px) com papel, apurações e uso do mês; "Gerenciar" abre apurações, teto mensal e acesso da pessoa; abaixo, o gasto da redação e a atividade.
 // Os dados vêm de equipe-listar, equipe-atividade, caso-* e /api/catalogo. A Mesa não decide pelo nome do papel e não aceita HTML: nomes e
 // e-mails entram como texto. A senha das operações sensíveis vai pelo diálogo com senha de conta.js (#dialogo-senha). "Convidar pessoa" não existe
-// mais: com a E3 de Contas, "Convidar pessoa" e os convites pendentes (Reenviar, Cancelar) entram aqui (#convites). "Recuperar acesso" ainda não tem tela do Design.
+// mais: com a E3 de Contas, "Convidar pessoa" e os convites pendentes (Reenviar, Cancelar) entram aqui (#convites), e "Recuperar acesso" (#recuperar), que
+// sempre envolve duas partes e pede a senha de quem age; os pedidos à espera de confirmação de um terceiro dono ficam num cartão acima da tabela.
 (() => {
   if (!window.Conta) return;
   const {no, botao, dado, apoio, carregar, data, dia, reais, rotuloPapel, estado, sensivel, textoDoServidor} = window.Conta;
@@ -11,7 +12,7 @@
   const ID_CONTA = /^[0-9a-f]{16}$/;
   const PAPEIS_ESCOLHA = ['dono', 'editor', 'reporter', 'leitor'];
 
-  let lista = null, catalogo = [], quemSou = null, aberto = new Set();
+  let lista = null, catalogo = [], quemSou = null, modo = null, aberto = new Set();
   let atividade = {eventos: [], proximo: null}, atividadePronta = false;
   const raiz = {};  // os contêineres montados
   const desktop = typeof matchMedia === 'function' ? matchMedia('(min-width:1024px)') : {matches: true, addEventListener() {}};
@@ -23,6 +24,7 @@
   // --- montagem -----------------------------------------------------------------------------------------------------------------------------
   function montar(painel) {
     raiz.aviso = no('div', 'equipe-aviso'); raiz.aviso.hidden = true;
+    raiz.recuperacoes = no('section', 'conta-cartao equipe-recuperacoes'); raiz.recuperacoes.hidden = true;
     raiz.tabela = no('section', 'conta-cartao conta-cartao-tabela'); raiz.tabela.setAttribute('aria-label', t('Pessoas da redação'));
     raiz.corpoTabela = no('div', 'conta-cartao-corpo'); raiz.tabela.append(raiz.corpoTabela);
     // "Convidar pessoa" (botão principal no título, #convites): com o convite por e-mail a exceção do texto abaixo da tabela deixou de valer.
@@ -33,11 +35,13 @@
     raiz.gasto.raiz.dataset.cartao = 'gasto'; raiz.atividade.raiz.dataset.cartao = 'atividade';
     const abaixo = no('div', 'conta-grade equipe-abaixo');
     abaixo.append(raiz.gasto.raiz, raiz.atividade.raiz);
-    painel.append(raiz.aviso, raiz.tabela, abaixo);
+    painel.append(raiz.aviso, raiz.recuperacoes, raiz.tabela, abaixo);
     desktop.addEventListener?.('change', () => { if (lista) desenharLista(); });
   }
   async function abrir() {
-    quemSou = (await window.Conta.sessao())?.conta?.id || null;
+    const sessaoAtual = await window.Conta.sessao();
+    quemSou = sessaoAtual?.conta?.id || null;
+    modo = sessaoAtual?.modo || null;  // 'local-contas' é a Mesa instalada: lá a recuperação mostra o link na tela (P33)
     await recarregar();
     carregarAtividade();
   }
@@ -64,6 +68,7 @@
   function desenharLista() {
     const todas = pessoas();
     const antigos = todas.filter(p => p.papel === 'convidado').length;
+    desenharRecuperacoes();
     raiz.aviso.replaceChildren();
     raiz.aviso.hidden = !antigos;
     if (antigos) {
@@ -86,7 +91,7 @@
     if (ehEu(pessoa)) primeira.append(' ', no('span', 'conta-apoio', t('(você)')));
     bloco.append(primeira);
     const contato = pessoa.email || (pessoa.login ? `${t('login')} ${pessoa.login}` : '');
-    if (contato) { const c = no('p', 'conta-apoio', contato); c.setAttribute('translate', 'no'); bloco.append(c); }
+    if (contato) { const c = dado(contato, 'p'); c.className = 'conta-apoio'; bloco.append(c); }
     const situacao = pessoa.situacao === 'desativada' || pessoa.ativa === false ? '○ Desativada'
       : pessoa.situacao === 'aguardando_senha' ? (pessoa.ativacao_vencida ? '◐ Link de ativação vencido' : '◐ Aguardando a senha') : '';
     if (situacao) bloco.append(no('p', 'conta-apoio equipe-situacao', t(situacao)));
@@ -241,9 +246,9 @@
   }
   const AVISO_DE_ENVIO = '! O e-mail para {email} não saiu. O convite está entre os pendentes; reenvie quando quiser.';
   // A vista do link do convite com o transporte `tela`: mostrada uma vez, no diálogo, e não fica na página depois.
-  function vistaDoLink({titulo: tituloDoLink, email, link, expiraEm}) {
+  function vistaDoLink({titulo: tituloDoLink, email, link, expiraEm, texto: textoPronto}) {
     return {titulo: tituloDoLink, item: email, itemAspas: false, acao: 'Já enviei', semCancelar: true,
-      texto: t('Mande por um canal seguro, pessoalmente ou por mensageiro cifrado. O link vale até {dia}, uma única vez, e não será mostrado de novo.', {dia: dia(expiraEm)}),
+      texto: textoPronto || t('Mande por um canal seguro, pessoalmente ou por mensageiro cifrado. O link vale até {dia}, uma única vez, e não será mostrado de novo.', {dia: dia(expiraEm)}),
       montar(vista) {
         const campoDoLink = document.createElement('input'); campoDoLink.type = 'text'; campoDoLink.readOnly = true; campoDoLink.value = link;
         campoDoLink.className = 'convite-link'; campoDoLink.setAttribute('translate', 'no'); campoDoLink.setAttribute('aria-label', t('Link do convite'));
@@ -502,8 +507,15 @@
     } else {
       acoes.append(botao('Desativar', 'danger', evento => desativar(pessoa, evento.currentTarget)));
     }
+    // "Recuperar acesso": secundário, só para conta ativa (a desativada é reativada antes) e para quem pode (equipe-recuperar).
+    const recuperavel = !desativada && window.Conta.capacidade('equipe-recuperar');
+    if (recuperavel) acoes.append(botao('Recuperar acesso', 'secondary', evento => recuperar(pessoa, evento.currentTarget)));
     acoes.append(botao('Remover da redação', 'danger', evento => remover(pessoa, evento.currentTarget)));
     caixa.append(acoes, apoio('Desativar encerra as sessões e para as perguntas em curso; as apurações ficam. Remover exclui a conta.'));
+    if (recuperavel) {
+      caixa.append(apoio('Recuperar manda à pessoa um link para criar uma senha nova; nada muda na conta até ela usar o link.'));
+      if (pessoa.papel === 'dono') caixa.append(apoio('Para um dono, outro dono precisa confirmar em até 24 horas.'));
+    }
     return caixa;
   }
   const TEXTO_DESATIVAR = 'A pessoa sai na próxima ação e as perguntas em curso dessa conta param. As apurações e os registros ficam; reativar devolve o acesso.';
@@ -536,6 +548,92 @@
       aberto.delete(pessoa.id);
       estado(t('{nome} não faz mais parte da redação.', {nome: pessoa.nome})); await recarregar(); carregarAtividade();
     } catch (falha) { estado(falha.message, {erro: true}); }
+  }
+
+  // --- Recuperar o acesso de outra pessoa (#recuperar) ---------------------------------------------------------------------------------------
+  const TEXTO_DO_LINK_DE_RECUPERACAO = 'Mande por um canal seguro. O link vale 24 horas, uma única vez, e não será mostrado de novo. Nada muda na conta até ele ser usado.';
+  // O que a tela faz com a resposta (a mesma em equipe-recuperar e em equipe-recuperar-confirmar): `confirmada` com link troca o formulário pelo link; as outras
+  // fecham o diálogo e deixam uma linha de estado. Devolve o que dizer depois que o diálogo fechar.
+  function tratarRecuperacao(resposta, nome, ctx) {
+    if (resposta.estado === 'confirmada' && resposta.link) {
+      ctx.trocarPor(vistaDoLink({titulo: 'Entregue o link a {item}', email: nome, link: resposta.link, texto: t(TEXTO_DO_LINK_DE_RECUPERACAO)}));
+      return null;
+    }
+    if (resposta.estado === 'enviada') {
+      return resposta.envio === 'falha' ? {texto: t('! O e-mail para {nome} não saiu. Peça de novo em alguns minutos.', {nome}), aviso: true}
+        : {texto: t('Link de recuperação enviado para {nome}. Vale 24 horas.', {nome})};
+    }
+    if (resposta.estado === 'aguardando_confirmacao') {
+      return {texto: t('Pedido registrado. Outro dono precisa confirmar a recuperação de {nome} até {quando}.', {nome, quando: data(resposta.recuperacao?.expira_em)})};
+    }
+    return null;
+  }
+  async function dialogoDeRecuperacao({titulo: tituloDoDialogo, item, texto, acao, ocupado, operacao, dados, nome, gatilho}) {
+    let depois = null, recusou = false;
+    const ok = await window.Dialogo.confirmar({variante: 'simples', titulo: tituloDoDialogo, item, itemAspas: false, texto, acao, ocupado, gatilho,
+      campos: [{id: 'senha', rotulo: 'Sua senha', apoio: 'A senha com que você entra na Mesa.', autocomplete: 'current-password', exigido: true}],
+      async executar(ctx) {
+        let resposta;
+        try { resposta = await api(operacao, {...dados, senha: ctx.valores().senha}); }
+        catch (falha) {
+          recusou = true;
+          // recuperacao_pelo_operador: não há terceiro dono, ou o link não tem como chegar à pessoa. Não é erro de quem pediu: a ação sai de cena e sobra Cancelar.
+          if (falha?.result?.codigo === 'recuperacao_pelo_operador') throw Object.assign(new Error(textoDoServidor(falha)), {bloqueado: true});
+          const recusa = window.Dialogo.recusaDaSenha(falha);
+          throw recusa === falha ? new Error(textoDoServidor(falha)) : recusa;
+        }
+        depois = tratarRecuperacao(resposta, nome, ctx);
+      }});
+    if (recusou) await recarregar();  // o pedido pode ter vencido, ou a situação mudado: a lista recarrega
+    if (!ok) return;
+    if (depois) estado(depois.texto, depois.aviso ? {aviso: true} : {});
+    await recarregar(); carregarAtividade();
+  }
+  function recuperar(pessoa, gatilho) {
+    const nome = pessoa.nome || '';
+    const texto = pessoa.papel === 'dono' ? t('{nome} é dono. O pedido espera até 24 horas que outro dono, que não seja você, o confirme. Só então sai o link.', {nome})
+      : modo === 'local-contas' ? t('A Mesa mostra a você um link para {nome} criar uma senha nova. Entregue por um canal seguro. O link vale 24 horas.', {nome})
+      : t('{nome} recebe por e-mail um link para criar uma senha nova. O link vale 24 horas. Nada muda na conta até ele ser usado.', {nome});
+    return dialogoDeRecuperacao({titulo: 'Recuperar o acesso de {item}?', item: nome, texto, acao: 'Recuperar acesso', ocupado: 'Recuperando…',
+      operacao: 'equipe-recuperar', dados: {conta: pessoa.id}, nome, gatilho});
+  }
+  function confirmarRecuperacao(pedido, gatilho) {
+    const nome = pedido.conta_nome || t('essa pessoa'), por = pedido.pedida_por_nome || t('um dono');
+    const segunda = modo === 'local-contas' ? t('Ao confirmar, a Mesa mostra a você o link para entregar a {nome}.', {nome})
+      : t('Ao confirmar, {nome} recebe por e-mail um link para criar uma senha nova, válido por 24 horas.', {nome});
+    return dialogoDeRecuperacao({titulo: 'Confirmar a recuperação do acesso de {item}?', item: nome, texto: `${t('{por} pediu em {quando}.', {por, quando: data(pedido.pedida_em)})} ${segunda}`,
+      acao: 'Confirmar recuperação', ocupado: 'Confirmando…', operacao: 'equipe-recuperar-confirmar', dados: {recuperacao: pedido.id}, nome, gatilho});
+  }
+  // O cartão "Recuperações à espera de confirmação": só quando há pedidos. "Confirmar" só para um terceiro dono; para quem pediu e para a própria pessoa, "Aguardando outro dono".
+  function modelar(modelo, valores) {
+    const alvo = document.createDocumentFragment();
+    for (const pedaco of String(modelo).split(/(\{\w+\})/)) {
+      const chave = /^\{(\w+)\}$/.exec(pedaco)?.[1];
+      if (chave && chave in valores) alvo.append(valores[chave]); else if (pedaco) alvo.append(pedaco);
+    }
+    return alvo;
+  }
+  function desenharRecuperacoes() {
+    const pedidos = lista?.recuperacoes || [];
+    raiz.recuperacoes.hidden = !pedidos.length;
+    if (!pedidos.length) { raiz.recuperacoes.replaceChildren(); return; }
+    const cabeca = no('h2', 'conta-cartao-titulo', t('Recuperações à espera de confirmação'));
+    const itens = no('ul', 'equipe-recuperacoes-lista');
+    for (const pedido of pedidos) {
+      const item = no('li', 'equipe-recuperacao'); item.dataset.recuperacao = pedido.id;
+      const texto = no('div', 'conta-rotulo');
+      const nome = no('span', 'conta-texto'); nome.append(pedido.conta_nome ? dado(pedido.conta_nome) : t('uma conta removida'));
+      const detalhe = no('span', 'conta-apoio');
+      detalhe.append(modelar(t('pedido por {por} em {pedida} · vence em {vence}'), {por: pedido.pedida_por_nome ? dado(pedido.pedida_por_nome) : t('um dono'), pedida: data(pedido.pedida_em), vence: data(pedido.expira_em)}));
+      texto.append(nome, detalhe);
+      const parte = !!quemSou && (pedido.pedida_por === quemSou || pedido.conta === quemSou);
+      let acao;
+      if (parte || !window.Conta.capacidade('equipe-recuperar-confirmar')) acao = no('span', 'conta-apoio', t('Aguardando outro dono'));
+      else { acao = botao('Confirmar', 'secondary', evento => confirmarRecuperacao(pedido, evento.currentTarget)); acao.setAttribute('aria-label', `${t('Confirmar')}: ${pedido.conta_nome || ''}`); }
+      item.append(window.Conta.linha(texto, acao));
+      itens.append(item);
+    }
+    raiz.recuperacoes.replaceChildren(cabeca, itens);
   }
 
   // --- gasto da redação e teto padrão -------------------------------------------------------------------------------------------------------
@@ -582,7 +680,7 @@
     // Convites (E3): a atividade não leva o e-mail, que é dado de quem ainda não é da redação.
     convite_enviado: '{por} convidou um e-mail', convite_reenviado: '{por} reenviou um convite', convite_cancelado: '{por} cancelou um convite',
     convite_aceito: '{conta} aceitou o convite e entrou na redação', convite_expirado: 'Um convite venceu',
-    // O que a E3 também grava (frases a confirmar com o Design): recuperação do acesso, link de senha e troca do e-mail.
+    // Recuperação do acesso, link de senha e troca do e-mail (frases do Design, #recuperar; nenhuma leva endereço de e-mail).
     recuperacao_pedida: '{por} pediu a recuperação do acesso de {conta}', recuperacao_confirmada: '{por} confirmou a recuperação do acesso de {conta}',
     senha_redefinida: '{conta} criou uma senha nova pelo link', redefinicao_pedida: '{conta} pediu um link para criar uma senha nova',
     email_troca_pedida: '{conta} pediu para trocar o e-mail', email_trocado: '{conta} trocou o e-mail',

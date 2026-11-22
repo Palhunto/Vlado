@@ -306,3 +306,8 @@ button[aria-disabled="true"]{cursor:progress}
 @media (max-width:719px) {
   .convite-link-linha{flex-direction:column}
 }
+
+/* === Recuperar o acesso de outra pessoa (componentes.md#recuperar; equipe.js) === */
+.equipe-recuperacoes[hidden]{display:none}
+.equipe-recuperacoes-lista{display:flex;flex-direction:column;gap:var(--espaco-2);margin:0;padding:0;list-style:none}
+.equipe-recuperacao+.equipe-recuperacao{padding-top:var(--espaco-2);border-top:1px solid var(--theme-line)}
