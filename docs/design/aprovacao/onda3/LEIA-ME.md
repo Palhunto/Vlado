@@ -24,7 +24,9 @@ Para ver como era antes da Onda 3, use a mesma captura em `3bf52c8`, por exemplo
 - Abaixo de 1280 px, a barra vira gaveta e abre pelo botão de menu.
 - Botões e campos de 44 px; anel de foco ocre.
 
-Antes de aprovar, veja a [lista de pré-entrega](pre-entrega.md). Ela tem seis ressalvas com dono (R1, R2 e R4 a R7) e uma exceção declarada até a Onda 4 (R3). Três aparecem nas capturas: o botão cortado em Conferir achados (R1), o desabilitado no escuro (R2) e os quadros no desenho antigo (R3, exceção).
+Antes de aprovar, veja a [lista de pré-entrega](pre-entrega.md). Ela tem oito ressalvas com dono (R1, R2 e R4 a R9) e uma exceção declarada até a Onda 4 (R3). Três aparecem nas capturas: o botão cortado em Conferir achados (R1), o desabilitado no escuro (R2) e os quadros no desenho antigo (R3, exceção).
+
+**Portão AA.** O medidor de contraste da Sonda (`lancamento/qa-o3` `1ac811d`) não reprova nenhum texto nos dois temas. Reprova o anel de foco que encosta no item ativo da barra e das abas, o editor do Caderno sem anel e o título da nota sem contorno: são as ressalvas R8 e R9, já decididas e com o Lume. O seletor de apuração do topo fica sem caixa, como no canvas, por decisão do dono (P34). Pela WCAG 1.4.11, o que precisa de 3:1 nele é o texto e a seta.
 
 ## Ordem
 
