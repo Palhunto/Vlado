@@ -75,6 +75,7 @@ COPY scripts/acesso.py \
      scripts/ambiente.py \
      scripts/apagamento.py \
      scripts/apuracao.py \
+     scripts/autorizacao.py \
      scripts/banco.py \
      scripts/cadastrar_documentos.py \
      scripts/caderno.py \
@@ -120,6 +121,7 @@ COPY scripts/acesso.py \
      scripts/rotas_conversa.py \
      scripts/rotas_documentos.py \
      scripts/rotas_downloads.py \
+     scripts/rotas_equipe.py \
      scripts/rotas_estaticas.py \
      scripts/rotas_evidencia.py \
      scripts/rotas_gestao.py \

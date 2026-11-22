@@ -17,6 +17,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acesso
+import autorizacao
 import interface_pesquisa
 import test_codex_integracao as integracao  # module import: its TestCase is not re-collected here
 from test_acesso import SENHA, hasher_rapido
@@ -38,12 +39,12 @@ class PrimeiroAdminStoreTest(unittest.TestCase):
     def test_cria_admin_com_senha_e_depois_recusa(self):
         self.assertTrue(acesso.primeiro_acesso_disponivel(self.root))
         conta = acesso.criar_primeiro_admin(self.root, 'Editora', 'editora', SENHA)
-        self.assertEqual((conta['papel'], conta['situacao'], conta['login']), ('admin', 'ativa', 'editora'))
+        self.assertEqual((conta['papel'], conta['situacao'], conta['login']), ('dono', 'ativa', 'editora'))
         self.assertFalse(acesso.primeiro_acesso_disponivel(self.root))
         with self.assertRaises(acesso.PrimeiroAcessoEncerrado):
             acesso.criar_primeiro_admin(self.root, 'Outra', 'outra', SENHA)
         sid, _, publica = acesso.entrar(self.root, 'editora', SENHA)
-        self.assertEqual(acesso.sessao(self.root, sid)['papel'], 'admin')
+        self.assertEqual(acesso.sessao(self.root, sid)['papel'], 'dono')
         self.assertEqual(publica['login'], 'editora')
         self.assertIn('primeiro_admin', [e['tipo'] for e in acesso.eventos(self.root)])
 
@@ -308,17 +309,29 @@ class SessaoLocalTest(LocalContasHttp):
                          'caderno-listar', 'gerenciar-listar'):
             status, _ = self.post(ana, operacao, {'caso': 'alpha'})
             self.assertEqual(status, 403, operacao)
+        # Out of reach and nonexistent: the same answer (contrato de contas, 4.3).
         status, corpo = self.post(ana, 'codex-listar', {'caso': 'beta'})
-        self.assertEqual((status, corpo.get('codigo')), (403, 'caso_nao_liberado'))
+        self.assertEqual((status, corpo.get('codigo')), (404, 'caso_indisponivel'))
+        self.assertEqual(self.post(ana, 'codex-listar', {'caso': 'nao_existe'}), (status, corpo))
         self.assertEqual(self.post(ana, 'codex-listar', {'caso': 'alpha'})[0], 200)
         dados = json.loads(self.request('GET', '/api/catalogo', headers={'Cookie': ana[0].split(';')[0]})[2])
         self.assertEqual([c['id'] for c in dados['casos']], ['alpha'])
 
     def test_admin_pode_encerrar_o_servico_local(self):
-        handler = interface_pesquisa.Handler.__new__(interface_pesquisa.Handler)
-        handler.server = self.server
-        self.assertIsNone(handler._negado('codex-desligar', {}, {'papel': 'admin'}))
-        self.assertIsNotNone(handler._negado('codex-desligar', {}, {'papel': 'convidado', 'casos': []}))
+        # The gate decides (contrato de contas, 4.1 and 5.5): in the local mode with accounts the dono may
+        # end the service, the guest may not; the hosted service is ended by nobody.
+        redacao = {'id': 'org0123456789abcdef', 'nome': 'Redação', 'situacao': 'ativa'}
+        dono = {'papel': 'dono', 'conta': 'a' * 16, 'casos': [], 'responsavel_de': [], 'organizacao': redacao}
+        convidado = {**dono, 'papel': 'convidado', 'conta': 'b' * 16}
+        self.assertEqual(self.server.modo, 'local-contas')
+        concedido = autorizacao.conferir(self.root, self.server.modo, dono, 'codex-desligar', {})
+        self.assertEqual(concedido.operacao, 'codex-desligar')
+        with self.assertRaises(autorizacao.Recusa) as recusa:
+            autorizacao.conferir(self.root, self.server.modo, convidado, 'codex-desligar', {})
+        self.assertEqual((recusa.exception.status, recusa.exception.codigo), (403, 'operacao_proibida'))
+        with self.assertRaises(autorizacao.Recusa) as recusa:
+            autorizacao.conferir(self.root, 'piloto', dono, 'codex-desligar', {})
+        self.assertEqual(recusa.exception.codigo, 'servico_nao_encerravel')
 
 
 class ModosTest(unittest.TestCase):

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -25,6 +26,18 @@ from test_acesso import SENHA
 from test_autorizacao import Http, ORIGEM
 
 HEX = re.compile(r'^[0-9a-f]{12}$')
+
+
+def mudar_sessoes(root, conta, campo, valor):
+    """Rewrite one field of every session of an account, in the accounts store (acesso/contas.sqlite)."""
+    assert campo in ('expira_em', 'ultimo_uso')
+    con = sqlite3.connect(acesso.caminho_bd(root))
+    try:
+        with con:
+            mudadas = con.execute(f'UPDATE sessoes SET {campo} = ? WHERE conta = ?', (valor, conta)).rowcount
+    finally:
+        con.close()
+    assert mudadas >= 1, 'a conta não tinha sessão aberta'
 
 
 class Auditoria(Http):
@@ -153,13 +166,7 @@ class AutenticacaoTest(Auditoria):
         self.assertEqual((linha['conta'], linha['ip'], linha['operacao']), (self.ana_id, '127.0.0.1', 'sessao-sair'))
 
     def test_sessao_expirada_e_registrada_uma_vez(self):
-        arquivo = acesso.caminho(self.root)
-        dados = json.loads(arquivo.read_text(encoding='utf-8'))
-        passado = acesso._iso(datetime.now(timezone.utc) - timedelta(hours=1))
-        for sessao in dados['sessoes'].values():
-            if sessao['conta'] == self.bia_id:
-                sessao['expira_em'] = passado
-        arquivo.write_text(json.dumps(dados), encoding='utf-8')
+        mudar_sessoes(self.root, self.bia_id, 'expira_em', acesso._iso(datetime.now(timezone.utc) - timedelta(hours=1)))
         self.assertEqual(self.get(self.bia, '/api/sessao')[0], 401)
         self.assertEqual(self.get(self.bia, '/api/sessao')[0], 401)
         linhas = self.novas('sessao_expirada')
@@ -167,12 +174,7 @@ class AutenticacaoTest(Auditoria):
         self.assertEqual((linhas[0]['conta'], linhas[0]['motivo']), (self.bia_id, 'expirada'))
 
     def test_sessao_por_inatividade_tem_o_motivo(self):
-        arquivo = acesso.caminho(self.root)
-        dados = json.loads(arquivo.read_text(encoding='utf-8'))
-        for sessao in dados['sessoes'].values():
-            if sessao['conta'] == self.bia_id:
-                sessao['ultimo_uso'] = acesso._iso(datetime.now(timezone.utc) - timedelta(hours=3))
-        arquivo.write_text(json.dumps(dados), encoding='utf-8')
+        mudar_sessoes(self.root, self.bia_id, 'ultimo_uso', acesso._iso(datetime.now(timezone.utc) - timedelta(hours=3)))
         self.get(self.bia, '/api/sessao')
         self.assertEqual(self.novas('sessao_expirada')[0]['motivo'], 'inatividade')
 
@@ -285,7 +287,8 @@ class AdministracaoTest(Auditoria):
         for linha in self.novas():
             self.assertEqual((linha['ip'], linha['resultado']), ('127.0.0.1', 'ok'))
         papel1, papel2 = self.novas('acesso_alterado')
-        self.assertEqual((papel1['papel'], papel1['campos']), ('admin', ['casos', 'cota', 'papel']))
+        # The administrator of before is the dono (contrato de contas, 2.4 and 6); `admin` is still accepted on input.
+        self.assertEqual((papel1['papel'], papel1['campos']), ('dono', ['casos', 'cota', 'papel']))
         self.assertEqual((papel2['papel'], papel2['campos']), ('convidado', ['casos', 'cota', 'papel']))
         self.assertEqual([l['operacao'] for l in self.novas()],
                          ['contas-criar', 'contas-atualizar', 'contas-atualizar', 'contas-desativar', 'contas-reativar', 'contas-recuperar'])
@@ -307,16 +310,20 @@ class AdministracaoTest(Auditoria):
     def test_convidado_tentando_administrar_e_negado_e_registrado(self):
         for operacao in ('contas-listar', 'contas-criar', 'contas-recuperar'):
             self.assertEqual(self.post(self.ana, operacao, {'id': self.bia_id})[0], 403)
-        negadas = self.novas('operacao_negada')
-        self.assertEqual([(l['conta'], l['operacao'], l['resultado'], l['codigo']) for l in negadas],
-                         [(self.ana_id, o, 'negado', 'operacao_proibida') for o in ('contas-listar', 'contas-criar', 'contas-recuperar')])
+        negadas = self.novas('acesso_negado')  # the gate's refusal, with its reason (contrato de contas, 4.3)
+        self.assertEqual([(l['conta'], l['operacao'], l['resultado'], l['codigo'], l['motivo']) for l in negadas],
+                         [(self.ana_id, o, 'negado', 'operacao_proibida', 'papel')
+                          for o in ('contas-listar', 'contas-criar', 'contas-recuperar')])
         self.assertEqual(self.novas('conta_criada'), [], 'nada foi criado')
 
     def test_apuracao_nao_liberada_ao_convidado_e_negada(self):
         status, _ = self.post(self.ana, 'codex-perguntar', {'caso': 'beta', 'pergunta': 'Pergunta sintética.'})
-        self.assertEqual(status, 403)
-        linha, = self.novas('operacao_negada')
-        self.assertEqual((linha['codigo'], linha['operacao']), ('caso_nao_liberado', 'codex-perguntar'))
+        # Out of reach answers as nonexistent (404 caso_indisponivel); the real reason goes to the audit log only
+        # (contrato de contas, 4.3).
+        self.assertEqual(status, 404)
+        linha, = self.novas('acesso_negado')
+        self.assertEqual((linha['codigo'], linha['motivo'], linha['operacao']),
+                         ('caso_indisponivel', 'sem_participacao', 'codex-perguntar'))
         self.assertNotIn('beta', json.dumps(linha))
 
 
@@ -352,7 +359,7 @@ class DownloadsTest(Auditoria):
         status, _ = self.post(self.ana, 'original', {'caso': 'beta', 'rodada': 'R1', 'passagem': 'x'})
         self.assertEqual(status, 403)
         self.assertEqual(self.novas('download'), [])
-        self.assertEqual(self.novas('operacao_negada')[0]['operacao'], 'original')
+        self.assertEqual(self.novas('acesso_negado')[0]['operacao'], 'original')
 
     def test_original_da_conversa_do_convidado_entra_como_download_de_original(self):
         conversa = self.perguntar(self.ana)
@@ -390,7 +397,10 @@ class NadaSensivelNoRegistroTest(Auditoria):
         for linha in self.todas():
             self.assertLessEqual(set(linha), {'em', 'evento', 'resultado', 'conta', 'ip', 'origem', 'operacao', 'caso_ref',
                                                'motivo', 'tipo', 'bytes', 'papel', 'campos', 'por', 'alvo', 'cliente', 'codigo',
-                                               'login_ref', 'acesso_operacao', 'tipo_original', 'em_original', 'quantidade'})
+                                               'login_ref', 'acesso_operacao', 'tipo_original', 'em_original', 'quantidade',
+                                               'organizacao'})  # the newsroom's id, never its name (contrato de contas, 10)
+            if 'organizacao' in linha:
+                self.assertRegex(linha['organizacao'], r'^(org[0-9a-f]{16}|instalacao)$')
 
     def test_log_message_continua_sem_registrar_consultas_ou_tokens(self):
         saida = StringIO()
