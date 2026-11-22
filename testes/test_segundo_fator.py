@@ -70,6 +70,18 @@ class TotpTest(unittest.TestCase):
         self.assertEqual(hostil.count('issuer='), 1)
 
 
+class DependenciaTest(unittest.TestCase):
+    def test_cryptography_e_dependencia_direta_com_a_versao_da_trava(self):
+        # Decision 13: it used to come only through the OCR's dependencies, which could drop it without notice.
+        raiz = Path(__file__).resolve().parents[1]
+        diretas = dict(re.findall(r'^([A-Za-z0-9._-]+)==(\S+)$', (raiz / 'requirements.txt').read_text(encoding='utf-8'), re.M))
+        self.assertIn('cryptography', diretas)
+        trava = dict(re.findall(r'^([A-Za-z0-9._-]+)==(\S+?)(?:\s|\\)', (raiz / 'deploy' / 'requirements.lock').read_text(encoding='utf-8'), re.M))
+        self.assertEqual(trava.get('cryptography'), diretas['cryptography'])
+        import cryptography
+        self.assertEqual(cryptography.__version__, diretas['cryptography'])  # what this environment runs is what is pinned
+
+
 class ReservaTest(unittest.TestCase):
     def test_dez_codigos_diferentes_num_formato_que_se_dita(self):
         codigos = fator.novos_codigos_de_reserva()
