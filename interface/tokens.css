@@ -96,7 +96,7 @@
 
 /* === 3. COMPONENTS === */
 :root{
- --largura-barra:256px;--mesa-sidebar:var(--largura-barra);
+ --largura-barra:256px;--mesa-sidebar:var(--largura-barra);--cabecalho-altura:64px;
  /* PDF reader: the page is paper in both themes */
  --pdf-pagina:var(--vlado-branco);--pdf-selecao:var(--vlado-pdf-selecao);
  --pdf-trecho:var(--vlado-pdf-trecho);--pdf-trecho-borda:var(--vlado-pdf-trecho-borda);

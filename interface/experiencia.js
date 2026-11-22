@@ -6,7 +6,7 @@
     'achados-texto','achados-documento','achados-natureza','achados-suporte','achados-humana','achados-destino','achados-briefing','achados-marcacao','achados-limite',
     'caderno-texto','diligencias-texto','diligencias-estado-filtro','diligencias-responsavel-filtro'];
   let current = '', area = 'inicio', restoring = false, revision = 0;
-  const desktop = matchMedia('(min-width: 1051px)');
+  const desktop = matchMedia('(min-width:1024px)');
   // Guests work only in "Ask the AI"; the server enforces access, this keeps the screen honest.
   const guest = document.body.dataset.papel === 'convidado';
   window.limitarNavegacaoConvidado = () => {
@@ -285,7 +285,7 @@
     return true;
   }
   $('achados-resultados').addEventListener('click',event=>{
-    if(!event.target.closest('.finding-open') || !matchMedia('(max-width: 900px)').matches)return;
+    if(!event.target.closest('.finding-open') || !matchMedia('(max-width:1023px)').matches)return;
     returnTo=event.target.closest('.finding-open'); $('mesa-achados').classList.add('detail-open'); back.hidden=false;
     window.camadaMesa.abrir('achado',closeDetail);
     const heading=$('achados-inspecao').querySelector('h3'); if(heading){heading.tabIndex=-1;heading.focus();}
@@ -342,7 +342,7 @@
 // Virtual keyboard: a focused field scrolls back into the visible part of the screen when the
 // keyboard (or the browser bar) shrinks the visual viewport. Desktop layouts are not affected.
 (() => {
-  const narrow = matchMedia('(max-width: 1050px)');
+  const narrow = matchMedia('(max-width:1023px)');
   const typing = node => node?.matches?.('input:not([type=checkbox]):not([type=radio]):not([type=file]),textarea,select,[contenteditable="true"]');
   let timer = null;
   function keepVisible() {

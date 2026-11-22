@@ -206,7 +206,7 @@ window.Quadros = (() => {
   // a screen down); the summary says how many types are chosen, and the choice survives reloads.
   function filtro(painel, casoId, carregar) {
     const gaveta = element('details', undefined, 'tempo-filtro-caixa');
-    filtroAberto ??= !window.matchMedia?.('(max-width: 720px)').matches;
+    filtroAberto ??= !window.matchMedia?.('(max-width:719px)').matches;
     gaveta.open = filtroAberto;
     gaveta.addEventListener('toggle', () => { filtroAberto = gaveta.open; });
     const total = Object.keys(tipos).length;

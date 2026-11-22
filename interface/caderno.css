@@ -91,7 +91,7 @@
 /* Sources column */
 #area-apuracao .notebook-sources .note-source-doc button{min-height:44px}
 
-@media (max-width:1439px){
+@media (max-width:1279px){
   #area-apuracao .caderno-rotulo{display:none}
 }
 
@@ -115,7 +115,7 @@
 }
 
 /* Phones and narrow tablets: the note in front, list and sources as drawers */
-@media (max-width:900px){
+@media (max-width:1023px){
   #area-apuracao .notebook-workspace.notebook-grid{grid-template-columns:minmax(0,1fr);gap:0}
   #area-apuracao #apuracao-ver-fontes{display:inline-flex}
   #area-apuracao .notebook-workspace:not(.is-empty)>#apuracao-fontes-painel{position:fixed;inset:0 0 0 auto;z-index:var(--camada-modal);width:min(380px,92vw);max-height:none;margin:0;padding:18px 16px;overflow-y:auto;overscroll-behavior:contain;background:var(--white);box-shadow:0 0 40px var(--theme-shadow);transform:translateX(105%);visibility:hidden;transition:transform var(--duracao-media) var(--curva-padrao),visibility 0s linear var(--duracao-media)}
@@ -138,7 +138,7 @@
   #area-apuracao>:is(.notebook-toolbar,.filters,#apuracao-inserir-ajuda,.notebook-note){order:3}
   #area-apuracao>.notebook-toolbar{margin-top:20px;padding-top:16px;border-top:1px solid var(--line)}
 }
-@media (max-width:380px){
+@media (max-width:719px){
   #area-apuracao .caderno-formatar{gap:2px}
   #area-apuracao .caderno-comando{padding:6px 8px}
   #area-apuracao #apuracao-mais{margin-left:0}

@@ -480,7 +480,7 @@
     else if (event.tipo === 'resposta') {
       agentMessage(data.item, data.texto, false, data.fase, data.rodada,
         {publicada:data.publicada, arquivo:data.arquivo, sha256:data.sha256, etapa:data.etapa});
-      $('codex-anuncio').textContent=matchMedia('(min-width: 1051px)').matches && !(data.publicada || data.fase === 'final_answer')
+      $('codex-anuncio').textContent=matchMedia('(min-width:1024px)').matches && !(data.publicada || data.fase === 'final_answer')
         ? 'Atualização de andamento disponível. A análise continua.'
         : 'Resposta disponível. Confira a análise e as fontes consultadas.';
     }

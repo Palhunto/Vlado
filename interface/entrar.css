@@ -16,5 +16,5 @@
 .entrar-mensagem{margin:18px 0 0;padding:14px 16px;border-radius:6px;background:var(--theme-warning-bg);color:var(--theme-warning);border:1px solid var(--theme-warning-line);overflow-wrap:anywhere}
 .entrar-mensagem.ok{background:var(--theme-soft);color:var(--theme-accent);border-color:var(--theme-accent-line)}
 #ativar-dica{margin:-8px 0 0}
-@media(max-width:360px){.entrar-cartao section{padding:18px}.entrar-senha-linha{flex-direction:column}.entrar-mostrar{align-self:flex-start}}
+@media(max-width:719px){.entrar-cartao section{padding:18px}.entrar-senha-linha{flex-direction:column}.entrar-mostrar{align-self:flex-start}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}

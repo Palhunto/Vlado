@@ -210,11 +210,11 @@ main{padding:30px 32px;min-width:0}
 .raw-briefing{white-space:pre-wrap;overflow-wrap:anywhere;font:var(--text-md)/1.65 var(--fonte-interface)}
 .briefing-caption{max-width:70ch}
 footer{font-size:var(--text-md);line-height:1.7;color:var(--muted);margin-top:38px;padding-top:22px;border-top:1px solid var(--line)}
-@media (min-width:1200px) {
+@media (min-width:1280px) {
   #area-achados .filters{grid-template-columns:repeat(3,minmax(0,1fr))}
   #area-achados .version-selectors{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
-@media (max-width:1100px) {
+@media (max-width:1023px) {
   .app-layout{grid-template-columns:180px minmax(0,1fr)}
   main{padding:28px 24px}
   .findings-workspace,.briefing-reader{grid-template-columns:1fr}
@@ -222,7 +222,7 @@ footer{font-size:var(--text-md);line-height:1.7;color:var(--muted);margin-top:38
   .finding-choice:last-child:nth-child(odd){grid-column:1/-1}
   .source-pane .finding-detail{padding:24px}
 }
-@media (max-width:760px) {
+@media (max-width:719px) {
   .app-header{padding:20px}
   .header-note{display:none}
   .app-layout{grid-template-columns:1fr}
@@ -239,7 +239,7 @@ footer{font-size:var(--text-md);line-height:1.7;color:var(--muted);margin-top:38
   .finding-choice:last-child:nth-child(odd){grid-column:auto}
   .source-pane .finding-detail{padding:20px}
 }
-@media (max-width:480px) {
+@media (max-width:719px) {
   main{padding:24px 16px}
   .app-header{gap:12px;padding:20px 16px}
   .brand{font-size:var(--text-base)}
@@ -274,7 +274,7 @@ footer{font-size:var(--text-md);line-height:1.7;color:var(--muted);margin-top:38
 #codex-atividades{max-height:320px;overflow:auto;overflow-wrap:anywhere}
 #codex-pergunta{width:100%;box-sizing:border-box;resize:vertical;font:inherit;padding:12px}
 #codex-inventario pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto}
-@media (max-width:950px) {
+@media (max-width:1023px) {
   .codex-workspace{grid-template-columns:1fr}
 }
 .inline-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
@@ -317,7 +317,7 @@ dialog{
 dialog::backdrop{background:var(--theme-backdrop)}
 dialog h2,dialog p{overflow-wrap:anywhere}
 dialog .actions{justify-content:flex-end;margin-bottom:0}
-@media (max-width:600px) {
+@media (max-width:719px) {
   .manage-case,.manage-list li{align-items:stretch;flex-direction:column;gap:12px}
   .manage-case button,.manage-list button{align-self:start}
   dialog{padding:22px}
@@ -468,16 +468,16 @@ h1,h2,h3{font-optical-sizing:auto}
 #codex-andamento .small{font-size:var(--text-sm)}
 .manage-case .technical{margin:8px 0 0;padding:0;border:0}
 .manage-list .technical{margin:8px 0 0;padding:0;border:0}
-@media (min-width:1450px) {
+@media (min-width:1280px) {
   .codex-workspace{grid-template-columns:minmax(0,1fr) minmax(290px,350px)}
 }
-@media (max-width:1050px) {
+@media (max-width:1023px) {
   .codex-workspace{grid-template-columns:minmax(0,1fr)}
   .codex-fontes{position:static}
   #codex-fontes{max-height:none}
   .codex-fontes>.small{margin-bottom:8px}
 }
-@media (max-width:600px) {
+@media (max-width:719px) {
   .brand{font-size:var(--text-2xl)}
   .badge{font-size:var(--text-sm)}
   #area-codex>.panel:first-child{padding:18px}
@@ -587,12 +587,12 @@ h1,h2,h3{font-optical-sizing:auto}
 .review-context{margin-top:10px}
 .review-context>.context{max-height:300px;overflow:auto;font-size:var(--text-md)}
 .review-context summary{font-size:var(--text-md)}
-@media (max-width:900px) {
+@media (max-width:1023px) {
   .human-review-workspace{grid-template-columns:minmax(0,1fr)}
   #revisao-form{position:static}
   .human-review-toolbar{grid-template-columns:minmax(0,1fr);gap:18px}
 }
-@media (max-width:480px) {
+@media (max-width:719px) {
   .human-review-dialog{width:calc(100% - 20px);padding:18px;max-height:calc(100% - 24px)}
   .review-claim{font-size:var(--text-xl)}
   .human-review-filter{align-items:stretch;flex-direction:column}
@@ -708,7 +708,7 @@ h1,h2,h3{font-optical-sizing:auto}
 #apuracao-previa, #apuracao-fontes{overflow-wrap:anywhere}
 #apuracao-texto{font-family:var(--fonte-mono)}
 #apuracao-adicionar-texto{max-height:35vh;overflow:auto;white-space:pre-wrap}
-@media (max-width:760px) {
+@media (max-width:719px) {
   .notebook-workspace{grid-template-columns:minmax(0,1fr)}
 }
 /* A single visible case context and one notebook navigation. */
@@ -754,7 +754,7 @@ h1,h2,h3{font-optical-sizing:auto}
 #original-conteudo pre{white-space:pre-wrap;overflow-wrap:anywhere}
 #achados-voltar-lista{display:none}
 #cadastro-perguntar{margin:16px 0}
-@media (max-width:900px) {
+@media (max-width:1023px) {
   .app-header{gap:12px;flex-wrap:wrap}
   .header-note{display:none}
   .persistent-context{min-width:160px}
@@ -785,13 +785,13 @@ h1,h2,h3{font-optical-sizing:auto}
   font-size:var(--text-base);
 }
 #original-conteudo{height:100%;flex:1;min-width:0}
-@media (max-width:700px) {
+@media (max-width:719px) {
   .original-workspace{flex-direction:column}
   #original-referencia{max-height:20vh;flex-basis:auto}
   #original-conteudo{min-height:40vh}
 }
 /* Desktop refinement. The existing rules up to 1050 px remain unchanged. */
-@media (min-width:1051px) {
+@media (min-width:1024px) {
   html{scroll-padding-top:calc(var(--mesa-header-height,106px) + 20px);scroll-padding-bottom:calc(var(--mesa-composer-height,0px) + 20px)}
   main [tabindex="-1"],.codex-source{scroll-margin-top:calc(var(--mesa-header-height,106px) + 20px)}
   .codex-fontes{top:calc(var(--mesa-header-height,106px) + 20px)}
@@ -921,8 +921,8 @@ progress{accent-color:var(--green)}
 }
 /* Cabeçalho da apuração (docs/design/componentes.md#cabecalhos): 64 px, preenchimento 0 32, intervalo de 16. */
 .app-header{
-  height:64px;
-  min-height:64px;
+  height:var(--cabecalho-altura);
+  min-height:var(--cabecalho-altura);
   padding:0 var(--espaco-8);
   margin:0 0 0 var(--mesa-sidebar);
   max-width:none;
@@ -1031,7 +1031,7 @@ progress{accent-color:var(--green)}
   vertical-align:middle;
 }
 .mesa-processing span{display:block;color:var(--muted);font-size:var(--text-xs);margin:4px 0 0 11px}
-main{padding:var(--espaco-8);max-width:1600px;min-height:calc(100dvh - 64px);margin:0 auto;min-width:0}
+main{padding:var(--espaco-8);max-width:1600px;min-height:calc(100dvh - var(--cabecalho-altura));margin:0 auto;min-width:0}
 .intro{margin:0 0 28px;max-width:none}
 .intro h1{max-width:none}
 .intro>p:last-child{max-width:800px;font-size:var(--text-base);line-height:1.65;margin:0;color:var(--muted)}
@@ -1368,7 +1368,7 @@ footer{font-size:var(--text-xs);margin-top:32px;padding-top:20px;color:var(--mut
 #codex-limitacoes{padding:12px 17px;margin-bottom:16px}
 #codex-limitacoes h3{font-size:var(--text-md);margin-bottom:5px}
 #codex-limitacoes li{font-size:var(--text-sm);margin:3px 0}
-@media (min-width:1051px) {
+@media (min-width:1024px) {
   .findings-list{
     max-height:calc(100dvh - 140px);
     overflow-y:auto;
@@ -1380,12 +1380,10 @@ footer{font-size:var(--text-xs);margin-top:32px;padding-top:20px;color:var(--mut
   }
   .finding-inspector>button{display:none}
 }
-@media (max-width:720px) {
-  .sidebar{visibility:hidden}
-  .mesa-menu-open .sidebar{visibility:visible}
+@media (max-width:719px) {
   .mesa-file-table td>.mesa-mobile-coverage{display:block;color:var(--warning);font-size:var(--text-xs)}
 }
-@media (min-width:1051px) {
+@media (min-width:1024px) {
   main:has(#area-achados:not([hidden])){padding-top:28px}
   #area-achados .human-review-toolbar{padding:15px 18px;margin:8px 0 0}
   .desktop-finding-fields{padding:15px 0}
@@ -1394,10 +1392,10 @@ footer{font-size:var(--text-xs);margin-top:32px;padding-top:20px;color:var(--mut
   .notebook-workspace:has(#apuracao-notas:empty){grid-template-columns:1fr}
   .notebook-workspace:has(#apuracao-notas:empty) #apuracao-notas{display:none}
 }
-@media (min-width:1550px) {
+@media (min-width:1280px) {
   .codex-workspace{grid-template-columns:minmax(0,1fr) 340px}
 }
-@media (max-width:1190px) {
+@media (max-width:1279px) {
   .codex-workspace{grid-template-columns:minmax(0,1fr) 240px;gap:20px}
   .findings-workspace{grid-template-columns:265px minmax(0,1fr)}
   .notebook-workspace{grid-template-columns:175px minmax(0,1fr)}
@@ -1406,7 +1404,7 @@ footer{font-size:var(--text-xs);margin-top:32px;padding-top:20px;color:var(--mut
   #mesa-etapas{gap:16px}
   .mesa-file-table th,.mesa-file-table td{padding-inline:13px}
 }
-@media (max-width:1050px) {
+@media (max-width:1023px) {
   .codex-workspace{grid-template-columns:1fr}
   .codex-fontes{position:static;padding-top:20px;border-top:1px solid var(--line)}
   #codex-fontes{max-height:60vh}
@@ -1420,7 +1418,7 @@ footer{font-size:var(--text-xs);margin-top:32px;padding-top:20px;color:var(--mut
   .mesa-file-table td:first-child{width:40%}
   .mesa-file-table td:nth-child(3){width:35%}
 }
-@media (max-width:900px) {
+@media (max-width:1023px) {
   .notebook-workspace{grid-template-columns:1fr}
   #apuracao-notas{flex-direction:row;flex-wrap:wrap;margin-bottom:8px}
   #apuracao-notas button{flex:1;min-width:140px}
@@ -1431,42 +1429,48 @@ footer{font-size:var(--text-xs);margin-top:32px;padding-top:20px;color:var(--mut
   .human-review-toolbar{grid-template-columns:1fr}
   .mesa-acervo-toolbar label:nth-child(2){max-width:none;flex:1}
 }
-@media (max-width:720px) {
+/* Gaveta (docs/design/componentes.md#barra-lateral): abaixo de 1280 px a barra lateral sai da tela e abre pelo botão de menu. */
+@media (max-width:1279px) {
   :root{--mesa-sidebar:0px}
-  .app-header{height:78px;min-height:78px;padding:12px 18px;gap:13px;margin-left:0;flex-wrap:nowrap}
+  .app-header{margin-left:0}
   .app-header .mobile-brand{display:none}
   #mesa-menu{
     display:inline-flex;
     align-items:center;
     justify-content:center;
-    width:40px;
-    min-width:40px;
-    height:40px;
-    padding:8px;
+    width:44px;
+    min-width:44px;
+    height:44px;
+    padding:var(--espaco-2);
     background:var(--white);
   }
-  .persistent-context{flex:1;max-width:none;min-width:0}
-  .persistent-context select{font-size:var(--text-base)}
-  .persistent-context>span{font-size:var(--text-xs)}
-  .header-note{display:none}
   .app-layout{margin-left:0}
   .sidebar{
     width:var(--largura-barra);
     transform:translateX(-100%);
     transition:transform var(--duracao-media) var(--curva-padrao);
-    box-shadow:10px 0 35px var(--theme-shadow-soft);
-    top:78px;
-    height:calc(100dvh - 78px);
-    padding:20px 16px;
+    box-shadow:var(--sombra-dialogo);
+    top:var(--cabecalho-altura);
+    height:calc(100dvh - var(--cabecalho-altura));
+    padding:var(--espaco-6) var(--espaco-4);
+    visibility:hidden;
   }
-  .mesa-menu-open .sidebar{transform:translateX(0)}
+  .mesa-menu-open .sidebar{transform:translateX(0);visibility:visible}
+}
+@media (max-width:719px) {
+  :root{--cabecalho-altura:78px}
+  .app-header{padding:12px 18px;gap:13px;flex-wrap:nowrap}
+  .persistent-context{flex:1;max-width:none;min-width:0}
+  .persistent-context select{font-size:var(--text-base)}
+  .persistent-context>span{font-size:var(--text-xs)}
+  .header-note{display:none}
   .sidebar-brand,.brand-sub{display:none}
   .sidebar #mesa-nova{margin-bottom:16px}
   .areas{flex-direction:column;flex-wrap:nowrap}
   .areas .eyebrow{display:block;padding-top:15px}
   .first-use{padding-top:15px}
   .mesa-processing{margin-top:10px;padding-top:12px}
-  main{padding:26px 20px;min-height:calc(100dvh - 78px)}
+  main{padding:26px 20px;min-height:calc(100dvh - var(--cabecalho-altura))}
   .intro{margin-bottom:24px}
   .intro h1,h1{font-size:var(--text-2xl);letter-spacing:-1px;line-height:1.2}
   .intro>p:last-child{font-size:var(--text-md);line-height:1.65}
@@ -1554,7 +1558,7 @@ footer{font-size:var(--text-xs);margin-top:32px;padding-top:20px;color:var(--mut
   #original-conteudo{min-height:40dvh}
   footer{font-size:var(--text-xs)}
 }
-@media (max-width:360px) {
+@media (max-width:719px) {
   main{padding-inline:16px}
   .intro h1{font-size:var(--text-2xl)}
   .mesa-home-section>.section-heading{align-items:start;flex-direction:column;gap:8px}
@@ -1619,7 +1623,7 @@ body>svg:has(>defs>symbol[id^="vditor-icon-"]){position:absolute;width:0;height:
   padding:6px 8px;
 }
 #apuracao-editor-ajuda{margin:0}
-@media (max-width:760px) {
+@media (max-width:719px) {
   #apuracao-vditor .vditor-content{flex-wrap:wrap}
   #apuracao-vditor .vditor-sv,#apuracao-vditor .vditor-preview{flex:1 1 100%;width:100%}
   #apuracao-vditor .vditor-preview{border-top:1px solid var(--line);max-height:360px}
@@ -1685,7 +1689,7 @@ body>svg:has(>defs>symbol[id^="vditor-icon-"]){position:absolute;width:0;height:
 :root[data-theme=dark] #apuracao-vditor :is(.vditor-tip__content a,.vditor-toc,.vditor-wysiwyg span[data-type=link-ref],.vditor-wysiwyg sup[data-type=footnotes-ref],.vditor-wysiwyg span[data-type=toc-h],.vditor-ir__node[data-type=link-ref],.vditor-ir__node[data-type=footnotes-ref]){
   color:var(--green);
 }
-@media (max-width:720px) {
+@media (max-width:719px) {
   #mesa-tema,#mesa-idioma{min-width:88px}
   .app-header .persistent-context{max-width:none}
   .app-header .mobile-brand{display:none}
@@ -1785,7 +1789,7 @@ body[data-modo="piloto"] #codex-desligar{display:none}
   overflow-wrap:anywhere;
 }
 main:has(#area-achados:not([hidden])) .intro{margin-bottom:16px}
-@media (max-width:720px) {
+@media (max-width:719px) {
   .intro{margin-bottom:18px}
   .intro h1{font-size:var(--text-2xl);letter-spacing:-.4px}
   .intro>#area-descricao{font-size:var(--text-md)}
@@ -1793,7 +1797,7 @@ main:has(#area-achados:not([hidden])) .intro{margin-bottom:16px}
 /* Phone drawer: interface settings and sign-out live under the navigation. */
 .mesa-drawer-controls{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 0;padding-top:16px;border-top:1px solid var(--line)}
 .mesa-drawer-controls>button{flex:1 1 auto;min-height:44px}
-@media (max-width:720px) {
+@media (max-width:719px) {
   .persistent-context>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
 /* Home: a plain first step instead of a hero. */
@@ -1801,7 +1805,7 @@ main:has(#area-achados:not([hidden])) .intro{margin-bottom:16px}
 .mesa-primeiro-passo h2{font-size:var(--text-xl);margin:0 0 6px}
 .mesa-primeiro-passo p{margin:0;font-size:var(--text-md);color:var(--muted);max-width:62ch}
 .mesa-primeiro-passo button{flex-shrink:0}
-@media (max-width:720px) {
+@media (max-width:719px) {
   .mesa-primeiro-passo{flex-direction:column;align-items:stretch;gap:16px}
 }
 /* Trash: restore and permanent delete side by side; the delete dialog shows the scope before the name. */
@@ -1824,7 +1828,7 @@ main:has(#area-achados:not([hidden])) .intro{margin-bottom:16px}
 .delete-confirm{margin-top:16px}
 .delete-confirm strong{font-weight:700;overflow-wrap:anywhere}
 #apagar-erro{padding:12px 14px;margin:14px 0 0;background:var(--warning-bg);color:var(--warning);border-radius:var(--raio-cartao);overflow-wrap:anywhere}
-@media (max-width:720px) {
+@media (max-width:719px) {
   .manage-actions{justify-content:flex-start}
   .delete-scope th,.delete-scope td{padding:7px 6px}
 }
@@ -1890,7 +1894,7 @@ main:has(#area-achados:not([hidden])) .intro{margin-bottom:16px}
 #codex-execucao-aviso{margin:12px 0 0;font-size:var(--text-md);font-weight:600;color:var(--green)}
 .codex-run>.actions{margin:14px 0 0}
 #codex-retomar-cota{margin:8px 0 0;max-width:75ch}
-@media (max-width:720px) {
+@media (max-width:719px) {
   .codex-run{padding:14px 16px}
   .codex-run-head h3{font-size:var(--text-base)}
   .run-step{font-size:var(--text-xs)}
@@ -1991,11 +1995,11 @@ main:has(#area-achados:not([hidden])) .intro{margin-bottom:16px}
   border-radius:var(--raio-pilula);
   cursor:pointer;
 }
-@media (max-width:1190px) {
+@media (max-width:1279px) {
   #area-apuracao .notebook-workspace.notebook-grid{grid-template-columns:minmax(170px,200px) minmax(0,1fr)}
   #area-apuracao .notebook-sources{grid-column:2;position:static;max-height:none}
 }
-@media (max-width:900px) {
+@media (max-width:1023px) {
   #area-apuracao .notebook-workspace.notebook-grid{grid-template-columns:minmax(0,1fr);gap:16px}
   #area-apuracao .notebook-sources{grid-column:auto}
   #area-apuracao #apuracao-notas{flex-direction:row;flex-wrap:nowrap;overflow-x:auto;scroll-snap-type:x proximity;padding-bottom:4px}
@@ -2043,7 +2047,7 @@ main:has(#area-achados:not([hidden])) .intro{margin-bottom:16px}
 #desktop-composicao{padding-top:12px}
 #desktop-composicao>.small{margin:6px 0;font-size:var(--text-xs)}
 #codex-form.desktop-composer-closed{max-height:none}
-@media (max-width:1050px) {
+@media (max-width:1023px) {
   html{scroll-padding-bottom:calc(var(--mesa-composer-height,0px) + 12px)}
   #codex-form{max-height:min(55dvh,420px)}
   #codex-pergunta{height:76px}
@@ -2051,17 +2055,17 @@ main:has(#area-achados:not([hidden])) .intro{margin-bottom:16px}
   #desktop-composicao{padding-top:8px}
 }
 /* Stepper at 12px: four steps stay on one line on a phone and scroll rather than clip. */
-@media (max-width:720px) {
+@media (max-width:719px) {
   #mesa-etapas{gap:4px;overflow-x:auto;scrollbar-width:none}
   #mesa-etapas a{flex:0 0 auto;gap:4px;padding-inline:2px;white-space:nowrap}
 }
-@media (min-width:1051px) {
+@media (min-width:1024px) {
   #achados-form>.actions label select{max-width:280px}
 }
 /* Sidebar group labels at 12px keep to one line in the narrow sidebar. */
 .areas .eyebrow,.brand-sub{letter-spacing:.06em}
 /* On a tablet the header belongs to the investigation selector; the document version stays in Documentos. */
-@media (max-width:1050px) {
+@media (max-width:1023px) {
   .app-header .header-note{display:none}
 }
 /* Frente C — Mesa em tela estreita (320–390 px), toque, teclado virtual e página citada do PDF. */
@@ -2091,14 +2095,14 @@ main:has(#area-achados:not([hidden])) .intro{margin-bottom:16px}
 .env-banner[hidden]{display:none}
 body[data-ambiente]{padding-top:var(--faixa-ambiente)}
 body[data-ambiente] .app-header{top:var(--faixa-ambiente)}
-@media (min-width:721px) {
+@media (min-width:1280px) {
   body[data-ambiente] .sidebar{top:var(--faixa-ambiente);height:calc(100dvh - var(--faixa-ambiente))}
 }
-@media (max-width:720px) {
-  body[data-ambiente] .sidebar{top:calc(78px + var(--faixa-ambiente));height:calc(100dvh - 78px - var(--faixa-ambiente))}
+@media (max-width:1279px) {
+  body[data-ambiente] .sidebar{top:calc(var(--cabecalho-altura) + var(--faixa-ambiente));height:calc(100dvh - var(--cabecalho-altura) - var(--faixa-ambiente))}
 }
 /* Touch: every control reaches 44 × 44 CSS px on phones and coarse pointers. */
-@media (max-width:720px),(pointer:coarse) {
+@media (max-width:719px),(pointer:coarse) {
   main button,
   main select,
   main summary,
@@ -2126,7 +2130,7 @@ body[data-ambiente] .app-header{top:var(--faixa-ambiente)}
   .feedback-choice,.delete-confirm{min-height:44px}
   input[type=checkbox],input[type=radio]{width:24px;height:24px}
 }
-@media (max-width:720px) {
+@media (max-width:719px) {
   .app-header .persistent-context select{min-height:44px;padding-block:6px}
   /* Long names, hashes and paths wrap instead of widening the page. */
   main h1,
@@ -2254,11 +2258,11 @@ body[data-ambiente] .app-header{top:var(--faixa-ambiente)}
 }
 /* Keyboard focus is never hidden behind the sticky header and the environment banner. */
 html{scroll-padding-top:calc(var(--faixa-ambiente) + 96px)}
-@media (max-width:720px) {
+@media (max-width:719px) {
   html{scroll-padding-top:calc(var(--faixa-ambiente) + 88px)}
 }
 /* Short screens (landscape phone, large text): the original scrolls as a whole instead of clipping. */
-@media (max-width:720px) and (max-height:560px),(max-height:420px) {
+@media (max-width:719px) and (max-height:560px),(max-height:420px) {
   #original-dialogo[open]{overflow-y:auto}
   #original-dialogo .original-workspace{flex:none}
   #original-referencia{max-height:5.5em}
@@ -2516,7 +2520,7 @@ ins.comparar-incluido,p.comparar-incluido{
 }
 .mapa-homonimo-nomes{font-weight:600;margin:0}
 .mapa-detalhe{margin-top:var(--espaco-5);border-top:1px solid var(--quadro-borda);padding-top:var(--espaco-4)}
-@media (max-width:900px) {
+@media (max-width:1023px) {
   .quadro-colunas,.comparar-lados,.tabela-layout,.mapa-layout,.comparar-form{grid-template-columns:minmax(0,1fr)}
 }
 /* Draft status in the header (indicador_salvamento.js): text always, the mark only reinforces it. */
@@ -2531,7 +2535,7 @@ ins.comparar-incluido,p.comparar-incluido{
 }
 .quadros-retomada{margin:var(--espaco-3) 0;border:1px solid var(--quadro-borda);border-radius:var(--raio-cartao);padding:0 var(--espaco-4)}
 /* Phones: the map is read as its list; the drawing stays out of the way. */
-@media (max-width:720px) {
+@media (max-width:719px) {
   .mapa-visual{display:none}
   .tabela-fonte{position:static}
   .mesa-tabs,.notebook-tabs,.quadros-abas{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity}

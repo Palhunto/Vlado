@@ -28,7 +28,7 @@
 })();
 // Adaptive operational controls. The approved editorial shell follows below.
 (() => {
-  const desktop = matchMedia('(min-width: 1051px)');
+  const desktop = matchMedia('(min-width:1024px)');
   const form = $('codex-form'), header = document.querySelector('.app-header');
   const navigation = [...document.querySelectorAll('.areas button:not([hidden])')].map(button => ({button,id:button.id,link:null}));
   const metadata = new Map();
@@ -179,7 +179,7 @@
 // Phones: language, theme and sign-out move into the navigation drawer, leaving the
 // header to the menu and the investigation selector.
 (() => {
-  const phone = matchMedia('(max-width: 720px)');
+  const phone = matchMedia('(max-width:719px)');
   const header = document.querySelector('.app-header');
   const controls = ['mesa-idioma','mesa-sair','mesa-tema'].map(id => $(id));
   const drawer = element('div', undefined, 'mesa-drawer-controls');
@@ -364,9 +364,9 @@
   diligenceResume.id='mesa-diligencias-retomada';diligenceResume.append(element('summary','Conversa e documentos para retomar a questão'));
   const resumeLabel=$('diligencias-conversa').closest('label');resumeLabel.before(diligenceResume);diligenceResume.append(resumeLabel,$('diligencias-incorporar').closest('label'));
   let hadSources=false;
-  new MutationObserver(()=>{const hasSources=!!$('codex-fontes').children.length;if(hasSources&&!hadSources&&matchMedia('(min-width:1051px)').matches)$('codex-painel-fontes').open=true;hadSources=hasSources;}).observe($('codex-fontes'),{childList:true});
+  new MutationObserver(()=>{const hasSources=!!$('codex-fontes').children.length;if(hasSources&&!hadSources&&matchMedia('(min-width:1024px)').matches)$('codex-painel-fontes').open=true;hadSources=hasSources;}).observe($('codex-fontes'),{childList:true});
   // Refresh the adopted navigation nodes after desktop.js restores them on resize.
-  matchMedia('(min-width:1051px)').addEventListener('change',navigation);
+  matchMedia('(min-width:1024px)').addEventListener('change',navigation);
   for(const field of document.querySelectorAll('input[id],textarea[id],select[id]')){if(!field.name)field.name=field.id;if(!field.hasAttribute('autocomplete')&&['text','search'].includes(field.type))field.autocomplete='off';}
   const params=new URL(location.href).searchParams;if(!params.has('documentos-aba')&&['consulta','geracao','rodada'].some(k=>params.has(k)))$('documentos-aba').value='pesquisa';
   sync();

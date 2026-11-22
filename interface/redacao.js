@@ -24,7 +24,7 @@
     // Number agreement: "1 parcial", "2 parciais" (and "1 partial claim" in English through the dictionary).
     const contagem = (n, um, varios) => t(n === 1 ? um : varios, {n});
     const comConta = () => document.body.dataset.modo !== 'local';
-    const celular = () => !!window.matchMedia?.('(max-width: 1050px)').matches;
+    const celular = () => !!window.matchMedia?.('(max-width:1023px)').matches;
     const rid = () => window.crypto.randomUUID().replace(/-/g, '').slice(0, 32);
     const opcoes = (mapa, vazio) => {
       const campo = element('select');
