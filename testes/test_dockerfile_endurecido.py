@@ -1,5 +1,6 @@
 """Fixa o endurecimento da imagem e do Compose (SEG-04): digests, lista de inclusão, trava com hashes,
 sistema de arquivos somente leitura, capacidades mínimas e limites. Só lê arquivos do repositório."""
+import ast
 from fnmatch import fnmatchcase
 from pathlib import Path
 import re
@@ -11,7 +12,7 @@ DIGEST = re.compile(r'@sha256:[0-9a-f]{64}$')
 # O que a Mesa hospedada lê em execução. Ampliar exige decisão consciente: cada item novo vira superfície
 # da imagem. Pastas de agente, docs, testes, instalador, Android e dados nunca entram.
 COPY_PERMITIDO = {
-    'deploy/requirements.lock', 'scripts/', 'interface/', 'prompts/', 'modelos/',
+    'deploy/requirements.lock', 'interface/', 'prompts/', 'modelos/',
     'configuracao.json', 'AGENTS.md', 'README.md', 'casos/README.md', 'casos/catalogo.json',
     'entrada/README.md', 'scripts/backup.py',  # esta última só no estágio `backup` (age + rclone), sem o app
 }
@@ -20,10 +21,17 @@ PROIBIDO_NA_IMAGEM = ('.maestro', '.maestri', '.claude', '.git', 'segredos', 'ac
 
 
 def _dockerfile() -> list[str]:
-    linhas = []
+    """Instruções do Dockerfile sem comentários, com as linhas de continuação (terminadas em barra invertida) juntadas."""
+    barra = chr(92)
+    linhas, acumulado = [], []
     for linha in (RAIZ / 'Dockerfile').read_text(encoding='utf-8').splitlines():
-        if linha.strip() and not linha.lstrip().startswith('#'):
-            linhas.append(linha.strip())
+        if not acumulado and (not linha.strip() or linha.lstrip().startswith('#')):
+            continue
+        continua = linha.rstrip().endswith(barra)
+        acumulado.append(linha.strip().removesuffix(barra).strip())
+        if not continua:
+            linhas.append(' '.join(parte for parte in acumulado if parte))
+            acumulado = []
     return linhas
 
 
@@ -142,6 +150,9 @@ class ListaDeInclusaoTest(unittest.TestCase):
     def test_copy_so_do_que_a_mesa_le_em_execucao(self):
         for partes in _copias():
             for origem in partes[:-1]:
+                if origem.startswith('scripts/'):  # um arquivo por vez (I5); o fecho de imports é conferido abaixo
+                    self.assertRegex(origem, r'^scripts/[a-z_]+\.py$', f'COPY de scripts fora da lista por arquivo: {origem}')
+                    continue
                 self.assertIn(origem, COPY_PERMITIDO, f'COPY fora da lista de inclusão: {origem}')
                 for proibido in PROIBIDO_NA_IMAGEM:
                     self.assertFalse(origem.strip('/').startswith(proibido), f'{origem} não pode entrar na imagem')
@@ -164,6 +175,43 @@ class ListaDeInclusaoTest(unittest.TestCase):
         for partes in _copias():
             for origem in partes[:-1]:
                 self.assertFalse(ignorado(origem.rstrip('/')), f'.dockerignore esconde {origem}, que o COPY precisa')
+
+    def test_scripts_da_imagem_do_app_sao_o_fecho_de_imports_da_mesa_mais_os_do_operador(self):
+        """I5: nada que a Mesa importe pode faltar na imagem, e as ferramentas de desenvolvimento e do Windows
+        não entram. O fecho é recalculado a partir de scripts/interface_pesquisa.py (import, from-import,
+        importlib com texto e nomes de arquivo .py citados)."""
+        modulos = {p.stem for p in (RAIZ / 'scripts').glob('*.py')}
+
+        def dependencias(nome: str) -> set[str]:
+            fonte = (RAIZ / 'scripts' / f'{nome}.py').read_text(encoding='utf-8')
+            achados = set()
+            for no in ast.walk(ast.parse(fonte)):
+                if isinstance(no, ast.Import):
+                    achados |= {a.name.split('.')[0] for a in no.names}
+                elif isinstance(no, ast.ImportFrom):
+                    if no.module and no.level == 0:
+                        achados.add(no.module.split('.')[0])
+                    elif no.level and not no.module:
+                        achados |= {a.name for a in no.names}
+            for m in modulos - {nome}:
+                if re.search(rf"['\"/\\]{m}\.py['\"]|import_module\(['\"]{m}['\"]", fonte):
+                    achados.add(m)
+            return achados & modulos
+
+        fecho, fila = set(), ['interface_pesquisa']
+        while fila:
+            atual = fila.pop()
+            if atual not in fecho:
+                fecho.add(atual)
+                fila.extend(dependencias(atual))
+        operador = {'semear_ambiente', 'dados_sinteticos'}
+        copiados = {Path(o).stem for partes in _copias() for o in partes[:-1] if o.startswith('scripts/')}
+        copiados_app = copiados - {'backup'}
+        self.assertEqual(fecho - copiados, set(), 'a Mesa importa módulos que a imagem não copia')
+        self.assertEqual(copiados_app, fecho | operador, 'a imagem copia módulos que a Mesa não usa')
+        for ferramenta in ('gerar_instalador', 'vlado_lancador', 'demo_evidencias', 'preparar_notebook',
+                           'empacotar_entrega', 'verificar_projeto', 'montar_fluxo', 'selecionar_caso', 'achados', 'backup'):
+            self.assertNotIn(ferramenta, copiados_app, ferramenta)
 
     def test_dockerignore_amplo_cobre_agentes_segredos_e_dumps(self):
         regras = {l.strip() for l in (RAIZ / '.dockerignore').read_text(encoding='utf-8').splitlines()}
@@ -233,6 +281,33 @@ class ComposeEndurecidoTest(unittest.TestCase):
 
     def test_caddy_espera_o_app_saudavel(self):
         self.assertRegex(self.servicos['caddy'], r'vlado:\n\s+condition: service_healthy')
+
+    def test_home_gravavel_pequeno_e_limitado_nos_tres_servicos_que_rodam_como_vlado(self):
+        """I8: com a raiz somente leitura, /home/vlado precisa de um destino gravável e pequeno (tmpfs com teto, dono
+        uid 10001, noexec); /var/tmp continua só leitura, os temporários do OCR vão para o volume tmp_vlado."""
+        for nome in ('vlado', 'backup', 'restauracao'):
+            linha = re.search(r'(?m)^      - (/home/vlado:\S+)$', self.servicos[nome])
+            self.assertIsNotNone(linha, f'{nome} sem tmpfs em /home/vlado')
+            opcoes = linha[1]
+            for exigido in ('rw', 'noexec', 'nosuid', 'nodev', 'uid=10001', 'gid=10001', 'mode=0700'):
+                self.assertIn(exigido, opcoes, f'{nome}: {exigido}')
+            tamanho = re.search(r'size=(?:\$\{[A-Z_]+:-)?(\d+)m', opcoes)
+            self.assertIsNotNone(tamanho, f'{nome}: sem teto de tamanho')
+            self.assertLessEqual(int(tamanho[1]), 32)
+            self.assertNotRegex(self.servicos[nome], r'(?m)^      - /var/tmp:')
+
+
+class VersoesDasFerramentasDeBackupTest(unittest.TestCase):
+    def test_age_e_rclone_com_versao_fixada_e_conferida_no_build(self):
+        """J4: nada de `apt-get install age rclone` sem versão; o build confere a versão instalada."""
+        dockerfile = (RAIZ / 'Dockerfile').read_text(encoding='utf-8')
+        estagio = dockerfile.split('AS backup', 1)[1].split('AS vlado', 1)[0]
+        self.assertIn('"age=1.1.1-1*"', estagio)
+        self.assertIn('"rclone=1.60.1+dfsg-2*"', estagio)
+        self.assertIn(r"age --version | grep -q '^1\.1\.1'", estagio)
+        self.assertIn(r"rclone version | head -1 | grep -q 'v1\.60\.1'", estagio)
+        self.assertNotRegex(estagio, r'install[^\n]* age (?!=)')
+        self.assertIn('FALHA, de propósito', estagio, 'o motivo e o jeito de atualizar ficam no arquivo')
 
 
 if __name__ == '__main__':
