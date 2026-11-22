@@ -322,7 +322,9 @@ class RascunhosContasTest(autorizacao.Http):
         status, body = self.post(self.admin, 'rascunhos-salvar', pedido)
         self.assertEqual((status, body['versao']), (200, 1), 'versão própria da conta')
         status, body = self.post(self.bia, 'rascunhos-ler', {'caso': 'alpha', 'tela': 'pergunta'})
-        self.assertEqual((status, body['codigo']), (400, 'caso_nao_liberado'), body)
+        # A case out of reach answers as a case that does not exist (contrato de contas, 4.3).
+        self.assertEqual((status, body['codigo']), (404, 'caso_indisponivel'), body)
+        self.assertEqual(self.post(self.bia, 'rascunhos-ler', {'caso': 'nao_existe', 'tela': 'pergunta'}), (status, body))
         status, body = self.post(self.ana, 'rascunhos-salvar', {**pedido, 'tela': 'caderno/N0001'})
         self.assertEqual((status, body['codigo']), (400, 'rascunho_so_pergunta'), body)
         status, body = self.post(self.ana, 'rascunhos-listar', {'caso': 'alpha'})
