@@ -1,0 +1,21 @@
+# Ambiente LOCAL no computador do dono (decisão D7: o servidor foi adiado). Camada em cima do docker-compose.yml:
+#   docker compose -p vlado-local --env-file deploy/ambientes/local.env -f docker-compose.yml -f deploy/compose.local.yml up -d --build
+# (o roteiro deploy/LOCAL.md e o script deploy/vlado-local.ps1 já montam esse comando.)
+# Só acrescenta o destino do backup: uma pasta do computador, montada em /destino-backup. O resto (limites de
+# memória, portas, domínio) vem do deploy/ambientes/local.env. Esse destino está na MESMA máquina: serve para
+# ensaiar o backup e a restauração, não protege contra perda do computador (ver deploy/LOCAL.md).
+services:
+  caddy:
+    # Só a porta HTTPS é publicada (e só em 127.0.0.1). A 80 fica fechada: o redirecionamento HTTP->HTTPS do Caddy
+    # aponta para a porta 443 padrão, que aqui é a da homologação, e não para a 9443 deste ambiente.
+    ports: !override
+      - "${VLADO_PORTA_HTTPS:-127.0.0.1:9443}:443"
+
+  backup:
+    volumes:
+      - ${VLADO_LOCAL_BACKUP_PASTA:?defina VLADO_LOCAL_BACKUP_PASTA (pasta do computador para os backups de teste)}:/destino-backup
+
+  restauracao:
+    volumes:
+      # Só leitura: a restauração lê o backup, nunca o altera.
+      - ${VLADO_LOCAL_BACKUP_PASTA:?defina VLADO_LOCAL_BACKUP_PASTA (pasta do computador para os backups de teste)}:/destino-backup:ro
