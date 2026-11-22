@@ -5,11 +5,13 @@ pequena de texto, de cor e de posição, tamanho diferente, captura ausente e ca
 e a linha de base versionada precisa bater com o manifesto (nenhuma imagem trocada ou apagada à mão).
 A captura em si (Playwright) roda à mão: `python testes/regressao_visual.py comparar`.
 """
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
 import re
 import tempfile
+import time
 import unittest
 
 from PIL import Image, ImageDraw
@@ -120,7 +122,7 @@ class MascarasTest(unittest.TestCase):
     """As máscaras trocam só data e hora gravadas pelo servidor; o resto do texto passa intacto."""
 
     def mascarar(self, texto):
-        for padrao in rv.MASCARAS:
+        for padrao in rv.mascaras(datetime(2026, 11, 21, 17, 2, tzinfo=timezone.utc)):
             texto = re.sub(padrao, '‹data›', texto)
         return texto
 
@@ -129,9 +131,12 @@ class MascarasTest(unittest.TestCase):
         self.assertEqual(self.mascarar('21/11/2026, 17:02:11 · Admin'), '‹data› · Admin')
         self.assertEqual(self.mascarar('Salvo às 17:02'), 'Salvo às ‹data›')
         self.assertEqual(self.mascarar('2026-11-21T17:02:11.123456Z'), '‹data›')
+        self.assertEqual(self.mascarar('Análise R001 · 21/11 · Revisão'), 'Análise R001 · ‹data› · Revisão')
+        self.assertEqual(self.mascarar('Atualizada em 20/11/2026'), 'Atualizada em ‹data›')   # ontem
 
     def test_nao_mascara_conteudo(self):
-        for texto in ('Contrato 041/2025 de pavimentação', 'Medição nº 3', 'Valor R$ 1.234,56', 'Reunião 14:00 na obra'):
+        for texto in ('Contrato 041/2025 de pavimentação', 'Medição nº 3', 'Valor R$ 1.234,56', 'Reunião 14:00 na obra',
+                      'prazo 25/03/2030', 'Assinatura em 03/03/2025', 'Análise de 15/03'):
             self.assertEqual(self.mascarar(texto), texto)
 
 
@@ -183,10 +188,76 @@ class LinhaDeBaseTest(unittest.TestCase):
             self.assertEqual(cmp.comparar_imagens(arquivo, caminho, 'inicio__1440__claro').estado, 'diferente')
 
 
+class RodadaSinteticaTest(unittest.TestCase):
+    def test_ids_fixos_por_rotulo(self):
+        import regressao_visual_rodada as rodada
+        self.assertEqual(rodada.rid('h1'), rodada.rid('h1'))
+        self.assertNotEqual(rodada.rid('h1'), rodada.rid('h2'))
+        self.assertRegex(rodada.rid('h1'), r'^[a-f0-9]{32}$')
+
+    def test_rodada_so_grava_na_pasta_dada_e_sem_modelo(self):
+        """A semeadura da rodada nunca importa provedor de modelo nem aponta para casos/ do projeto."""
+        codigo = (Path(__file__).with_name('regressao_visual_rodada.py')).read_text(encoding='utf-8')
+        for proibido in ('inferencia_api', 'provedor_', 'anthropic', 'openai', 'requests', 'urllib', 'ROOT'):
+            self.assertNotIn(proibido, codigo)
+
+
+class AtividadeDeRedeTest(unittest.TestCase):
+    """Pedido lento em andamento não é silêncio: foi o que deixava capturar `quadros` ainda "carregando"."""
+
+    def _pagina_falsa(self):
+        class Pagina:
+            def __init__(self):
+                self.ouvintes = {}
+                self.esperas = 0
+
+            def on(self, evento, f):
+                self.ouvintes[evento] = f
+
+            def wait_for_timeout(self, ms):
+                self.esperas += 1
+        return Pagina()
+
+    def test_pedido_em_andamento_conta_ate_terminar(self):
+        pagina = self._pagina_falsa()
+        rede = rv.AtividadeDeRede(pagina)
+        pedido = object()
+        pagina.ouvintes['request'](pedido)
+        self.assertEqual(rede.pendentes(), 1)
+        pagina.ouvintes['requestfinished'](pedido)
+        self.assertEqual(rede.pendentes(), 0)
+
+    def test_pedido_falho_tambem_termina(self):
+        pagina = self._pagina_falsa()
+        rede = rv.AtividadeDeRede(pagina)
+        pedido = object()
+        pagina.ouvintes['request'](pedido)
+        pagina.ouvintes['requestfailed'](pedido)
+        self.assertEqual(rede.pendentes(), 0)
+
+    def test_conexao_de_longa_duracao_deixa_de_contar(self):
+        pagina = self._pagina_falsa()
+        rede = rv.AtividadeDeRede(pagina)
+        rede.em_andamento[1] = time.monotonic() - 60
+        self.assertEqual(rede.pendentes(), 0)
+
+    def test_espera_enquanto_houver_pedido_novo_em_andamento(self):
+        pagina = self._pagina_falsa()
+        rede = rv.AtividadeDeRede(pagina)
+        rede.ultima -= 10   # já passou o silêncio, mas há um pedido em curso
+        rede.em_andamento[1] = time.monotonic()
+        rede.esperar_quieta(pagina, quieto=0.1, limite=0.3)
+        self.assertGreater(pagina.esperas, 0)
+
+
 class SelecaoTest(unittest.TestCase):
+    def test_focos_so_nas_larguras_alcancaveis(self):
+        self.assertEqual(rv.larguras_da_tela('foco_mesa_barra', rv.VIEWPORTS), [1440])
+        self.assertEqual(rv.larguras_da_tela('inicio', rv.VIEWPORTS), list(rv.VIEWPORTS))
+
     def test_nomes(self):
         self.assertEqual(rv.nome_captura('inicio', 375, 'claro'), 'inicio__375__claro')
-        self.assertEqual(len(rv.nomes_esperados(rv.TODAS, rv.VIEWPORTS, rv.TEMAS)), 114)
+        self.assertEqual(len(rv.nomes_esperados(rv.TODAS, rv.VIEWPORTS, rv.TEMAS)), 130)
 
     def test_larguras_e_temas_do_plano(self):
         self.assertEqual(sorted(rv.VIEWPORTS), [375, 768, 1024, 1440])

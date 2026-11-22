@@ -22,7 +22,7 @@ Depois, com o Python desse ambiente (o servidor e o semeador sobem sozinhos no P
 `--python-servidor`, ou `VLADO_PYTHON_SERVIDOR`):
 
 ```
-python testes/regressao_visual.py comparar                  # 114 capturas, cerca de 5 min; relatório em tmp/regressao_visual/relatorio.html
+python testes/regressao_visual.py comparar                  # 130 capturas, cerca de 7 min; relatório em tmp/regressao_visual/relatorio.html
 python testes/regressao_visual.py gerar                     # refaz a linha de base inteira
 python testes/regressao_visual.py comparar --telas codex --larguras 375,1440 --temas escuro   # recorte
 ```
@@ -34,7 +34,7 @@ mostra referência, atual e diferença (pixels diferentes em vermelho, caixas ao
 ## O que é capturado
 
 Telas: `inicio`, `documentos`, `cadastro`, `codex`, `achados`, `apuracao`, `diligencias`, `quadros`, `gerenciar`,
-`caderno`, `configuracoes` (por `/?area=<área>&caso=vila_serena_sintetico`, servidor `local`) e `entrar` (servidor
+`caderno`, `configuracoes`, as abas `quadros_linha` e `quadros_mapa` (por `/?area=<área>&caso=vila_serena_sintetico`, servidor `local`) e `entrar` (servidor
 `local-contas`). Larguras 375, 768, 1024 e 1440 px; temas claro e escuro. Captura de página inteira, então a altura
 varia por tela. Nome: `<tela>__<largura>__<tema>.png`.
 
@@ -45,9 +45,24 @@ anel visível; se o foco não chegar ao alvo, a rodada falha. Alvos: campo de lo
 espessura ou o `outline-offset` do foco reprova (verificado: cor do foco no tema claro, 9 de 9 reprovadas; offset
 efetivo de 4 px para 2 px, 5 de 5). Nas demais capturas o foco é retirado de propósito, para não aparecer anel.
 
-Hoje o conteúdo é o do estado inicial dos dois casos semeados: sem rodada, sem conversa. As áreas que dependem de
-rodada (`achados`, `codex`, `quadros`, `diligencias`) aparecem com o estado vazio; quando houver rodada sintética
-semeável, acrescentá-la à semeadura (`regressao_visual_semear.py`) e refazer a linha de base.
+**Rodada sintética.** Além dos dois casos, `regressao_visual_semear.py` grava na pasta temporária, por
+`regressao_visual_rodada.py`, a rodada `R001` de `vila_serena_sintetico`, sem nenhuma chamada de modelo: pergunta,
+índice, 3 achados em duas revisões (a segunda com revisão assistida e briefing), 3 hipóteses, 3 entidades e 2
+relações no mapa, 3 eventos na linha do tempo, 2 diligências (uma de achado da IA, em "aguardando resposta", e
+uma livre) e uma conversa com pergunta, fonte e resposta. Tudo escrito pelas funções que a Mesa usa para gravar
+(`criar_rodada`, `publicar`, `hipoteses.salvar`, `mapa_relacoes.salvar_*`, `linha_tempo.salvar`,
+`diligencias.salvar`); as evidências citam linhas literais do contrato sintético, e a medição digitalizada entra
+como evidência visual (sem OCR). Os `requisicao_id` são fixos e os prazos ficam em 2030, para os ids e as datas
+saírem iguais em toda semeadura. Por isso `achados`, `codex` (com a conversa aberta), `quadros`, `diligencias`,
+`gerenciar`, `inicio` e `documentos` aparecem como um repórter os veria. As abas "Linha do tempo" e "Mapa de
+relações" de `quadros` são capturadas à parte (`quadros_linha`, `quadros_mapa`), abertas por clique, porque a Mesa
+não guarda a aba na URL; as abas Comparador, Tabelas, Conferência do texto e Entrevistas não têm dado semeado e
+ficam fora.
+
+Para o Design capturar a Mesa com essa rodada: `python testes/regressao_visual_semear.py <pasta nova>` (no Python
+do projeto), depois `python scripts/interface_pesquisa.py --modo local --porta <livre> --sem-abrir --dados <pasta>`
+com `VLADO_OCR=0` e sem chaves de API no ambiente, e abrir `http://127.0.0.1:<porta>/?area=quadros&caso=vila_serena_sintetico`
+(nunca `localhost`).
 
 ## O que fica de fora
 
@@ -75,7 +90,16 @@ A Mesa grava com a hora real do servidor. Os textos de data e hora (`21/11/2026`
 `regressao_visual.py`). **Nada além disso é mascarado.** Cada captura só vale depois de duas leituras seguidas
 idênticas; se não estabilizar, a rodada inteira falha e nada é gravado.
 
-Rodadas independentes (semeadura nova a cada uma) deram 82 e 83 de 96 imagens idênticas; as demais, ruído de borda
+Antes de capturar, o harness espera a área ficar **pronta**: nenhum pedido em andamento (um pedido lento, como
+`hipoteses-quadro` com 1,5 s, não gera evento e antes parecia silêncio; conexões abertas há mais de 5 s não contam),
+nenhum texto visível "Carregando…" e, no caderno, o editor Vditor (carregado sob demanda, ~4 MB) montado. Se a área
+não ficar pronta em 30 s, a rodada falha. Sem isso, `quadros` saía ainda "carregando" (812 em vez de 3936 px de
+altura) e `apuracao` a 375 px com "Carregando o editor de notas…".
+
+Fase 2 (rodada sintética: uma rodada R001 do caso `vila_serena_sintetico`, sem modelo, com achados, hipóteses, mapa,
+linha do tempo, diligências e uma conversa): duas comparações completas seguidas deram 130/130.
+
+Rodadas independentes da fase 1 (semeadura nova a cada uma) deram 82 e 83 de 96 imagens idênticas; as demais, ruído de borda
 arredondada: no máximo 2 níveis num canal, no máximo 26 pixels por imagem.
 
 ## Tolerância
@@ -105,7 +129,7 @@ linha de base é do Windows, e as duas não batem pixel a pixel. O que roda no C
 
 ## Tamanho
 
-114 imagens PNG sem perda, 12,2 MB no total (as mais pesadas são as telas de 1440 px). Cada
+130 imagens PNG sem perda, 16,8 MB no total (as mais pesadas são as telas de 1440 px). Cada
 `gerar` completo acrescenta esse tanto ao histórico do git: refazer a linha de base só no portão de cada tela ou fase,
 não a cada commit, e usar recorte (`--telas`, `--larguras`, `--temas`) para trocar só o que mudou.
 

@@ -3,8 +3,8 @@
     python testes/regressao_visual.py gerar     # refaz a linha de base em testes/referencias_visuais/<plataforma>/
     python testes/regressao_visual.py comparar  # captura de novo e compara com a linha de base; relatório em tmp/
 
-Captura 11 telas (inicio, documentos, cadastro, codex, achados, apuracao, diligencias, quadros, gerenciar,
-caderno, configuracoes) em 375, 768, 1024 e 1440 px, nos temas claro e escuro, e a tela de entrar. Só
+Captura 11 áreas (inicio, documentos, cadastro, codex, achados, apuracao, diligencias, quadros, gerenciar,
+caderno, configuracoes), duas abas de `quadros` (linha do tempo e mapa de relações) em 375, 768, 1024 e 1440 px, nos temas claro e escuro, e a tela de entrar. Só
 dados sintéticos: uma pasta temporária semeada por `vlado_lancador.preparar_dados` + `semear_ambiente.semear`
 (casos vila_serena_sintetico e campo_verde_aditivo_sintetico), que nunca é a do projeto. O servidor sobe
 em 127.0.0.1 (o servidor recusa `localhost`) e todo pedido a outro endereço é abortado e reprova a rodada.
@@ -15,7 +15,7 @@ servidor e o semeador rodam no Python do projeto (`.venv`, ou --python-servidor,
 Determinismo: relógio do navegador fixo, fuso UTC, idioma pt-BR, movimento reduzido, animações e
 transições concluídas pelo Playwright (`animations='disabled'`; a CSP da Mesa não deixa injetar CSS), cursor de texto invisível, fontes só as da Mesa (esperadas por `document.fonts.ready`),
 barras de rolagem ocultas, suavização de fonte sem subpixel, dimensão fixa por largura e dados da mesma
-semente. Texto que o servidor grava com a hora real (`MASCARAS`) é trocado por um marcador antes da
+semente. Texto que o servidor grava com a hora real (`MASCARAS_FIXAS`) é trocado por um marcador antes da
 captura; nada além disso é mascarado. Cada captura só vale depois de dar o mesmo resultado em duas
 leituras seguidas; se não estabilizar, a rodada falha (captura não determinística nunca entra).
 """
@@ -47,6 +47,8 @@ REFERENCIAS = AQUI / 'referencias_visuais'
 TELAS = ('inicio', 'documentos', 'cadastro', 'codex', 'achados', 'apuracao', 'diligencias', 'quadros',
          'gerenciar', 'caderno', 'configuracoes')
 TELA_ENTRAR = 'entrar'
+# Mesma área, outra aba aberta por clique (a Mesa não guarda a aba na URL): nome -> (área, nome da aba).
+VARIANTES = {'quadros_linha': ('quadros', 'Linha do tempo'), 'quadros_mapa': ('quadros', 'Mapa de relações')}
 # Foco de teclado: pressiona Tab até o alvo ficar focado e captura com o anel de foco visível.
 # nome -> (tela de base, seletor do alvo, larguras em que o alvo é alcançável por Tab).
 FOCOS = {'foco_entrar_campo': ('entrar', '#entrar-login', (375, 1440)),
@@ -54,19 +56,31 @@ FOCOS = {'foco_entrar_campo': ('entrar', '#entrar-login', (375, 1440)),
          'foco_mesa_botao': ('cadastro', '#enviar-documentos', (375, 1440)),
          'foco_mesa_campo': ('cadastro', '#cadastro-natureza', (375, 1440)),
          'foco_mesa_barra': ('cadastro', '#ver-cadastro', (1440,))}   # a barra lateral só existe em tela larga
-TODAS = TELAS + (TELA_ENTRAR,) + tuple(FOCOS)
+TODAS = TELAS + tuple(VARIANTES) + (TELA_ENTRAR,) + tuple(FOCOS)
 CASO = 'vila_serena_sintetico'
+CONVERSA = 'c' * 32   # conversa sintética de regressao_visual_rodada.py, aberta em ?codex-conversa=
 VIEWPORTS = {375: 812, 768: 1024, 1024: 768, 1440: 900}   # largura -> altura
 TEMAS = {'claro': 'light', 'escuro': 'dark'}
 RELOGIO = datetime(2026, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
 CHAVE_TEMA, CHAVE_IDIOMA = 'apuracao:tema', 'vlado-idioma'   # localStorage, como em desktop.js e i18n.js
 ARGS_CHROMIUM = ['--lang=en-US', '--force-color-profile=srgb', '--font-render-hinting=none', '--disable-lcd-text',
                  '--disable-font-subpixel-positioning', '--hide-scrollbars', '--disable-gpu']
-# Texto gravado pelo servidor com a hora real (varia a cada semeadura); trocado por um marcador na DOM.
-# Cada entrada é um padrão de regex; o que casa vira '‹data›'. Nada mais é mascarado.
-MASCARAS = (r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?',    # ISO 8601
-            r'\d{2}/\d{2}/\d{4}(?:,?\s+\d{2}:\d{2}(?::\d{2})?)?',                       # toLocale(Date)String('pt-BR')
-            r'(?<=às )\d{2}:\d{2}(?::\d{2})?')                                           # "Salvo às 17:02"
+# Texto gravado pelo servidor com a hora real (varia a cada semeadura) vira '‹data›' na DOM, antes da captura.
+# Só isto é mascarado: carimbos de data e hora, a data de HOJE (e a de ontem, se a semeadura cruzar a meia-noite)
+# e o dia/mês da análise. Datas que a semeadura fixa (prazos de 2030) aparecem como são.
+MASCARAS_FIXAS = (r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?',    # ISO 8601 com hora
+                  r'\d{2}/\d{2}/\d{4},?\s+\d{2}:\d{2}(?::\d{2})?',                           # toLocaleString('pt-BR')
+                  r'(?<=às )\d{2}:\d{2}(?::\d{2})?',                                          # "Salvo às 17:02"
+                  r'(?<=R\d{3} · )\d{2}/\d{2}')                                                # "Análise R001 · 21/11"
+
+
+def mascaras(agora=None) -> tuple:
+    from datetime import timedelta
+    agora = agora or datetime.now(timezone.utc)
+    dias = [agora, agora - timedelta(days=1)]
+    return MASCARAS_FIXAS + tuple(re.escape(d.strftime('%d/%m/%Y')) for d in dias)
+
+
 ESPERA_ESTAVEL_MAX = 10
 
 
@@ -205,96 +219,121 @@ JS_MASCARAR = """(padroes) => {
 
 def capturar(servidores: Servidores, saida: Path, telas, larguras, temas, aviso=print) -> dict:
     """Captura tudo em `saida` e devolve o manifesto. Qualquer instabilidade levanta SystemExit."""
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import Error as ErroPlaywright, sync_playwright
     saida.mkdir(parents=True, exist_ok=True)
     problemas, externos, mascaradas, avisos_navegador = [], [], {}, {}
-    metadados = {}
+    metadados = {'reinicios_do_navegador': 0}
+    permitidos = (servidores.origem_mesa, servidores.origem_entrar)
+
+    def filtrar(rota):
+        url = rota.request.url
+        if url.startswith(permitidos) or url.startswith(('data:', 'blob:', 'about:')):
+            rota.continue_()
+        else:
+            externos.append(url)
+            rota.abort()
+
+    def uma_tela(contexto, tela, largura, tema):
+        nome = nome_captura(tela, largura, tema)
+        pagina = contexto.new_page()
+        erros = []
+        atividade = AtividadeDeRede(pagina)
+        pagina.on('pageerror', lambda e: erros.append('pageerror: ' + str(e)))
+        pagina.on('console', lambda m: erros.append('console.error: ' + m.text) if m.type == 'error' else None)
+        try:
+            url, seletor = destino(servidores, tela)
+            pagina.goto(url, wait_until='load')
+            pagina.wait_for_selector(seletor, state='visible', timeout=30000)
+            atividade.esperar_quieta(pagina)
+            esperar_pronta(pagina, atividade, nome, problemas)
+            pagina.evaluate('document.fonts.ready.then(() => 0)')
+            # A tela esperada precisa ser a que aparece (nunca uma página de erro que sai igual para sempre).
+            esperada = FOCOS[tela][0] if tela in FOCOS else VARIANTES[tela][0] if tela in VARIANTES else tela
+            if esperada != TELA_ENTRAR:
+                ativa = pagina.evaluate("new URL(location.href).searchParams.get('area') || 'inicio'")
+                if ativa != esperada:
+                    problemas.append(f'{nome}: a Mesa abriu a área {ativa!r}, não {esperada!r}')
+            if tela in VARIANTES:
+                aba = pagina.get_by_role('tab', name=VARIANTES[tela][1], exact=True)
+                aba.click()
+                if aba.get_attribute('aria-selected') != 'true':
+                    problemas.append(f'{nome}: a aba {VARIANTES[tela][1]!r} não ficou selecionada')
+                esperar_pronta(pagina, atividade, nome, problemas)
+            mascaradas[nome] = pagina.evaluate(JS_MASCARAR, list(mascaras()))
+            pagina.evaluate('window.scrollTo(0, 0)')
+            pagina.mouse.move(0, 0)
+            if tela in FOCOS:
+                if not focar_com_tab(pagina, FOCOS[tela][1]):
+                    problemas.append(f'{nome}: o foco de teclado (Tab) não chegou a {FOCOS[tela][1]}')
+            else:
+                pagina.evaluate("document.activeElement && document.activeElement.blur && document.activeElement.blur()")
+            esperar_pronta(pagina, atividade, nome, problemas)
+            png = estavel(pagina)
+            if png is not None and tela in FOCOS and not foco_pintado(pagina, FOCOS[tela][1]):
+                # O foco se perdeu durante a captura (a página mexeu depois do Tab): refaz o foco e a captura.
+                png = None
+                if focar_com_tab(pagina, FOCOS[tela][1]):
+                    png = estavel(pagina)
+                    if png is not None and not foco_pintado(pagina, FOCOS[tela][1]):
+                        png = None
+            if png is None:
+                problemas.append(f'{nome}: não estabilizou em {ESPERA_ESTAVEL_MAX} leituras (captura não determinística)')
+            else:
+                (saida / f'{nome}.png').write_bytes(png)
+        finally:
+            # A CSP da Mesa (style-src 'self') proíbe injetar CSS: animações saem por `animations='disabled'`.
+            # Na tela de entrar, o 401 de /api/sessao sem sessão é esperado.
+            erros = [e for e in erros if 'favicon' not in e.lower() and not (tela == TELA_ENTRAR and 'status of 401' in e)]
+            if erros:   # estado atual da Mesa: registra no manifesto, não reprova (ver `comparar`)
+                avisos_navegador[nome] = sorted({normalizar_erro(e) for e in erros})
+            with contextlib.suppress(ErroPlaywright):
+                pagina.close()
+
     with sync_playwright() as pw:
-        navegador = pw.chromium.launch(args=ARGS_CHROMIUM)
-        metadados['navegador'] = 'chromium ' + navegador.version
         for largura in larguras:
             for tema in temas:
-                contexto = navegador.new_context(
-                    viewport={'width': largura, 'height': VIEWPORTS[largura]}, device_scale_factor=1,
-                    locale='pt-BR', timezone_id='UTC', color_scheme=TEMAS[tema], reduced_motion='reduce',
-                    service_workers='block', accept_downloads=False)
-                contexto.clock.set_fixed_time(RELOGIO)
-                contexto.add_init_script(
-                    f"try{{localStorage.setItem('{CHAVE_TEMA}','{TEMAS[tema]}');localStorage.setItem('{CHAVE_IDIOMA}','pt');}}catch(e){{}}")
-                permitidos = (servidores.origem_mesa, servidores.origem_entrar)
-
-                def filtrar(rota):
-                    url = rota.request.url
-                    if url.startswith(permitidos) or url.startswith(('data:', 'blob:', 'about:')):
-                        rota.continue_()
-                    else:
-                        externos.append(url)
-                        rota.abort()
-                contexto.route('**/*', filtrar)
-                for tela in telas:
-                    if largura not in larguras_da_tela(tela, [largura]):
-                        continue
-                    nome = nome_captura(tela, largura, tema)
-                    pagina = contexto.new_page()
-                    erros = []
-                    pagina.on('pageerror', lambda e, erros=erros: erros.append('pageerror: ' + str(e)))
-                    pagina.on('console', lambda m, erros=erros: erros.append('console.error: ' + m.text) if m.type == 'error' else None)
+                pendentes = [t for t in telas if largura in larguras_da_tela(t, [largura])]
+                tentativas = 0
+                while pendentes:
+                    # Um navegador por grupo (largura × tema): se o Chromium cair no meio, recomeça só as telas que faltam.
+                    navegador = pw.chromium.launch(args=ARGS_CHROMIUM)
+                    metadados['navegador'] = 'chromium ' + navegador.version
                     try:
-                        url, seletor = destino(servidores, FOCOS[tela][0] if tela in FOCOS else tela)
-                        pagina.goto(url, wait_until='load')
-                        pagina.wait_for_selector(seletor, state='visible', timeout=30000)
-                        with contextlib.suppress(Exception):
-                            pagina.wait_for_load_state('networkidle', timeout=3000)   # a área codex mantém um pedido aberto
-                        pagina.evaluate('document.fonts.ready.then(() => 0)')
-                        # A tela esperada precisa ser a que aparece (nunca uma página de erro que sai igual para sempre).
-                        base = FOCOS[tela][0] if tela in FOCOS else tela
-                        if base != TELA_ENTRAR:
-                            ativa = pagina.evaluate("new URL(location.href).searchParams.get('area') || 'inicio'")
-                            if ativa != base:
-                                problemas.append(f'{nome}: a Mesa abriu a área {ativa!r}, não {base!r}')
-                        mascaradas[nome] = pagina.evaluate(JS_MASCARAR, list(MASCARAS))
-                        pagina.evaluate('window.scrollTo(0, 0)')
-                        pagina.mouse.move(0, 0)
-                        if tela in FOCOS:
-                            alvo = FOCOS[tela][1]
-                            if not focar_com_tab(pagina, alvo):
-                                problemas.append(f'{nome}: o foco de teclado (Tab) não chegou a {alvo}')
-                        else:
-                            pagina.evaluate("document.activeElement && document.activeElement.blur && document.activeElement.blur()")
-                        png = estavel(pagina)
-                        if png is not None and tela in FOCOS and not foco_pintado(pagina, FOCOS[tela][1]):
-                            # O foco se perdeu durante a captura (a página mexeu depois do Tab): refaz o foco e a captura.
-                            png = None
-                            if focar_com_tab(pagina, FOCOS[tela][1]):
-                                png = estavel(pagina)
-                                if png is not None and not foco_pintado(pagina, FOCOS[tela][1]):
-                                    png = None
-                        if png is None:
-                            problemas.append(f'{nome}: não estabilizou em {ESPERA_ESTAVEL_MAX} leituras (captura não determinística)')
-                        else:
-                            (saida / f'{nome}.png').write_bytes(png)
-                    except Exception as exc:   # noqa: BLE001 - qualquer falha de captura reprova a rodada
-                        problemas.append(f'{nome}: {type(exc).__name__}: {str(exc)[:300]}')
+                        contexto = navegador.new_context(
+                            viewport={'width': largura, 'height': VIEWPORTS[largura]}, device_scale_factor=1,
+                            locale='pt-BR', timezone_id='UTC', color_scheme=TEMAS[tema], reduced_motion='reduce',
+                            service_workers='block', accept_downloads=False)
+                        contexto.clock.set_fixed_time(RELOGIO)
+                        contexto.add_init_script(
+                            f"try{{localStorage.setItem('{CHAVE_TEMA}','{TEMAS[tema]}');localStorage.setItem('{CHAVE_IDIOMA}','pt');}}catch(e){{}}")
+                        contexto.route('**/*', filtrar)
+                        while pendentes:
+                            tela = pendentes[0]
+                            try:
+                                uma_tela(contexto, tela, largura, tema)
+                            except ErroPlaywright as exc:
+                                if 'closed' in str(exc).lower() and tentativas < 3:   # o navegador caiu
+                                    tentativas += 1
+                                    metadados['reinicios_do_navegador'] += 1
+                                    aviso(f'  (Chromium caiu em {tela}; reiniciando, tentativa {tentativas})')
+                                    break
+                                problemas.append(f'{nome_captura(tela, largura, tema)}: {type(exc).__name__}: {str(exc)[:300]}')
+                            except Exception as exc:   # noqa: BLE001 - qualquer falha de captura reprova a rodada
+                                problemas.append(f'{nome_captura(tela, largura, tema)}: {type(exc).__name__}: {str(exc)[:300]}')
+                            pendentes.pop(0)
+                            aviso(f'  {nome_captura(tela, largura, tema)}')
                     finally:
-                        # A CSP da Mesa (style-src 'self') proíbe injetar CSS: animações saem por `animations='disabled'`.
-                        # Na tela de entrar, o 401 de /api/sessao sem sessão é esperado.
-                        erros = [e for e in erros if 'favicon' not in e.lower()
-                                 and not (tela == TELA_ENTRAR and 'status of 401' in e)]
-                        if erros:   # estado atual da Mesa: registra no manifesto, não reprova (ver `comparar`)
-                            avisos_navegador[nome] = sorted({normalizar_erro(e) for e in erros})
-                        pagina.close()
-                    aviso(f'  {nome}')
-                contexto.close()
-        navegador.close()
+                        with contextlib.suppress(Exception):
+                            navegador.close()
     if externos:
         problemas.append('pedidos a endereços externos (abortados): ' + ', '.join(sorted(set(externos))[:5]))
     if problemas:
         raise SystemExit('Rodada reprovada, nada foi gravado como referência:\n - ' + '\n - '.join(problemas))
     import playwright
-    return {'navegador': metadados['navegador'], 'playwright': getattr(playwright, '__version__', '?'),
+    return {'navegador': metadados['navegador'], 'reinicios_do_navegador': metadados['reinicios_do_navegador'], 'playwright': getattr(playwright, '__version__', '?'),
             'plataforma': plataforma(), 'python': platform.python_version(),
             'relogio_fixo_utc': RELOGIO.isoformat(), 'viewports': {str(k): v for k, v in VIEWPORTS.items()},
-            'argumentos_chromium': ARGS_CHROMIUM, 'mascaras': list(MASCARAS),
+            'argumentos_chromium': ARGS_CHROMIUM, 'mascaras': list(MASCARAS_FIXAS) + ['data de hoje e de ontem (dd/mm/aaaa)'],
             'erros_do_navegador': avisos_navegador}
 
 
@@ -304,10 +343,13 @@ def normalizar_erro(texto: str) -> str:
 
 
 def destino(servidores: Servidores, tela: str):
+    tela = FOCOS[tela][0] if tela in FOCOS else tela
     if tela == TELA_ENTRAR:
         return servidores.origem_entrar + '/entrar', '#entrar-secao:not([hidden])'
-    seletor = '#area-documentos' if tela == 'documentos' else f'#area-{tela}'
-    return f'{servidores.origem_mesa}/?area={tela}&caso={CASO}', seletor
+    area = VARIANTES[tela][0] if tela in VARIANTES else tela
+    seletor = '#area-documentos' if area == 'documentos' else f'#area-{area}'
+    extra = f'&codex-conversa={CONVERSA}' if area == 'codex' else ''
+    return f'{servidores.origem_mesa}/?area={area}&caso={CASO}{extra}', seletor
 
 
 JS_FOCO_PINTADO = """([s]) => {
@@ -318,7 +360,61 @@ JS_FOCO_PINTADO = """([s]) => {
   const r = e.getBoundingClientRect();
   return [r.x, r.y, r.width, r.height].map(v => Math.round(v * 100) / 100).join(',');
 }"""
+# Sinal de pronto por área: nenhum texto visível "Carregando…" e, no caderno, o editor Vditor (carregado sob demanda,
+# ~4 MB) já montado, ou o campo de Markdown de reserva à mostra. Sem isto a captura pode sair com "Carregando o
+# editor de notas…", bem mais curta que a página pronta.
+JS_PRONTA = """() => {
+  if (/Carregando/.test(document.body.innerText)) return false;
+  if (document.querySelector('#area-apuracao:not([hidden])')) {
+    const nota = document.getElementById('apuracao-editor');
+    const host = document.getElementById('apuracao-vditor');
+    const alt = document.getElementById('apuracao-texto-alternativo');
+    if (nota && !nota.hidden && !(host && host.querySelector('.vditor-toolbar')) && !(alt && !alt.hidden)) return false;
+  }
+  return true;
+}"""
 JS_DOIS_QUADROS = "new Promise(ok => requestAnimationFrame(() => requestAnimationFrame(ok)))"
+
+
+class AtividadeDeRede:
+    """Pedidos da página. `networkidle` não serve: a área codex mantém um pedido aberto para sempre. Aqui "quieta"
+    é não haver início nem fim de pedido por `quieto` segundos E nenhum pedido em andamento (um pedido lento, como
+    `hipoteses-quadro` com 1,5 s, não gera evento enquanto espera e parecia silêncio). Um pedido aberto há mais de
+    `longo` segundos é tratado como conexão de longa duração e deixa de contar. É o que impede capturar a página no
+    estado "carregando" (mais curta) em vez do conteúdo."""
+
+    def __init__(self, pagina):
+        self.ultima = time.monotonic()
+        self.em_andamento = {}
+        pagina.on('request', self._iniciou)
+        for evento in ('requestfinished', 'requestfailed'):
+            pagina.on(evento, self._terminou)
+
+    def _iniciou(self, pedido):
+        self.ultima = time.monotonic()
+        self.em_andamento[id(pedido)] = self.ultima
+
+    def _terminou(self, pedido):
+        self.ultima = time.monotonic()
+        self.em_andamento.pop(id(pedido), None)
+
+    def pendentes(self, longo: float = 5.0) -> int:
+        agora = time.monotonic()
+        return sum(1 for desde in self.em_andamento.values() if agora - desde < longo)
+
+    def esperar_quieta(self, pagina, quieto: float = 0.8, limite: float = 20.0):
+        inicio = time.monotonic()
+        while (time.monotonic() - self.ultima < quieto or self.pendentes()) and time.monotonic() - inicio < limite:
+            pagina.wait_for_timeout(100)
+
+
+def esperar_pronta(pagina, atividade, nome: str, problemas: list, limite_ms: int = 30000) -> None:
+    """Espera o sinal de pronto da área e depois a rede quieta de novo (o que acabou de montar pode pedir mais)."""
+    try:
+        pagina.wait_for_function(JS_PRONTA, timeout=limite_ms)
+    except Exception:   # noqa: BLE001 - tempo esgotado: a área não ficou pronta, a captura não vale
+        problemas.append(f'{nome}: a área não ficou pronta em {limite_ms // 1000} s (ainda "Carregando…" ou sem o editor)')
+    atividade.esperar_quieta(pagina)
 
 
 def foco_pintado(pagina, seletor: str):

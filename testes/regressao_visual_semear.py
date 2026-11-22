@@ -6,6 +6,7 @@ Usa só `vlado_lancador.preparar_dados` e `semear_ambiente.semear` (casos vila_s
 campo_verde_aditivo_sintetico, de `dados_sinteticos.py`). Nunca toca em `casos/` do projeto: recusa uma
 pasta que já exista e não esteja vazia, e confere ao final que só há os dois casos sintéticos.
 Os links de ativação das contas de demonstração vão para um arquivo ao lado da pasta e são apagados.
+Depois grava a rodada sintética completa de `regressao_visual_rodada.py` (sem chamada de modelo).
 """
 import json
 from pathlib import Path
@@ -13,6 +14,7 @@ import sys
 
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ / 'scripts'))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
 def main(argv):
@@ -36,7 +38,9 @@ def main(argv):
     esperados = sorted((semear_ambiente.CASO_A, semear_ambiente.CASO_B))
     if ids != esperados:
         raise SystemExit(f'Casos inesperados na pasta semeada: {ids}')
-    print(json.dumps({'casos': ids, 'contas': feitos['contas']}))
+    import regressao_visual_rodada
+    resumo = regressao_visual_rodada.semear_rodada(pasta)
+    print(json.dumps({'casos': ids, 'contas': feitos['contas'], 'rodada': resumo}))
     return 0
 
 
