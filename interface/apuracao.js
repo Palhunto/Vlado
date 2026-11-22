@@ -82,7 +82,7 @@
   const sourceCount = count => count === 1 ? t('1 fonte') : t('{n} fontes', {n:count});
   const fold = text => String(text).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
   // Widths where each panel is a drawer (caderno.css): the list below 1280px, the sources below 901px.
-  const DRAWER_WIDTH = {notas:'(max-width: 1279px)', fontes:'(max-width: 900px)'};
+  const DRAWER_WIDTH = {notas:'(max-width: 1279px)', fontes:'(max-width: 1023px)'};
   const asDrawer = name => !!window.matchMedia?.(DRAWER_WIDTH[name]).matches;
   function error(message = '') { $('apuracao-erro').textContent = message; $('apuracao-erro').hidden = !message; }
   function dialogError(message = '') { $('apuracao-adicionar-erro').textContent = message; $('apuracao-adicionar-erro').hidden = !message; }
