@@ -113,6 +113,6 @@
  --mapa-ligacao:var(--theme-muted);--mapa-ligacao-destaque:var(--theme-focus);--mapa-ligacao-aberta:var(--theme-accent);--mapa-rotulo-fundo:var(--theme-surface);
  /* Sidebar counter and tabs (docs/design/mudancas-de-token.md, item 8) */
  --nav-contador-fundo:var(--theme-accent);--nav-contador-texto:var(--theme-on-primary);
- --nav-contador-ativo-fundo:var(--vlado-branco);--nav-contador-ativo-texto:var(--theme-accent);
+ --nav-contador-ativo-fundo:var(--theme-on-primary);--nav-contador-ativo-texto:var(--theme-accent);
  --aba-ativa-fundo:var(--theme-soft);--aba-ativa-texto:var(--theme-accent);
 }

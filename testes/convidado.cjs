@@ -69,7 +69,9 @@ for (const desktop of [false, true]) {
 
 test('administrador mantém navegação completa e as etapas', async () => {
   const mesa = await abrir({papel: 'admin', modo: 'local', idioma: 'pt', desktop: true, url: 'http://127.0.0.1:8765/?area=codex', catalogo: [ALFA]});
-  assert.equal(navegacao(mesa).filter(no => !no.hidden).length >= 8, true);
+  // A barra tem os sete itens do canvas (Visão geral, Documentos, Perguntar, Conferir, Quadros, Caderno, Pedidos e prazos);
+  // Cadastrar, Trechos e Apurações e lixeira seguem no DOM, ocultos.
+  assert.equal(navegacao(mesa).filter(no => !no.hidden).length, 7);
   assert.equal(mesa.$('mesa-etapas').hidden, false);
 });
 

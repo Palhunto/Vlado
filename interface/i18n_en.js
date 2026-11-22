@@ -15,6 +15,12 @@ window.VLADO_I18N_EN = {
     "Ativar modo escuro": "Switch to dark mode",
     "SUA MESA DE TRABALHO": "YOUR NEWSROOM DESK",
     "Nova apuração": "New investigation",
+    "Perguntar": "Ask",
+    "Quadros": "Boards",
+    "Pedidos e prazos": "Requests and deadlines",
+    "Trocar de apuração": "Switch investigation",
+    "Administrador": "Administrator",
+    "1 vence": "1 due",
     "Áreas de trabalho": "Work areas",
     "Visão geral": "Overview",
     "DA FONTE À HISTÓRIA": "FROM SOURCE TO STORY",
@@ -1236,6 +1242,8 @@ window.VLADO_I18N_EN = {
     "O que já foi feito e o que falta nesta apuração": "What is done and what is left in this investigation"
   },
   padroes: [
+    // Contador de prazos na barra lateral
+    ["^(\\d+) vencem$", "$1 due"],
     // Frente C — Mesa móvel (visualizador de PDF)
     ["^de (\\d+)$", "of $1"],
     ["^Página (\\d+) de (\\d+)\\.$", "Page $1 of $2."],

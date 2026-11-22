@@ -582,7 +582,7 @@ function findingsError(message = '') {
 }
 function clearFindings() {
   window.limparObservacoes?.();
-  findingEpoch++; findingSequence++; findingQuery = null; findingResult = null;
+  findingEpoch++; findingSequence++; findingQuery = null; findingResult = null; window.barraMesa?.definir('achados', '', 'pendencia');
   $('achados-resultados').replaceChildren(); $('achados-total').textContent = '';
   $('achados-inspecao').replaceChildren(); $('achados-inspecao').hidden = true;
   $('achados-briefings').replaceChildren(); selectedFindingId = null;
@@ -1027,7 +1027,7 @@ async function searchFindings(query) {
     if (progress) {
       $('achados-progresso-texto').textContent = `${progress.revisados} de ${progress.total} achados revisados`;
       $('achados-progresso').max = progress.total || 1; $('achados-progresso').value = progress.revisados;
-      $('achados-progresso-humano').hidden = false;
+      $('achados-progresso-humano').hidden = false; window.barraMesa?.definir('achados', progress.total > progress.revisados ? String(progress.total - progress.revisados) : '', 'pendencia');
     }
     $('achados-so-pendentes').setAttribute('aria-pressed', String($('achados-marcacao').value === 'pendente'));
     for (const artifact of result.artefatos.filter(a => a.tipo === 'briefing')) {

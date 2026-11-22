@@ -962,6 +962,7 @@ progress{accent-color:var(--green)}
   border-right:1px solid var(--line);
   display:flex;
   flex-direction:column;
+  gap:var(--espaco-6);
   overflow-y:auto;
   overscroll-behavior:contain;
   z-index:var(--camada-gaveta);
@@ -973,17 +974,6 @@ progress{accent-color:var(--green)}
   text-decoration:none;
   padding:0 var(--espaco-2);
   color:var(--ink);
-}
-.brand-sub{font-size:var(--text-xs);letter-spacing:1.6px;color:var(--muted);padding:5px 12px 20px;margin:0}
-.sidebar #mesa-nova{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  text-align:left;
-  justify-content:flex-start;
-  margin:0 0 25px;
-  background:var(--white);
-  border-color:var(--theme-input-line);
 }
 .areas{display:flex;flex-direction:column;gap:var(--espaco-1)}
 .areas>a,.areas>button{
@@ -1006,33 +996,33 @@ progress{accent-color:var(--green)}
 .areas>a:hover,.areas>button:hover{background:var(--soft)}
 .areas>a[aria-current=page],.areas>button[aria-pressed=true]{background:var(--green);color:var(--theme-on-primary);font-weight:600}
 .areas>a[aria-current=page]:hover,.areas>button[aria-pressed=true]:hover{background:var(--theme-primary-hover)}
-.areas .eyebrow{
-  display:block;
-  font-size:var(--text-xs);
-  letter-spacing:1.5px;
-  color:var(--muted);
-  font-weight:600;
-  padding:23px 12px 10px;
-  margin:0;
+/* Contador do item (docs/design/mudancas-de-token.md, item 8): só com dado real e some quando é zero. */
+.mesa-nav-rotulo{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mesa-nav-contador{margin-left:auto;flex:none;white-space:nowrap;font-size:var(--text-md);color:var(--muted)}
+.mesa-nav-contador[data-forma=pendencia]{padding:0 var(--espaco-2);border-radius:var(--raio-pilula);background:var(--nav-contador-fundo);color:var(--nav-contador-texto);font-weight:600}
+.mesa-nav-contador[data-forma=aviso]{color:var(--theme-warning);font-weight:600}
+.areas>a[aria-current=page] .mesa-nav-contador,.areas>button[aria-pressed=true] .mesa-nav-contador{padding:0 var(--espaco-2);border-radius:var(--raio-pilula);background:var(--nav-contador-ativo-fundo);color:var(--nav-contador-ativo-texto);font-weight:600}
+.areas>a[aria-current=page] .mesa-nav-contador[data-forma=aviso],.areas>button[aria-pressed=true] .mesa-nav-contador[data-forma=aviso]{color:var(--theme-warning)}
+/* Perfil no rodapé da barra: nome e papel da sessão; abre Configurações. */
+.mesa-perfil{
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:var(--espaco-3);
+  margin-top:auto;
+  min-height:44px;
+  padding:0 var(--espaco-2);
+  border:0;
+  background:transparent;
+  color:var(--theme-text);
+  font-weight:400;
+  text-align:left;
 }
-.areas #ver-cadastro{font-size:var(--text-sm);padding-left:23px}
-.areas #ver-cadastro .mesa-icon{width:15px;height:15px}
-.first-use{margin-top:auto;padding:24px 10px 0;border:0}
-.first-use>summary{font-size:var(--text-sm);font-weight:400;color:var(--muted)}
-.first-use p,.first-use li{font-size:var(--text-xs)}
-.first-use ol{padding-left:18px}
-.mesa-processing{border-top:1px solid var(--line);padding:16px 6px 0;font-size:var(--text-xs);color:var(--theme-muted);margin:16px 0 0}
-.mesa-processing::before{
-  content:'';
-  width:5px;
-  height:5px;
-  border-radius:50%;
-  background:var(--green);
-  display:inline-block;
-  margin-right:6px;
-  vertical-align:middle;
-}
-.mesa-processing span{display:block;color:var(--muted);font-size:var(--text-xs);margin:4px 0 0 11px}
+.mesa-perfil:hover,.mesa-perfil[aria-pressed=true]{background:var(--soft)}
+.mesa-avatar{display:inline-flex;align-items:center;justify-content:center;flex:none;width:var(--espaco-8);height:var(--espaco-8);border-radius:50%;background:var(--theme-accent);color:var(--theme-on-primary);font-size:var(--text-md);font-weight:600}
+.mesa-perfil-texto{display:flex;flex-direction:column;min-width:0;line-height:1.25}
+.mesa-perfil-nome{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--text-base);font-weight:600}
+.mesa-perfil-papel{font-size:var(--text-md);color:var(--muted)}
 main{padding:var(--espaco-8);max-width:1600px;min-height:calc(100dvh - var(--cabecalho-altura));margin:0 auto;min-width:0}
 .intro{margin:0 0 28px;max-width:none}
 .intro h1{max-width:none}
@@ -1469,11 +1459,7 @@ footer{font-size:var(--text-xs);margin-top:32px;padding-top:20px;color:var(--mut
   .persistent-context select{font-size:var(--text-base)}
   .persistent-context>span{font-size:var(--text-xs)}
   .header-note{display:none}
-  .sidebar #mesa-nova{margin-bottom:16px}
   .areas{flex-direction:column;flex-wrap:nowrap}
-  .areas .eyebrow{display:block;padding-top:15px}
-  .first-use{padding-top:15px}
-  .mesa-processing{margin-top:10px;padding-top:12px}
   main{padding:26px 20px;min-height:calc(100dvh - var(--cabecalho-altura))}
   .intro{margin-bottom:24px}
   .intro h1,h1{font-size:var(--text-2xl);line-height:1.2}
@@ -1710,8 +1696,6 @@ body>svg:has(>defs>symbol[id^="vditor-icon-"]){position:absolute;width:0;height:
 body[data-papel="convidado"] [data-somente-admin]{display:none}
 #mesa-sair{flex-shrink:0}
 body[data-papel="convidado"] .areas :is(button,a):not(#ver-codex),
-body[data-papel="convidado"] .areas .eyebrow,
-body[data-papel="convidado"] #mesa-nova,
 body[data-papel="convidado"] .first-use,
 body[data-papel="convidado"] #codex-desligar,
 body[data-papel="convidado"] #codex-excluir,
@@ -2075,7 +2059,6 @@ main:has(#area-achados:not([hidden])) .intro{margin-bottom:16px}
   #achados-form>.actions label select{max-width:280px}
 }
 /* Sidebar group labels at 12px keep to one line in the narrow sidebar. */
-.areas .eyebrow,.brand-sub{letter-spacing:.06em}
 /* On a tablet the header belongs to the investigation selector; the document version stays in Documentos. */
 @media (max-width:1023px) {
   .app-header .header-note{display:none}

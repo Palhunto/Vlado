@@ -141,7 +141,7 @@
         if (!field.hasAttribute('name')) field.name = field.id;
         if (!field.hasAttribute('autocomplete') && !['file','checkbox'].includes(field.type) && field.tagName !== 'SELECT') field.autocomplete = 'off';
       }
-      compactFindings();feedbackState();navigationState();geometry();
+      compactFindings();feedbackState();navigationState();geometry();window.barraMesa?.aplicar();
     } else {
       for (const item of navigation) {
         if (!item.link) continue;
@@ -149,6 +149,7 @@
         item.button.setAttribute('aria-pressed',String(item.link.getAttribute('aria-current') === 'page'));
         item.link.replaceWith(item.button);item.link = null;
       }
+      window.barraMesa?.aplicar();
       if (findingSearchPosition) {
         const {button,parent,next}=findingSearchPosition;parent.insertBefore(button,next);
         findingSearchPosition=null;
@@ -194,20 +195,25 @@
 'use strict';
 // Presentation layer. Operational modules keep ownership of scope, writes and evidence.
 (() => {
-  const icons = {
-    inicio:'m3 10 9-7 9 7v10H14v-7h-4v7H3z',
-    cadastro:'M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6',
-    documentos:'M8 3h8l4 4v14H8zM16 3v5h4M4 7v14M11 12h6M11 16h6',
-    codex:'M4 4h16v12H9l-5 4zM8 8h8M8 12h5',
-    achados:'m12 3 8 4v6c0 4-8 8-8 8s-8-4-8-8V7zM8 12l3 3 5-6',
-    apuracao:'M3 4h7l2 2 2-2h7v15h-7l-2 2-2-2H3zM12 6v15',
-    diligencias:'M5 21V3h13l-2 4 2 4H5',
-    gerenciar:'M3 6h7l2 3h9v11H3z',
-    configuracoes:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12h2M3 12h2M12 3v2M12 19v2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4',
-    plus:'M12 5v14M5 12h14',menu:'M4 6h16M4 12h16M4 18h16'
-  };
-  // Navigation labels are the area headings (app.js); the hidden notebook tab keeps its own.
-  const labels=Object.fromEntries(Object.entries(areaNames).filter(([name])=>name!=='caderno'));
+  // The sidebar has no icons (P11.6); only the drawer button keeps one.
+  const icons = {menu:'M4 6h16M4 12h16M4 18h16'};
+  // Sidebar labels (componentes.md#barra-lateral): shorter than the area headings in app.js, in the canvas order.
+  const labels={inicio:'Visão geral',documentos:'Documentos',codex:'Perguntar',achados:'Conferir',quadros:'Quadros',apuracao:'Caderno',diligencias:'Pedidos e prazos'};
+  // Counters beside the labels: only with real data, hidden at zero. forma = quantidade | pendencia | aviso.
+  const contagens={};
+  function aplicarBarra(){
+    for(const [name,label] of Object.entries(labels)){
+      const node=$('ver-'+name);if(!node)continue;
+      if(!node.querySelector('.mesa-nav-rotulo'))node.replaceChildren(element('span',label,'mesa-nav-rotulo'),element('span',undefined,'mesa-nav-contador'));
+      const contador=node.querySelector('.mesa-nav-contador'),dado=contagens[name];
+      contador.hidden=!dado;contador.textContent=dado?dado.texto:'';
+      if(dado)contador.dataset.forma=dado.forma;else delete contador.dataset.forma;
+    }
+  }
+  window.barraMesa={aplicar:aplicarBarra,definir(nome,texto,forma='quantidade'){
+    if(texto)contagens[nome]={texto,forma};else delete contagens[nome];
+    aplicarBarra();
+  }};
   let inventory=null, loadedCase=null, sequence=0, loading=false;
   const scopePanel=$('selecao-acervo');
   const svg=name=>{const s=document.createElementNS('http://www.w3.org/2000/svg','svg');s.setAttribute('viewBox','0 0 24 24');s.setAttribute('aria-hidden','true');s.classList.add('mesa-icon');const p=document.createElementNS(s.namespaceURI,'path');p.setAttribute('d',icons[name]||icons.documentos);s.append(p);return s;};
@@ -226,9 +232,9 @@
     $('mesa-sidebar').querySelector('.areas button:not([hidden]),.areas a:not([hidden])')?.focus();
   }
   function navigation(){
-    for(const [name,label]of Object.entries(labels)){
+    aplicarBarra();
+    for(const name of Object.keys(labels)){
       const node=$('ver-'+name);if(!node)continue;
-      if(!node.querySelector('.mesa-icon')){node.replaceChildren(svg(name),element('span',label));}
       const selected=active()===name||name==='apuracao'&&active()==='caderno';
       // aria-pressed remains owned by legacy buttons; anchors use aria-current.
       if(node.tagName==='A'){if(selected)node.setAttribute('aria-current','page');else node.removeAttribute('aria-current');}
@@ -247,7 +253,7 @@
   // First run: with an empty catalog there is nothing to continue, only one first step.
   function firstRun(){
     const empty=catalogLoaded&&!cases.length;
-    $('mesa-continuar').hidden=empty;
+    $('mesa-continuar').hidden=empty;$('inicio-trocar').hidden=empty;
     text('mesa-primeiro-titulo',empty?'Comece sua primeira apuração':'Nova apuração');
     text('mesa-primeiro-texto',empty?'Dê um nome à pauta e envie os arquivos. Cada um recebe um recibo, e você já pode perguntar à IA sobre eles.'
       :'Cadastre os documentos da pauta, pergunte à IA e confira cada achado na página do original.');
@@ -308,17 +314,40 @@
   }
   async function loadInventory(force=false){
     const caseId=current();if(!force&&loadedCase===caseId)return;
-    const ticket=++sequence;loadedCase=caseId;inventory=null;loading=!!caseId;$('mesa-acervo-erro').hidden=true;
+    const ticket=++sequence;loadedCase=caseId;inventory=null;loading=!!caseId;$('mesa-acervo-erro').hidden=true;window.barraMesa.definir('documentos','');
     $('mesa-atualizar-acervo').disabled=loading;
     $('mesa-filtrar-documento').value='';$('mesa-filtrar-leitura').value='todos';documentTable();home();
     if(!caseId){text('mesa-acervo-status','Selecione a apuração no topo da mesa.');text('mesa-versao','Documentos, achados e fontes');return;}
     text('mesa-acervo-status','Conferindo os documentos cadastrados…');text('mesa-versao','Conferindo acervo…');
     try{
       const result=await api('inventario',{caso:caseId});if(ticket!==sequence||caseId!==current())return;
-      inventory=result;documentTable();home();text('mesa-versao',`Versão dos documentos: ${result.corpus_id}`);text('mesa-acervo-status',`${Leitura.quantidade(result.total_documentos,'documento')} cadastrado(s). Os originais estão preservados; a extração não substitui a conferência.`);
+      inventory=result;documentTable();home();window.barraMesa.definir('documentos',result.total_documentos?String(result.total_documentos):'');text('mesa-versao',`Versão dos documentos: ${result.corpus_id}`);text('mesa-acervo-status',`${Leitura.quantidade(result.total_documentos,'documento')} cadastrado(s). Os originais estão preservados; a extração não substitui a conferência.`);
     }catch(error){if(ticket===sequence){$('mesa-acervo-erro').textContent=error.message;$('mesa-acervo-erro').hidden=false;text('mesa-acervo-status','A conferência do acervo falhou. Isso não equivale a um acervo vazio.');text('mesa-versao','Acervo indisponível');}}
     finally{if(ticket===sequence){loading=false;$('mesa-atualizar-acervo').disabled=false;}}
   }
+  // "Pedidos e prazos": open requests whose deadline is today or has passed (same rule as "hoje" and "vencida" on the Diligências screen).
+  let deadlineTicket=0;
+  async function countDeadlines(){
+    const caseId=current();
+    if(!caseId||document.body.dataset.papel==='convidado'){deadlineTicket++;window.barraMesa.definir('diligencias','','aviso');return;}
+    const ticket=++deadlineTicket;
+    try{
+      const result=await api('diligencias-listar',{caso:caseId});
+      if(ticket!==deadlineTicket||caseId!==current())return;
+      const today=new Date(),limit=[today.getFullYear(),String(today.getMonth()+1).padStart(2,'0'),String(today.getDate()).padStart(2,'0')].join('-');
+      const n=result.resultados.filter(({diligencia:d})=>d?.prazo&&!['concluida','cancelada'].includes(d.estado)&&d.prazo<=limit).length;
+      window.barraMesa.definir('diligencias',n?(n===1?'1 vence':`${n} vencem`):'','aviso');
+    }catch(_){if(ticket===deadlineTicket)window.barraMesa.definir('diligencias','','aviso');}
+  }
+  // Profile in the sidebar footer: name and role from the session; it opens Configurações (shown only when piloto.js allows it).
+  const ROLES={admin:'Administrador',convidado:'Convidado'};
+  Promise.resolve(window.fetch?.('/api/sessao')).then(res=>res?.ok?res.json():null).then(data=>{
+    const account=data?.conta;if(!account?.nome)return;
+    const name=String(account.nome).trim(),initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0].toUpperCase()).join('');
+    const button=$('ver-configuracoes');
+    button.querySelector('.mesa-avatar').textContent=initials;button.querySelector('.mesa-perfil-nome').textContent=name;
+    button.querySelector('.mesa-perfil-papel').textContent=ROLES[account.papel]||account.papel||'';
+  }).catch(()=>{});
   function sync(){
     const area=active();
     document.body.dataset.mesaArea=area;navigation();tab();
@@ -326,10 +355,9 @@
     // Guests only ask questions; every other step is closed to them.
     $('mesa-etapas').hidden=stage===undefined||document.body.dataset.papel==='convidado';
     if(stage!==undefined&&$('mesa-etapas').dataset.stage!==String(stage)){$('mesa-etapas').dataset.stage=String(stage);$('mesa-etapas').replaceChildren(...stages.map(([name,label],i)=>{const a=element('a');a.href=window.enderecoAreaMesa(name);a.dataset.mesaArea=name;a.append(element('span',String(i+1)),document.createTextNode(label));if(i===stage)a.setAttribute('aria-current','step');return a;}));}
-    closeMenu();if(['inicio','documentos'].includes(area))loadInventory();
+    closeMenu();loadInventory();countDeadlines();
   }
   $('mesa-menu').replaceChildren(svg('menu'));
-  $('ver-cadastro').before($('ver-documentos'));
   $('mesa-menu').addEventListener('click',()=>{if(document.body.classList.contains('mesa-menu-open'))closeMenu();else openMenu();});
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.body.classList.contains('mesa-menu-open')){closeMenu();$('mesa-menu').focus();}});
   document.addEventListener('click',event=>{
@@ -337,7 +365,8 @@
     if(link&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey&&event.button===0){event.preventDefault();navigate(link.dataset.mesaArea);}
     if(document.body.classList.contains('mesa-menu-open')&&!event.target.closest('.sidebar,#mesa-menu'))closeMenu();
   });
-  for(const id of ['mesa-nova']){$(id).prepend(svg('plus'));$(id).addEventListener('click',()=>$('inicio-nova').click());}
+  // "Trocar de apuração" opens the list of investigations (and the trash), which left the sidebar.
+  $('inicio-trocar').addEventListener('click',()=>navigate('gerenciar'));
   $('mesa-adicionar').addEventListener('click',()=>$('inicio-adicionar').click());
   $('mesa-aba-recibo').addEventListener('click',()=>navigate('cadastro'));
   $('mesa-perguntar').addEventListener('click',()=>{if(!current()){$('contexto-caso').focus();return;}navigate('codex');window.abrirComposicaoMesa?.();});
