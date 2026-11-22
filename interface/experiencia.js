@@ -147,7 +147,7 @@
   registrarGanchoArea({
     antes: name => {
       if (!$('area-' + name)) name = 'inicio';
-      if (guest) name = 'codex';
+      if (guest && name !== 'configuracoes') name = 'codex';   // o perfil antigo só pergunta, salvo a página da própria conta
       area = name;
       return name;
     },

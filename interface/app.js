@@ -38,9 +38,10 @@ function networkFailure(message, cause) {
   failure.rede = true; failure.cause = cause;
   return failure;
 }
-// Operações que o servidor recusa ao papel convidado (fora de OPERACOES_CONVIDADO em scripts/rotas_contas.py). Pedi-las só gera uma linha
-// operacao_negada no registro de acessos; a recusa local tem a mesma forma da do servidor.
-const SO_ADMINISTRADOR = new Set(['ambiente', 'ia-config', 'analises', 'gerenciar-listar', 'inventario', 'apuracao-notas', 'diligencias-listar', 'caderno-listar']);
+// Operações que o servidor recusa a alguns papéis (o convidado, e o leitor em continuidade-resumo). Pedi-las só gera uma linha operacao_negada no
+// registro de acessos; depois que a sessão diz o que o papel alcança, a recusa local tem a mesma forma da do servidor e nada vai à rede.
+const SO_ADMINISTRADOR = new Set(['ambiente', 'ia-config', 'analises', 'gerenciar-listar', 'inventario', 'apuracao-notas', 'diligencias-listar', 'caderno-listar',
+  'continuidade-resumo']);
 async function api(operation, data, binary = false) {
   // Estas operações esperam a sessão (que diz o que o papel alcança): pedi-las antes só geraria uma linha operacao_negada no registro de acessos.
   if (SO_ADMINISTRADOR.has(operation) && window.Sessao) await window.Sessao.pronta;
@@ -1130,7 +1131,7 @@ async function searchFindings(query) {
       button.addEventListener('click',() => openBriefing(artifact,query,version));
       $('achados-briefings').append(button);
     }
-    $('achados-total').textContent = `${result.total_correspondencias} achado(s) nesta seleção`;
+    $('achados-total').textContent = `${Leitura.quantidade(result.total_correspondencias, 'achado')} nesta seleção`;
     const states = {sem_achados_apos_revisao:'Conjunto sem achados após revisão.',sem_achados_iniciais:'Registro inicial sem achados.',somente_pendencias:'Somente pendências; não há conclusão sustentada.',disponivel:'Consulta concluída.'};
     $('achados-status').textContent = `${states[result.estado]} ${!result.retornados && result.estado === 'disponivel' ? 'Nenhum achado corresponde aos filtros.' : ''}${result.revisoes_sucessoras.length ? ` Revisão mais recente disponível: ${result.revisoes_sucessoras.join(', ')}. A seleção foi mantida.` : ''}`;
     $('achados-intervalo').textContent = result.retornados ? `${result.deslocamento+1}–${result.deslocamento+result.retornados} de ${result.total_correspondencias}` : '0 resultados';
@@ -1164,7 +1165,7 @@ $('achados-exportar').addEventListener('click', async () => {
     const result = await api('achados-exportar', query);
     if (version !== findingEpoch || sequence !== findingSequence) return;
     window.exportarEditorial(result,`achados_${query.caso}_${query.rodada}_${query.revisao}_${query.geracao_achados}_completo`,$('achados-formato').value);
-    $('achados-status').textContent = `Exportados ${result.retornados} achado(s): seleção filtrada inteira, todas as páginas.`;
+    $('achados-status').textContent = `${result.retornados === 1 ? 'Exportado' : 'Exportados'} ${Leitura.quantidade(result.retornados, 'achado')}: seleção filtrada inteira, todas as páginas.`;
   } catch (failure) { if (version === findingEpoch && sequence === findingSequence) findingsError(failure.message); }
   finally { if (version === findingEpoch && sequence === findingSequence) $('achados-exportar').disabled = false; }
 });

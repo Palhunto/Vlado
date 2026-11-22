@@ -177,3 +177,29 @@ test('o CSS esconde o resto da Mesa no estado suspenso e as cores são as de avi
   assert.ok(regras.includes('var(--theme-warning-bg)') && regras.includes('var(--theme-warning-line)') && regras.includes('var(--theme-warning)'));
   assert.ok(!/#[0-9a-f]{3,8}\b|rgba?\(/i.test(regras), 'nenhuma cor solta');
 });
+
+// --- Ressalvas da Coruja sobre 29aeafa -----------------------------------------------------------------------------------------------------
+test('P1: o convidado antigo abre Minha conta pelo perfil, só com o que o papel dele alcança', async () => {
+  const mesa = await abrir({papel: 'convidado', url: 'http://127.0.0.1:8765/?area=codex'});
+  assert.deepEqual(mesa.erros, []);
+  assert.equal(mesa.$('ver-configuracoes').hidden, false, 'o perfil aparece também para ele');
+  mesa.$('ver-configuracoes').click(); await mesa.esperar(10);
+  assert.equal(area(mesa), 'configuracoes', 'não cai de volta em Perguntar');
+  assert.equal(mesa.$('area-configuracoes').hidden, false);
+  assert.equal(mesa.$('conta-aba-conta').getAttribute('aria-pressed'), 'true');
+  assert.equal(mesa.$('conta-aba-equipe').hidden, true); assert.equal(mesa.$('conta-aba-configuracoes').hidden, true);
+  assert.ok(mesa.chamadas.some(c => c.operacao === 'conta-ver'), 'Minha conta carrega os dados da própria conta');
+  const proibidas = mesa.chamadas.map(c => c.operacao).filter(op => !CAPACIDADES.convidado.includes(op) && !['sessao', 'catalogo', 'integracao', 'cota'].includes(op));   // as quatro são leituras (GET) abertas a quem tem sessão
+  assert.deepEqual(proibidas, [], 'só pede o que o papel alcança');
+  mesa.$('ver-codex').click(); await mesa.esperar(4);
+  assert.equal(area(mesa), 'codex', 'e volta a Perguntar');
+});
+
+test('P2: sem a capacidade a Mesa não chama continuidade-resumo (o leitor levava 403 a cada abertura)', async () => {
+  const leitor = await abrir({papel: 'leitor', url: 'http://127.0.0.1:8765/?area=quadros&caso=alfa'});
+  await assert.rejects(leitor.avaliar("api('continuidade-resumo', {caso: 'alfa'})"), falha => falha.result.codigo === 'operacao_proibida');
+  assert.ok(!leitor.chamadas.some(c => c.operacao === 'continuidade-resumo'), 'nada vai ao servidor');
+  const reporter = await abrir({papel: 'reporter', url: 'http://127.0.0.1:8765/?area=quadros&caso=alfa'});
+  await reporter.avaliar("api('continuidade-resumo', {caso: 'alfa'})");
+  assert.ok(reporter.chamadas.some(c => c.operacao === 'continuidade-resumo'), 'quem tem a capacidade chama');
+});

@@ -501,7 +501,7 @@
       currentStage = t(stageLabels[data.etapa] || data.etapa);
       $('codex-atividades').append(element('li', `${data.numero}/${data.total} · ${currentStage}${data.tentativa > 1 ? ' · nova tentativa automática' : ''}`));
     } else if (event.tipo === 'publicacao') {
-      $('codex-atividades').append(element('li', `Achados publicados e verificados: ${data.caso} / ${data.rodada} · ${data.achados} achado(s). Conferência humana não realizada.`));
+      $('codex-atividades').append(element('li', `Achados publicados e verificados: ${data.caso} / ${data.rodada} · ${Leitura.quantidade(data.achados, 'achado')}. Conferência humana não realizada.`));
       const link = element('button','Consultar achados desta análise','secondary'); link.type = 'button';
       link.addEventListener('click', async () => {
         try {
