@@ -177,6 +177,8 @@ def montar(tipo: str, idioma, dados: dict) -> tuple[str, str]:
         campos['validade'] = f'{dia}/{mes}/{ano}'
     if 'papel' in campos:
         campos['papel'] = _PAPEIS[idioma].get(campos['papel'], campos['papel'])
+    if campos.get('convidado_por'):  # nor a telephone number: the name of who invites goes without digits (P32)
+        campos['convidado_por'] = ' '.join(''.join(c for c in campos['convidado_por'] if not c.isdigit()).split())
     if not campos.get('convidado_por'):
         campos['convidado_por'] = {'pt': 'A administração', 'en': 'The administrators'}[idioma]
     assunto, corpo = MODELOS[tipo][1][idioma]

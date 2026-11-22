@@ -117,6 +117,15 @@ class ModelosTest(Base):
                             self.assertEqual(endereco.findall(assunto), [])
                             for sinal in ('://', '@', 'golpe.', '.example', '。', '．'):
                                 self.assertNotIn(sinal, (assunto + corpo).replace(LINK, ''))
+        # Nor a telephone number (P32): the name of who invites goes without digits, in every language and type.
+        for tipo in ('convite', 'convite_sem_efeito'):
+            for idioma in correio.IDIOMAS:
+                assunto, corpo = correio.montar(tipo, idioma, {**DADOS, 'convidado_por': 'Ligue 0800 555 1234'})
+                self.assertIn('Ligue ' + ('convidou' if idioma == 'pt' else 'invited'), corpo)
+                for numero in ('0800', '555', '1234'):
+                    self.assertNotIn(numero, assunto + corpo)
+        self.assertIn('A administração convidou', correio.montar('convite', 'pt', {**DADOS, 'convidado_por': '0800 555 1234'})[1])
+        self.assertIn('29/11/2026', correio.montar('convite', 'pt', {**DADOS, 'convidado_por': 'Ligue 0800'})[1])  # only that field
         assunto, corpo = correio.montar('convite', 'pt', {**DADOS, 'convidado_por': 'Veja https://golpe.example'})
         self.assertIn('Veja https golpe example convidou você', corpo)  # the name is still there, as words
         self.assertIn("Maria d'Ávila-Souza (editora), Jr", correio.montar('convite', 'pt', {**DADOS, 'convidado_por': "Maria d'Ávila-Souza (editora), Jr."})[1])
