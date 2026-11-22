@@ -85,7 +85,9 @@ Anote data, quem recebeu e em quanto tempo no registro de verificação do ambie
 
 O Caddy grava uma linha JSON por requisição em `/var/log/caddy/acesso.log` (volume `caddy_logs`): horário, IP, método,
 host, caminho com o token mascarado, status, duração e tamanho. **Não grava** corpo, query string, cookies,
-Authorization, nem nenhum outro cabeçalho. Rotação: 20 MiB por arquivo, 20 arquivos, no máximo 30 dias. Esse registro
+Authorization, nem nenhum outro cabeçalho. O log padrão do contêiner (o que `docker logs caddy` mostra, inclusive os
+erros 502 de quando a Mesa está fora do ar) leva o mesmo filtro: sem URI, sem cabeçalhos de requisição nem de resposta.
+Rotação: 20 MiB por arquivo, 20 arquivos, no máximo 30 dias. Esse registro
 tem **IP de pessoas**: trate como dado pessoal (acesso restrito, 30 dias) e informe a retenção na política de
 privacidade do dono. Para ler: `docker compose -p vlado-<ambiente> --env-file ... exec caddy tail -n 100 /var/log/caddy/acesso.log`.
 

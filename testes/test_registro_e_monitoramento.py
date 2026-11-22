@@ -44,6 +44,36 @@ class RegistroDoCaddyTest(unittest.TestCase):
             for campo in ('request>uri delete', 'request>headers delete', 'resp_headers delete'):
                 self.assertIn(campo, bloco, f'{nome}: falta {campo}')
 
+    def bloco_global(self, texto: str) -> str:
+        """As opções globais: o `{ ... }` do topo do arquivo, antes do bloco do site (sem os comentários)."""
+        corpo = '\n'.join(l for l in texto.splitlines() if not l.lstrip().startswith('#'))
+        self.assertTrue(corpo.lstrip().startswith('{'), 'o bloco global precisa ser o primeiro do arquivo')
+        inicio = corpo.index('{')
+        fim = re.compile(r'(?m)^\}$').search(corpo, inicio).end()
+        return corpo[inicio:fim]
+
+    def log_padrao(self, texto: str) -> str:
+        """O `log { ... }` sem nome das opções globais (o log padrão), do `log {` à chave que o fecha."""
+        glob = self.bloco_global(texto)
+        inicio = glob.index('\tlog {')
+        return glob[inicio:glob.index('\n\t}', glob.index('format filter', inicio)) + 3]
+
+    def test_o_log_padrao_do_conteiner_tem_o_mesmo_filtro_sem_uri_nem_cabecalhos(self):
+        # Com a Mesa fora do ar (502) o Caddy escreve no log padrão (stdout), não no registro do site.
+        for nome, texto in self.textos.items():
+            glob = self.bloco_global(texto)
+            padrao = self.log_padrao(texto)
+            self.assertIn('wrap json', padrao, nome)
+            for campo in ('request>uri delete', 'request>headers delete', 'resp_headers delete'):
+                self.assertIn(campo, padrao, f'{nome}: o log padrão não apaga {campo}')
+            # É o log padrão (sem nome e sem arquivo): continua em stdout/stderr, onde o `docker logs` lê.
+            self.assertNotIn('output', padrao, nome)
+            self.assertNotRegex(padrao, r'log \w+ \{', nome)
+            self.assertNotIn('rota', padrao, nome)
+            self.assertEqual(glob.count('\tlog {'), 1, nome)
+        iguais = {nome: re.sub(r'\s+', ' ', self.log_padrao(t)) for nome, t in self.textos.items()}
+        self.assertEqual(iguais['deploy/Caddyfile'], iguais['deploy/Caddyfile.interno'])
+
     def test_o_caminho_vai_em_campo_proprio_e_mascarado(self):
         for nome, texto in self.textos.items():
             bloco = bloco_de_registro(texto)
