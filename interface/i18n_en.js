@@ -1334,6 +1334,8 @@ window.VLADO_I18N_EN = {
     cota_diaria_esgotada: "Daily limit of {cota} question(s) reached. Try again tomorrow.",
     cota_mensal_conta: "Your monthly quota is used up. You used R$ {usado} of R$ {teto}. Documents, review and the notebook keep working.",
     cota_mensal_organizacao: "The installation's monthly quota is used up. Documents, review and the notebook keep working; the installation owner can raise the quota.",
+    gasto_ilegivel: "The record of this month's spending is unreadable: the quota was treated as used up until the installation administrator recovers it. Documents, review and the notebook keep working.",
+    gasto_nao_registrado: "This month's spending cannot be recorded right now: no question is run until the record can be written again. Documents, review and the notebook keep working.",
     modelo_nao_permitido: "The selected model is not among those allowed on this installation. The previous configuration was kept; choose one of the allowed models or ask the installation owner.",
     execucoes_simultaneas_conta: "There are already {limite} question(s) running on this account. Conversations and documents stay available; send this one when one of them finishes.",
     execucoes_simultaneas_mesa: "The Mesa already has {limite} questions running. Conversations and documents stay available; send this question in a few minutes.",
