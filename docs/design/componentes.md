@@ -868,6 +868,14 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 
 **Mais dois estados de leitura** *(derivado, 22/11/2026)*, além dos três da prancha, sempre com sinal e texto (W02, regra 5): PDF com parte das páginas sem texto, "Lida em parte: confira as páginas sem texto" com o ícone `sinal-parcial` em `--theme-warning` 600; erro de leitura ou PDF protegido, "Não foi lido. O original ficou guardado." com o ícone `sinal-sem-suporte` em `--theme-danger` 600. Os dois têm "Abrir original".
 
+**O que a tela tem além da prancha** *(derivado, 22/11/2026, fase 1)*:
+
+- Abas "Acervo cadastrado" e "Pesquisar no conteúdo" acima do topo, enquanto vale a exceção da busca; no celular, pílulas de 44 (P20b).
+- Barra "Leitura" (todos os documentos, ou só os com limitações) com "Atualizar acervo" ao lado, logo acima da lista; a caixa de seleção vai até 420 px, como a busca, e não ocupa a linha inteira no desktop.
+- Uma contagem só, a do topo ("2 documentos"). A nota "Os originais estão preservados; a extração não substitui a conferência." pode ficar acima da lista, sem contagem. A versão dos documentos já está no cabeçalho e não se repete no pé da lista.
+- "Acervo conferido? Explore o que os documentos permitem afirmar." com "Perguntar aos documentos" (principal) no pé, como próximo passo.
+- "Ver recibo" abre o recibo conferido num cartão logo abaixo do cartão de envio. O cartão mostra só o que o envio não mostrou: título 16/600 ("Recibo do lote: 3 de 3 arquivos"), novos e duplicados ("3 novos · nenhum duplicado") e "Detalhes técnicos" com apuração e versão. O resultado de cada arquivo já está no cartão de envio e não se repete. Plural concordado, sem "(s)".
+
 ---
 
 ## Regras dos wireframes
