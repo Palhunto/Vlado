@@ -1,0 +1,141 @@
+---
+type: reference
+title: Lista de pré-entrega da Onda 3
+created: 2026-11-22
+tags: [design, onda3, portao, acessibilidade]
+related: ['[[componentes]]', '[[mudancas-de-token]]', '[[LEIA-ME]]']
+---
+
+# Lista de pré-entrega da Onda 3
+
+Primeiro item do portão da Onda 3 (`PLANO_LANCAMENTO.md`, Onda 3): a lista de pré-entrega da skill `ui-ux-pro-max` (`references/pro-rules.md`, "Pre-Delivery Checklist"), conferida tela por tela na Mesa como está na integração `b5874ad`, com a linha de base visual `db4e032` (130 capturas, `testes/referencias_visuais/windows/`, branch `lancamento/qa-o3`).
+
+**Como foi conferida (22/11/2026).**
+
+- Capturas: cada tela em 375, 768, 1024 e 1440 px, nos dois temas, comparadas com a linha de base de antes da Onda 3 (`3bf52c8`).
+- Código: o que a captura não mostra foi conferido em `b5874ad`, como movimento reduzido, alvos, `aria-hidden` e estados desabilitados.
+- Tradução para a web: a lista da skill é escrita para aplicativo nativo. "Dynamic Type" vira texto ampliado a 200 %; "safe area" e "gesto" só valem onde a Mesa tem barra fixa ou arrasto.
+
+Legenda:
+
+- **C**: cumprido, com a prova;
+- **E**: exceção declarada, com o lugar em que está registrada;
+- **F**: falta; vira uma ressalva com dono, na última seção;
+- **—**: não se aplica à Mesa, com a razão.
+
+## Itens da Mesa inteira
+
+### Processo
+
+| Item | Estado | Prova ou razão |
+|---|---|---|
+| Só consultas relevantes à interface | C | `componentes.md`, "Consultas às skills" |
+| Passada final por `quick-reference.md` §1 a §3 | C, com ressalva | Esta lista cobre §1 e §2. O §3 (desempenho) é o item "primeira carga em rede móvel medida antes e depois" do portão, separado desta lista |
+| Testado em 375 px | C | linha de base `db4e032`, 375 nos dois temas, todas as telas |
+| Testado em paisagem | F | não há captura em paisagem de celular → **R6** |
+| Movimento reduzido | C | `prefers-reduced-motion` em `style.css` (5 blocos), `componentes_o3.css`, `caderno.css` e `entrar.css`; o esqueleto não pulsa (`componentes.md`, Movimento) |
+| Texto ampliado (equivalente web do Dynamic Type) | F | não há rodada com texto a 200 % → **R6** |
+| Escuro conferido por conta própria | C | contraste de cada par medido nos dois temas em `mudancas-de-token.md`; capturas nos dois temas |
+| Alvos ≥ 44 px; nada sob área fixa | C | `min-height: 44px` em `style.css` (17) e `caderno.css` (4); a Mesa não tem barra fixa no pé |
+
+### Aparência
+
+| Item | Estado | Prova ou razão |
+|---|---|---|
+| Nenhum emoji como ícone | C | sinais em SVG embutido (`interface/app.js:587`); ✓ ○ ◐ ! são caracteres de texto ao lado do rótulo, com `aria-hidden` |
+| Ícones de uma família só | C | conjunto do Vlado, traço único (`docs/design/icones/`, `componentes.md#conjunto-de-icones`) |
+| Marca oficial com proporção certa | — | a marca "Vlado." é tipográfica, sem arquivo de logotipo |
+| Pressionar não mexe no leiaute | C | `button:active` desce 1 px por `transform` (`style.css:869`), sem mudar a caixa |
+| Tokens semânticos, sem cor solta por tela | C | `interface/tokens.css`; mudanças em `mudancas-de-token.md` |
+
+### Interação
+
+| Item | Estado | Prova ou razão |
+|---|---|---|
+| Retorno ao pressionar | C | `transform` ao pressionar e fundo ao passar o mouse (`componentes.md#botao`) |
+| Alvos mínimos | C | ver Processo; links dentro do texto ("Ver apurações →", "trocar") seguem a exceção de alvo em linha do WCAG 2.5.8 |
+| Tempo de transição por token | C | 150 ms de cor e fundo (`componentes.md`, Movimento) |
+| Desabilitado claro e sem ação | **F no escuro** | no claro: fundo `--theme-sidebar` e texto `--theme-muted` (`style.css:876`). No escuro, os botões desabilitados do Caderno, aba Trechos ("Criar cruzamento humano", "Exportar selecionados", "Limpar seleção", "Usar selecionados numa pergunta"), parecem habilitados (`caderno__375__escuro`, `caderno__1440__escuro`) → **R2** |
+| Ordem de foco igual à visual; rótulos claros | C para teclado | capturas `foco_*` (o capturador chega ao alvo por Tab). A rodada com leitor de tela é de pessoa (Manual Follow-Up), não de captura |
+| Sem gestos em conflito | — | a Mesa não usa gesto; o mapa tem botões e lista |
+
+### Claro e escuro
+
+| Item | Estado | Prova ou razão |
+|---|---|---|
+| Texto ≥ 4,5:1 nos dois temas | C | `mudancas-de-token.md`, pares medidos |
+| Filetes e estados visíveis nos dois temas | C, com ressalva | C55 e C58 ficam abaixo de 3:1 e são decorativos, como registrado em `mudancas-de-token.md`; o desabilitado no escuro é a **R2** |
+| Véu de diálogo legível sobre o fundo real | C | o diálogo é opaco sobre `--theme-backdrop`; pranchas `novas/telas/dialogo-*` aprovadas (21/11/2026) |
+| Os dois temas testados | C | linha de base com claro e escuro em toda tela |
+
+### Leiaute
+
+| Item | Estado | Prova ou razão |
+|---|---|---|
+| Áreas seguras | — | página web sem barra fixa no pé nem no topo sobre o conteúdo |
+| Rolagem não fica sob barra fixa | C | nenhuma barra fixa cobre conteúdo; o compositor do celular não cobre o foco (UX-19) |
+| Celular pequeno, grande e tablet, retrato e paisagem | F em parte | 375, 768, 1024 e 1440 capturados; faltam celular grande (430) e paisagem → **R6** |
+| Margens por largura | C | 16 px no celular, 32 no desktop |
+| Ritmo de 4/8 px | C | arredondamento para a grade de 4 px (P11.8) |
+| Medida de leitura | C | até 70 caracteres no texto de leitura (UX-10) |
+
+### Acessibilidade
+
+| Item | Estado | Prova ou razão |
+|---|---|---|
+| Ícone decorativo fora da árvore de acessibilidade | C | `aria-hidden` nos ícones ao lado de texto (`app.js`, `analise.js`, `quadros.js`, `desktop.js`, `codex.js`, `experiencia.js`) |
+| Ícone com sentido tem texto | C | nós do mapa com o nome inteiro ao leitor de tela (`b5874ad`); selos com texto |
+| Controle só de ícone com nome e estado | C | "Abrir navegação" com `aria-label` e `aria-expanded` (`index.html:49`) |
+| Campos com rótulo, dica e erro claro | C | erro junto ao campo (UX-15; `componentes.md#campo` e W11) |
+| Cor nunca sozinha | C | estados sempre com sinal e texto (W02, regra 5; P20a) |
+| Movimento reduzido e texto ampliado sem quebrar | C e F | movimento: C. Texto ampliado: **R6** |
+| Interface fixa não cobre o foco | C | UX-19 |
+| Arrastar tem alternativa | C | envio por arrasto tem "escolha no computador" e "Escolher arquivos"; o mapa tem a lista |
+| Entrada aceita gerenciador de senha e colar | C | Entrar com `autocomplete` e "Mostrar"; nenhuma trava de colar |
+| Conteúdo que gira sozinho | — | a Mesa não tem |
+| Erros ficam no campo depois do envio; resumo com foco | E | sem resumo de erros: os formulários são curtos e o foco vai ao primeiro campo com erro (`componentes.md#campo`, estado Erro) |
+
+## Tela por tela
+
+Colunas:
+
+- **375**: sem rolagem lateral da página no celular;
+- **Temas**: contraste e filetes nos dois temas;
+- **Desab.**: desabilitado visível nos dois temas;
+- **Corte**: nenhum texto ou controle cortado;
+- **Alvos**: controles com 44 px;
+- **Desenho**: fora da lista da skill, mas do mesmo portão, a tela confere com o desenho aprovado (contrato visual).
+
+| Tela (captura) | 375 | Temas | Desab. | Corte | Alvos | Desenho |
+|---|---|---|---|---|---|---|
+| Entrar (`entrar`) | C | C | — | C | C | **F**: ainda é o formulário antigo ("Login", sem a marca de 40 px, a frase, o aviso de teste e o rodapé do canvas) → **R5**. A chave de acesso fica fora por decisão do dono (decisão 4 do contrato de contas) |
+| Visão geral (`inicio`) | C | C | — | C | C | C (telas derivadas, aprovadas em 21/11/2026). No celular, "Trocar de apuração" e "Adicionar documentos" quebram em duas linhas (altura mínima, P11.5) |
+| Documentos (`documentos`) | C | C | — | C | C | C, com as exceções declaradas (`componentes.md#documentos`); aceita em 22/11/2026 |
+| Cadastrar arquivos (`cadastro`) | C | C | — | C | C | **F**: a área deveria deixar de existir e virar a área de envio de Documentos (P16.5) → **R4**. O "Choose Files" em inglês é o controle nativo no idioma do navegador de teste: — |
+| Perguntar (`codex`) | C | C | — | C | C | E: sem desenho no desktop (`componentes.md`, "O que ainda falta desenhar"); conferida pelos componentes |
+| Conferir achados (`achados`) | C | C | — | **F**: em 1440 e 1024 px, o botão "Conferir" sai cortado no pé de cada cartão da lista (`achados__1440__claro`, `__escuro`) → **R1** | C | C (canvas "Conferir achado"); "3 achado(s) nesta seleção" usa "(s)" → **R7** |
+| Caderno, notas (`apuracao`) | C | C | — | C | C | C (P14, P14b) |
+| Caderno, trechos (`caderno`) | C | C | **F** no escuro → **R2** | C | C | C (P14b.6) |
+| Pedidos e prazos (`diligencias`) | C | C | — | C | C | **F**: o item "Pedidos e prazos" da barra abre a tela Diligências de hoje, sem a prancha aprovada (P15.5) → **R3** |
+| Quadros, hipóteses (`quadros`) | C | C | — | C | C | **F**: sete abas e barra lateral, contra cinco abas (P15.1) e quadros sem barra, com "‹ Apuração" (P11.7); hipóteses sem a prancha aprovada (P15.2) → **R3** |
+| Linha do tempo (`quadros_linha`) | C | C | — | C | C | C (canvas "Tempo", parte E), dentro da moldura de abas da R3 |
+| Mapa de relações (`quadros_mapa`) | C | C | — | C: o nome do nó corta na segunda linha, mas sai inteiro na lista abaixo e ao leitor de tela (`b5874ad`) | C | C (canvas "Mapa", parte E; escala 1) |
+| Apurações e lixeira (`gerenciar`) | C | C | — | C | C | E: sem desenho (`componentes.md`, "O que ainda falta desenhar") |
+| Configurações (`configuracoes`) | C | C | — | C | C | E: sem desenho. No modo `local`, o texto "Adicione contas para outras pessoas" aparece sem o painel de contas → **R7** |
+| Foco (`foco_*`) | C | C | — | — | — | C: anel ocre de 3 px com afastamento de 2 px nos dois temas |
+
+Minha conta, Equipe, convite e redefinir a senha (Onda 2) não estão nesta linha de base. São conferidos à parte, contra `componentes.md#contas`.
+
+## Ressalvas
+
+| Nº | O que falta | Onde | Dono |
+|---|---|---|---|
+| R1 | Botão "Conferir" cortado no pé dos cartões de achado. O cartão deve crescer com o conteúdo, com altura mínima no lugar de fixa (P11.5) | Conferir achados, 1440 e 1024 | Frontend |
+| R2 | Botão desabilitado no escuro igual ao habilitado. Ele deve usar a aparência "Indisponível" também no escuro (`componentes.md#botao`) | Caderno, aba Trechos, e qualquer botão desabilitado no escuro | Frontend |
+| R3 | Quadros e Pedidos e prazos ainda no desenho antigo: sete abas, barra lateral e Diligências no lugar da prancha (P11.7, P15.1, P15.2, P15.5). Se isso for da Onda 4, o Maestro registra como exceção com a data de volta | Quadros, Pedidos e prazos | Frontend; o Maestro decide a onda |
+| R4 | A área "Cadastrar arquivos" continua a existir (P16.5) | Cadastrar arquivos | Frontend |
+| R5 | O Entrar não segue o canvas: marca, frase, aviso de teste, rodapé e "E-mail" no lugar de "Login" (com a Onda 2, o campo aceita e-mail) | Entrar | Frontend (junto com as seções da Onda 2 do Entrar) |
+| R6 | Faltam capturas em paisagem de celular, em celular grande (430 px) e com texto a 200 % | linha de base | QA (Sonda) |
+| R7 | Textos: "3 achado(s)" sem concordância (o plural deve concordar, sem "(s)"); o texto de Configurações no modo `local` fala de contas que não aparecem | Conferir achados, Configurações | Frontend |
+
+R1 e R2 são da lista da skill. R3 a R5 são divergências do desenho aprovado. R6 é falta de prova. R7 é texto.
