@@ -361,10 +361,13 @@
       const used=Number(block.gasto_brl),cap=Number(block.teto_brl);if(!Number.isFinite(used)||!Number.isFinite(cap)||cap<=0)throw new Error('sem cota');
       const money=(value,full)=>new Intl.NumberFormat('pt-BR',{minimumFractionDigits:full?2:0,maximumFractionDigits:2}).format(value);
       const pct=Math.min(100,Math.round(used/cap*100));
-      $('mesa-cota-valor').textContent=`R$ ${money(used,true)} de R$ ${money(cap,!Number.isInteger(cap))}`;
-      $('mesa-cota-medidor').style.setProperty('--uso',pct+'%');
-      $('mesa-cota-medidor').setAttribute('aria-label',`${pct}% da cota usada`);
-      card.dataset.esgotada=String(Boolean(block.esgotada));card.hidden=false;
+      const value=`R$ ${money(used,true)} de R$ ${money(cap,!Number.isInteger(cap))}`,spent=Boolean(block.esgotada);
+      // Used up is never shown by colour alone (W11, rules 6 and 7): the label changes, a "!" comes first and the aria-label says it.
+      $('mesa-cota-rotulo').textContent=spent?'Cota esgotada':'Cota do mês';
+      $('mesa-cota-valor').textContent=value;
+      $('mesa-cota-medidor').style.setProperty('--uso',(spent?100:pct)+'%');
+      $('mesa-cota-medidor').setAttribute('aria-label',spent?`Cota do mês esgotada: ${value}`:`${pct}% da cota usada`);
+      card.dataset.esgotada=String(spent);card.hidden=false;
     }catch(_){card.hidden=true;}
   }
   loadQuota(true);
