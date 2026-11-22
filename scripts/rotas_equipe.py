@@ -135,7 +135,11 @@ def executar(root, operation, data, principal, ip=None, parar=None, gasto_da_red
     if operation == 'caso-participantes':
         return acesso.participantes(root, data.get('caso'), redacao)
     if operation in _ACOES:
-        return _ACOES[operation](root, data.get('caso'), data.get('conta'), quem, redacao)
+        resultado = _ACOES[operation](root, data.get('caso'), data.get('conta'), quem, redacao)
+        if operation == 'caso-retirar' and parar is not None:
+            # Who was taken out of a case must not keep spending the API on it in the background.
+            parar(data['conta'], tuple(acesso.alcance(root, data['conta'])[0]))
+        return resultado
     if operation == 'equipe-listar':
         return _listar(root, redacao, principal, gasto_da_redacao)
     if operation == 'equipe-atividade':

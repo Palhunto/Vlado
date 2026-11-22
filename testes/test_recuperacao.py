@@ -297,6 +297,34 @@ class ServidorTest(cenario.DuasRedacoes):
         for conta in (alvo, terceira):  # leave the scenario with the donos it had
             self.assertEqual(self.post('dono', 'equipe-remover', {'conta': conta, 'senha': SENHA})[0], 200)
 
+    def test_a_recuperacao_antiga_saiu_e_nao_ha_caminho_por_fora_da_dupla_confirmacao(self):
+        # The old `contas-recuperar` let a dono recover ANOTHER dono, or a reader, with the own password alone: 200, a
+        # link in the answer and the other person's session gone. It left with the invitation (P30): 404, like the
+        # other `contas-*`, with or without the password, and nothing happens to anybody.
+        email_da_outra = f'outra.dona{self.numero}@exemplo.test'
+        outra = com_email(self.root, self.a, self.ids['dono'], email_da_outra, 'dono')
+        da_outra = self.entrar(email_da_outra)
+        inexistente = self.post('dono', 'operacao-que-nunca-existiu', {})
+        for alvo in (outra, self.ids['leitor']):
+            for senha in ({}, {'senha': SENHA}):
+                for corpo in ({'id': alvo, **senha}, {'conta': alvo, **senha}):
+                    resposta = self.post('dono', 'contas-recuperar', corpo)
+                    self.assertEqual((resposta[0], resposta[2]), (404, inexistente[2]))
+                    self.assertNotIn(b'/ativar/', resposta[2])
+        for operacao in ('contas-listar', 'contas-criar', 'contas-atualizar', 'contas-desativar', 'contas-reativar'):
+            self.assertEqual(self.post('dono', operacao, {'id': outra, 'papel': 'leitor', 'senha': SENHA})[0], 404, operacao)
+        self.assertEqual(self.post(da_outra, 'codex-status', {})[0], 200)  # the other dono's session goes on
+        self.assertEqual(self.post('leitor', 'codex-status', {})[0], 200)
+        self.assertIsNotNone(self.entrar(email_da_outra))  # and her password is the same
+        # The way that is left: another dono only with a third dono, and never a link in the answer.
+        with correio.usar('simulado'):
+            pela_equipe = self.post('dono', 'equipe-recuperar', {'conta': outra, 'senha': SENHA})
+        self.assertEqual((pela_equipe[0], pela_equipe[1].get('codigo')), (400, 'recuperacao_pelo_operador'))  # two donos: no third
+        self.assertNotIn('link', pela_equipe[1])
+        self.assertEqual(self.post(da_outra, 'codex-status', {})[0], 200)
+        self.assertEqual(correio.caixa(), [])
+        self.assertEqual(self.post('dono', 'equipe-remover', {'conta': outra, 'senha': SENHA})[0], 200)  # the scenario as it was
+
     def test_trocar_o_proprio_email_pelo_servidor(self):
         sessao = self.entrar(self.email)
         novo = f'nova.caixa{self.numero}@exemplo.test'
@@ -386,6 +414,8 @@ class MesaInstaladaTest(unittest.TestCase):
             con.close()
 
     def test_o_dono_unico_recupera_quem_nao_e_dono_com_a_propria_senha_e_ve_o_link(self):
+        antiga = self.pedir('contas-recuperar', {'id': self.ana, 'senha': SENHA}, self.sessao)  # gone here too
+        self.assertEqual((antiga[0], b'/ativar/' in antiga[2]), (404, False))
         for senha, codigo in (({}, 'senha_necessaria'), ({'senha': ERRADA}, 'senha_atual_incorreta')):
             status, _, corpo = self.pedir('equipe-recuperar', {'conta': self.ana, **senha}, self.sessao)
             self.assertEqual((status, json.loads(corpo).get('codigo')), (403, codigo))
