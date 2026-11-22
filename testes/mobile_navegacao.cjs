@@ -115,8 +115,9 @@ test('menu: voltar fecha a navegação; escolher uma área não deixa entrada ex
 
 test('diálogo com texto não salvo: voltar pergunta e, se o usuário mantiver, continua aberto', async () => {
   let confirmar = false;
-  const mesa = abrir({preparar: janela => { janela.confirm = () => confirmar; }});
+  const mesa = abrir();
   await mesa.esperar(12);
+  mesa.janela.Dialogo = {confirmar: async () => confirmar};   // a confirmação da Mesa (dialogo.js) trocada por uma resposta fixa
   mesa.$('diligencias-dialogo').showModal();
   mesa.$('diligencias-acao').value = 'Pedir contrato';
   mesa.$('diligencias-form').dispatchEvent(new mesa.janela.Event('input'));

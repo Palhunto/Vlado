@@ -191,7 +191,7 @@
           ul.append(li);
         }
         corpo.push(ul);
-      } else corpo.push(Q.estado(element('div'), 'vazio', t('Nenhum texto em conferência nesta apuração.')));
+      } else corpo.push(Q.estado(element('div'), 'vazio', t('Nenhum texto desta apuração foi enviado para conferência.'), {titulo: t('Nenhum texto em conferência'), acao: {rotulo: t('Abrir o caderno'), aoClicar: () => window.areaMesa?.ir('apuracao')}}));
       if (dados.divergentes?.length) corpo.push(element('p', t('{n} textos com histórico divergente ficaram de fora.', {n: dados.divergentes.length}), 'notice'));
       painel.replaceChildren(...corpo, formNovo(painel, casoId));
     }

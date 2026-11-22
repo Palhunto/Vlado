@@ -581,7 +581,7 @@
   });
   $('codex-conectar').addEventListener('click', status);
   $('codex-desligar').addEventListener('click', async () => {
-    if (!window.confirm(window.I18N.t('Encerrar o serviço local? As execuções ativas serão interrompidas. As saídas já salvas serão preservadas; será necessário abrir a Mesa novamente para continuar.'))) return;
+    if (!(await Dialogo.confirmar({variante:'destrutivo', titulo:'Encerrar o serviço local?', texto:'As execuções ativas serão interrompidas. As saídas já salvas serão preservadas; será necessário abrir a Mesa novamente para continuar.', acao:'Encerrar o serviço', gatilho:$('codex-desligar')}))) return;
     try {
       await api('codex-desligar', {});
       ++view; active = false;
@@ -663,8 +663,12 @@
   window.continuarComObservacoes=(preview,request)=>levarContribuicoes(preview,request,'observacoes');
   window.continuarComCaderno=(preview,request)=>levarContribuicoes(preview,request,'caderno');
   window.continuarComDiligencias=(preview,request)=>levarContribuicoes(preview,request,'diligencias');
+  // Empty or blank question: the error stays beside the field (W11 rule 5), not in the browser's own bubble.
+  const emptyQuestion = () => window.Estados.erroCampo($('codex-pergunta'), 'Falta a pergunta. Escreva o que quer saber dos documentos.');
+  $('codex-pergunta').addEventListener('invalid', e => { e.preventDefault(); emptyQuestion(); });
   $('codex-form').addEventListener('submit', async e => {
     e.preventDefault(); if (active || submitting || trackingPending || trackingFailed) return;
+    if (!$('codex-pergunta').value.trim()) { emptyQuestion(); return; }
     if (draftContext.caso !== $('codex-caso').value || draftContext.conversa !== conversation) {
       fail('O destino da pergunta mudou. Selecione novamente a apuração e a conversa antes de enviar.'); return;
     }

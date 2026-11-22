@@ -69,7 +69,7 @@
     const inventario = await api('inventario', {caso: casoId});
     if (!vigente()) return;
     const rodadas = (typeof cases !== 'undefined' ? cases : []).find(c => c.id === casoId)?.rodadas || [];
-    if (!rodadas.length) { Q.estado(painel, 'vazio', t('Esta apuração ainda não tem análise com documentos preservados para comparar.')); return; }
+    if (!rodadas.length) { Q.estado(painel, 'vazio', t('Esta apuração ainda não tem análise com documentos preservados para comparar.'), {titulo: t('Nada para comparar ainda'), acao: Q.perguntar()}); return; }
     const form = element('form', undefined, 'comparar-form');
     const rodada = element('select'); rodada.id = 'comparar-rodada';
     rodada.replaceChildren(...rodadas.map(r => new Option(t('Análise {id}', {id: r.id}), r.id))); rodada.value = rodadas.at(-1).id;
@@ -194,7 +194,7 @@
   Q.registrarAba({id: 'tabelas', rotulo: t('Tabelas'), carregar: Q.quadro('tabelas_apuracao', async (painel, casoId, vigente) => {
     const lista = await api('tabelas-listar', {caso: casoId});
     if (!vigente()) return;
-    if (!lista.tabelas.length) { Q.estado(painel, 'vazio', t('Nenhuma tabela de apuração nesta apuração.')); return; }
+    if (!lista.tabelas.length) { Q.estado(painel, 'vazio', t('Uma tabela conferível reúne números tirados dos documentos, cada um com a sua fonte.'), {titulo: t('Nenhuma tabela ainda'), acao: Q.perguntar()}); return; }
     const escolha = element('select'); escolha.id = 'tabelas-escolha';
     escolha.replaceChildren(...lista.tabelas.map(tb => { const o = new Option(`${tb.titulo} · ${t('{n} linhas', {n: tb.total_linhas})}`, tb.id); o.setAttribute('translate', 'no'); return o; }));
     const area = element('div', undefined, 'tabela-area');
@@ -364,7 +364,7 @@
   Q.registrarAba({id: 'mapa', rotulo: t('Mapa de relações'), carregar: Q.quadro('quadros_evidencia', async (painel, casoId, vigente) => {
     const mapa = await api('mapa-ver', {caso: casoId});
     if (!vigente()) return;
-    if (!mapa.entidades.length) { Q.estado(painel, 'vazio', t('Nenhuma pessoa ou organização registrada nesta apuração.')); return; }
+    if (!mapa.entidades.length) { Q.estado(painel, 'vazio', t('O mapa mostra as pessoas e organizações que os documentos citam e como elas se ligam.'), {titulo: t('Nenhuma ligação ainda'), acao: Q.perguntar()}); return; }
     const nomes = Object.fromEntries(mapa.entidades.map(e => [e.id, e.nome]));
     const saida = element('section', undefined, 'mapa-detalhe'); saida.tabIndex = -1; saida.setAttribute('aria-live', 'polite');
     saida.append(element('p', t('Escolha uma ligação para ver as evidências.'), 'small'));

@@ -11,11 +11,15 @@
   <link rel="apple-touch-icon" href="/icones/vlado-192.png">
   <link rel="stylesheet" href="/tokens.css">
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/componentes_o3.css">
   <link rel="stylesheet" href="/caderno.css">
   <link rel="preload" href="/fonts/SourceSans3-Upright.otf" as="font" type="font/otf" crossorigin media="(min-width: 1051px)">
   <link rel="stylesheet" href="/redacao.css">
   <script src="/i18n.js" defer></script>
   <script src="/leitura.js" defer></script>
+  <script src="/dialogo.js" defer></script>
+  <script src="/estados.js" defer></script>
+  <script src="/envio.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/fontes_web.js" defer></script>
   <script src="/revisao.js" defer></script>
@@ -203,6 +207,7 @@
         <button id="enviar-documentos">Enviar e cadastrar agora</button>
       </form>
       <p id="cadastro-status" role="status" aria-live="polite"></p>
+      <div id="cadastro-envio"></div>
       <p id="cadastro-erro" role="alert" hidden></p>
       <div id="cadastro-preparacao" class="notice" hidden><p id="cadastro-preparacao-resumo"></p><button id="cadastro-preparar" type="button" class="secondary">Preparar PDFs pendentes</button><p class="small">Usa as cópias já cadastradas, sem reenvio. A nova preparação vale para próximas conversas; análises anteriores são preservadas.</p></div>
       <div id="cadastro-recibo" hidden></div>
