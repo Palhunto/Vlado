@@ -216,6 +216,7 @@ class Servidor(ThreadingHTTPServer):
         # Extraction and OCR of uploads (CONF-02): 'processos' runs them in separate processes
         # (main); 'local' in threads of this process (tests, the frozen Windows desk).
         self.fila = fila_extracao.Fila(self.root, modo=extracao or 'local')
+        self.conversas.renderizar_pagina = self.fila.renderizar_pagina  # page images too (SEG-01)
         super().__init__(address, Handler)
 
     def serve_forever(self, poll_interval=0.5):

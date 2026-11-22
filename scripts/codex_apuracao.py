@@ -19,6 +19,7 @@ import fila_extracao
 import trava_cadastro
 from inferencia_api import CHAVES, ErroIA, ServidorAPI, seguro
 from fontes_web import documentos_e_capturas
+import tetos_extracao
 from indice_sqlite import _entradas, construir_snapshot, cobertura, ler_passagem, pesquisar
 from nova_rodada import _criar_rodada, preparar_pasta_rodada
 from fluxo_codex import Fluxo, ETAPAS
@@ -146,6 +147,8 @@ class _LoteNaFila(Exception):
 class Conversas:
     def __init__(self, root, factory=ServidorAPI):
         self.root = Path(root).resolve()
+        # PDF page as an image for the model; the Mesa sets its queue's isolated renderer (SEG-01).
+        self.renderizar_pagina = None
         self.folder = dentro(self.root, 'conversas')
         self.factory = factory
         self.rpc = None
@@ -1288,14 +1291,9 @@ class Conversas:
                 if path.suffix.lower() == '.pdf':
                     if type(page) is not int or page < 1:
                         raise ValueError('Informe uma página física positiva.')
-                    try:
-                        import fitz
-                    except ImportError as exc:
-                        raise ValueError('Leitura visual de PDF exige PyMuPDF opcional. Consulte o original na interface; não presuma tabela conferida.') from exc
-                    with fitz.open(path) as pdf:
-                        if page > len(pdf):
-                            raise ValueError('Página fora do PDF.')
-                        content = pdf[page - 1].get_pixmap(matrix=fitz.Matrix(1.5, 1.5)).tobytes('png')
+                    # The page is untrusted input: pixel caps, and in the Mesa's queue an isolated
+                    # process renders it (SEG-01); MuPDF never decodes it in this process there.
+                    content = (self.renderizar_pagina or tetos_extracao.renderizar_png)(path, page)
                     mime = 'image/png'
                     locator = f'página física PDF {page}'
                 elif path.suffix.lower() in ('.png', '.jpg', '.jpeg'):

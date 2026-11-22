@@ -360,19 +360,32 @@ def extrair_item(tarefa, *, base=None, paralelo=None, progresso=None):
 
     Runs in the command line's own process, in a thread of the Mesa (local queue) or in
     ``trabalhador_extracao`` (separate process). Never touches the manifest or the lock.
-    Returns ``{'resultado': outcome, 'derivado': path of the copy relative to base, or None}``.
+    Returns ``{'resultado': outcome, 'derivado': path of the copy relative to base, or None}``,
+    plus ``'teto': reason`` when the whole file was over a cap (``tetos_extracao``; memory
+    included): the outcome is then an error without a copy, and the queue marks the file failed.
     """
     origem, destino = Path(tarefa['origem']), Path(tarefa['destino'])
     destino.parent.mkdir(parents=True, exist_ok=True)
-    with ocr.execucao(paralelo=paralelo, progresso=progresso):
-        if tarefa['tipo'] == 'pdf':
-            resultado = extrair_pdf(origem, tarefa['identificador'], destino)
-        elif tarefa['tipo'] == 'office':
-            resultado = extrair_office(origem, tarefa['identificador'], destino)
-        elif tarefa['tipo'] == 'imagem':
-            resultado = ocr.ocr_imagem(origem, tarefa['identificador'], destino)
-        else:
-            raise ValueError('Tipo de extração desconhecido.')
+    try:
+        with ocr.execucao(paralelo=paralelo, progresso=progresso):
+            if tarefa['tipo'] == 'pdf':
+                resultado = extrair_pdf(origem, tarefa['identificador'], destino)
+            elif tarefa['tipo'] == 'office':
+                resultado = extrair_office(origem, tarefa['identificador'], destino)
+            elif tarefa['tipo'] == 'imagem':
+                resultado = ocr.ocr_imagem(origem, tarefa['identificador'], destino)
+            else:
+                raise ValueError('Tipo de extração desconhecido.')
+    except MemoryError:
+        destino.unlink(missing_ok=True)  # a copy cut in the middle is never taken
+        teto = ('O arquivo excedeu o teto de memória da extração (VLADO_EXTRACAO_TETO_MEMORIA_MB). '
+                'O original está preservado; o texto não foi extraído.')
+        return {'resultado': {**resultado_sem_extracao(tarefa['tipo'], origem.suffix.lower(), teto), 'teto': teto},
+                'derivado': None, 'teto': teto}
+    teto = resultado.get('teto') if isinstance(resultado, dict) else None
+    if teto:
+        destino.unlink(missing_ok=True)
+        return {'resultado': resultado, 'derivado': None, 'teto': teto}
     derivado = None
     if destino.is_file():
         derivado = destino.relative_to(base).as_posix() if base else str(destino)
