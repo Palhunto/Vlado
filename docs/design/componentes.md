@@ -203,6 +203,8 @@ Onde: Conferir achado, Visão geral. `<nav aria-label="Áreas">`.
 | Foco | anel de foco | canvas (regra geral) |
 | Ocupado, erro, desabilitado | não se aplicam | — |
 | Vazio | contador some quando é zero | derivado |
+| Cota esgotada (gasto igual ou acima do teto) | o cartão da cota vira aviso, nunca só pela cor: fundo `--theme-warning-bg`, borda 1 px `--theme-warning-line`; a primeira linha troca "Cota do mês" por "! Cota esgotada" em 14/600 `--theme-warning`, e o valor continua ao lado ("R$ 50,00 de R$ 50": gasto sempre com centavos, teto sem centavos quando inteiro; 14/600 `--theme-warning`); o medidor fica cheio, com preenchimento `--theme-warning`; `aria-label` "Cota do mês esgotada: R$ 50,00 de R$ 50". O bloco "Limite atingido" ([estados](#estados)) aparece onde a ação para (pergunta, envio), não na barra | derivado de W11 (regras 6 e 7), 22/11/2026 |
+| Sem cota | sem a rota ou sem sessão, o cartão some; o perfil sobe para o lugar dele | derivado |
 | Abaixo de 1280 px | vira gaveta: o conteúdo fica `inert` com ela aberta, e ela abre pelo botão de menu do cabeçalho ([tablet](#tablet)) | plano (UX-11, UX-17) e derivado; limite de 1280 px decidido pelo dono (P12.1) |
 
 Sem ícones nos itens da barra, como no canvas (decisão do dono, P11.6). Rótulo e contador dos itens nunca quebram linha (P15.7); a largura de 256 px foi medida para o item mais longo, "Pedidos e prazos" ativo com "1 vence" (188 px de 199 úteis). Perfil e cota cabem numa linha com os textos das pranchas; para nome de redação ou valor mais longo, vale a altura mínima no lugar de altura fixa (P11.5). Área nova na barra pede nova medida.
