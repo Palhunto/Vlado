@@ -18,7 +18,7 @@ import registro_acesso
 ORIGEM = 'https://vlado.test'
 LINK = ORIGEM + '/aceitar/' + 'T' * 43
 DADOS = {'redacao': 'Redação Alfa', 'convidado_por': 'Dona Alfa', 'papel': 'reporter', 'validade': '2026-11-29',
-         'link': LINK, 'origem': ORIGEM}
+         'link': LINK, 'origem': ORIGEM, 'minutos': 60}
 SMTP = {'VLADO_CORREIO': 'smtp', 'VLADO_SMTP_HOST': 'smtp.exemplo.test', 'VLADO_SMTP_PORTA': '587',
         'VLADO_SMTP_USUARIO': 'vlado', 'VLADO_SMTP_SENHA': 'senha-do-smtp-de-teste', 'VLADO_SMTP_REMETENTE': 'nao-responda@vlado.test'}
 SEM_CORREIO = {chave: '' for chave in SMTP}
@@ -107,7 +107,7 @@ class ModelosTest(Base):
                  'h​ttps://golpe.example', 'golpe . example', 'https:\\\\golpe.example', '//golpe.example')
         for tipo in correio.MODELOS:
             for idioma in correio.IDIOMAS:
-                for campo in ('convidado_por', 'redacao', 'papel', 'validade'):
+                for campo in ('convidado_por', 'redacao', 'papel', 'validade', 'minutos'):
                     for nome in nomes:
                         with self.subTest(tipo=tipo, idioma=idioma, campo=campo, nome=nome):
                             assunto, corpo = correio.montar(tipo, idioma, {**DADOS, campo: nome})
@@ -120,6 +120,29 @@ class ModelosTest(Base):
         assunto, corpo = correio.montar('convite', 'pt', {**DADOS, 'convidado_por': 'Veja https://golpe.example'})
         self.assertIn('Veja https golpe example convidou você', corpo)  # the name is still there, as words
         self.assertIn("Maria d'Ávila-Souza (editora), Jr", correio.montar('convite', 'pt', {**DADOS, 'convidado_por': "Maria d'Ávila-Souza (editora), Jr."})[1])
+
+    def test_redefinicao_e_aviso_de_senha_trocada(self):
+        for idioma, trecho in (('pt', 'vale por 60 minutos'), ('en', 'valid for 60 minutes')):
+            assunto, corpo = correio.montar('redefinicao', idioma, {'link': ORIGEM + '/redefinir/' + 'T' * 43, 'origem': ORIGEM, 'minutos': 60})
+            self.assertIn(trecho, corpo)
+            self.assertIn(ORIGEM + '/redefinir/' + 'T' * 43, corpo)
+            self.assertEqual(corpo.count('http'), 1)
+            aviso = correio.montar('senha_trocada', idioma, {})[1]
+            self.assertNotIn('http', aviso)  # a notice carries no link: nothing to click in a message nobody asked for
+        self.assertIn('foi trocada', correio.montar('senha_trocada', 'pt', {})[0])
+
+    def test_enviar_depois_nao_faz_quem_chamou_esperar_e_guarda_o_transporte_do_pedido(self):
+        with correio.usar('simulado'):
+            correio.enviar_depois('senha_trocada', 'ana@exemplo.test', 'pt', {}, conta='a' * 16)
+        correio.aguardar()  # the block ended before the thread ran: the transport is the one of when it was asked
+        self.assertEqual([(m['tipo'], m['para']) for m in correio.caixa()], [('senha_trocada', 'ana@exemplo.test')])
+        self.assertIn(('email_enviado', 'ok', 'senha_trocada'), self.registrados())
+        correio.limpar_caixa()
+        correio.enviar_depois('senha_trocada', 'ana@exemplo.test', 'pt', {})  # the link on the screen: nothing leaves
+        correio.aguardar()
+        self.assertEqual(correio.caixa(), [])
+        with correio.usar('simulado'), self.assertRaises(ValueError):
+            correio.enviar_depois('promocao', 'ana@exemplo.test', 'pt', {})  # a programming error shows in the caller
 
     def test_link_de_fora_da_instalacao_tipo_desconhecido_e_campo_faltando_sao_recusados(self):
         for link in ('https://outro.test/aceitar/abc', 'javascript:alert(1)', LINK + '\nhttps://outro.test/', LINK + '?x=1', ''):

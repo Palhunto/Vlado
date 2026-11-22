@@ -296,6 +296,7 @@ A coluna Tipo diz o que a operação faz: `L` lê, `B` baixa arquivo, `E` escrev
 | `GET /entrar`, `/ativar/<token>`, `/aceitar/<token>`\*, `/redefinir/<token>`\*, `/primeiro-acesso`, arquivos de `rotas_estaticas.ARQUIVOS` | nenhum | L | pública | | | | | Página e arquivos estáticos, sem dado de conta nem de apuração. O token fica no caminho e é lido pelo script da página. |
 | `GET /convite/<token>` | nenhum | L | pública | | | | | 410, como hoje (convites da versão 1). |
 | `GET /api/primeiro-acesso` | nenhum | L | pública | | | | | Só no modo `local-contas`. |
+| `GET /api/entrada`\* | nenhum | L | pública | | | | | Só `{esqueci_senha}`: se a página de entrada pode oferecer "Esqueci a senha" (transporte diferente de `tela`, seção 8.1). Nada de conta nenhuma. |
 | `GET /` | nenhum | L | sim | sim | sim | sim | sim | Sem sessão: 303 para `/entrar`. Com pendência: 303 para a página que a resolve. |
 | `GET /api/sessao` | nenhum | L | sim | sim | sim | sim | sim | Seção 3. |
 | `GET /api/integracao` | nenhum | L | sim | sim | sim | sim | sim | Só capacidades do servidor. |
@@ -315,7 +316,7 @@ Operações públicas: exigem `Origin` e JSON, aceitam corpo de até 4 KB e cont
 | `convite-consultar`\* | L | `{token}` devolve redação, e-mail, papel, quem convidou, validade e versão dos termos. |
 | `convite-aceitar`\* | A | `{token, nome, senha, termos_versao}` cria a conta e abre a sessão, com a pendência de segundo fator quando for obrigatório. |
 | `senha-esqueci`\* | A | `{email}`. A resposta é sempre a mesma, exista a conta ou não. |
-| `senha-redefinir`\* | A | `{token, senha, codigo?}`. Conta com segundo fator exige também o código. |
+| `senha-redefinir`\* | A | `{token, senha, codigo?}`. Não abre sessão: encerra todas as da conta. Conta com segundo fator exige também o código. |
 | `primeiro-admin` | A | Só `local-contas`, só de `127.0.0.1`, uma vez. Cria a redação única e o primeiro dono. |
 
 ### 5.4 A própria conta
@@ -685,7 +686,7 @@ O mesmo cuidado vale para todo texto que uma conta escreve e outra lê: nome de 
 
 ## 10. O que muda para os outros agentes
 
-**Arquivos de Contas** (escreve só neles): `scripts/acesso.py`, `scripts/rotas_contas.py`, os demais `scripts/rotas_*.py` e `scripts/interface_pesquisa.py` (nesta onda, pela tabela "Quem escreve onde"), e os módulos novos `scripts/autorizacao.py`, `scripts/correio.py`, `scripts/segundo_fator.py` e `scripts/rotas_equipe.py`. Testes em arquivos novos (`test_matriz_contas.py`, `test_isolamento_redacoes.py`, `test_migracao_contas.py`, `test_convites.py`, `test_segundo_fator.py`, `test_sessoes_conta.py`, `test_equipe.py`, `test_ciclo_conta.py`, `test_correio.py`), mais `test_acesso.py` e `test_autorizacao.py`, que são de autorização.
+**Arquivos de Contas** (escreve só neles): `scripts/acesso.py`, `scripts/rotas_contas.py`, os demais `scripts/rotas_*.py` e `scripts/interface_pesquisa.py` (nesta onda, pela tabela "Quem escreve onde"), e os módulos novos `scripts/autorizacao.py`, `scripts/correio.py`, `scripts/segundo_fator.py` e `scripts/rotas_equipe.py`. Testes em arquivos novos (`test_matriz_contas.py`, `test_isolamento_redacoes.py`, `test_migracao_contas.py`, `test_convites.py`, `test_redefinicao_senha.py`, `test_segundo_fator.py`, `test_sessoes_conta.py`, `test_equipe.py`, `test_ciclo_conta.py`, `test_correio.py`), mais `test_acesso.py` e `test_autorizacao.py`, que são de autorização.
 
 **Pedidos, um por dono de arquivo. Nenhum é feito por Contas sem o aval do Maestro.**
 
@@ -779,11 +780,19 @@ Do que a entrega 3 decide, além do texto da seção 8.1:
 - `termos_versao` sai `null` em `convite-consultar` e só `null` é aceito em `convite-aceitar`, até os termos existirem (seção 8.4).
 - Apuração apagada depois do convite fica de fora no aceite; o resto do convite vale.
 - `acesso.py manutencao` vence os convites e poda a atividade com mais de 90 dias; a mesma varredura roda na partida do servidor. Um convite vencido já não funciona nem aparece entre os pendentes antes de a varredura passar.
-- A página `GET /aceitar/<token>` ainda não é servida: a rota entra junto com a página do Frontend (W10). Até lá o link do convite não abre nada no navegador.
+- `GET /aceitar/<token>` e `GET /redefinir/<token>` servem a mesma página de `/entrar` e `/ativar/<token>`, sem cache e sem referência, com o token só no caminho; as seções da página são do Frontend (W10) e entram com ele.
+
+**Entrega 3, redefinição de senha por e-mail:** `senha-esqueci` e `senha-redefinir`, públicas, em `scripts/rotas_contas.py`, e a leitura pública `GET /api/entrada`. Roda hoje `-p test_redefinicao_senha.py`. O que ela decide, além do texto das seções 5.3, 8.1 e 8.2:
+
+- `senha-esqueci {email}` responde sempre 200 `{estado: "enviado"}`, para e-mail com conta, sem conta e malformado. O armazenamento é escrito do mesmo jeito nos três casos (quando foi o último pedido para aquele endereço) e a mensagem sai em outra linha de execução, para o tempo da resposta não distinguir. Um endereço recebe no máximo uma mensagem a cada 5 minutos, e o link novo mata o anterior. Só recebe link a conta ativa, com senha, de redação ativa.
+- Com o transporte `tela`, `senha-esqueci` responde 400 `transporte_indisponivel`, igual para todo e-mail, e `GET /api/entrada` devolve `{esqueci_senha: false}`, para a página de entrada nem oferecer o link.
+- `senha-redefinir {token, senha}` não abre sessão: troca a senha, encerra todas as sessões da conta e a pessoa entra em seguida. O link vale 60 minutos e uma vez. Link desconhecido, usado ou vencido tem uma resposta só (400 `link_invalido`); senha fora do tamanho responde 400 `senha_invalida`, também em `convite-aceitar`. O campo `codigo` é aceito e ignorado até o segundo fator existir.
+- O link de redefinição pendente morre com tudo o que encerra as sessões da conta: senha trocada, desativação, recuperação e remoção.
+- Depois de `senha-redefinir` e de `conta-senha-trocar`, a pessoa recebe no e-mail da conta o aviso de senha trocada, sem link nenhum. Conta sem e-mail (as migradas) não recebe aviso nem redefine por aqui: a recuperação dela é pela administração.
 
 **O que ainda não existe,** e onde o código difere do texto até lá:
 
-- As operações de `autorizacao.PENDENTES` (redefinição de senha, troca de e-mail, segundo fator, termos, exportação e exclusão da própria conta, recuperação) respondem 404. As seis `contas-*` continuam, só para o dono e só sobre a própria redação (`autorizacao.TRANSITORIAS`), com a senha pedida nos casos da seção 5.15, e saem com o convite por e-mail (P30, seção 5.5).
+- As operações de `autorizacao.PENDENTES` (troca de e-mail, segundo fator, termos, exportação e exclusão da própria conta, recuperação pelo dono) respondem 404. As seis `contas-*` continuam, só para o dono e só sobre a própria redação (`autorizacao.TRANSITORIAS`), com a senha pedida nos casos da seção 5.15, e saem com o convite por e-mail (P30, seção 5.5).
 - `contas-criar` é recusada a todos (403 `operacao_proibida`) numa instalação com mais de uma redação: o login é único na instalação, e a recusa "esse login já existe" contaria a uma redação que outra tem uma conta com ele (seção 4.5). Até o convite por e-mail entrar, nessas instalações as contas novas são criadas pelo operador, no terminal. Com uma redação só, nada muda. Nenhuma outra operação recebe campo único da instalação.
 - A página (`GET /`), `GET /api/sessao` e `GET /api/integracao` também passam pelo portão: de uma redação suspensa, respondem 403 `redacao_suspensa` (a página, um aviso simples, sem dado nem token).
 - `data-papel` leva `admin` para o dono enquanto a interface não conhece os papéis novos; os outros papéis vão com o próprio nome. `GET /api/sessao` já devolve os valores novos e `capacidades`.
