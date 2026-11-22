@@ -1,4 +1,5 @@
 const {chromium} = require('playwright');
+const {irParaGerenciar} = require('./qa_navegacao.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -22,7 +23,7 @@ const [origin, output, chrome] = process.argv.slice(2);
   }
   try {
     await page.goto(origin);
-    await page.click('#ver-gerenciar');
+    await irParaGerenciar(page);
     await page.locator('#gerenciar-caso option[value="alpha"]').waitFor({state:'attached'});
     assert.equal(await page.locator('#selecao-acervo').isVisible(), false);
     assert.equal(await page.locator('#gerenciar-caso').inputValue(), '');
@@ -56,7 +57,7 @@ const [origin, output, chrome] = process.argv.slice(2);
     await page.locator('#codex-status').filter({hasText:'Conversa movida para a lixeira'}).waitFor();
     assert.equal(await page.locator('#codex-conversa').inputValue(), '');
     assert.equal(await page.locator('#codex-excluir').isDisabled(), true);
-    await page.click('#ver-gerenciar');
+    await irParaGerenciar(page);
     await trash('Conversa · Pergunta sintética').waitFor();
     await page.locator('#gerenciar-conversas .manage-empty').waitFor();
     checks.push('Excluir conversa na tela de perguntas limpa a seleção e retira as rodadas vinculadas.');
@@ -65,7 +66,7 @@ const [origin, output, chrome] = process.argv.slice(2);
     await trash('Apuração · Caso sintético alpha').waitFor();
     assert.equal(await trash('Conversa · Pergunta sintética').getByRole('button').isDisabled(), true);
     await page.reload();
-    await page.click('#ver-gerenciar');
+    await irParaGerenciar(page);
     await trash('Apuração · Caso sintético alpha').waitFor();
     assert.equal(await page.locator('#gerenciar-caso option[value="alpha"]').count(), 0);
     await trash('Apuração · Caso sintético alpha').getByRole('button').click();

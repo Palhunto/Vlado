@@ -1,5 +1,6 @@
 // Development acceptance only. Uses an isolated headless browser and synthetic server.
 const {chromium} = require('playwright');
+const {irParaCadastro} = require('./qa_navegacao.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const assert = require('node:assert/strict');
@@ -28,7 +29,7 @@ const [origin,output,chrome] = process.argv.slice(2);
     await page.goto(origin);
     await page.locator('#caso option[value="alpha"]').waitFor({state:'attached'});
     assert.equal(await page.locator('#area-cadastro').isVisible(),false);
-    await page.click('#ver-cadastro');
+    await irParaCadastro(page);
     assert.equal(await page.locator('#area-cadastro').isVisible(),true);
     assert.equal(await page.locator('#selecao-acervo').isVisible(),false);
     assert.equal(await page.locator('#area-documentos').isVisible(),false);
@@ -44,7 +45,7 @@ const [origin,output,chrome] = process.argv.slice(2);
     await firstHit.locator('.context:not([hidden])').waitFor();
     assert.match(await firstHit.locator('.context').innerText(),/valor 12/);
     assert.equal(await page.evaluate(() => window.INJETADO),undefined);
-    await page.click('#ver-cadastro'); await page.click('#ver-documentos');
+    await irParaCadastro(page); await page.click('#ver-documentos');
     assert.equal(await page.locator('#caso').inputValue(),'alpha');
     assert.equal(await page.locator('#geracao').inputValue(),'v1');
     for (const width of [1365,736,390,320]) {
@@ -172,7 +173,7 @@ const [origin,output,chrome] = process.argv.slice(2);
     assert.equal(await page.locator('#achados-resultados article').count(),0);
     await page.screenshot({path:path.join(output,'erro.png')});
     checks.push('conjunto vazio revisado, banco ausente e erro de integridade distintos; sem dependência de FTS documental');
-    await page.click('#ver-cadastro');
+    await irParaCadastro(page);
     assert.equal(await page.locator('#cadastro-id').count(),0);
     await page.fill('#cadastro-titulo-input','Cadastro de teste visual');
     await page.selectOption('#cadastro-natureza','sinteticos');
