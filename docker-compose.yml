@@ -66,6 +66,17 @@ services:
       VLADO_PROXIES_CONFIAVEIS: ${VLADO_PROXIES_CONFIAVEIS:-}
       # Rede que cobre quase toda a internet (0.0.0.0/0...) é recusada; só VLADO_PROXIES_CONFIAVEIS_AMPLAS=1 a confirma.
       VLADO_PROXIES_CONFIAVEIS_AMPLAS: ${VLADO_PROXIES_CONFIAVEIS_AMPLAS:-}
+      # Extração e OCR em processos separados (CONF-02) e os tetos do documento recebido (SEG-01). Vazio = o padrão do código;
+      # os padrões estão comentados em deploy/ambientes/*.env.example. Cada processo de extração tem RLIMIT_AS = TETO_MEMORIA_MB:
+      # PROCESSOS x TETO_MEMORIA_MB (mais a Mesa) tem de caber em VLADO_MEM_LIMITE.
+      VLADO_EXTRACAO_PROCESSOS: ${VLADO_EXTRACAO_PROCESSOS:-}
+      VLADO_EXTRACAO_PAGINAS: ${VLADO_EXTRACAO_PAGINAS:-}
+      VLADO_EXTRACAO_TEMPO_MAXIMO: ${VLADO_EXTRACAO_TEMPO_MAXIMO:-}
+      VLADO_EXTRACAO_TETO_PAGINAS: ${VLADO_EXTRACAO_TETO_PAGINAS:-}
+      VLADO_EXTRACAO_TETO_MEGAPIXELS: ${VLADO_EXTRACAO_TETO_MEGAPIXELS:-}
+      VLADO_EXTRACAO_TETO_MEMORIA_MB: ${VLADO_EXTRACAO_TETO_MEMORIA_MB:-}
+      VLADO_EXTRACAO_TETO_CPU_S: ${VLADO_EXTRACAO_TETO_CPU_S:-}
+      VLADO_EXTRACAO_NUCLEOS: ${VLADO_EXTRACAO_NUCLEOS:-}
       # SEG-02: registro de auditoria (autenticação, administração, downloads), uma linha JSON por evento, sem conteúdo, no
       # volume `registro` (o serviço de backup NÃO o monta: fora do backup, de propósito; ver deploy/BACKUP.md).
       VLADO_REGISTRO: /app/registro
