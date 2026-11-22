@@ -1474,6 +1474,7 @@ window.VLADO_I18N_EN = {
     conflito: "Conflict: the note was changed in another tab.",
     ia_autenticacao: "The API refused the key, or no key is set. Fix the key under Connection and options.",
     ia_limite: "API usage or capacity limit reached. Wait and try again.",
+    ia_cobranca: "The AI provider account is out of credit or has reached its spending cap. Trying again will not help until billing is fixed on the provider's account; tell whoever administers the Mesa. What was already done was kept.",
     ia_conexao: "The connection to the API failed or timed out. Check the network and try again.",
     ia_servidor: "Temporary error on the provider's server. Try again.",
     fila_limite_envios: "Upload limit while files are being processed. {arquivos} file(s) are being read. The files already sent are saved; send the next ones when these finish. Documents, questions and the notebook keep working.",
