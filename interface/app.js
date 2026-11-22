@@ -652,6 +652,7 @@ function mostrarAreaBase(area) {
     window.achadosDesatualizados = false;  // a human mark was saved elsewhere: reload badges and counter
     searchFindings({...findingQuery});
   }
+  if (area === 'cadastro') loadPdfEnvironment();  // reverifica o extrator de PDF e o aviso, por qualquer caminho até Cadastro
   if (area === 'gerenciar') window.dispatchEvent(new Event('gerenciar-abrir'));
   if (area === 'caderno') window.dispatchEvent(new Event('caderno-abrir'));
   if (area === 'apuracao') window.dispatchEvent(new Event('apuracao-abrir'));
@@ -1080,4 +1081,3 @@ $('achados-exportar').addEventListener('click', async () => {
 });
 loadCatalog();
 loadPdfEnvironment();
-$('ver-cadastro').addEventListener('click', loadPdfEnvironment);
