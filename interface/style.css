@@ -1510,7 +1510,8 @@ footer{font-size:var(--text-xs);margin-top:32px;padding-top:20px;color:var(--mut
   .mesa-upload-banner p{font-size:var(--text-sm)}
   .mesa-acervo-toolbar{gap:12px}
   .mesa-acervo-toolbar label:first-child{flex-basis:100%}
-  .mesa-acervo-toolbar label:nth-child(2){flex:1;min-width:120px}
+  .mesa-acervo-toolbar label:nth-child(2){flex-basis:100%}
+  .mesa-acervo-toolbar>button{flex:1 1 100%}
   .mesa-file-table th,.mesa-file-table td{padding:13px 11px}
   .mesa-file-table td:nth-child(3),.mesa-file-table th:nth-child(3){display:none}
   .mesa-file-table td:last-child{width:1%}
