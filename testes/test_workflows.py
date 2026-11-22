@@ -65,6 +65,12 @@ class WorkflowDaImagemTest(unittest.TestCase):
         self.assertRegex(self.conteudo, r'(?m)^    timeout-minutes:\s*30\s*$')
         self.assertIn('ubuntu-latest', self.conteudo)
 
+    def test_so_roda_no_repositorio_principal_tanto_no_agendado_quanto_no_manual(self):
+        condicoes = re.findall(r'(?m)^    if:\s*(.+?)\s*$', self.conteudo)
+        self.assertEqual(condicoes, ["github.repository == 'Palhunto/Vlado'"])
+        # Nenhuma saída pelo evento: "manual OU repositório" deixaria o disparo manual rodar em qualquer fork.
+        self.assertNotIn('github.event_name', condicoes[0])
+
     def test_cache_de_camadas_em_tmp_buildx_cache(self):
         self.assertIn('docker/setup-buildx-action@', self.conteudo)
         self.assertIn('actions/cache@', self.conteudo)
