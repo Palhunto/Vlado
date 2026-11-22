@@ -5,8 +5,10 @@
   const button = document.getElementById('mesa-tema');
   const meta = document.querySelector('meta[name="theme-color"]');
   function apply(value) {
-    // Sem valor guardado ("Do sistema", em Minha conta), vale a preferência do sistema, como na entrada; sem a consulta, o escuro de sempre.
-    const theme = value === 'light' || value === 'dark' ? value : (typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    // "claro" e "escuro" valem como estão; "sistema" ("Do sistema", em Minha conta, gravado como as outras escolhas) segue a preferência do sistema; sem valor
+    // guardado a Mesa abre no escuro, como sempre abriu.
+    const theme = value === 'light' || value === 'dark' ? value
+      : value === 'sistema' && typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
     document.documentElement.dataset.theme = theme;
     const label = theme === 'dark' ? 'Modo claro' : 'Modo escuro';
     button.textContent = label;

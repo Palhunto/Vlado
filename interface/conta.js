@@ -274,13 +274,13 @@
     const tema = document.createElement('select'); tema.id = 'conta-tema';
     tema.append(new Option(t('Do sistema'), 'sistema'), new Option(t('Claro'), 'light'), new Option(t('Escuro'), 'dark'));
     const guardado = () => { try { return localStorage.getItem(CHAVE_TEMA); } catch (_) { return null; } };
-    const lerTema = () => (['light', 'dark'].includes(guardado()) ? guardado() : 'sistema');
+    const lerTema = () => (['light', 'dark', 'sistema'].includes(guardado()) ? guardado() : 'dark');  // sem nada guardado a Mesa abre no escuro
     tema.value = lerTema();
     const rotuloTema = no('label', 'conta-campo', t('Tema')); rotuloTema.append(tema);
     tema.addEventListener('change', () => {
       // O mesmo estado do botão "Modo escuro" do cabeçalho (desktop.js): a chave guardada e o aviso aos ouvintes.
-      try { if (tema.value === 'sistema') localStorage.removeItem(CHAVE_TEMA); else localStorage.setItem(CHAVE_TEMA, tema.value); } catch (_) { /* a troca vale mesmo assim */ }
-      const aviso = new Event('storage'); aviso.key = CHAVE_TEMA; aviso.newValue = tema.value === 'sistema' ? null : tema.value;
+      try { localStorage.setItem(CHAVE_TEMA, tema.value); } catch (_) { /* a troca vale mesmo assim */ }  // 'sistema' também é uma escolha gravada
+      const aviso = new Event('storage'); aviso.key = CHAVE_TEMA; aviso.newValue = tema.value;
       window.dispatchEvent(aviso);
     });
     document.getElementById('mesa-tema')?.addEventListener('click', () => { tema.value = lerTema(); });

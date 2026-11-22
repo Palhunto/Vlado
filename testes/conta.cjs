@@ -233,12 +233,12 @@ test('Idioma muda o idioma da Mesa e grava o da conta; Tema fica só neste naveg
   assert.equal(mesa.janela.I18N.idioma(), 'en');
   assert.deepEqual(dados(mesa.chamadas.find(c => c.operacao === 'conta-atualizar').dados), {idioma: 'en'});
   const tema = mesa.$('conta-tema');
-  assert.deepEqual([...tema.querySelectorAll('option')].map(o => o.value), ['sistema', 'light', 'dark']); assert.equal(tema.value, 'sistema');
+  assert.deepEqual([...tema.querySelectorAll('option')].map(o => o.value), ['sistema', 'light', 'dark']); assert.equal(tema.value, 'dark', 'sem nada guardado a Mesa abre no escuro');
   mudar(tema, 'light');
   assert.equal(mesa.guardado.get('apuracao:tema'), 'light'); assert.equal(mesa.doc.documentElement.dataset.theme, 'light', 'o cabeçalho acompanha');
   assert.equal(mesa.chamadas.filter(c => c.operacao === 'conta-atualizar').length, 1, 'o tema não vai ao servidor');
   mudar(tema, 'dark'); assert.equal(mesa.doc.documentElement.dataset.theme, 'dark');
-  mudar(tema, 'sistema'); assert.equal(mesa.guardado.has('apuracao:tema'), false, 'Do sistema: nada guardado');
+  mudar(tema, 'sistema'); assert.equal(mesa.guardado.get('apuracao:tema'), 'sistema', 'Do sistema é uma escolha gravada como as outras');
 });
 
 test('em inglês: abas, cartões, datas e a linha de estado saem em inglês', async () => {
@@ -253,15 +253,25 @@ test('em inglês: abas, cartões, datas e a linha de estado saem em inglês', as
   assert.equal(mesa.$('area-titulo').textContent, 'My account');
 });
 
-test('tema.js (no <head>, antes da pintura): o guardado vale; sem nada guardado, o sistema decide, claro ou escuro, e sem a consulta fica o escuro de sempre', () => {
-  const tema = (armazenamento, sistemaClaro) => {
-    const mesa = criarMesa({scripts: [], armazenamento, preparar: janela => { janela.matchMedia = consulta => ({matches: sistemaClaro && /prefers-color-scheme:\s*light/.test(consulta)}); }});
-    mesa.executar('tema.js');
+test('tema.js (no <head>, antes da pintura) e desktop.js: as seis combinações (sistema claro ou escuro × nada guardado, claro, escuro) e "Do sistema" gravado seguindo o sistema', () => {
+  const tema = (armazenamento, sistemaClaro, scripts) => {
+    const mesa = criarMesa({scripts, armazenamento, preparar: janela => { janela.matchMedia = consulta => ({matches: sistemaClaro && /prefers-color-scheme:\s*light/.test(consulta), addEventListener() {}}); }});
+    if (!scripts.length) mesa.executar('tema.js');  // com a pilha inteira, é o desktop.js que aplica o tema
     return mesa.doc.documentElement.dataset.theme;
   };
-  assert.equal(tema({'apuracao:tema': 'light'}, false), 'light'); assert.equal(tema({'apuracao:tema': 'dark'}, true), 'dark');
-  assert.equal(tema({}, true), 'light', 'sem nada guardado, segue o sistema'); assert.equal(tema({}, false), 'dark');
-  assert.equal(tema({'apuracao:tema': 'qualquer-coisa'}, true), 'light', 'valor desconhecido conta como sem escolha');
+  const guardado = valor => (valor === undefined ? {} : {'apuracao:tema': valor});
+  for (const [descricao, scripts] of [['tema.js', []], ['desktop.js', SCRIPTS]]) {
+    const dele = (valor, sistemaClaro) => tema(guardado(valor), sistemaClaro, scripts);
+    assert.equal(dele(undefined, true), 'dark', `${descricao}: sistema claro e nada guardado: o escuro de sempre`);
+    assert.equal(dele(undefined, false), 'dark', `${descricao}: sistema escuro e nada guardado`);
+    assert.equal(dele('light', true), 'light', `${descricao}: sistema claro e claro guardado`);
+    assert.equal(dele('light', false), 'light', `${descricao}: sistema escuro e claro guardado`);
+    assert.equal(dele('dark', true), 'dark', `${descricao}: sistema claro e escuro guardado`);
+    assert.equal(dele('dark', false), 'dark', `${descricao}: sistema escuro e escuro guardado`);
+    assert.equal(dele('sistema', true), 'light', `${descricao}: Do sistema gravado segue o sistema claro`);
+    assert.equal(dele('sistema', false), 'dark', `${descricao}: Do sistema gravado segue o sistema escuro`);
+    assert.equal(dele('qualquer-coisa', true), 'dark', `${descricao}: valor desconhecido conta como sem escolha`);
+  }
   const index = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'interface', 'index.html'), 'utf8');
   assert.ok(/<script src="\/tema\.js[^"]*"><\/script>/.test(index), 'sem defer: roda antes da primeira pintura');
 });
