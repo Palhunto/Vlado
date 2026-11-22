@@ -621,21 +621,25 @@ window.addEventListener('catalogo-carregado', areaHeading);
 // A única função de troca de área. Os módulos que precisam reagir a ela não a reatribuem: registram
 // ganchos, na ordem em que as camadas se empilhavam antes (o último a registrar fica por fora).
 //   antes(nome) -> nome: ajusta o nome pedido; o último registrado roda primeiro.
-//   forcar(nome) -> nome: troca só a tela que o núcleo mostra; os ganchos de depois seguem com o nome pedido.
+//   forcar(nome) -> nome: troca a tela que o núcleo mostra; todos rodam, na ordem de registro, e os ganchos de depois recebem o nome
+//   já forçado, para a rota, as abas e a tela nunca divergirem.
 //   depois(nome): roda depois do núcleo, na ordem de registro.
-const ganchosArea = {antes: [], forcar: null, depois: []};
+const ganchosArea = {antes: [], forcar: [], depois: []};
 function registrarGanchoArea({antes, forcar, depois}) {
   if (antes) ganchosArea.antes.unshift(antes);
-  if (forcar) ganchosArea.forcar = forcar;
+  if (forcar) ganchosArea.forcar.push(forcar);
   if (depois) ganchosArea.depois.push(depois);
 }
 function showArea(pedida) {
   let nome = pedida;
   for (const gancho of ganchosArea.antes) nome = gancho(nome);
-  mostrarAreaBase(ganchosArea.forcar ? ganchosArea.forcar(nome) : nome);
+  for (const gancho of ganchosArea.forcar) nome = gancho(nome);
+  mostrarAreaBase(nome);
   for (const gancho of ganchosArea.depois) gancho(nome);
 }
-// Núcleo: mostra a área, atualiza título e avisa o módulo dela. Quem não precisa dos ganchos pode chamá-lo direto.
+// Núcleo: mostra a área, atualiza título e avisa o módulo dela, sem os ganchos (rota, abas, foco). Só quem já tem a rota certa o chama
+// direto (piloto.js, na carga); quem muda de área de verdade chama showArea. O auxiliar é global por ser função de script clássico;
+// código novo usa window.areaMesa.
 function mostrarAreaBase(area) {
   for (const name of Object.keys(areaNames)) {
     $('area-' + name).hidden = area !== name;
@@ -662,6 +666,7 @@ function mostrarAreaBase(area) {
     }).catch(() => { $('codex-conta').textContent = 'Servidor desconectado. Inicie a Mesa novamente.'; });
   }
 }
+window.areaMesa = Object.freeze({ir: showArea, nucleo: mostrarAreaBase});
 for (const area of ['inicio','cadastro','documentos','achados','codex','gerenciar','configuracoes','caderno','apuracao','diligencias','quadros']) $('ver-' + area).addEventListener('click', () => showArea(area));
 window.addEventListener('acervo-alterado', () => {
   $('cadastro-recibo').hidden = true; $('cadastro-perguntar').hidden=true;

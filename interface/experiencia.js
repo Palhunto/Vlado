@@ -150,6 +150,7 @@
       return name;
     },
     depois: name => {
+      area = name;  // o nome já passou pelos ganchos de forçar: rota e tela dizem o mesmo
       $('caderno-abas').hidden = !['apuracao','caderno'].includes(name);
       $('caderno-aba-notas').setAttribute('aria-pressed',String(name === 'apuracao'));
       $('caderno-aba-trechos').setAttribute('aria-pressed',String(name === 'caderno'));
