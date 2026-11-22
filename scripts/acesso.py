@@ -63,6 +63,8 @@ PAPEIS = ('dono', 'editor', 'reporter', 'leitor', 'convidado')
 # Names of the two-role model, accepted on input (old CLI, `contas-*` while they exist) and never stored.
 PAPEIS_ANTIGOS = {'admin': 'dono'}
 RESPONSAVEIS = ('dono', 'reporter')  # who may answer for a case
+ATRIBUIVEIS = ('dono', 'editor', 'reporter', 'leitor')  # the legacy `convidado` is never given to anybody again
+IDIOMAS = ('pt', 'en')
 CLIENTES = ('web', 'android')
 ID_CASO = re.compile(r'[a-z0-9][a-z0-9_-]{0,63}')
 ID_CONTA = re.compile(r'[0-9a-f]{16}')
@@ -79,7 +81,7 @@ BLOQUEIO_MINUTOS = 15
 TENTATIVAS_IP_MINUTO = 20
 MAX_EVENTOS = 1000
 MAX_TENTATIVAS_GUARDADAS = 2000
-ESQUEMA = 1  # PRAGMA user_version of the store
+ESQUEMA = 2  # PRAGMA user_version of the store; `_ATUALIZACOES` takes an older store up to it
 ESPERA_BD_S = 10
 NOME_PADRAO_REDACAO = 'Redação'
 CREDENCIAIS = 'Login ou senha incorretos.'
@@ -88,6 +90,12 @@ BLOQUEADO = 'Muitas tentativas. Aguarde alguns minutos e tente de novo.'
 CONTA_INEXISTENTE = 'Conta não encontrada.'
 CASOS_INEXISTENTES = 'Escolha apurações existentes para a conta.'
 CASO_INEXISTENTE = 'Apuração não encontrada.'
+SESSAO_INEXISTENTE = 'Sessão não encontrada.'
+SENHA_NECESSARIA = 'Digite a sua senha para confirmar.'
+SENHA_INCORRETA = 'Senha incorreta.'
+ULTIMO_DONO = 'A redação precisa de ao menos um dono ativo.'
+TETO_INVALIDO = 'Informe o teto em reais, com até duas casas decimais (por exemplo, 50 ou 50.00).'
+CHAVE_CONFIRMACAO = '#senha|'  # attempt counter of the password asked again; `#` never starts a login
 
 _HASHER = PasswordHasher()  # library defaults (argon2id); check_needs_rehash follows them
 _TRAVA = threading.RLock()
@@ -111,7 +119,7 @@ CREATE TABLE contas (
     nome TEXT NOT NULL, login TEXT UNIQUE, email TEXT UNIQUE, ativa INTEGER NOT NULL DEFAULT 1,
     senha_hash TEXT, senha_definida_em TEXT, cota_diaria INTEGER, teto_mensal_brl TEXT,
     criada_em TEXT NOT NULL, criada_por TEXT NOT NULL, migrada_de_convite INTEGER NOT NULL DEFAULT 0,
-    ativacao_sha256 TEXT, ativacao_expira_em TEXT, ativacao_motivo TEXT);
+    ativacao_sha256 TEXT, ativacao_expira_em TEXT, ativacao_motivo TEXT, idioma TEXT, excluida_em TEXT);
 CREATE INDEX contas_por_organizacao ON contas (organizacao);
 CREATE INDEX contas_por_ativacao ON contas (ativacao_sha256);
 CREATE TABLE casos (
@@ -141,14 +149,22 @@ BEGIN SELECT RAISE(ABORT, 'conta nao muda de redacao'); END;
 CREATE TABLE sessoes (
     id_sha256 TEXT PRIMARY KEY, publico TEXT NOT NULL UNIQUE, conta TEXT NOT NULL REFERENCES contas(id),
     csrf TEXT NOT NULL, criada_em TEXT NOT NULL, expira_em TEXT NOT NULL, ultimo_uso TEXT NOT NULL,
-    cliente TEXT NOT NULL DEFAULT 'web');
+    cliente TEXT NOT NULL DEFAULT 'web', aparelho TEXT, ip_criacao TEXT, ip_ultimo TEXT);
 CREATE INDEX sessoes_por_conta ON sessoes (conta);
 CREATE TABLE tentativas (chave TEXT PRIMARY KEY, falhas INTEGER NOT NULL DEFAULT 0, bloqueado_ate TEXT, em TEXT);
 CREATE TABLE uso_diario (conta TEXT PRIMARY KEY, dia TEXT NOT NULL, feitas INTEGER NOT NULL);
 CREATE TABLE eventos (
     n INTEGER PRIMARY KEY AUTOINCREMENT, em TEXT NOT NULL, tipo TEXT NOT NULL, conta TEXT, por TEXT,
     organizacao TEXT);
+CREATE INDEX eventos_por_organizacao ON eventos (organizacao, n);
 """
+# From each older version of the store to the next one (applied in order, each in one transaction).
+_ATUALIZACOES = {1: ('ALTER TABLE contas ADD COLUMN idioma TEXT',
+                     'ALTER TABLE contas ADD COLUMN excluida_em TEXT',
+                     'ALTER TABLE sessoes ADD COLUMN aparelho TEXT',
+                     'ALTER TABLE sessoes ADD COLUMN ip_criacao TEXT',
+                     'ALTER TABLE sessoes ADD COLUMN ip_ultimo TEXT',
+                     'CREATE INDEX eventos_por_organizacao ON eventos (organizacao, n)')}
 
 
 class RegistroIlegivel(ValueError):
@@ -181,6 +197,26 @@ class AtivacaoInvalida(ValueError):
 
 class PrimeiroAcessoEncerrado(ValueError):
     """The store already has an account: the first-administrator form is gone for good."""
+
+
+class Recusada(ValueError):
+    """A refusal the server answers with its own status and code (the message is the text for the person)."""
+    status, codigo, motivo = 400, 'requisicao_invalida', 'validacao'
+
+
+class SenhaNecessaria(Recusada):
+    """A sensitive operation came without the password of who asks."""
+    status, codigo, motivo = 403, 'senha_necessaria', 'validacao'
+
+
+class SenhaIncorreta(Recusada):
+    """The password sent to confirm a sensitive operation is wrong (it counts for the attempt ceiling)."""
+    status, codigo, motivo = 403, 'senha_atual_incorreta', 'senha_incorreta'
+
+
+class UltimoDono(Recusada):
+    """The newsroom would be left without an active dono."""
+    status, codigo, motivo = 400, 'ultimo_dono', 'ultimo_dono'
 
 
 def agora() -> datetime:
@@ -310,12 +346,31 @@ def _preparar(root: Path) -> Path:
             con = sqlite3.connect(str(bd), timeout=ESPERA_BD_S, isolation_level=None)
             try:
                 con.execute('PRAGMA journal_mode = WAL')
+                _atualizar_esquema(con)
             finally:
                 con.close()
         except sqlite3.Error as exc:
             raise _ilegivel() from exc
         _PRONTOS.add(chave)
     return bd
+
+
+def _atualizar_esquema(con) -> None:
+    """Take an older store up to ESQUEMA, one version at a time. A store newer than this code is left alone
+    (it then reads as unreadable: nobody gets in with half-understood data)."""
+    versao = con.execute('PRAGMA user_version').fetchone()[0]
+    while versao in _ATUALIZACOES and versao < ESQUEMA:
+        con.execute('BEGIN IMMEDIATE')
+        try:
+            if con.execute('PRAGMA user_version').fetchone()[0] == versao:  # another process may have done it
+                for comando in _ATUALIZACOES[versao]:
+                    con.execute(comando)
+                con.execute(f'PRAGMA user_version = {versao + 1}')
+            con.execute('COMMIT')
+        except sqlite3.Error:
+            _desfazer(con)
+            raise
+        versao = con.execute('PRAGMA user_version').fetchone()[0]
 
 
 def _trocar(origem: Path, destino: Path, tentativas: int = 40) -> None:
@@ -380,9 +435,11 @@ def _evento(tx: _Tx, tipo: str, conta: str | None, por: str | None, momento: dat
     tx.ex('INSERT INTO eventos (em, tipo, conta, por, organizacao) VALUES (?, ?, ?, ?, ?)',
           _iso(momento), tipo, conta, por, organizacao)
     tx.depois.append(lambda: registro_acesso.do_acesso(tipo, conta, por, momento, organizacao=organizacao, **detalhes))
-    excesso = tx.um('SELECT COUNT(*) AS total FROM eventos')['total'] - MAX_EVENTOS
+    # The window is of each newsroom: the activity of one never pushes out the activity of another.
+    excesso = tx.um('SELECT COUNT(*) AS total FROM eventos WHERE organizacao IS ?', organizacao)['total'] - MAX_EVENTOS
     if excesso > 0:  # leaving the window is not silent: it goes to the audit log
-        for antigo in tx.todos('SELECT n, em, tipo, conta, por FROM eventos ORDER BY n LIMIT ?', excesso):
+        for antigo in tx.todos('SELECT n, em, tipo, conta, por FROM eventos WHERE organizacao IS ? ORDER BY n LIMIT ?',
+                               organizacao, excesso):
             copia = {k: antigo[k] for k in ('em', 'tipo', 'conta', 'por')}
             tx.depois.append(lambda copia=copia: registro_acesso.arquivar_evento(copia))
             tx.ex('DELETE FROM eventos WHERE n = ?', antigo['n'])
@@ -646,6 +703,8 @@ def _validar_senha(senha) -> str:
 
 
 def _situacao(conta) -> str:
+    if conta['excluida_em']:
+        return 'excluida'
     if not conta['ativa']:
         return 'desativada'
     return 'ativa' if conta['senha_hash'] else 'aguardando_senha'
@@ -663,7 +722,8 @@ def _publico(tx: _Tx, conta, momento: datetime | None = None) -> dict:
     return {'id': conta['id'], 'nome': conta['nome'], 'login': conta['login'], 'email': conta['email'],
             'papel': conta['papel'], 'organizacao': conta['organizacao'],
             'casos': None if conta['papel'] == 'dono' else _participacoes(tx, conta['id']),
-            'cota_diaria': conta['cota_diaria'], 'ativa': bool(conta['ativa']),
+            'cota_diaria': conta['cota_diaria'], 'teto_mensal_brl': conta['teto_mensal_brl'],
+            'idioma': conta['idioma'] or IDIOMAS[0], 'ativa': bool(conta['ativa']),
             'situacao': _situacao(conta), 'criada_em': conta['criada_em'],
             'senha_definida_em': conta['senha_definida_em'], 'ativacao_expira_em': expira,
             'ativacao_vencida': bool(expira and _data(expira) <= (momento or agora())),
@@ -671,9 +731,10 @@ def _publico(tx: _Tx, conta, momento: datetime | None = None) -> dict:
 
 
 def _conta(tx: _Tx, cid, organizacao: str | None = None):
-    """The account, or the same refusal for an unknown id and for an account of another newsroom."""
+    """The account, or the same refusal for an unknown id, for an account of another newsroom and for one that
+    was removed (only its id is left)."""
     conta = tx.um('SELECT * FROM contas WHERE id = ?', cid) if isinstance(cid, str) else None
-    if not conta or (organizacao is not None and conta['organizacao'] != organizacao):
+    if not conta or conta['excluida_em'] or (organizacao is not None and conta['organizacao'] != organizacao):
         raise ValueError(CONTA_INEXISTENTE)
     return conta
 
@@ -1000,8 +1061,9 @@ def criar_conta(root: Path, nome, login, papel='convidado', casos=(), cota_diari
 def listar(root: Path, organizacao: str | None = None) -> list[dict]:
     momento = agora()
     with _bd(root) as tx:
-        contas = (tx.todos('SELECT * FROM contas WHERE organizacao = ? ORDER BY criada_em, rowid', organizacao)
-                  if organizacao is not None else tx.todos('SELECT * FROM contas ORDER BY criada_em, rowid'))
+        contas = (tx.todos('SELECT * FROM contas WHERE organizacao = ? AND excluida_em IS NULL ORDER BY criada_em, rowid',
+                           organizacao) if organizacao is not None
+                  else tx.todos('SELECT * FROM contas WHERE excluida_em IS NULL ORDER BY criada_em, rowid'))
         return [_publico(tx, conta, momento) for conta in contas]
 
 
@@ -1013,11 +1075,26 @@ def eventos(root: Path, limite: int = 50, organizacao: str | None = None) -> lis
         return [dict(linha) for linha in linhas]
 
 
-def desativar(root: Path, cid, por='cli', organizacao: str | None = None) -> dict:
+def _senha_se(root: Path, por, senha, ip, exige) -> bool:
+    """Ask the password of `por` again when `exige(tx)` says the operation is sensitive (contract, 5.15).
+    Returns whether it was confirmed; the caller checks `exige` once more inside its own transaction."""
+    with _bd(root) as tx:
+        precisa = bool(exige(tx))
+    if precisa:
+        confirmar_senha(root, por, senha, ip)
+    return precisa
+
+
+def desativar(root: Path, cid, por='cli', organizacao: str | None = None, *, confirmar=False, senha=None, ip=None) -> dict:
+    """Deactivate an account: its sessions end and the cases it answers for are left without one.
+    With `confirmar` (the team screen), deactivating a dono asks the password of who does it."""
+    confirmada = confirmar and _senha_se(root, por, senha, ip, lambda tx: _conta(tx, cid, organizacao)['papel'] == 'dono')
     with _bd(root, escrever=True) as tx:
         conta = _conta(tx, cid, organizacao)
+        if confirmar and conta['papel'] == 'dono' and not confirmada:
+            raise SenhaNecessaria(SENHA_NECESSARIA)
         if conta['papel'] == 'dono' and conta['ativa'] and not _donos_ativos(tx, conta['organizacao'], exceto=cid):
-            raise ValueError('Não é possível desativar o último administrador ativo.')
+            raise UltimoDono('Não é possível desativar o último administrador ativo.')
         # An old link must not come back to life after reactivation.
         tx.ex('UPDATE contas SET ativa = 0, ativacao_sha256 = NULL, ativacao_expira_em = NULL, ativacao_motivo = NULL'
               ' WHERE id = ?', cid)
@@ -1055,7 +1132,7 @@ def atualizar(root: Path, cid, por='cli', *, nome=None, papel=None, casos=None, 
         novo_papel = papel or conta['papel']
         if (conta['papel'] == 'dono' and novo_papel != 'dono' and conta['ativa']
                 and not _donos_ativos(tx, conta['organizacao'], exceto=cid)):
-            raise ValueError('Não é possível rebaixar o último administrador ativo.')
+            raise UltimoDono('Não é possível rebaixar o último administrador ativo.')
         antes = _publico(tx, conta, momento)
         if nome is not None:
             tx.ex('UPDATE contas SET nome = ? WHERE id = ?', nome, cid)
@@ -1090,6 +1167,137 @@ def recuperar(root: Path, cid, por='cli', horas=ATIVACAO_HORAS, organizacao: str
         _limpar_tentativas(tx, conta['login'])
         _evento(tx, 'recuperacao_emitida', cid, por, momento)
         return _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), momento), token
+
+
+# --- the team screen (equipe-*) -----------------------------------------------------------------
+
+def equipe(root: Path, organizacao: str) -> dict:
+    """The people of one newsroom, for its dono: role, cases, own ceiling. Removed accounts are not listed.
+    `casos` is None for a dono (every case of the newsroom)."""
+    momento = agora()
+    with _bd(root) as tx:
+        redacao = tx.um('SELECT id, nome, situacao, cota_mensal_brl, teto_por_pessoa_brl FROM organizacoes WHERE id = ?',
+                        organizacao)
+        if not redacao:
+            raise ValueError('Redação não encontrada.')
+        pessoas = []
+        for conta in tx.todos('SELECT * FROM contas WHERE organizacao = ? AND excluida_em IS NULL ORDER BY criada_em, rowid',
+                              organizacao):
+            ultimo = tx.um('SELECT MAX(ultimo_uso) AS em FROM sessoes WHERE conta = ?', conta['id'])['em']
+            pessoas.append({**_publico(tx, conta, momento), 'responsavel_de': _alcance(tx, conta)[1],
+                            'sessao_aberta': bool(ultimo), 'ultimo_uso': ultimo})
+        return {'redacao': dict(redacao), 'pessoas': pessoas}
+
+
+def mudar_papel(root: Path, cid, papel, por: str, organizacao: str, senha=None, ip=None) -> dict:
+    """Change the role of a person of the newsroom. The participations stay; whoever stops being dono or reporter
+    no longer answers for cases. Promoting to dono, or changing the role of a dono, asks the password of who does it
+    (contract, 5.15, and the first condition of P28). The legacy `convidado` is never given."""
+    if papel not in ATRIBUIVEIS:
+        raise ValueError('Papel de acesso inválido.')
+
+    def sensivel(tx):
+        atual = _conta(tx, cid, organizacao)['papel']
+        return atual != papel and 'dono' in (atual, papel)
+    confirmada = _senha_se(root, por, senha, ip, sensivel)
+    with _bd(root, escrever=True) as tx:
+        conta = _conta(tx, cid, organizacao)
+        momento = agora()
+        if conta['papel'] != papel:
+            if sensivel(tx) and not confirmada:
+                raise SenhaNecessaria(SENHA_NECESSARIA)
+            if conta['papel'] == 'dono' and conta['ativa'] and not _donos_ativos(tx, organizacao, exceto=cid):
+                raise UltimoDono(ULTIMO_DONO)
+            tx.ex('UPDATE contas SET papel = ?, cota_diaria = NULL WHERE id = ?', papel, cid)
+            if papel not in RESPONSAVEIS:
+                _sem_responsabilidade(tx, cid)
+            _evento(tx, 'papel_alterado', cid, por, momento, papel=papel)
+        return _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), momento)
+
+
+def remover(root: Path, cid, por: str, organizacao: str, senha=None, ip=None) -> dict:
+    """Remove a person from the newsroom, for good: sessions, password, e-mail, login, name and participations
+    go; only the id stays, never used again (it is what links notes and reviews to their author). Always asks
+    the password of who does it. The own account is not removed here."""
+    if cid == por:
+        raise ValueError('Para excluir a sua própria conta, use a página Minha conta.')
+    with _bd(root) as tx:
+        _conta(tx, cid, organizacao)  # an unknown account is refused before the password is asked
+    confirmar_senha(root, por, senha, ip)
+    with _bd(root, escrever=True) as tx:
+        conta = _conta(tx, cid, organizacao)
+        momento = agora()
+        if conta['papel'] == 'dono' and conta['ativa'] and not _donos_ativos(tx, organizacao, exceto=cid):
+            raise UltimoDono(ULTIMO_DONO)
+        _derrubar_sessoes(tx, cid)
+        tx.ex('DELETE FROM participacoes WHERE conta = ?', cid)
+        _sem_responsabilidade(tx, cid)
+        tx.ex('DELETE FROM uso_diario WHERE conta = ?', cid)
+        _limpar_tentativas(tx, conta['login'])
+        tx.ex('DELETE FROM tentativas WHERE chave = ?', CHAVE_CONFIRMACAO + cid)
+        tx.ex("UPDATE contas SET ativa = 0, nome = '', login = NULL, email = NULL, senha_hash = NULL, senha_definida_em = NULL,"
+              ' cota_diaria = NULL, teto_mensal_brl = NULL, idioma = NULL, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
+              ' ativacao_motivo = NULL, excluida_em = ? WHERE id = ?', _iso(momento), cid)
+        _evento(tx, 'conta_excluida', cid, por, momento)
+        return {'id': cid, 'situacao': 'excluida'}
+
+
+def _valor_do_teto(valor) -> str | None:
+    """A ceiling in reais as the store keeps it ('50.00'), or None to go back to the default."""
+    if valor is None:
+        return None
+    texto = str(valor) if type(valor) is int else valor
+    if not isinstance(texto, str) or not re.fullmatch(r'\d{1,7}(\.\d{1,2})?', texto):
+        raise ValueError(TETO_INVALIDO)
+    inteiro, _, centavos = texto.partition('.')
+    return f'{int(inteiro)}.{centavos.ljust(2, "0")}'
+
+
+def _centavos(texto) -> int:
+    inteiro, _, centavos = str(texto).partition('.')
+    return int(inteiro or 0) * 100 + int((centavos + '00')[:2])
+
+
+def definir_teto(root: Path, organizacao: str, por: str, valor, cid=None, teto_padrao=None) -> dict:
+    """Monthly ceiling in reais of one person (`cid`) or the newsroom's default per person. Never above the
+    newsroom's own ceiling, which only the operator sets; without one, `teto_padrao` (the installation's)."""
+    valor = _valor_do_teto(valor)
+    with _bd(root, escrever=True) as tx:
+        redacao = tx.um('SELECT cota_mensal_brl, teto_por_pessoa_brl FROM organizacoes WHERE id = ?', organizacao)
+        if not redacao:
+            raise ValueError('Redação não encontrada.')
+        limite = (_centavos(redacao['cota_mensal_brl']) if redacao['cota_mensal_brl']
+                  else int(round(float(teto_padrao) * 100)) if teto_padrao is not None else None)
+        if valor is not None and limite is not None and _centavos(valor) > limite:
+            raise ValueError(f'O teto por pessoa não pode passar do teto da redação (R$ {limite // 100},{limite % 100:02d}).')
+        momento = agora()
+        if cid is None:
+            tx.ex('UPDATE organizacoes SET teto_por_pessoa_brl = ? WHERE id = ?', valor, organizacao)
+            _evento(tx, 'teto_alterado', None, por, momento, organizacao=organizacao)
+            return {'teto_por_pessoa_brl': valor}
+        _conta(tx, cid, organizacao)
+        tx.ex('UPDATE contas SET teto_mensal_brl = ? WHERE id = ?', valor, cid)
+        _evento(tx, 'teto_alterado', cid, por, momento)
+        return _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), momento)
+
+
+def atividade(root: Path, organizacao: str, limite: int = 50, antes=None) -> dict:
+    """Accesses and administration acts of one newsroom, newest first: type, time, who and by whom. No content of
+    any case, and never the refusals of the gate (those tell what exists elsewhere: they go to the audit log only).
+    `antes` continues a previous page (its `proximo`)."""
+    if type(limite) is not int or not 1 <= limite <= 200:
+        raise ValueError('O limite da atividade deve ficar entre 1 e 200.')
+    if antes is not None and (type(antes) is not int or antes < 1):
+        raise ValueError('Continuação da atividade inválida.')
+    with _bd(root) as tx:
+        linhas = tx.todos('SELECT n, em, tipo, conta, por FROM eventos WHERE organizacao = ? AND n < ? ORDER BY n DESC LIMIT ?',
+                          organizacao, antes if antes is not None else 1 << 62, limite + 1)
+        nomes = {c['id']: c['nome'] for c in tx.todos(
+            'SELECT id, nome FROM contas WHERE organizacao = ? AND excluida_em IS NULL', organizacao)}
+        pagina = linhas[:limite]
+        return {'eventos': [{'n': l['n'], 'em': l['em'], 'tipo': l['tipo'], 'conta': l['conta'], 'por': l['por'],
+                             'conta_nome': nomes.get(l['conta']), 'por_nome': nomes.get(l['por'])} for l in pagina],
+                'proximo': pagina[-1]['n'] if len(linhas) > limite else None}
 
 
 # --- first administrator (local mode with accounts) ----------------------------------------------
@@ -1296,9 +1504,24 @@ def _sessao_vencida(registro, momento: datetime) -> bool:
         return True
 
 
-def entrar(root: Path, login, senha, ip: str | None = None, cliente='web') -> tuple[str, str, dict]:
+def _aparelho(texto) -> str | None:
+    """The device label of a session ('Firefox · Windows'): short text chosen by the server, never the raw header."""
+    if not isinstance(texto, str) or not 1 <= len(texto) <= 60 or any(ord(c) < 32 for c in texto):
+        return None
+    return texto
+
+
+def _ip_valido(ip) -> str | None:
+    try:
+        return str(ipaddress.ip_address(ip)) if ip else None
+    except ValueError:
+        return None
+
+
+def entrar(root: Path, login, senha, ip: str | None = None, cliente='web', aparelho=None) -> tuple[str, str, dict]:
     """Return (session id, csrf token, public account). One generic refusal for every bad credential.
-    Every outcome goes to the audit log: success, wrong credentials, lockout and per-address limit (never the text typed)."""
+    Every outcome goes to the audit log: success, wrong credentials, lockout and per-address limit (never the text typed).
+    `aparelho` and `ip` are kept with the session, for the person's own list of sessions."""
     momento = agora()
     try:
         _limite_ip(ip, momento)
@@ -1337,9 +1560,11 @@ def entrar(root: Path, login, senha, ip: str | None = None, cliente='web') -> tu
                 tx.ex('DELETE FROM tentativas WHERE chave = ?', chave)
                 sid, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
                 _limpar_sessoes(tx, momento)
-                tx.ex('INSERT INTO sessoes (id_sha256, publico, conta, csrf, criada_em, expira_em, ultimo_uso, cliente)'
-                      ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)', _hash(sid), secrets.token_hex(8), cid, csrf, _iso(momento),
-                      _iso(momento + timedelta(hours=SESSAO_HORAS)), _iso(momento), _cliente(cliente))
+                tx.ex('INSERT INTO sessoes (id_sha256, publico, conta, csrf, criada_em, expira_em, ultimo_uso, cliente,'
+                      ' aparelho, ip_criacao, ip_ultimo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                      _hash(sid), secrets.token_hex(8), cid, csrf, _iso(momento),
+                      _iso(momento + timedelta(hours=SESSAO_HORAS)), _iso(momento), _cliente(cliente),
+                      _aparelho(aparelho), _ip_valido(ip), _ip_valido(ip))
                 tx.depois.append(lambda: registro_acesso.registrar('login_ok', 'ok', cid, momento,
                                                                    cliente=_cliente(cliente), ip=ip))
                 aberta = (sid, csrf, _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), momento))
@@ -1363,8 +1588,9 @@ def _auditar_falha(motivo: str, cid: str | None, login: str, cliente, ip: str | 
                               cliente=_cliente(cliente), ip=ip)
 
 
-def sessao(root: Path, sid) -> dict | None:
+def sessao(root: Path, sid, ip: str | None = None) -> dict | None:
     """The calling account, re-read on every request (deactivation, role, participations and quota apply at once).
+    `ip` is kept as the session's last address, at most once a minute, with its last use.
 
     `casos` is always the explicit reach (for a dono, every case of the own newsroom) and `responsavel_de` the cases
     the account answers for: outside the local mode no caller ever has "every case"."""
@@ -1395,7 +1621,8 @@ def sessao(root: Path, sid) -> dict | None:
         # Audited once (`sessao_expirada`) and forgotten: no event per later request.
         with _bd(root, escrever=True) as tx:
             if tocar:
-                tx.ex('UPDATE sessoes SET ultimo_uso = ? WHERE id_sha256 = ?', _iso(momento), chave)
+                tx.ex('UPDATE sessoes SET ultimo_uso = ?, ip_ultimo = coalesce(?, ip_ultimo) WHERE id_sha256 = ?',
+                      _iso(momento), _ip_valido(ip), chave)
             _limpar_sessoes(tx, momento)
     return principal
 
@@ -1416,6 +1643,122 @@ def encerrar_todas_as_sessoes(root: Path) -> int:
         total = tx.um('SELECT COUNT(*) AS total FROM sessoes')['total']
         tx.ex('DELETE FROM sessoes')
         return total
+
+
+# --- the own account (conta-*) ------------------------------------------------------------------
+
+def confirmar_senha(root: Path, cid, senha, ip: str | None = None) -> None:
+    """The password of the session's account, asked again by a sensitive operation (contract, 5.15): a session left
+    open, or hostile content shown in the Mesa, cannot run it. A wrong password counts: five in a row block the
+    confirmation of this account for 15 minutes. Raises SenhaNecessaria, SenhaIncorreta or Bloqueado."""
+    if not isinstance(senha, str) or not senha:
+        raise SenhaNecessaria(SENHA_NECESSARIA)
+    senha = senha if len(senha) <= SENHA_MAX else ''
+    chave, momento = CHAVE_CONFIRMACAO + str(cid), agora()
+    with _bd(root) as tx:
+        conta = tx.um('SELECT ativa, senha_hash FROM contas WHERE id = ?', cid) if isinstance(cid, str) else None
+        guardado = conta['senha_hash'] if conta and conta['ativa'] else None
+        bloqueado = _bloqueado(tx, chave, momento)
+    if bloqueado:
+        registro_acesso.registrar('admin_recusada', 'falha', cid, motivo='bloqueado', ip=ip)
+        raise Bloqueado(BLOQUEADO)
+    try:
+        with _VezDoHash():
+            certo = _HASHER.verify(guardado or _hash_ficticio(), senha) and bool(guardado) and bool(senha)
+    except (VerifyMismatchError, VerificationError, InvalidHashError):
+        certo = False
+    with _bd(root, escrever=True) as tx:
+        if certo:
+            tx.ex('DELETE FROM tentativas WHERE chave = ?', chave)
+            return
+        bloqueou = _registrar_falha(tx, chave, None, agora())
+    registro_acesso.registrar('admin_recusada', 'falha', cid, motivo='bloqueado' if bloqueou else 'senha_incorreta', ip=ip)
+    raise SenhaIncorreta(SENHA_INCORRETA)
+
+
+def ver_conta(root: Path, cid) -> dict:
+    """The own profile: name, e-mail, login, role, language, newsroom and when the password was set. The second
+    factor and the terms come with their own deliveries."""
+    with _bd(root) as tx:
+        conta = _conta(tx, cid)
+        redacao = tx.um('SELECT id, nome FROM organizacoes WHERE id = ?', conta['organizacao'])
+        return {'conta': {'id': conta['id'], 'nome': conta['nome'], 'email': conta['email'], 'login': conta['login'],
+                          'papel': conta['papel'], 'idioma': conta['idioma'] or IDIOMAS[0],
+                          'senha_definida_em': conta['senha_definida_em'], 'criada_em': conta['criada_em']},
+                'organizacao': dict(redacao), 'segundo_fator': {'ativo': False}, 'termos': None}
+
+
+def atualizar_perfil(root: Path, cid, *, nome=None, idioma=None) -> dict:
+    """The person changes the own name and the language of the e-mails; nothing else is theirs to change here."""
+    if nome is None and idioma is None:
+        raise ValueError('Informe o nome ou o idioma a alterar.')
+    if nome is not None:
+        nome = _validar_nome(nome)
+    if idioma is not None and idioma not in IDIOMAS:
+        raise ValueError('Idioma inválido: use pt ou en.')
+    with _bd(root, escrever=True) as tx:
+        conta = _conta(tx, cid)
+        campos = [campo for campo, novo, atual in (('nome', nome, conta['nome']), ('idioma', idioma, conta['idioma'] or IDIOMAS[0]))
+                  if novo is not None and novo != atual]
+        if campos:
+            tx.ex('UPDATE contas SET nome = ?, idioma = ? WHERE id = ?', nome if nome is not None else conta['nome'],
+                  idioma if idioma is not None else conta['idioma'], cid)
+            _evento(tx, 'conta_atualizada', cid, cid, campos=campos)
+    return ver_conta(root, cid)
+
+
+def trocar_senha(root: Path, cid, senha_atual, senha_nova, sessao_atual=None, ip: str | None = None) -> int:
+    """Change the own password: asks the current one and ends every other session of the account (W08, rule 2).
+    `sessao_atual` is the public id of the session that asks, the only one kept. Returns how many were ended."""
+    senha_nova = _validar_senha(senha_nova)
+    confirmar_senha(root, cid, senha_atual, ip)
+    if senha_nova == senha_atual:
+        raise ValueError('A senha nova precisa ser diferente da atual.')
+    with _VezDoHash():
+        senha_hash = _HASHER.hash(senha_nova)
+    with _bd(root, escrever=True) as tx:
+        conta = _conta(tx, cid)
+        momento = agora()
+        tx.ex('UPDATE contas SET senha_hash = ?, senha_definida_em = ?, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
+              ' ativacao_motivo = NULL WHERE id = ?', senha_hash, _iso(momento), cid)
+        encerradas = tx.ex('DELETE FROM sessoes WHERE conta = ? AND publico IS NOT ?', cid, sessao_atual).rowcount
+        _limpar_tentativas(tx, conta['login'])
+        _evento(tx, 'senha_trocada', cid, cid, momento)
+        return encerradas
+
+
+def sessoes_da_conta(root: Path, cid, atual=None) -> list[dict]:
+    """The open sessions of one account, newest use first: public id, device, client, dates and addresses.
+    Never the cookie nor its hash. `atual` marks the session that asks."""
+    momento = agora()
+    with _bd(root) as tx:
+        linhas = tx.todos('SELECT * FROM sessoes WHERE conta = ? ORDER BY ultimo_uso DESC, criada_em DESC', cid)
+        return [{'id': l['publico'], 'aparelho': l['aparelho'], 'cliente': l['cliente'] or 'web', 'criada_em': l['criada_em'],
+                 'ultimo_uso': l['ultimo_uso'], 'expira_em': l['expira_em'], 'ip': l['ip_ultimo'] or l['ip_criacao'],
+                 'ip_criacao': l['ip_criacao'], 'atual': l['publico'] == atual}
+                for l in linhas if not _sessao_vencida(l, momento)]
+
+
+def encerrar_sessao_da_conta(root: Path, cid, publico, atual=None) -> None:
+    """End one other session of the own account, at a distance. A session of another account, an ended one and an
+    id that never existed get the same refusal. The session that asks is ended by signing out."""
+    if not isinstance(publico, str) or not ID_CONTA.fullmatch(publico):
+        raise ValueError(SESSAO_INEXISTENTE)
+    if publico == atual:
+        raise ValueError('Esta é a sessão em uso. Para encerrá-la, saia da conta.')
+    with _bd(root, escrever=True) as tx:
+        if not tx.ex('DELETE FROM sessoes WHERE conta = ? AND publico = ?', cid, publico).rowcount:
+            raise ValueError(SESSAO_INEXISTENTE)
+        _evento(tx, 'sessao_encerrada_a_distancia', cid, cid)
+
+
+def encerrar_outras_sessoes(root: Path, cid, atual) -> int:
+    """End every session of the own account but the one that asks. Returns how many."""
+    with _bd(root, escrever=True) as tx:
+        encerradas = tx.ex('DELETE FROM sessoes WHERE conta = ? AND publico IS NOT ?', cid, atual).rowcount
+        if encerradas:
+            _evento(tx, 'sessao_encerrada_a_distancia', cid, cid)
+        return encerradas
 
 
 def copia_consistente(root: Path, destino: Path) -> Path:

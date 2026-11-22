@@ -355,7 +355,7 @@ class TravessiaTest(cenario.DuasRedacoes):
 
     def test_operacao_que_nao_esta_na_matriz_nao_existe(self):
         self.assertEqual(self.post('dono', 'acesso-listar', {})[0], 404)
-        self.assertEqual(self.post('dono', 'equipe-listar', {})[0], 404)  # defined by the contract, not delivered yet
+        self.assertEqual(self.post('dono', 'equipe-convidar', {})[0], 404)  # defined by the contract, not delivered yet
         with self.assertRaises(autorizacao.Recusa) as recusa:
             autorizacao.conferir(self.root, 'piloto', acesso.sessao(self.root, self.sessoes['dono'][0].split('=', 1)[1]),
                                  'operacao-nova-sem-linha', {})
@@ -380,7 +380,8 @@ class RotasNaoLeemOPapelTest(unittest.TestCase):
         local = {'papel': 'dono', 'conta': None, 'casos': None, 'organizacao': None}
         concedido = autorizacao.conferir(Path('.'), 'local', local, 'analises', {'caso': 'qualquer'})
         self.assertEqual((concedido.caso, concedido.restrito, concedido.dono), ('qualquer', False, None))
-        for operacao in ('contas-listar', 'caso-participantes'):
+        for operacao in ('contas-listar', 'caso-participantes', 'conta-ver', 'conta-senha-trocar', 'equipe-listar',
+                         'equipe-remover'):  # accounts, newsrooms and teams do not exist in the local mode
             with self.assertRaises(autorizacao.Recusa):
                 autorizacao.conferir(Path('.'), 'local', local, operacao, {})
 

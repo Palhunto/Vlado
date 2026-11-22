@@ -93,10 +93,13 @@ MATRIZ: dict[str, Regra] = {}
 _linhas(MATRIZ, 'nenhum', 'L', TODOS, 'GET:/ GET:/api/sessao GET:/api/integracao GET:/api/catalogo GET:/api/cota')
 _linhas(MATRIZ, 'lote+caso+nenhum', 'L', TODOS, 'GET:/api/fila')
 # 5.4 A própria conta.
-_linhas(MATRIZ, 'nenhum', 'A', TODOS, 'sessao-sair')
+_linhas(MATRIZ, 'nenhum', 'A', TODOS, 'sessao-sair conta-senha-trocar conta-sessao-encerrar conta-sessoes-encerrar-outras')
+_linhas(MATRIZ, 'nenhum', 'L', TODOS, 'conta-ver conta-sessoes')
+_linhas(MATRIZ, 'nenhum', 'E', TODOS, 'conta-atualizar')
 # 5.5 A redação.
-_linhas(MATRIZ, 'nenhum', 'L', SO_DONO, 'ia-config')
-_linhas(MATRIZ, 'nenhum', 'A', SO_DONO, 'ia-config-salvar codex-desligar')
+_linhas(MATRIZ, 'nenhum', 'L', SO_DONO, 'ia-config equipe-listar equipe-atividade')
+_linhas(MATRIZ, 'nenhum', 'A', SO_DONO, 'ia-config-salvar codex-desligar equipe-papel equipe-desativar equipe-reativar '
+                                        'equipe-remover equipe-teto')
 _linhas(MATRIZ, 'nenhum', 'L', DONO_E_REPORTER, 'ambiente')
 _linhas(MATRIZ, 'nenhum', 'L', TODOS, 'codex-status')
 # 5.6 Apurações: criação, participação e lixeira.
@@ -164,11 +167,9 @@ _linhas(TRANSITORIAS, 'nenhum', 'A', SO_DONO, 'contas-listar contas-criar contas
 # Operações que o contrato já define e que entram nas próximas entregas (conta própria, equipe, convites, senha).
 PENDENTES = frozenset((
     'entrar-segundo-fator convite-consultar convite-aceitar senha-esqueci senha-redefinir '
-    'conta-ver conta-atualizar conta-senha-trocar conta-email-trocar conta-fator-iniciar conta-fator-confirmar '
-    'conta-fator-codigos conta-fator-remover conta-sessoes conta-sessao-encerrar conta-sessoes-encerrar-outras '
+    'conta-email-trocar conta-fator-iniciar conta-fator-confirmar conta-fator-codigos conta-fator-remover '
     'conta-termos-aceitar conta-exportar conta-excluir '
-    'equipe-listar equipe-convidar equipe-convite-reenviar equipe-convite-cancelar equipe-papel equipe-desativar '
-    'equipe-reativar equipe-remover equipe-recuperar equipe-recuperar-confirmar equipe-teto equipe-atividade').split())
+    'equipe-convidar equipe-convite-reenviar equipe-convite-cancelar equipe-recuperar equipe-recuperar-confirmar').split())
 # Antes da sessão (seção 5.3): sem papel, conferidas em `rotas_contas._publico`.
 PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin')
 _REGRAS = {**MATRIZ, **TRANSITORIAS}
@@ -203,6 +204,19 @@ def restrito(principal: dict | None) -> bool:
 def ve_redacao(principal: dict) -> bool:
     """Quem vê os números da redação (gasto, cota): o dono; no modo local, o operador."""
     return principal.get('papel') == 'dono'
+
+
+def gasto_da_redacao(root: Path, modo: str, principal: dict) -> bool:
+    """Se o gasto "da organização" que o módulo de custo guarda para esta conta é o da redação dela, e só dela.
+    Nenhuma resposta leva número que some redações (seção 4.5): enquanto o custo contar a instalação inteira, o
+    bloco só vai ao dono quando a instalação tem uma redação só."""
+    if modo == 'local':
+        return True
+    if not ve_redacao(principal):
+        return False
+    import custo
+    redacao = (principal.get('organizacao') or {}).get('id')
+    return custo.chaves_orcamento(principal.get('conta'))['organizacao'] == redacao or acesso.total_redacoes(root) <= 1
 
 
 def papel_para_interface(principal: dict) -> str:
@@ -296,7 +310,7 @@ def conferir(root: Path, modo: str, principal: dict, operacao: str, dados: dict)
     mensagem de sempre). Não grava nada: quem registra a posse de uma apuração nova é ``registrar_novo``."""
     root = Path(root)
     if modo == 'local':
-        if operacao in TRANSITORIAS or operacao.startswith('caso-'):
+        if operacao in TRANSITORIAS or operacao.startswith(('caso-', 'conta-', 'equipe-')):
             raise _proibida('Contas só existem nos modos com login.')
         return Acesso(operacao, dados, dados.get('caso') if isinstance(dados.get('caso'), str) else None)
     if modo == 'piloto' and operacao == 'codex-desligar':
