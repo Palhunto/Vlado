@@ -356,3 +356,71 @@ test('aviso_natureza do servidor aparece no recibo do lote, como aviso (sinal e 
   assert.ok(aviso.querySelector('svg.estado-sinal'));
   assert.equal(mesa.$('cadastro-recibo').querySelector('[role="alert"]'), null);
 });
+
+// --- Apuração nova: o identificador é escolhido pelo servidor (contrato de contas, 4.4; o portão recusa `novo` com `caso`) ----------------------
+const manifestoDe = pedido => JSON.parse(Buffer.from(pedido.corpo.partes[0]).toString('utf8'));
+
+test('apuração nova: o primeiro lote vai com novo:true e sem caso; os seguintes entram com o caso_id que o servidor devolveu', async () => {
+  const mesa = abrir({fila: id => ({lote: id, caso: 'apuracao_do_servidor', estado: 'publicado', recibo: {recebidos: 1, novos: 1, duplicados: 0, corpus_id: 'c1'}, arquivos: [{indice: 0, estado: 'pronto', extracao: 'extraido'}]})});
+  const promessa = mesa.janela.Envio.enviar({escopo: {novo: true, titulo: 'T'}, arquivos: [arquivo('a.pdf', 40 * MB), arquivo('b.pdf', 40 * MB), arquivo('c.pdf', 40 * MB)], alvo: mesa.$('alvo')});
+  await livre(mesa);
+  const primeiro = manifestoDe(mesa.pedidos[0]);
+  assert.equal(primeiro.novo, true); assert.ok(!('caso' in primeiro), 'o primeiro lote não escolhe o identificador');
+  mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', caso: 'apuracao_do_servidor', estado: 'enfileirado', arquivos: []}});
+  await livre(mesa); await livre(mesa);
+  assert.equal(mesa.pedidos.length, 2);
+  const segundo = manifestoDe(mesa.pedidos[1]);
+  assert.equal(segundo.novo, false); assert.equal(segundo.caso, 'apuracao_do_servidor', 'o segundo lote cai na mesma apuração');
+  mesa.pedidos[1].responder(200, {estado: 'enfileirado', lote: {lote: 'L2', caso: 'apuracao_do_servidor', estado: 'enfileirado', arquivos: []}});
+  await livre(mesa); await livre(mesa);
+  const terceiro = manifestoDe(mesa.pedidos[2]);
+  assert.equal(terceiro.novo, false); assert.equal(terceiro.caso, 'apuracao_do_servidor');
+  mesa.pedidos[2].responder(200, {estado: 'enfileirado', lote: {lote: 'L3', caso: 'apuracao_do_servidor', estado: 'enfileirado', arquivos: []}});
+  const final = await promessa;
+  assert.equal(final.caso_id, 'apuracao_do_servidor'); assert.equal(final.lotes.length, 3); assert.equal(final.recebidos, 3);
+});
+
+test('apuração que já existe: todos os lotes levam o caso desde o primeiro, e o resultado traz o mesmo caso_id', async () => {
+  const mesa = abrir({fila: id => ({lote: id, estado: 'publicado', recibo: {recebidos: 1, novos: 1, duplicados: 0}, arquivos: [{indice: 0, estado: 'pronto', extracao: 'extraido'}]})});
+  const promessa = mesa.janela.Envio.enviar({escopo: {novo: false, caso: 'alfa'}, arquivos: [arquivo('a.pdf', 40 * MB), arquivo('b.pdf', 40 * MB)], alvo: mesa.$('alvo')});
+  await livre(mesa);
+  assert.deepEqual([manifestoDe(mesa.pedidos[0]).novo, manifestoDe(mesa.pedidos[0]).caso], [false, 'alfa']);
+  mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', estado: 'enfileirado', arquivos: []}});
+  await livre(mesa); await livre(mesa);
+  assert.deepEqual([manifestoDe(mesa.pedidos[1]).novo, manifestoDe(mesa.pedidos[1]).caso], [false, 'alfa']);
+  mesa.pedidos[1].responder(200, {estado: 'enfileirado', lote: {lote: 'L2', estado: 'enfileirado', arquivos: []}});
+  assert.equal((await promessa).caso_id, 'alfa');
+});
+
+test('Cadastrar arquivos com apuração nova não escolhe o identificador, no envio em fluxo e no JSON de antes; cada tentativa é nova', async () => {
+  const fluxo = await abrirCadastro({fluxo: true});
+  Object.defineProperty(fluxo.$('cadastro-arquivos'), 'files', {value: [arquivo('a.pdf', 100)], configurable: true});
+  fluxo.$('cadastro-caso').value = '';
+  fluxo.$('cadastro-titulo-input').value = 'Apuração nova';
+  fluxo.$('cadastro').requestSubmit();
+  await fluxo.esperar(10);
+  const manifesto = manifestoDe(fluxo.pedidos[0]);
+  assert.equal(manifesto.novo, true); assert.ok(!('caso' in manifesto), 'sem caso escolhido pela tela');
+  assert.equal(manifesto.titulo, 'Apuração nova');
+
+  const antigo = await abrirCadastro({fluxo: false});
+  antigo.janela.FileReader = class { readAsDataURL() { this.result = 'data:;base64,AAAA'; this.onload(); } };
+  Object.defineProperty(antigo.$('cadastro-arquivos'), 'files', {value: [arquivo('a.pdf', 100)], configurable: true});
+  antigo.$('cadastro-caso').value = '';
+  antigo.$('cadastro-titulo-input').value = 'Apuração nova';
+  antigo.$('cadastro').requestSubmit();
+  await antigo.esperar(12);
+  const [pedido] = antigo.chamadas.filter(c => c.operacao === 'cadastrar');
+  assert.equal(pedido.dados.novo, true); assert.ok(!('caso' in pedido.dados), 'o JSON de antes também não escolhe o caso');
+  antigo.$('cadastro').requestSubmit();
+  await antigo.esperar(12);
+  const todos = antigo.chamadas.filter(c => c.operacao === 'cadastrar');
+  assert.ok(todos.every(c => !('caso' in c.dados)), 'uma nova tentativa não reaproveita um identificador feito na tela');
+
+  const existente = await abrirCadastro({fluxo: true});
+  Object.defineProperty(existente.$('cadastro-arquivos'), 'files', {value: [arquivo('a.pdf', 100)], configurable: true});
+  existente.$('cadastro-caso').value = 'alfa';
+  existente.$('cadastro').requestSubmit();
+  await existente.esperar(10);
+  assert.deepEqual([manifestoDe(existente.pedidos[0]).novo, manifestoDe(existente.pedidos[0]).caso], [false, 'alfa']);
+});

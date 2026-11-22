@@ -232,7 +232,9 @@
       if (motivo) { linha.estado = 'recusado'; linha.motivo = motivo; }
     }
     const ui = cartao(alvo, ctx);
-    const resultado = {caso_id: escopo.caso, lotes: [], enviados: 0, recebidos: 0, novos: 0, duplicados: 0, pendentes: 0, avisos: [], recusados: ctx.linhas.filter(l => l.estado === 'recusado').length, cancelado: false};
+    // Apuração nova: o primeiro lote vai com `novo: true` e SEM `caso`, porque o servidor escolhe o identificador (contrato de contas, 4.4); o `caso_id`
+    // da resposta vale para os lotes seguintes. Uma apuração que já existe traz o `caso` desde o início.
+    const resultado = {caso_id: escopo.caso ?? null, lotes: [], enviados: 0, recebidos: 0, novos: 0, duplicados: 0, pendentes: 0, avisos: [], recusados: ctx.linhas.filter(l => l.estado === 'recusado').length, cancelado: false};
     ui.desenhar();
 
     const lotesPlanejados = planejar(ctx.linhas.filter(l => l.estado === 'aguardando'));
@@ -242,8 +244,9 @@
         for (const linha of linhas) { linha.estado = 'enviando'; linha.fracao = 0; }
         ui.mostrarAcoes([{rotulo: t('Cancelar envio'), aoClicar: () => { ctx.cancelado = true; ctx.cancelarEnvio?.(); }}]);
         ui.desenhar();
-        // O primeiro lote cria a apuração nova; os seguintes entram nela.
-        const manifesto = {...escopo, ...(resultado.lotes.length ? {novo: false} : {}), assincrono: true,
+        // O primeiro lote cria a apuração nova; os seguintes entram nela, com o identificador que o servidor devolveu.
+        const entrando = resultado.lotes.length > 0 && resultado.caso_id;
+        const manifesto = {...escopo, ...(entrando ? {novo: false, caso: resultado.caso_id} : {}), assincrono: true,
           arquivos: linhas.map(l => ({nome: l.nome, tamanho: l.bytes}))};
         let lote;
         try {
@@ -257,6 +260,7 @@
           continue;
         }
         ctx.cancelarEnvio = null;
+        if (lote.caso) resultado.caso_id = lote.caso;   // o identificador que o servidor escolheu para a apuração nova
         ui.mostrarAcoes([]);
         for (const linha of linhas) linha.fracao = 1;
         const dosArquivos = linhas;   // o índice do lote é a posição no manifesto
@@ -282,6 +286,7 @@
           continue;
         }
         resultado.lotes.push(atual);
+        resultado.caso_id = atual.caso ?? atual.recibo?.caso_id ?? resultado.caso_id;
         // Aviso do servidor sobre a natureza dos documentos (informada diferente da apuração): vai para o recibo, como aviso e não como erro.
         const aviso = atual.recibo?.aviso_natureza;
         if (aviso && !resultado.avisos.includes(aviso)) resultado.avisos.push(aviso);

@@ -319,7 +319,7 @@ $('proximo').addEventListener('click', () => { if (lastResult?.proximo_deslocame
 $('exportar').addEventListener('click', () => {
   if (lastResult) window.exportarEditorial(lastResult,`pesquisa_${lastResult.caso_id}_${lastResult.rodada}_${lastResult.geracao}`,$('pesquisa-formato').value);
 });
-let inventorySequence = 0, draftCaseId = '', pdfAvailable = false, ocrAvailable = false, cadastroBusy = false;
+let inventorySequence = 0, pdfAvailable = false, ocrAvailable = false, cadastroBusy = false;
 async function loadPdfEnvironment() {
   try {
     const environment = await api('ambiente', {});
@@ -467,7 +467,6 @@ $('cadastro-arquivos').addEventListener('change', () => {
     ? `${files.length} arquivo(s) selecionado(s): ${files.map(f => f.name).join(', ')}`
     : 'Selecione todos os arquivos do lote. Até 50 MB por envio.';
 });
-$('cadastro-titulo-input').addEventListener('input', () => { draftCaseId = ''; });
 function encodeFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -496,9 +495,10 @@ $('cadastro').addEventListener('submit', async event => {
     cadastroBusy = false;
     uploadError('O lote excede 50 MB. Divida o envio em lotes menores; nenhum arquivo foi enviado.'); return;
   }
+  // Apuração nova: sem `caso`. O identificador é escolhido pelo servidor (contrato de contas, 4.4; o portão recusa um escolhido aqui) e volta na
+  // resposta (`caso_id`), de onde os lotes seguintes o tomam.
   const isNew = !$('cadastro-caso').value;
-  if (isNew && !draftCaseId) draftCaseId = 'apuracao_' + crypto.randomUUID().replaceAll('-', '');
-  const scope = {novo:isNew, caso:isNew ? draftCaseId : $('cadastro-caso').value,
+  const scope = {novo:isNew, ...(isNew ? {} : {caso:$('cadastro-caso').value}),
     titulo:$('cadastro-titulo-input').value, natureza:$('cadastro-natureza').value,
     ...(isNew ? window.FontesWeb?.escopoNovo() : {})};
   $('cadastro-preparar').disabled = true;
@@ -522,7 +522,6 @@ $('cadastro').addEventListener('submit', async event => {
     $('cadastro-caso').value = result.caso_id;
     window.definirContextoCaso?.(result.caso_id);
     $('cadastro-perguntar').dataset.caso=result.caso_id; $('cadastro-perguntar').hidden=false;
-    draftCaseId = '';
     toggleNewCase();
     $('cadastro-arquivos').value = '';
     $('arquivos-selecionados').textContent = 'Pronto para selecionar outro lote.';
