@@ -92,6 +92,7 @@ COPY scripts/acesso.py \
      scripts/exportar_apuracao.py \
      scripts/extrair_office.py \
      scripts/extrair_pdf.py \
+     scripts/fila_extracao.py \
      scripts/fluxo_codex.py \
      scripts/fontes_web.py \
      scripts/hipoteses.py \
@@ -124,6 +125,7 @@ COPY scripts/acesso.py \
      scripts/segredos.py \
      scripts/semear_ambiente.py \
      scripts/tabelas_apuracao.py \
+     scripts/trabalhador_extracao.py \
      scripts/trava_cadastro.py \
      ./scripts/
 COPY interface/ ./interface/
