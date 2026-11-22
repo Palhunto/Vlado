@@ -6,22 +6,8 @@
 body{margin:0}
 button,input,select{font:inherit}
 button,summary{cursor:pointer}
-button,input,select,textarea{min-height:44px;border-radius:6px}
-button{
-  border:1px solid var(--green);
-  padding:10px 16px;
-  background:var(--green);
-  color:var(--theme-on-primary);
-  font-size:var(--text-md);
-  font-weight:600;
-  white-space:normal;
-}
-button:hover{background:var(--theme-primary-hover)}
-.secondary{background:var(--paper);color:var(--green);border-color:var(--theme-input-line)}
-.secondary:hover{background:var(--soft)}
-button:disabled,select:disabled,input:disabled{cursor:default;opacity:.55}
-button:disabled:hover{background:var(--green)}
-.secondary:disabled:hover{background:var(--paper)}
+input,select,textarea{min-height:44px;border-radius:var(--raio-controle)}
+select:disabled,input:disabled{cursor:default;opacity:.55}
 input,select{
   width:100%;
   min-width:0;
@@ -295,9 +281,6 @@ footer{font-size:var(--text-md);line-height:1.7;color:var(--muted);margin-top:38
 @media (max-width:950px) {
   .codex-workspace{grid-template-columns:1fr}
 }
-.danger{background:var(--paper);color:var(--theme-danger);border-color:var(--theme-danger-line)}
-.danger:hover{background:var(--theme-danger-bg)}
-.danger:disabled:hover{background:var(--paper)}
 .inline-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
 .manage-case{
   display:flex;
@@ -889,19 +872,26 @@ html{scroll-padding-top:110px}
 body{background:var(--paper);color:var(--ink);font:var(--text-base)/1.5 "Source Sans 3","Segoe UI",sans-serif}
 button,input,select,textarea{font-family:inherit}
 button,a{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+/* Botão (docs/design/componentes.md#botao): principal por padrão; .secondary e .danger são variantes. */
 button{
-  min-height:42px;
-  font-size:var(--text-md);
-  border-radius:6px;
-  padding:10px 16px;
+  min-height:44px;
+  border:1px solid var(--green);
+  border-radius:var(--raio-controle);
+  padding:var(--espaco-3) var(--espaco-4);
+  background:var(--green);
+  color:var(--theme-on-primary);
+  font-size:var(--text-base);
+  font-weight:600;
+  white-space:normal;
   transition:background-color var(--duracao-rapida) var(--curva-padrao),border-color var(--duracao-rapida) var(--curva-padrao);
 }
 button:hover{background:var(--theme-primary-hover)}
-.secondary{background:var(--white);border-color:var(--theme-input-line);color:var(--green)}
-.secondary:hover{background:var(--soft);border-color:var(--theme-accent-line)}
-.danger{color:var(--theme-danger);border-color:var(--theme-danger-line);background:var(--white)}
-.danger:hover{background:var(--theme-danger-bg);color:var(--theme-danger)}
-button:disabled{cursor:not-allowed}
+button:active:not(:disabled){transform:translateY(1px)}
+.secondary{background:var(--white);border-color:var(--theme-input-line);color:var(--theme-text);font-weight:400}
+.secondary:hover{background:var(--soft)}
+.danger{background:var(--white);border-color:var(--theme-danger-line);color:var(--theme-danger);font-weight:400}
+.danger:hover{background:var(--soft);color:var(--theme-danger)}
+button:disabled,button:disabled:hover{background:var(--theme-sidebar);border-color:var(--line);color:var(--muted);font-weight:400;cursor:not-allowed}
 input,select,textarea{font-size:var(--text-base);border-color:var(--theme-input-line);background:var(--white);color:var(--ink)}
 textarea{font:inherit;line-height:1.65;padding:12px;resize:vertical;max-width:100%}
 a,button,summary,input,textarea,select{scroll-margin-top:110px}
