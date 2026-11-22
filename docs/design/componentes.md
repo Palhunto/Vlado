@@ -513,7 +513,7 @@ Onde: toda a Mesa (W11). O wireframe fixa a estrutura e o texto; a aparência ab
 | Conferência do texto | Nenhum texto em conferência | Nenhum texto desta apuração foi enviado para conferência. | Abrir o caderno | a mesma |
 | Qualquer quadro, sem apuração | Nenhuma apuração escolhida | Escolha uma apuração no topo da Mesa para ver este quadro. | Escolher apuração | a mesma |
 
-Erro de campo segue o [campo](#campo): 14/400 `--theme-danger`, no formato "o que houve. o que fazer". Pergunta em branco: "Falta a pergunta. Escreva o que quer saber dos documentos."
+Erro de campo segue o [campo](#campo): 14/400 `--theme-danger`, no formato "o que houve. o que fazer". Pergunta em branco: "Falta a pergunta. Escreva o que quer saber dos documentos." A mensagem fica a 4 px do campo, mesmo quando o campo está dentro de um `<label>` e a mensagem fica fora dele. Cada mensagem fala do campo em que está. Entrada, ativação e primeiro acesso *(derivado, 22/11/2026)*: login em branco, "Falta o login. Use o login da sua conta."; senha em branco, "Falta a senha. Use a senha da sua conta."; nome em branco, "Falta o nome. Escreva o seu nome."; login fora da regra, "Login inválido. Use de 3 a 64 caracteres: letras minúsculas, números, ponto, hífen ou sublinhado, começando por letra ou número."; senha fora do tamanho, "A senha deve ter de 12 a 256 caracteres."; confirmação diferente, "As duas senhas não coincidem. Digite a mesma senha nos dois campos." A resposta do servidor (senha errada, bloqueio, rede) fica na caixa de aviso do formulário.
 
 Erro usa as cores de erro e aviso usa as de aviso, nunca trocadas (W11, regra 6). Mudança de estado é anunciada a leitor de tela (`role="status"` para ocupado e concluído, `role="alert"` para erro; W11, regra 9).
 
