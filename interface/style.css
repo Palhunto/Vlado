@@ -720,7 +720,6 @@ h2{font-family:var(--fonte-titulo);font-size:var(--text-2xl);font-weight:500}
 .app-header{position:sticky;top:0;z-index:var(--camada-barra);gap:24px}
 .start-actions{display:flex;flex-wrap:wrap;gap:14px;margin:24px 0}
 .notebook-tabs{margin-bottom:24px}
-.notebook-tabs [aria-pressed=true]{background:var(--green);color:var(--theme-on-primary)}
 #area-titulo{scroll-margin-top:110px}
 #area-titulo:focus{outline:none}
 #experiencia-status{min-height:1.5em}
@@ -1080,24 +1079,23 @@ main{padding:38px 40px 26px;max-width:1600px;min-height:calc(100dvh - 86px);marg
 .mesa-workflow span{font:italic var(--text-xl) var(--fonte-titulo);color:var(--theme-muted)}
 .mesa-workflow h3{font-size:var(--text-base);font-weight:600;margin:10px 0 5px}
 .mesa-workflow p{font-size:var(--text-sm);color:var(--muted);margin:0}
-.mesa-tabs,.notebook-tabs{display:flex;gap:24px;border-bottom:1px solid var(--line);margin:0 0 24px;padding:0}
-.mesa-tabs button,.notebook-tabs button{
-  background:transparent;
+/* Abas (docs/design/componentes.md#abas): 44 px, raio de controle, ativa em verde suave com texto verde 600. Um padrão só. */
+.mesa-tabs,.notebook-tabs,.quadros-abas{display:flex;flex-wrap:wrap;gap:var(--espaco-1);margin:0 0 var(--espaco-6);padding:0}
+.mesa-tabs button,.notebook-tabs button,.quadros-abas [role=tab]{
+  min-height:44px;
+  padding:0 var(--espaco-4);
   border:0;
-  border-radius:0;
-  border-bottom:2px solid transparent;
-  margin-bottom:-1px;
-  color:var(--muted);
-  padding:0 0 13px;
-  min-height:37px;
-  font-size:var(--text-md);
-  font-weight:400;
-}
-.mesa-tabs button:hover,.notebook-tabs button:hover{color:var(--green);background:transparent}
-.mesa-tabs button[aria-pressed=true],.notebook-tabs button[aria-pressed=true]{
+  border-radius:var(--raio-controle);
   background:transparent;
-  border-bottom-color:var(--green);
-  color:var(--green);
+  color:var(--theme-text);
+  font-size:var(--text-base);
+  font-weight:400;
+  white-space:nowrap;
+}
+.mesa-tabs button:hover,.notebook-tabs button:hover,.quadros-abas [role=tab]:hover{background:var(--soft);color:var(--theme-text)}
+.mesa-tabs button[aria-pressed=true],.notebook-tabs button[aria-pressed=true],.quadros-abas [role=tab][aria-selected=true]{
+  background:var(--aba-ativa-fundo);
+  color:var(--aba-ativa-texto);
   font-weight:600;
 }
 .mesa-upload-banner{
@@ -1492,9 +1490,6 @@ footer{font-size:var(--text-xs);margin-top:32px;padding-top:20px;color:var(--mut
   #mesa-etapas{gap:9px;margin-bottom:23px}
   #mesa-etapas a{gap:5px;font-size:var(--text-xs);padding:0 3px 13px;flex:1}
   #mesa-etapas a>span{width:19px;height:19px;font-size:var(--text-xs)}
-  .mesa-tabs,.notebook-tabs{gap:17px;flex-wrap:wrap}
-  .mesa-tabs button,.notebook-tabs button{font-size:var(--text-xs);padding-bottom:10px}
-  .mesa-tabs #mesa-aba-recibo{font-size:var(--text-xs)}
   .mesa-upload-banner{padding:18px;flex-direction:column;align-items:stretch;gap:14px}
   .mesa-upload-banner h2{font-size:var(--text-base)}
   .mesa-upload-banner p{font-size:var(--text-sm)}
@@ -1569,9 +1564,6 @@ footer{font-size:var(--text-xs);margin-top:32px;padding-top:20px;color:var(--mut
   .mesa-home-section>.section-heading{align-items:start;flex-direction:column;gap:8px}
   #mesa-etapas{gap:4px}
   #mesa-etapas a{font-size:var(--text-xs);padding-inline:0;gap:4px}
-  .mesa-tabs{gap:11px}
-  .mesa-tabs button{font-size:var(--text-xs)}
-  .mesa-tabs #mesa-aba-recibo{font-size:var(--text-xs)}
   .mesa-file-table th,.mesa-file-table td{padding-inline:9px}
   .mesa-document-name{font-size:var(--text-sm)}
 }
@@ -2314,16 +2306,6 @@ html{scroll-padding-top:calc(var(--faixa-ambiente) + 96px)}
 }
 /* Evidence boards (quadros.js): tabs, hypotheses in three columns, vertical timeline. Component tokens in tokens.css.
    State never relies on colour alone: each column, seal and date carries its text. */
-.quadros-abas{display:flex;flex-wrap:wrap;gap:var(--espaco-2);margin:var(--espaco-4) 0;border-bottom:1px solid var(--quadro-borda)}
-.quadros-abas [role=tab]{
-  background:transparent;
-  color:var(--green);
-  border:1px solid transparent;
-  border-bottom:3px solid transparent;
-  border-radius:var(--raio-controle) var(--raio-controle) 0 0;
-}
-.quadros-abas [role=tab]:hover{background:var(--soft)}
-.quadros-abas [role=tab][aria-selected=true]{border-bottom-color:var(--green);font-weight:700;color:var(--ink)}
 .quadros-painel:focus-visible{outline-offset:var(--foco-afastamento)}
 .quadro-estado{margin:var(--espaco-4) 0}
 .quadro-aviso{max-width:80ch}
@@ -2556,8 +2538,9 @@ ins.comparar-incluido,p.comparar-incluido{
 @media (max-width:720px) {
   .mapa-visual{display:none}
   .tabela-fonte{position:static}
-  .quadros-abas{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity}
-  .quadros-abas [role=tab]{flex:0 0 auto;scroll-snap-align:start;white-space:nowrap}
+  .mesa-tabs,.notebook-tabs,.quadros-abas{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity}
+  .mesa-tabs button,.notebook-tabs button,.quadros-abas [role=tab]{flex:0 0 auto;scroll-snap-align:start;border:1px solid var(--theme-input-line);border-radius:var(--raio-pilula)}
+  .mesa-tabs button[aria-pressed=true],.notebook-tabs button[aria-pressed=true],.quadros-abas [role=tab][aria-selected=true]{background:var(--green);border-color:var(--green);color:var(--theme-on-primary)}
 }
 @media (prefers-reduced-motion:reduce) {
   .quadros-abas [role=tab]{transition:none}
