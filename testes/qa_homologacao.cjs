@@ -1,7 +1,7 @@
 // Homologação ponta a ponta em modo hospedado (login real), headless Chrome atrás do proxy TLS de teste.
 // Invocado por qa_homologacao.py; as senhas chegam só por VLADO_QA_CONTAS e nunca são gravadas.
 const {chromium, request} = require('playwright');
-const {irParaCadastro} = require('./qa_navegacao.cjs');
+const {irParaNovaApuracao} = require('./qa_navegacao.cjs');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
@@ -24,7 +24,7 @@ function py(pedido) {
   });
 }
 
-const verificacoes = [], erros = [];
+const verificacoes = [], erros = [], bloqueios = [], pulados = [];
 const marcar = (fluxo, texto) => { verificacoes.push({fluxo, verificacao: texto}); console.log(`ok [${fluxo}] ${texto}`); };
 const ocultar = texto => Object.values(contas).reduce((t, c) => t.split(c.senha).join('***'), String(texto)).replace(/\/ativar\/[A-Za-z0-9_-]+/g, '/ativar/***');
 const sha = async arquivo => crypto.createHash('sha256').update(await fs.readFile(arquivo)).digest('hex');
@@ -43,9 +43,15 @@ async function pagina(ctx, nome) {
   page.on('dialog', d => d.accept().catch(() => {}));
   return page;
 }
+// O formulário só tem o envio ligado depois das leituras de /api/entrada, e o entrar.js dá o foco ao e-mail logo em seguida: antes disso,
+// um clique em "Entrar" vira envio nativo e recarrega a página vazia.
+async function formularioPronto(page) {
+  await page.locator('#entrar-secao:not([hidden])').waitFor();
+  await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'entrar-login', null, {timeout: 30000});
+}
 async function entrar(page, conta) {
   await page.goto(origin + '/entrar');
-  await page.locator('#entrar-secao:not([hidden])').waitFor();
+  await formularioPronto(page);
   await page.fill('#entrar-login', conta.login);
   await page.fill('#entrar-senha', conta.senha);
   await page.click('#entrar-enviar');
@@ -76,6 +82,8 @@ async function perguntar(page, caso, texto) {
   await page.click('#codex-enviar');
   await page.locator('#codex-status').filter({hasText: 'Execução concluída'}).waitFor({timeout: LONGO});
   await page.locator('#codex-fontes>details').first().waitFor({state: 'attached'});  // a drawer on phones
+  // A lista de conversas é relida depois de "Execução concluída": o seletor passa a apontar para a conversa nova só então.
+  await page.waitForFunction(() => /^[a-f0-9]{32}$/.test(document.querySelector('#codex-conversa').value), null, {timeout: 30000});
   const conversa = await page.locator('#codex-conversa').inputValue();
   assert.match(conversa, /^[a-f0-9]{32}$/);
   return conversa;
@@ -93,6 +101,14 @@ async function fecharOriginal(page) {
   await page.locator('#original-dialogo').waitFor({state: 'hidden'});
 }
 
+// Lista de Documentos: um objeto por linha (arquivo, identificador, SHA-256, estado de leitura), lido dos "Detalhes técnicos" da tabela.
+const documentosDaLista = page => page.locator('#mesa-acervo-lista tbody tr').evaluateAll(linhas => linhas.map(l => {
+  const dado = rotulo => [...l.querySelectorAll('.docs-tecnicos-dados dt')].find(dt => dt.textContent.trim() === rotulo)?.nextElementSibling?.textContent.trim() || '';
+  const celula = l.querySelector('.docs-leitura');
+  return {arquivo: dado('Arquivo recebido'), identificador: dado('Identificador'), sha256: dado('Hash (SHA-256)'),
+    leitura: celula?.dataset.leitura || '', texto: celula?.textContent.trim() || ''};
+}));
+
 (async () => {
   await fs.mkdir(output, {recursive: true});
   await fs.mkdir(shots, {recursive: true});
@@ -107,7 +123,7 @@ async function fecharOriginal(page) {
     abertas.push(admin);
     await admin.goto(origin + '/');
     assert.equal(new URL(admin.url()).pathname, '/entrar');
-    await admin.locator('#entrar-secao:not([hidden])').waitFor();
+    await formularioPronto(admin);
     marcar('acesso', '"/" sem sessão redireciona para /entrar.');
     await admin.screenshot({path: path.join(shots, 'entrar.png')});
 
@@ -147,36 +163,73 @@ async function fecharOriginal(page) {
 
     // ---------------------------------------------------------------- 2. Reportagem sintética (admin)
     await entrar(admin, contas.admin);
-    await irParaCadastro(admin);
+    // Lote 1 vai pela tela "Nova apuração" (Visão geral > Nova apuração): a área de envio de Documentos só serve a uma apuração que já existe.
+    await irParaNovaApuracao(admin);
     await admin.locator('#area-cadastro:not([hidden])').waitFor();
     await admin.selectOption('#cadastro-caso', '');
     await admin.selectOption('#cadastro-natureza', 'sinteticos');
     await admin.fill('#cadastro-titulo-input', 'Reportagem sintética — Vila Serena');
     await admin.setInputFiles('#cadastro-arquivos', esperado.lotes.lote1.map(a => a.caminho));
     await admin.click('#enviar-documentos');
-    await admin.locator('#cadastro-recibo:not([hidden])').waitFor({timeout: LONGO});
-    const recibo = await admin.locator('#cadastro-recibo pre').evaluateAll(els => els.map(el => JSON.parse(el.textContent)));
-    const textoRecibo = await admin.locator('#cadastro-recibo').innerText();
-    const caso = await admin.locator('#cadastro-caso').inputValue();
-    assert.match(caso, /^apuracao_[0-9a-f]{32}$/);
-    assert.equal(recibo.length, 2);
-    assert.match(textoRecibo, /Envio conferido: 2 de 2 arquivo/);
-    for (const [i, arquivo] of esperado.lotes.lote1.entries()) {
-      const item = recibo.find(r => r.nome_recebido === arquivo.nome);
-      assert.ok(item, 'arquivo no recibo: ' + arquivo.nome);
-      assert.equal(item.documento_id, `D00${i + 1}`);
-      assert.equal(item.sha256, arquivo.sha256, 'SHA-256 do recibo = SHA-256 calculado em Python');
-      assert.equal(item.estado, 'cadastrado');
+    const desfecho = await Promise.race([
+      admin.locator('#cadastro-recibo:not([hidden])').waitFor({timeout: LONGO}).then(() => 'recibo', () => 'nada'),
+      admin.locator('#cadastro-erro:not([hidden])').waitFor({timeout: LONGO}).then(() => 'erro', () => 'nada')]);
+    let caso;
+    if (desfecho === 'recibo') {
+      const textoRecibo = await admin.locator('#cadastro-recibo').innerText();
+      caso = await admin.locator('#cadastro-caso').inputValue();
+      assert.match(caso, /^apuracao_[0-9a-f]{32}$/);
+      assert.match(textoRecibo, /Recibo do lote: 2 de 2 arquivos/);
+      assert.match(textoRecibo, /2 novos/);
+    } else {
+      const erroTela = desfecho === 'erro' ? (await admin.locator('#cadastro-erro').innerText()).trim() : 'sem recibo nem erro em ' + LONGO / 1000 + ' s';
+      await admin.screenshot({path: path.join(shots, 'bloqueio-nova-apuracao.png'), fullPage: true});
+      // Só a recusa conhecida vira bloqueio e deixa os demais passos rodarem; qualquer outro erro derruba a rodada aqui.
+      if (!/identificador de uma apuração nova é escolhido pelo servidor/.test(erroTela)) throw new Error('Nova apuração: ' + erroTela);
+      bloqueios.push({passo: 'Nova apuração pela interface (envio em fluxo, modo hospedado)', erro: erroTela,
+        origem: 'a tela manda um identificador de apuração nova e o portão (scripts/autorizacao.py) o recusa'});
+      console.log('BLOQUEIO [reportagem] Nova apuração pela interface: ' + erroTela);
+      // Para os passos seguintes rodarem, o lote 1 é cadastrado pelo mesmo caminho do servidor, sem a tela: /api/cadastrar sem identificador.
+      const arquivos = await Promise.all(esperado.lotes.lote1.map(async a => ({nome: a.nome, base64: (await fs.readFile(a.caminho)).toString('base64')})));
+      const cadastro = await admin.evaluate(async ([titulo, arquivos]) => {
+        const token = document.querySelector('meta[name="session-token"]')?.content || '';
+        const r = await fetch('/api/cadastrar', {method: 'POST', credentials: 'same-origin',
+          headers: {'Content-Type': 'application/json', 'X-Session-Token': token},
+          body: JSON.stringify({novo: true, titulo, natureza: 'sinteticos', arquivos})});
+        return {status: r.status, corpo: await r.json().catch(() => ({}))};
+      }, ['Reportagem sintética — Vila Serena', arquivos]);
+      assert.equal(cadastro.status, 200, 'cadastro do lote 1 pela API: ' + JSON.stringify(cadastro.corpo).slice(0, 300));
+      caso = cadastro.corpo.caso_id;
+      assert.match(caso, /^apuracao_[0-9a-f]{32}$/);
+      await admin.goto(origin + '/?area=documentos');
+      await admin.locator('#area-documentos:not([hidden])').waitFor();
+      await admin.locator(`#contexto-caso option[value="${caso}"]`).waitFor({state: 'attached'});
+      await admin.selectOption('#contexto-caso', caso);
     }
-    const digitalizado = recibo.find(r => r.nome_recebido === esperado.digitalizado);
-    assert.deepEqual(digitalizado.extracao_pdf.paginas_ocr, [1]);
-    assert.deepEqual(digitalizado.extracao_pdf.paginas_texto_nativo, []);
-    assert.deepEqual(recibo.find(r => r.documento_id === 'D001').extracao_pdf.paginas_ocr, []);
-    assert.match(textoRecibo, /Reconhecidas por OCR: página\(s\) 1/);
-    assert.match(textoRecibo, /Páginas: 1 com texto nativo · 1 por OCR · 0 sem texto · 0 com falha/);
-    marcar('reportagem', 'Lote 1 cadastrado pela interface num caso novo; recibo lista 2 arquivos (D001, D002) com SHA-256 iguais aos calculados em Python.');
-    marcar('reportagem', 'Recibo mostra o PDF digitalizado com a página 1 reconhecida por OCR local e o PDF com texto nativo sem OCR.');
-    await admin.locator('#cadastro-recibo').screenshot({path: path.join(shots, 'recibo-ocr.png')});
+    // O recibo do lote só conta; hash, identificador e leitura de cada documento estão na lista de Documentos (W02, regra 7).
+    await admin.click('#ver-documentos');
+    await admin.locator('#mesa-acervo-lista tbody tr').first().waitFor({timeout: 30000});
+    const docs = await documentosDaLista(admin);
+    assert.equal(docs.length, 2);
+    for (const [i, arquivo] of esperado.lotes.lote1.entries()) {
+      const item = docs.find(d => d.arquivo === arquivo.nome);
+      assert.ok(item, 'arquivo na lista de Documentos: ' + arquivo.nome);
+      assert.equal(item.identificador, `D00${i + 1}`);
+      assert.equal(item.sha256, arquivo.sha256, 'SHA-256 de Documentos = SHA-256 calculado em Python');
+    }
+    const digitalizado = docs.find(d => d.arquivo === esperado.digitalizado);
+    if (esperado.ocr_disponivel) {
+      assert.equal(digitalizado.leitura, 'ocr', 'o PDF digitalizado aparece como lido por OCR');
+      assert.match(digitalizado.texto, /Lida por OCR/);
+    } else {   // sem Tesseract e os idiomas nesta máquina: o PDF sem página com texto é "Sem texto lido"
+      assert.equal(digitalizado.leitura, 'sem-texto', 'sem OCR, o PDF digitalizado aparece como "Sem texto lido"');
+      pulados.push('OCR local: Tesseract ou idiomas ausentes nesta máquina; o PDF digitalizado saiu "Sem texto lido" e a leitura por OCR não foi verificada');
+      console.log('PULADO [reportagem] ' + pulados[pulados.length - 1]);
+    }
+    assert.equal(docs.find(d => d.identificador === 'D001').leitura, 'texto', 'o PDF com texto nativo aparece como texto do próprio arquivo');
+    marcar('reportagem', (desfecho === 'recibo' ? 'Lote 1 cadastrado pela interface num caso novo; recibo do lote "2 de 2 arquivos, 2 novos"; ' : 'Lote 1 cadastrado pela API (a tela de Nova apuração está bloqueada, ver bloqueios); ') + 'Documentos lista D001 e D002 com SHA-256 iguais aos calculados em Python.');
+    marcar('reportagem', (esperado.ocr_disponivel ? 'Documentos mostra o PDF digitalizado como "Lida por OCR: confira números"' : 'Sem OCR na máquina, Documentos mostra o PDF digitalizado como "Sem texto lido"') + ' e o PDF com texto nativo como "Texto do próprio arquivo".');
+    await admin.locator('#mesa-acervo-lista').screenshot({path: path.join(shots, 'recibo-ocr.png')});
 
     await admin.click('#ver-codex');
     const conversaAdmin = await perguntar(admin, caso, 'Qual é o valor global do contrato sintético e quem é a contratada?');
@@ -239,17 +292,19 @@ async function fecharOriginal(page) {
     await admin.screenshot({path: path.join(shots, 'caderno-nota-com-fonte.png')});
 
     await py({cmd: 'instantaneo', nome: 'r001', caso, rodada: 'R001'});
-    await irParaCadastro(admin);
-    await admin.locator('#area-cadastro:not([hidden])').waitFor();
-    assert.equal(await admin.locator('#cadastro-caso').inputValue(), caso, 'destino do envio = caso aberto');
-    await admin.setInputFiles('#cadastro-arquivos', esperado.lotes.lote2.map(a => a.caminho));
-    await admin.click('#enviar-documentos');
-    await admin.locator('#cadastro-recibo:not([hidden])').waitFor({timeout: LONGO});
-    const recibo2 = await admin.locator('#cadastro-recibo pre').evaluateAll(els => els.map(el => JSON.parse(el.textContent)));
-    assert.equal(recibo2.length, 1);
-    assert.equal(recibo2[0].documento_id, 'D003');
-    assert.equal(recibo2[0].sha256, esperado.lotes.lote2[0].sha256);
-    assert.match(await admin.locator('#cadastro-recibo').innerText(), /3 documento\(s\) no caso/);
+    // Lote 2 no mesmo caso: pela área de envio da tela Documentos, que manda para a apuração escolhida no cabeçalho.
+    await admin.click('#ver-documentos');
+    await admin.locator('#area-documentos:not([hidden])').waitFor();
+    assert.equal(await admin.locator('#contexto-caso').inputValue(), caso, 'destino do envio = caso aberto');
+    await admin.setInputFiles('#documentos-zona input[type=file]', esperado.lotes.lote2.map(a => a.caminho));
+    await admin.locator('#documentos-recibo:not([hidden])').waitFor({timeout: LONGO});
+    assert.match(await admin.locator('#documentos-recibo').innerText(), /Recibo do lote: 1 de 1 arquivos/);
+    await admin.waitForFunction(() => document.querySelectorAll('#mesa-acervo-lista tbody tr').length === 3, null, {timeout: 30000});
+    const docs2 = await documentosDaLista(admin);
+    const d3 = docs2.find(d => d.identificador === 'D003');
+    assert.ok(d3, 'D003 na lista de Documentos');
+    assert.equal(d3.sha256, esperado.lotes.lote2[0].sha256);
+    assert.equal(d3.arquivo, esperado.lotes.lote2[0].nome);
     const comparacao = await py({cmd: 'comparar', nome: 'r001'});
     assert.ok(comparacao.total > 0);
     assert.deepEqual(comparacao.alterados, []);
@@ -289,7 +344,7 @@ async function fecharOriginal(page) {
     const cel = atual = await pagina(ctxCel, 'celular');
     abertas.push(cel);
     await cel.goto(origin + '/');
-    await cel.locator('#entrar-secao:not([hidden])').waitFor();
+    await formularioPronto(cel);
     assert.equal(await semRolagem(cel), true, 'rolagem horizontal na página de entrada (390 px)');
     await cel.screenshot({path: path.join(shots, 'celular-390-entrar.png')});
     await entrar(cel, contas.a);
@@ -317,7 +372,9 @@ async function fecharOriginal(page) {
     for (const [nome, r] of Object.entries(recusas)) assert.ok([400, 403, 404].includes(r.status), `${nome} deveria ser recusado: ${JSON.stringify(r)}`);
     assert.equal(recusas['apuracao-exportar'].status, 403);
     assert.equal(recusas['apuracao-notas'].status, 403);
-    assert.equal(recusas['codex-listar alpha'].codigo, 'caso_nao_liberado');
+    // O portão único (scripts/autorizacao.py) responde 404 "caso_indisponivel" igual para caso alheio e caso inexistente: não revela que o caso existe.
+    assert.equal(recusas['codex-listar alpha'].status, 404);
+    assert.equal(recusas['codex-listar alpha'].codigo, 'caso_indisponivel');
     for (const nome of ['codex-eventos', 'codex-original']) assert.equal(recusas[nome].codigo, 'conversa_indisponivel', nome);
     const permitido = await chamar(b, 'codex-listar', {caso: 'beta'});
     assert.equal(permitido.status, 200, 'controle: a mesma chamada no caso liberado funciona');
@@ -331,7 +388,11 @@ async function fecharOriginal(page) {
     // As sessões de A, B e do celular terminam sem passo de encerramento: cada contexto se fecha com o navegador.
 
     assert.deepEqual(erros, []);
-    Object.assign(resultado, {estado: 'aprovado', caso_reportagem: caso, verificacoes, erros_js: erros});
+    Object.assign(resultado, {estado: bloqueios.length ? 'bloqueado' : 'aprovado', caso_reportagem: caso, verificacoes, erros_js: erros, bloqueios, pulados});
+    if (bloqueios.length) {
+      await fs.writeFile(path.join(output, 'resultado.json'), JSON.stringify(resultado, null, 2));
+      throw new Error('Homologação com bloqueios: ' + bloqueios.map(b => b.passo + ' → ' + b.erro).join(' | '));
+    }
     await fs.writeFile(path.join(output, 'resultado.json'), JSON.stringify(resultado, null, 2));
     console.log(`QA homologação (navegador): OK (${verificacoes.length} verificações)`);
   } catch (error) {

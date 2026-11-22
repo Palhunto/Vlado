@@ -38,6 +38,7 @@ from interface_pesquisa import Servidor  # noqa: E402
 from comum import sha256, ler_json  # noqa: E402
 import acesso  # noqa: E402
 import apuracao  # noqa: E402
+import ocr  # noqa: E402
 import dados_sinteticos  # noqa: E402
 
 # Search terms tried, in order, when the fixture's default term finds nothing in the selected corpus.
@@ -225,7 +226,9 @@ def main() -> int:
         lotes = dados_sinteticos.gerar(Path(externo.name) / 'corpus')
         esperado = {'lotes': {lote: [{'caminho': str(p), 'nome': p.name, 'sha256': sha256(p)} for p in arquivos]
                               for lote, arquivos in lotes.items()},
-                    'digitalizado': lotes['lote1'][1].name}
+                    'digitalizado': lotes['lote1'][1].name,
+                    # Sem Tesseract e os idiomas, o PDF digitalizado fica "Sem texto lido": o roteiro não exige OCR, e diz que pulou.
+                    'ocr_disponivel': bool(ocr._tesseract_disponivel())}
         contas = {'admin': _conta(root, 'Administração QA', 'admin.qa', 'admin'),
                   'a': _conta(root, 'Convidada A', 'convidada.a', 'convidado', ['alpha']),
                   'b': _conta(root, 'Convidado B', 'convidado.b', 'convidado', ['beta'])}
