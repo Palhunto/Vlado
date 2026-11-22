@@ -928,7 +928,7 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 
 - **Minha conta** abre pelo perfil no rodapé da [barra lateral](#barra-lateral) (W08, regra 1). Abaixo de 1280 px, abre pelo mesmo perfil no pé da gaveta. Com a página aberta, o perfil leva `aria-current="page"` e nenhum item de área fica selecionado. No modo `local`, sem contas, não há perfil nem Minha conta.
 - **Para o dono**, Minha conta, Equipe e Configurações são três [abas](#abas) no topo da página, nessa ordem; no celular, pílulas de 44 (P20b). Quem não é dono vê só Minha conta, sem a linha de abas. Cada aba aparece pela capacidade que `GET /api/sessao` devolve: Equipe com `equipe-listar`, Configurações com `ia-config`. A Mesa não decide pelo nome do papel.
-- O botão "Configurações" do cabeçalho leva à aba Configurações. "Contas de acesso" continua em Configurações, como hoje, até o convite por e-mail da E3 de Contas; sai junto com as operações `contas-*`, na mesma integração dos [convites](#convites) (decisão do dono, P30). Depois disso, em Configurações fica só a configuração da IA, com a senha da [tabela](#dialogo-senha).
+- O botão "Configurações" do cabeçalho leva à aba Configurações. "Contas de acesso" continua em Configurações, como hoje, até o convite por e-mail da E3 de Contas. **Ela e as operações `contas-*` só saem na integração em que entram juntos o [convite](#convites) e o ["Esqueci a senha"](#aceitar-convite) da E3** (decisão do dono, P30, e ordem combinada com Contas). Nenhuma entrega tira a tela antiga antes disso, nem que uma das duas partes já esteja pronta: sem as duas, o dono fica sem jeito de incluir alguém ou a pessoa fica sem jeito de recuperar a senha. Depois disso, em Configurações fica só a configuração da IA, com a senha da [tabela](#dialogo-senha).
 - **Aceitar convite** (`/aceitar/<token>`) e **Redefinir a senha** (`/redefinir/<token>`) são páginas públicas da família do Entrar ([aceitar convite](#aceitar-convite)).
 
 ### Moldura comum
@@ -1008,7 +1008,7 @@ Só para quem tem `equipe-listar`, isto é, o dono. Os dados vêm de `equipe-lis
 | TETO MENSAL | campo "Teto de gasto com IA, em reais", de 44 px e até 160 px de largura, `inputmode="decimal"`, aceitando "30" e "30,50"; "Salvar" (secundário). Apoio: "Padrão da redação: R$ 50. Não passa do teto da redação." Com teto próprio, "Usar o padrão" ([link](#link)) o apaga. A Mesa envia `teto_brl` como texto com ponto ("30.50"), nunca como número, e `null` para voltar ao padrão (`equipe-teto` com `conta`). Recusa: o texto do servidor abaixo do campo |
 | ACESSO | conta ativa: "Desativar" e "Remover da redação" (destrutivos). Conta desativada: "Reativar" (secundário, sem diálogo) e "Remover da redação". Apoio: "Desativar encerra as sessões e para as perguntas em curso; as apurações ficam. Remover exclui a conta." Os diálogos estão na [tabela](#dialogo-senha) |
 
-Criar conta com link e "Recuperar acesso" continuam em "Contas de acesso", em Configurações, até a integração dos [convites](#convites) (P30; [exceções](#contas-excecoes)).
+Criar conta com link e "Recuperar acesso" continuam em "Contas de acesso", em Configurações, até a integração em que entram juntos o convite e o "Esqueci a senha" (P30; [exceções](#contas-excecoes)).
 
 **Abaixo da tabela**, em grade de duas colunas:
 
@@ -1044,7 +1044,7 @@ Frases da atividade. "Fulano" é `por_nome` e "Beltrano" é `conta_nome`; quando
 
 ### Convites na Equipe (W09, E3)
 
-*(Derivado, 22/11/2026.)* Entram com a E3 de Contas (`281a468`; `testes/test_convites.py`; contrato, 8.1 e 12). Na mesma integração saem as `contas-*` e "Contas de acesso" (P30), e a exceção do convite deixa de valer.
+*(Derivado, 22/11/2026.)* Entram com a E3 de Contas (`281a468`; `testes/test_convites.py`; contrato, 8.1 e 12). As `contas-*` e "Contas de acesso" saem só na integração em que entram juntos o convite e o "Esqueci a senha" da E3 (P30 e ordem combinada com Contas; ver [onde ficam](#contas)); com ela, a exceção do convite deixa de valer.
 
 **"Convidar pessoa"** é botão principal, à direita do título da Equipe, alinhado pela base (W09). No celular, fica abaixo do título, com largura cheia e 48 px. O título ganha a contagem dos pendentes: "6 pessoas · 2 convites pendentes".
 
@@ -1088,7 +1088,7 @@ A tela não distingue o convite para um e-mail que tem conta em outra redação:
 No celular, cada convite vira um cartão depois dos cartões das pessoas, com as duas ações em botões secundários de largura cheia.
 
 - **Reenviar** age direto, sem diálogo, e gera um link novo: o anterior deixa de valer e o prazo recomeça (`equipe-convite-reenviar` com `convite`). Resultado: com `enviado`, "✓ Convite reenviado para ana@redacao.org. O link anterior deixou de valer."; com `tela`, o mesmo diálogo do link, com o título "Novo link para ana@redacao.org"; com `falha`, o aviso acima. Antes de uma hora, o servidor recusa (429 `limite_de_convites`): o texto dele vai à linha de estado, em 14 `--theme-danger`, com `role="alert"`.
-- **Cancelar convite** abre a variante destrutiva: "Cancelar o convite de ana@redacao.org?", com o texto "O link deixa de valer. Você pode convidar o mesmo e-mail de novo." A ação é "Cancelar convite" e o botão de sair é "Manter convite", não "Cancelar", para não haver dois "Cancelar". Resultado: "✓ Convite de ana@redacao.org cancelado." (`equipe-convite-cancelar` com `convite`).
+- **Cancelar convite** abre a variante destrutiva: "Cancelar o convite de ana@redacao.org?", com o texto "O link deixa de valer. Dá para convidar o mesmo e-mail de novo, mas cada endereço recebe no máximo três convites da redação por hora, contando os cancelados." (teto do servidor desde `e5743a5`; passar dele dá 429 `limite_de_convites`, com o texto do servidor no erro do diálogo de convidar: "Esse e-mail já recebeu convites demais desta redação na última hora. Espere para convidar de novo.") A ação é "Cancelar convite" e o botão de sair é "Manter convite", não "Cancelar", para não haver dois "Cancelar". Resultado: "✓ Convite de ana@redacao.org cancelado." (`equipe-convite-cancelar` com `convite`).
 - Convite que já não existe (cancelado em outra aba, aceito, vencido) responde "Convite não encontrado.": a lista recarrega, sem erro.
 
 Na atividade, frases novas:
@@ -1115,7 +1115,7 @@ A atividade não leva o e-mail, que é dado de quem ainda não é da redação.
 |---|---|
 | Rubrica | "CONVITE", 14/600 maiúsculas, `--theme-muted` |
 | Título | serifa 22/600: "Entre na Redação Serena" (`redacao`) |
-| Texto | 16: "Rui Castro convidou **ana@redacao.org** como Repórter." (`convidado_por`, `email` em 600 e `translate="no"`, `papel`). Abaixo, em 14 `--theme-muted`: "Convite válido até 29 de nov." (`expira_em`) |
+| Texto | 16: "Rui Castro convidou **ana@redacao.org** como Repórter." (`convidado_por`, `email` em 600 e `translate="no"`, `papel`). `convidado_por` e `redacao` são texto digitado por alguém: entram só como texto (`textContent`), nunca como HTML nem como link, mesmo que pareçam um endereço. Abaixo, em 14 `--theme-muted`: "Convite válido até 29 de nov." (`expira_em`) |
 | E-mail | não é campo: o e-mail do convite está no texto e não muda aqui (W10, regra 3). Um `input` oculto com `autocomplete="username"` e o e-mail permite ao gerenciador de senhas guardar o par certo |
 | Seu nome | campo, `autocomplete="name"`, até 120 caracteres; recebe o foco inicial |
 | Crie uma senha | [campo de senha](#campo) com "Mostrar", `autocomplete="new-password"`; apoio "De 12 a 256 caracteres. Pode colar ou usar o gerenciador de senhas." (W10). Um campo só, como no W10 |
