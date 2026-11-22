@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Estados</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+body{margin:0}
+a{color:#333}a:hover{color:#000}
+</style>
+</helmet>
+<div style="width: 1200px; height: 760px; box-sizing: border-box; display: flex; background: #ffffff; color: #2b2b2b; font-family: 'Source Sans 3', system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+<div style="flex: 1; min-width: 0; box-sizing: border-box; padding: 28px 32px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 16px">
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 14px; color: #6b6b6b">VAZIO</span><b style="font-size: 17px">Nenhuma hipótese ainda</b><span>Uma hipótese é uma afirmação que os documentos podem sustentar ou contrariar.</span><button type="button" style="margin-top: auto; align-self: flex-start; height: 44px; padding: 0 14px; border: 0; border-radius: 6px; background: #2b2b2b; color: #fff; font: inherit; font-weight: 600">Criar a primeira</button></div>
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 14px; color: #6b6b6b">OCUPADO, CURTO (até 10 s)</span><div style="height: 14px; width: 70%; background: #cfcfcf; border-radius: 4px"></div><div style="height: 14px; width: 90%; background: #cfcfcf; border-radius: 4px"></div><div style="height: 14px; width: 50%; background: #cfcfcf; border-radius: 4px"></div><span style="margin-top: auto; color: #6b6b6b">Esqueleto no lugar do conteúdo. Não aparece se a resposta chega em menos de 0,3 s.</span></div>
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 14px; color: #6b6b6b">OCUPADO, LONGO (OCR, IA)</span><b>Lendo a página 2 de 5</b><div style="height: 8px; background: #cfcfcf; border-radius: 999px"><div style="width: 40%; height: 8px; background: #2b2b2b; border-radius: 999px"></div></div><span>Pode levar alguns minutos. Você pode sair desta tela.</span><button type="button" style="margin-top: auto; align-self: flex-start; height: 40px; padding: 0 12px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Cancelar</button></div>
+<div style="border: 2px solid #2b2b2b; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 14px; color: #6b6b6b">ERRO QUE A PESSOA RESOLVE</span><b>✕ Este arquivo tem macro e não foi lido</b><span>Salve uma cópia como .xlsx sem macro e envie de novo. O original ficou guardado.</span><div style="margin-top: auto; display: flex; gap: 8px"><button type="button" style="height: 40px; padding: 0 12px; border: 0; border-radius: 6px; background: #2b2b2b; color: #fff; font: inherit; font-weight: 600">Enviar outro</button><button type="button" style="height: 40px; padding: 0 12px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Manter só o original</button></div></div>
+<div style="border: 2px solid #2b2b2b; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 14px; color: #6b6b6b">ERRO DO SERVIÇO</span><b>✕ A análise parou no meio</b><span>O que já foi concluído está guardado. Nada foi cobrado pela parte que falhou.</span><div style="margin-top: auto; display: flex; gap: 8px"><button type="button" style="height: 40px; padding: 0 12px; border: 0; border-radius: 6px; background: #2b2b2b; color: #fff; font: inherit; font-weight: 600">Retomar de onde parou</button><u style="align-self: center">Detalhes</u></div></div>
+<div style="border: 1.5px dashed #2b2b2b; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 14px; color: #6b6b6b">LIMITE ATINGIDO</span><b>! Sua cota do mês acabou</b><span>Você usou R$ 50,00 de R$ 50,00. Documentos, conferência e caderno seguem funcionando.</span><div style="margin-top: auto; display: flex; gap: 8px"><button type="button" style="height: 40px; padding: 0 12px; border: 1.5px solid #2b2b2b; border-radius: 6px; background: #fff; font: inherit; font-weight: 600">Pedir mais ao dono da redação</button></div></div>
+</div>
+<div style="width: 320px; flex: none; box-sizing: border-box; background: #f4f4f2; border-left: 1.5px solid #cfcfcf; padding: 28px 22px; display: flex; flex-direction: column; gap: 10px; font-size: 14px">
+<div style="font-weight: 600; font-size: 15px">Regras para toda a Mesa</div>
+<div>1. Todo estado vazio diz o que é a coisa e traz uma ação.</div>
+<div>2. Dois padrões de "ocupado" e só dois: esqueleto para espera curta, barra com etapa para espera longa. Ambos com aria-busy.</div>
+<div>3. Espera longa pode ser cancelada e não prende a pessoa na tela.</div>
+<div>4. Erro em três partes: o que houve, o que foi preservado, o que fazer. Sem código interno no texto principal; o código fica em "Detalhes".</div>
+<div>5. Erro de campo aparece junto ao campo, com aria-invalid, e o foco vai para ele.</div>
+<div>6. Erro usa as cores de erro; aviso usa as de aviso. Nunca trocados.</div>
+<div>7. Limite de gasto explica o que continua funcionando.</div>
+<div>8. Confirmação de ação destrutiva usa o diálogo da Mesa, nunca o do navegador, e oferece desfazer quando possível.</div>
+<div>9. Mensagens de mudança de estado são anunciadas a leitor de tela.</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

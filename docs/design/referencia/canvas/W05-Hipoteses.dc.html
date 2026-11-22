@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Hipóteses</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+body{margin:0}
+a{color:#333}a:hover{color:#000}
+</style>
+</helmet>
+<div style="width: 1200px; height: 760px; box-sizing: border-box; display: flex; background: #ffffff; color: #2b2b2b; font-family: 'Source Sans 3', system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+<div style="flex: 1; min-width: 0; box-sizing: border-box; padding: 28px 32px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 12px"><span style="font-size: 22px; font-weight: 600">Hipóteses</span><span style="color: #6b6b6b">3 hipóteses</span><button type="button" style="margin-left: auto; height: 44px; padding: 0 16px; border: 0; border-radius: 6px; background: #2b2b2b; color: #fff; font: inherit; font-weight: 600">Nova hipótese</button></div>
+<div style="border: 2px solid #2b2b2b; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: baseline; gap: 10px"><b style="font-size: 17px">O aditivo ultrapassa o limite legal de acréscimo</b><span style="margin-left: auto; color: #6b6b6b">2 sustentam · 1 contraria · 1 falta</span><u>Editar</u></div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px"><b>✓ Sustenta</b><div style="border: 1px solid #9a9a9a; border-radius: 6px; padding: 6px 8px">Aditivo acresce 22,4%<br><span style="font-size: 14px; color: #6b6b6b">Aditivo 1, p. 2</span></div><div style="border: 1px solid #9a9a9a; border-radius: 6px; padding: 6px 8px">Valor original de R$ 8,75 mi<br><span style="font-size: 14px; color: #6b6b6b">Contrato, p. 1</span></div><u style="font-size: 14px">+ ligar evidência</u></div>
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px"><b>✕ Contraria</b><div style="border: 1px solid #9a9a9a; border-radius: 6px; padding: 6px 8px">Parecer cita limite de 25%<br><span style="font-size: 14px; color: #6b6b6b">Parecer jurídico, p. 3</span></div><u style="font-size: 14px">+ ligar evidência</u></div>
+<div style="border: 1.5px dashed #6b6b6b; border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px"><b>? Falta</b><div style="border: 1px dashed #9a9a9a; border-radius: 6px; padding: 6px 8px">Qual lei rege este contrato<br><span style="font-size: 14px; color: #6b6b6b">sem documento</span></div><u style="font-size: 14px">Virar pergunta ou pedido</u></div>
+</div>
+</div>
+<div style="border: 1.5px solid #9a9a9a; border-radius: 8px; padding: 12px 16px; display: flex; gap: 10px"><b>A medição nº 3 foi paga antes da conclusão do trecho</b><span style="margin-left: auto; color: #6b6b6b">0 sustentam · 0 contrariam · 2 faltam</span></div>
+<div style="border: 1.5px solid #9a9a9a; border-radius: 8px; padding: 12px 16px; display: flex; gap: 10px"><b>Sócios da construtora têm vínculo com a secretaria</b><span style="margin-left: auto; color: #6b6b6b">1 sustenta · 0 contrariam · 1 falta</span></div>
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; margin-top: auto">
+<b>Nova hipótese</b>
+<label style="display: flex; flex-direction: column; gap: 4px">Escreva como afirmação que os documentos possam sustentar ou contrariar<input type="text" style="height: 44px; box-sizing: border-box; border: 1.5px solid #6b6b6b; border-radius: 6px; padding: 0 10px; font: inherit"></label>
+<div style="display: flex; gap: 8px; justify-content: flex-end"><button type="button" style="height: 40px; padding: 0 12px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Cancelar</button><button type="button" style="height: 40px; padding: 0 12px; border: 0; border-radius: 6px; background: #2b2b2b; color: #fff; font: inherit; font-weight: 600">Criar</button></div>
+</div>
+</div>
+<div style="width: 320px; flex: none; box-sizing: border-box; background: #f4f4f2; border-left: 1.5px solid #cfcfcf; padding: 28px 22px; display: flex; flex-direction: column; gap: 10px; font-size: 14px">
+<div style="font-weight: 600; font-size: 15px">Regras desta tela</div>
+<div>1. Criar, editar e arquivar hipótese pela Mesa. Hoje só se lê.</div>
+<div>2. Três colunas fixas: sustenta, contraria, falta. Cada uma com sinal, traço e texto próprios.</div>
+<div>3. "Ligar evidência" abre a lista de achados já conferidos; achado não conferido aparece marcado como tal.</div>
+<div>4. Toda evidência abre o original na página citada.</div>
+<div>5. Item de "falta" pode virar pergunta à IA, entrevista ou pedido de LAI.</div>
+<div>6. A contagem no cabeçalho não é placar: o quadro organiza, não decide se a hipótese é verdadeira.</div>
+<div>7. Estado vazio traz explicação curta e o botão "Nova hipótese".</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

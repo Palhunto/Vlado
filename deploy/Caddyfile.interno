@@ -1,11 +1,52 @@
 # Homologação local: HTTPS com a CA interna do Caddy (o navegador e o emulador precisam
 # confiar no certificado raiz em caddy_data/caddy/pki/authorities/local/root.crt).
 # Nunca use no ambiente editorial nem na demonstração pública.
+{
+	# Contêiner somente leitura e sem privilégios: o Caddy não instala a CA no repositório de
+	# certificados do contêiner (falharia com "failed to execute tee"). Confie nela no navegador.
+	skip_install_trust
+
+	# Log padrão do Caddy (stdout/stderr do contêiner, o que `docker logs` mostra): com a Mesa fora do ar o
+	# Caddy registra aqui o erro 502 com a URI inteira (token de /ativar, query) e todos os cabeçalhos
+	# (Cookie, X-Session-Token). Mesmo filtro do registro de acesso, sem o campo "rota" (que é do `log_append`
+	# do site): nada de URI, cabeçalhos de requisição nem de resposta. Fica horário, nível, IP e o erro.
+	log {
+		format filter {
+			wrap json
+			fields {
+				request>uri delete
+				request>headers delete
+				resp_headers delete
+			}
+		}
+	}
+}
+
 {$VLADO_DOMINIO} {
 	tls internal
 	encode gzip
 	request_body {
 		max_size 80MB
+	}
+	# Registro de acesso: mesmo bloco de deploy/Caddyfile (um teste confere que são idênticos). Sem URI, sem
+	# cabeçalhos, sem corpo; token mascarado em "rota". Ver os comentários em deploy/Caddyfile.
+	# O log padrão do contêiner (opções globais, acima) leva o mesmo filtro, igual ao de deploy/Caddyfile.
+	log_append rota {http.request.uri.path}
+	log {
+		output file /var/log/caddy/acesso.log {
+			roll_size 20MiB
+			roll_keep 20
+			roll_keep_for 720h
+		}
+		format filter {
+			wrap json
+			fields {
+				request>uri delete
+				request>headers delete
+				resp_headers delete
+				rota regexp "(?P<p>/(?:ativar|convite)/)[^/?#]+|(?P<q>/)[A-Za-z0-9_-]{24,}" "${p}${q}***"
+			}
+		}
 	}
 	reverse_proxy vlado:8765
 }

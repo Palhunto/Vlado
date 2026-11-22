@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Perguntar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+body{margin:0}
+a{color:#333}a:hover{color:#000}
+</style>
+</helmet>
+<div style="width: 1200px; height: 760px; box-sizing: border-box; display: flex; background: #ffffff; color: #2b2b2b; font-family: 'Source Sans 3', system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+<div style="width: 220px; flex: none; box-sizing: border-box; border-right: 1.5px solid #cfcfcf; padding: 28px 16px; display: flex; flex-direction: column; gap: 8px">
+<button type="button" style="height: 44px; border: 1.5px solid #2b2b2b; border-radius: 6px; background: #fff; font: inherit; font-weight: 600">Nova conversa</button>
+<div style="font-size: 14px; color: #6b6b6b; padding-top: 8px">Conversas</div>
+<div style="border: 1.5px solid #2b2b2b; border-radius: 6px; padding: 8px 10px; background: #f1f1ef"><b>Pagamentos e aditivo</b><br><span style="font-size: 14px; color: #6b6b6b">Hoje · 4 a conferir</span></div>
+<div style="padding: 8px 10px">Quem assina as medições<br><span style="font-size: 14px; color: #6b6b6b">Ontem · conferida</span></div>
+<div style="padding: 8px 10px">Trecho da Rua das Acácias<br><span style="font-size: 14px; color: #6b6b6b">18 nov</span></div>
+</div>
+<div style="flex: 1; min-width: 0; box-sizing: border-box; padding: 28px 32px; display: flex; flex-direction: column; gap: 14px">
+<div style="align-self: flex-end; max-width: 440px; border: 1.5px solid #9a9a9a; border-radius: 8px; padding: 10px 12px; background: #f1f1ef">Quanto do contrato já foi pago e o aditivo respeita o limite legal?</div>
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex"><b>Lendo os documentos</b><span style="margin-left: auto; color: #6b6b6b">etapa 3 de 6 · 0 min 52 s</span></div>
+<div style="height: 8px; background: #cfcfcf; border-radius: 999px"><div style="width: 50%; height: 8px; background: #2b2b2b; border-radius: 999px"></div></div>
+<div style="color: #6b6b6b">✓ Planejou a busca · ✓ Buscou em 12 documentos · ◐ Cruzando valores · ○ Revisando · ○ Resumo</div>
+<div style="display: flex; gap: 8px"><button type="button" style="height: 40px; padding: 0 12px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Parar</button><span style="align-self: center; color: #6b6b6b">Gasto até agora: R$ 0,61</span></div>
+</div>
+<div style="max-width: 620px; display: flex; flex-direction: column; gap: 8px">
+<div>O contrato soma <b>R$ 8,75 milhões</b> <span style="border: 1.5px solid #6b6b6b; border-radius: 999px; padding: 0 8px; font-size: 14px">Contrato, p. 1</span> e foram pagos <b>R$ 3,9 milhões</b> <span style="border: 1.5px solid #6b6b6b; border-radius: 999px; padding: 0 8px; font-size: 14px">Medição 3, p. 1</span>.</div>
+<div style="border: 1.5px dashed #6b6b6b; border-radius: 8px; padding: 8px 12px">? Lacuna: sócios da construtora não localizados.</div>
+<button type="button" style="align-self: flex-start; height: 44px; padding: 0 14px; border: 0; border-radius: 6px; background: #2b2b2b; color: #fff; font: inherit; font-weight: 600">Conferir os 4 achados</button>
+</div>
+<div style="margin-top: auto; border: 1.5px solid #2b2b2b; border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+<label style="display: flex; flex-direction: column; gap: 4px">Nova pergunta ou complemento<textarea rows="2" style="resize: none; border: 1.5px solid #6b6b6b; border-radius: 6px; padding: 8px 10px; font: inherit"></textarea></label>
+<div style="display: flex; align-items: center; gap: 12px"><span style="color: #6b6b6b">Custo estimado: R$ 0,90 a 1,40 · saldo: R$ 31,60 · rascunho salvo</span><button type="button" style="margin-left: auto; height: 44px; padding: 0 16px; border: 0; border-radius: 6px; background: #2b2b2b; color: #fff; font: inherit; font-weight: 600">Enviar</button></div>
+</div>
+</div>
+<div style="width: 300px; flex: none; box-sizing: border-box; background: #f4f4f2; border-left: 1.5px solid #cfcfcf; padding: 28px 22px; display: flex; flex-direction: column; gap: 10px; font-size: 14px">
+<div style="font-weight: 600; font-size: 15px">Regras desta tela</div>
+<div>1. Lista de conversas à esquerda; nada de escolher rodada ou versão do corpus.</div>
+<div>2. O campo de pergunta fica no fim da coluna e nunca cobre o conteúdo.</div>
+<div>3. Estimativa de custo antes de enviar, gasto durante e valor final depois, em reais.</div>
+<div>4. O progresso nomeia as seis etapas em linguagem comum e pode ser interrompido.</div>
+<div>5. Cada número da resposta leva a fonte ao lado, que abre o original na página.</div>
+<div>6. Lacuna é um bloco próprio, com sinal e texto.</div>
+<div>7. Conexão, provedor e chave saem daqui e vão para a configuração da organização.</div>
+<div>8. Se novos documentos chegaram, a conversa avisa e oferece refazer a pergunta com eles.</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

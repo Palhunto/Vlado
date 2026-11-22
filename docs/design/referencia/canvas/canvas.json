@@ -1,0 +1,201 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Celular.dc.html": {
+      "h": 844,
+      "title": "Pergunta no celular (tema escuro)",
+      "w": 390,
+      "x": 1520,
+      "y": 1020
+    },
+    "Entrar.dc.html": {
+      "h": 844,
+      "title": "Entrar",
+      "w": 390,
+      "x": 1990,
+      "y": 1020
+    },
+    "Inicio.dc.html": {
+      "h": 900,
+      "title": "Visão geral",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Main.dc.html": {
+      "h": 900,
+      "title": "Conferir achado",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "Mapa.dc.html": {
+      "h": 900,
+      "title": "Mapa de relações",
+      "w": 1440,
+      "x": 0,
+      "y": 2140
+    },
+    "Tempo.dc.html": {
+      "h": 900,
+      "title": "Linha do tempo",
+      "w": 1440,
+      "x": 1520,
+      "y": 2140
+    },
+    "Tokens.dc.html": {
+      "h": 897,
+      "title": "Design system revisado",
+      "w": 1440,
+      "x": 0,
+      "y": 1123
+    },
+    "W01-NovaApuracao.dc.html": {
+      "h": 760,
+      "page": "wire",
+      "title": "W01 Nova apuração (vários sites)",
+      "w": 1200,
+      "x": 0,
+      "y": 0
+    },
+    "W02-Documentos.dc.html": {
+      "h": 760,
+      "page": "wire",
+      "title": "W02 Documentos e envio",
+      "w": 1200,
+      "x": 1280,
+      "y": 0
+    },
+    "W03-Perguntar.dc.html": {
+      "h": 760,
+      "page": "wire",
+      "title": "W03 Perguntar",
+      "w": 1200,
+      "x": 2560,
+      "y": 0
+    },
+    "W04-Caderno.dc.html": {
+      "h": 760,
+      "page": "wire",
+      "title": "W04 Caderno e conferência do texto",
+      "w": 1200,
+      "x": 3840,
+      "y": 0
+    },
+    "W05-Hipoteses.dc.html": {
+      "h": 760,
+      "page": "wire",
+      "title": "W05 Hipóteses",
+      "w": 1200,
+      "x": 0,
+      "y": 880
+    },
+    "W06-Tabelas.dc.html": {
+      "h": 760,
+      "page": "wire",
+      "title": "W06 Tabelas conferíveis",
+      "w": 1200,
+      "x": 1280,
+      "y": 880
+    },
+    "W07-Comparador.dc.html": {
+      "h": 760,
+      "page": "wire",
+      "title": "W07 Comparador",
+      "w": 1200,
+      "x": 2560,
+      "y": 880
+    },
+    "W08-Conta.dc.html": {
+      "h": 760,
+      "page": "wire",
+      "title": "W08 Minha conta",
+      "w": 1200,
+      "x": 3840,
+      "y": 880
+    },
+    "W09-Equipe.dc.html": {
+      "h": 760,
+      "page": "wire",
+      "title": "W09 Equipe e convites",
+      "w": 1200,
+      "x": 0,
+      "y": 1760
+    },
+    "W10-Convite.dc.html": {
+      "h": 760,
+      "page": "wire",
+      "title": "W10 Aceitar convite",
+      "w": 1200,
+      "x": 1280,
+      "y": 1760
+    },
+    "W11-Estados.dc.html": {
+      "h": 760,
+      "page": "wire",
+      "title": "W11 Estados: vazio, ocupado, erro",
+      "w": 1200,
+      "x": 2560,
+      "y": 1760
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-11-20T12:00:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "titulo": {
+      "kind": "title1",
+      "maxW": 2960,
+      "text": "Vlado — Mesa ideal",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "titulowire": {
+      "kind": "title1",
+      "maxW": 5040,
+      "page": "wire",
+      "text": "Wireframes — estrutura e regras de cada tela",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    }
+  },
+  "order": [
+    "W01-NovaApuracao.dc.html",
+    "W02-Documentos.dc.html",
+    "W03-Perguntar.dc.html",
+    "W04-Caderno.dc.html",
+    "W05-Hipoteses.dc.html",
+    "W06-Tabelas.dc.html",
+    "W07-Comparador.dc.html",
+    "W08-Conta.dc.html",
+    "W09-Equipe.dc.html",
+    "W10-Convite.dc.html",
+    "W11-Estados.dc.html",
+    "Main.dc.html",
+    "Inicio.dc.html",
+    "Tokens.dc.html",
+    "Celular.dc.html",
+    "Entrar.dc.html",
+    "Mapa.dc.html",
+    "Tempo.dc.html"
+  ],
+  "pages": [
+    {
+      "id": "final",
+      "name": "Telas finais"
+    },
+    {
+      "id": "wire",
+      "name": "Wireframes"
+    }
+  ],
+  "title": "Vlado — Mesa ideal"
+}

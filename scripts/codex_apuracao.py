@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+from contextlib import contextmanager
 import hashlib
 from datetime import datetime, timezone
 import json
@@ -14,6 +15,7 @@ import uuid
 
 from comum import dentro, escrever_json, ler_json, sha256
 from cadastrar_documentos import _atomico, _bytes, _trava, inventario
+import trava_cadastro
 from inferencia_api import CHAVES, ErroIA, ServidorAPI, seguro
 from fontes_web import documentos_e_capturas
 from indice_sqlite import _entradas, construir_snapshot, cobertura, ler_passagem, pesquisar
@@ -29,6 +31,11 @@ import limites
 ACTIVE = {'preparando', 'executando', 'cancelando', 'publicando'}
 LIMITE_RESULTADO = 60_000    # characters of one tool result sent back to the model
 LIMITE_ARGUMENTOS = 8_000    # characters of tool arguments kept in the round's records
+# Seconds a question waits for a cadastro in progress before freezing (it holds no other lock
+# meanwhile; cancelling or shutting the Mesa down stops the wait).
+ESPERA_CONGELAMENTO = 600
+# Management holds Conversas.lock while it waits for the cadastro lock: keep that wait short.
+ESPERA_GESTAO = 10
 RETOMAVEIS = ('interrompido', 'erro', 'sem_cota', 'incompleto', 'cancelado')
 # Causes for which resuming the same provider thread would fail again.
 SEM_RETOMADA = ('contexto',)
@@ -226,7 +233,7 @@ class Conversas:
 
     def gerenciar(self, operation, data):
         """Metadata-only management, serialized with questions and registrations."""
-        with self.lock, _trava(self.root):
+        with self.lock, _trava(self.root, espera=ESPERA_GESTAO, operacao='gestao'):
             if operation == 'restaurar':
                 item = lixeira.restaurar(self.root, data.get('item'))
                 return {'estado': 'restaurado', 'item': item}
@@ -359,6 +366,30 @@ class Conversas:
         continuidade.anterior(self.root, ctx['meta'])
         return ctx
 
+    @contextmanager
+    def reservar_para_documentos(self, case, identifier):
+        """Check the conversation, then keep new executions on it out until the batch is in.
+
+        ``Conversas.lock`` is held only for the check: the cadastro can take minutes (OCR) and
+        may wait for the cadastro lock, and holding the lock that long froze every conversation.
+        Until the block ends, ``perguntar`` and ``retomar`` refuse this conversation, so it stays
+        as checked (not busy, same rounds). Deleting it or its case goes through the Mesa's
+        cadastro lock, which the caller holds, and the cadastro checks the trash again.
+        """
+        with self.lock:
+            ctx = self.conferir_para_documentos(case, identifier)
+            ctx['documentos_em_cadastro'] = ctx.get('documentos_em_cadastro', 0) + 1
+        try:
+            yield ctx
+        finally:
+            with self.lock:
+                ctx['documentos_em_cadastro'] -= 1
+
+    @staticmethod
+    def _conferir_sem_cadastro(ctx):
+        if ctx.get('documentos_em_cadastro'):
+            raise ValueError('Esta conversa está recebendo documentos. Aguarde o fim do cadastro para perguntar.')
+
     def preparar_corpus(self, data):
         with self.lock:
             ctx = self.conferir_para_documentos(data.get('caso'), data.get('conversa'))
@@ -436,6 +467,7 @@ class Conversas:
                     ctx['meta']['rodada_base'] = feedback['conteudo']['rodada_origem']
             if ctx['busy'] or ctx['meta']['estado'] in ACTIVE:
                 raise ValueError('Esta conversa já tem uma execução ativa.')
+            self._conferir_sem_cadastro(ctx)
             evolution = None
             if data.get('atualizar_corpus') is not None:
                 request = data['atualizar_corpus']
@@ -480,11 +512,29 @@ class Conversas:
         worker.start()
         return {'conversa': identifier, 'estado': 'preparando'}
 
+    @contextmanager
+    def _eventos_adiados(self, identifier):
+        """Collect this conversation's events and send them when the block ends."""
+        pendentes = []
+        try:
+            yield lambda kind, data: pendentes.append((kind, data))
+        finally:
+            for kind, data in pendentes:
+                self._event(identifier, kind, data)
+
     def _freeze(self, identifier, question):
         ctx = self.contexts[identifier]
         meta = ctx['meta']
         case = meta['caso']
-        with _trava(self.root):
+        if (trava_cadastro.ler_dono(self.root) or {}).get('estado') == 'ocupada':
+            self._event(identifier, 'aviso', {'mensagem': 'Aguardando o fim de um cadastro em andamento '
+                                                          'para congelar a pergunta.'})
+        # Lock order: Conversas.lock is never taken inside the cadastro lock (management and the
+        # trash hold it while they wait for the cadastro lock). This freeze's events and the
+        # conversation save therefore go out right after the cadastro lock is released.
+        with self._eventos_adiados(identifier) as evento, _trava(
+                self.root, espera=ESPERA_CONGELAMENTO, operacao='congelamento',
+                cancelar=lambda: self.stopping or bool(ctx.get('cancel'))):
             parent = dentro(self.root, f'execucoes/{case}')
             numbers = [int(p.name[1:]) for p in parent.iterdir()
                        if re.fullmatch(r'R[0-9]{3,6}', p.name)] if parent.exists() else []
@@ -528,7 +578,7 @@ class Conversas:
                     'recebido_em_utc': agora()}, exclusivo=True)
                 meta['diligencias_recebidas'] = {'arquivo': str(receipt.relative_to(self.root)),
                     'sha256': sha256(receipt), 'quantidade': len(followups['diligencias'])}
-                self._event(identifier, 'diligencias_recebidas', {**followups, **meta['diligencias_recebidas']})
+                evento('diligencias_recebidas', {**followups, **meta['diligencias_recebidas']})
             notebook = ctx.get('caderno')
             if notebook:
                 caderno.validar_destino(notebook, manifest)
@@ -537,7 +587,7 @@ class Conversas:
                     'recebido_em_utc': agora()}, exclusivo=True)
                 meta['caderno_recebido'] = {'arquivo': str(receipt.relative_to(self.root)),
                     'sha256': sha256(receipt), 'quantidade': len(notebook['registros'])}
-                self._event(identifier, 'contribuicoes_caderno', {**notebook, **meta['caderno_recebido']})
+                evento('contribuicoes_caderno', {**notebook, **meta['caderno_recebido']})
             if evolution:
                 receipt = run / 'saidas/continuidade_entrada.json'
                 escrever_json(receipt, {**evolution, 'rodada_destino': run_id}, exclusivo=True)
@@ -546,7 +596,7 @@ class Conversas:
                 meta['continuidade_corpus'] = {'arquivo': str(receipt.relative_to(self.root)),
                     'sha256': sha256(receipt), 'rodada_anterior': evolution['rodada_anterior'],
                     'corpus_anterior': evolution['corpus_anterior'], 'corpus_novo': manifest['corpus_id']}
-                self._event(identifier, 'evolucao_corpus', {**continuidade.previa(evolution), 'rodada_atual': run_id})
+                evento('evolucao_corpus', {**continuidade.previa(evolution), 'rodada_atual': run_id})
             feedback = ctx.get('observacoes_humanas')
             if feedback:
                 documents = {d['id']: d for d in manifest['documentos']}
@@ -562,7 +612,7 @@ class Conversas:
                 meta['observacoes_humanas'] = {'arquivo': str(receipt.relative_to(self.root)),
                     'sha256': sha256(receipt), 'quantidade': len(feedback['observacoes']),
                     'rodada_origem': feedback['rodada_origem'], 'revisao_origem': feedback['revisao_origem']}
-                self._event(identifier, 'observacoes_humanas', {**meta['observacoes_humanas'],
+                evento('observacoes_humanas', {**meta['observacoes_humanas'],
                     'observacoes': feedback['observacoes']})
             ctx['manifest'] = manifest
             ctx.setdefault('acervos', {})[run_id] = self._apresentacao(manifest)
@@ -581,7 +631,7 @@ class Conversas:
             ctx['pipeline'] = Fluxo(self.root, run, meta, ctx['references'], continuidade=evolution)
             ctx['tool_lock'] = threading.RLock()
             meta['fluxo_automatico'] = 2
-            self._save(identifier)
+        self._save(identifier)
         return run
 
     def _instructions(self, identifier, run):
@@ -652,6 +702,10 @@ class Conversas:
             self._save(identifier)
             self._event(identifier, 'escopo', {k: ctx['meta'][k] for k in ('caso', 'rodada', 'corpus_id', 'modelo')})
             self._execute_stages(identifier, question, rpc)
+        except trava_cadastro.TravaInterrompida as exc:
+            # Cancelled, or the Mesa is shutting down, while waiting to freeze: nothing was frozen.
+            self._event(identifier, 'aviso', {'mensagem': seguro(exc)})
+            self._finish(identifier, 'interrompido')
         except Exception as exc:
             self._event(identifier, 'erro', {'mensagem': seguro(exc)})
             self._registrar_causa(ctx, getattr(exc, 'codigo', None), seguro(exc))
@@ -1073,6 +1127,7 @@ class Conversas:
         with self.lock:
             if ctx['busy'] or meta['estado'] in ACTIVE:
                 raise ValueError('Esta conversa já tem uma execução ativa.')
+            self._conferir_sem_cadastro(ctx)
             if dono is not None and any(c['meta'].get('dono') == dono and c.get('busy')
                                         for c in self.contexts.values()):
                 raise ValueError('Já há uma pergunta em andamento para este convite. Aguarde a resposta ou cancele.')
@@ -1265,7 +1320,8 @@ class Conversas:
             raise ValueError('Hash do original divergente.')
         return path
 
-    def close(self):
+    def close(self, prazo=None):
+        """Stop every execution and wait for their threads: up to 5 s each, or ``prazo`` in total."""
         with self.lock:
             self.stopping = True
             for ctx in self.contexts.values():
@@ -1275,6 +1331,7 @@ class Conversas:
                     ctx['turn_done'].set()
         if self.rpc:
             self.rpc.close()
+        limite = None if prazo is None else time.monotonic() + max(0.0, prazo)
         for worker in self.workers:
             if worker is not threading.current_thread():
-                worker.join(timeout=5)
+                worker.join(timeout=5 if limite is None else max(0.0, limite - time.monotonic()))

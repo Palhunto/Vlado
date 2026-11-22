@@ -1,0 +1,7 @@
+# Teto rígido de CPU, opcional (I2). O docker-compose.yml usa só pesos relativos (cpu_shares), que funcionam em
+# qualquer servidor. Se quiser limitar o app a N núcleos (precisa de N <= núcleos do servidor, senão o Docker
+# recusa subir: "Range of CPUs is from 0.01 to <núcleos>"), defina VLADO_CPUS no .env do ambiente e suba com:
+#   docker compose -p vlado-<ambiente> --env-file deploy/ambientes/<ambiente>.env #     -f docker-compose.yml -f deploy/compose.limite-cpu.yml up -d
+services:
+  vlado:
+    cpus: ${VLADO_CPUS:?defina VLADO_CPUS (número de núcleos, por exemplo 3)}

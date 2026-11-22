@@ -75,6 +75,15 @@
  --espaco-5:var(--vlado-espaco-5);--espaco-6:var(--vlado-espaco-6);--espaco-8:var(--vlado-espaco-8);
  --raio-controle:var(--vlado-raio-2);--raio-cartao:var(--vlado-raio-3);--raio-painel:var(--vlado-raio-4);--raio-pilula:var(--vlado-raio-pilula);
  --sombra-cartao:0 1px 2px var(--theme-shadow-soft);--sombra-flutuante:0 4px 18px var(--theme-shadow-soft);
+ /* Fonts: families as the sheets already use them (Source Serif 4 for titles, Source Sans 3 for the interface). */
+ --fonte-titulo:"Source Serif 4",Georgia,serif;--fonte-interface:"Source Sans 3","Segoe UI",Arial,sans-serif;--fonte-mono:monospace;
+ /* Keyboard focus ring (docs/design/mudancas-de-token.md, "Tokens da parte A"). */
+ --foco-largura:3px;--foco-afastamento:4px;
+ /* Motion: three durations and two curves. */
+ --duracao-rapida:.15s;--duracao-media:.2s;--duracao-lenta:.25s;--curva-padrao:ease;--curva-saida:ease-out;
+ /* Layers (z-index). The two notebook layers are provisional. */
+ --camada-base:0;--camada-acima:1;--camada-caderno-1:6;--camada-caderno-2:7;--camada-fixo:10;--camada-barra:20;--camada-barra-alta:25;
+ --camada-gaveta:30;--camada-sobreposicao:50;--camada-sobreposicao-alta:55;--camada-modal:60;
 }
 
 /* === 3. COMPONENTS === */
