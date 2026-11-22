@@ -198,6 +198,33 @@ class TravessiaTest(cenario.DuasRedacoes):
         self.igual_ao_inexistente('dono', 'contas-atualizar', {'id': self.ids['leitor'], 'casos': ['beta']},
                                   {'id': self.ids['leitor'], 'casos': [INEXISTENTE]})
 
+    def test_login_de_outra_redacao_nao_e_confirmado_por_nenhuma_operacao_de_contas(self):
+        # The login is unique in the installation: "this login already exists" would tell Alfa that Beta has it.
+        # With more than one newsroom nobody chooses a login in the Mesa, so no answer depends on the login asked.
+        antes = self.post('dono', 'contas-listar', {})[1]['contas']
+        respostas = {}
+        for rotulo, login in (('de Beta', 'dono.sentinela'), ('de Beta, outro', 'rep.sentinela'), ('livre', 'login.livre.sintetico'),
+                              ('da própria Alfa', 'edu.editor'), ('malformado', 'X')):
+            for papel in ('leitor', 'admin', 'convidado'):
+                dados = {'nome': 'Pessoa Nova', 'login': login, 'papel': papel, **({'casos': ['alpha']} if papel != 'admin' else {})}
+                resposta = self.post('dono', 'contas-criar', dados)
+                respostas[rotulo, papel] = (resposta[0], resposta[2])
+                self.sem_sentinela(resposta[2], f'contas-criar {rotulo}')
+        self.assertEqual(len(set(respostas.values())), 1, 'a resposta de contas-criar depende do login pedido')
+        self.assertEqual(next(iter(respostas.values()))[0], 403)
+        self.assertEqual(self.post('dono', 'contas-listar', {})[1]['contas'], antes)  # and nothing was created
+        self.assertEqual(self.post('dono_b', 'contas-criar', {'nome': 'Pessoa', 'login': 'dona.alfa', 'papel': 'admin'})[0], 403)
+        # No other operation takes a field that is unique in the installation: a login sent to `contas-atualizar`
+        # is not read, whether another newsroom has it or not, and the login of the account stays.
+        de_beta = self.post('dono', 'contas-atualizar', {'id': self.ids['leitor'], 'nome': 'Leo Leitor', 'login': 'dono.sentinela'})
+        livre = self.post('dono', 'contas-atualizar', {'id': self.ids['leitor'], 'nome': 'Leo Leitor', 'login': 'login.livre.sintetico'})
+        com_email = self.post('dono', 'contas-atualizar', {'id': self.ids['leitor'], 'nome': 'Leo Leitor', 'email': 'dono@sentinela.example'})
+        self.assertEqual((de_beta[0], de_beta[2]), (livre[0], livre[2]))
+        self.assertEqual((com_email[0], com_email[2]), (livre[0], livre[2]))
+        self.assertEqual((livre[0], livre[1]['conta']['login'], livre[1]['conta']['email']), (200, 'leo.leitor', None))
+        self.sem_sentinela(de_beta[2])
+        self.assertEqual(self.post('dono_b', 'codex-status', {})[0], 200)
+
     def test_mesmos_ids_internos_nas_duas_redacoes_nao_se_misturam(self):
         nota = {'requisicao_id': 'a' * 32, 'titulo': 'Nota', 'texto': 'Texto.'}
         de_beta = self.post('dono_b', 'apuracao-nota-salvar', {'caso': 'beta', **nota, 'texto': 'Anotação Betabetico reservada.'})
@@ -276,11 +303,26 @@ class TravessiaTest(cenario.DuasRedacoes):
                 status, corpo, _ = self.post('dono_b', operacao, dados)
                 self.assertEqual((status, corpo.get('codigo')), (403, 'redacao_suspensa'), operacao)
             self.assertEqual(self.get('dono_b', '/api/catalogo')[0], 403)
+            # Nor the page, the session or the server's capabilities: nobody of a suspended newsroom operates.
+            for caminho in ('/api/sessao', '/api/integracao', '/api/cota', '/api/fila'):
+                status, corpo, _ = self.get('reporter_b', caminho)
+                self.assertEqual((status, corpo.get('codigo')), (403, 'redacao_suspensa'), caminho)
+            status, cabecalhos, pagina = self.pedir('GET', '/', cabecalhos={'Cookie': self.sessoes['dono_b'][0]})
+            self.assertEqual((status, cabecalhos['Content-Type']), (403, 'text/html; charset=utf-8'))
+            self.assertIn('suspensa', pagina.decode('utf-8'))
+            for segredo in (self.sessoes['dono_b'][1], cenario.REDACAO_B, 'Dono Sentinela', 'data-papel'):
+                self.assertNotIn(segredo, pagina.decode('utf-8'))  # a plain notice: no token, no name, no application
+            acesso.limpar_limites()
+            descartavel = self._entrar('rep.sentinela')  # signing in still works, and so does signing out
+            self.assertEqual(self.post(descartavel, 'sessao-sair', {})[0], 200)
+            self.assertEqual(self.get('dono', '/api/sessao')[0], 200)  # the other newsroom goes on
+            self.assertEqual(self.pedir('GET', '/', cabecalhos={'Cookie': self.sessoes['dono'][0]})[0], 200)
             self.assertEqual(self.post('dono', 'analises', {'caso': 'alpha'})[0], 200)
             self.assertEqual(self.post('dono', 'analises', {'caso': 'beta'})[2], self.post('dono', 'analises', {'caso': INEXISTENTE})[2])
         finally:
             acesso.definir_situacao_redacao(self.root, self.b, 'ativa')
         self.assertEqual(self.post('dono_b', 'analises', {'caso': 'beta'})[0], 200)
+        self.assertEqual((self.get('dono_b', '/api/sessao')[0], self.get('dono_b', '/api/integracao')[0]), (200, 200))
 
     def test_configuracao_do_servidor_nao_vai_com_caminhos(self):
         status, corpo, bruto = self.post('dono', 'ambiente', {})

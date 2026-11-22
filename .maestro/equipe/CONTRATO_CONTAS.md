@@ -742,6 +742,8 @@ Nenhuma das duas muda uma célula da matriz.
 **O que a entrega 1 ainda não tem,** e onde o código difere do texto até lá:
 
 - As operações de `autorizacao.PENDENTES` (`conta-*`, `equipe-*`, convite, redefinição de senha e segundo fator) respondem 404. As seis `contas-*` continuam, só para o dono e só sobre a própria redação (`autorizacao.TRANSITORIAS`), e saem quando a tela Equipe entrar (seção 5.5).
+- `contas-criar` é recusada a todos (403 `operacao_proibida`) numa instalação com mais de uma redação: o login é único na instalação, e a recusa "esse login já existe" contaria a uma redação que outra tem uma conta com ele (seção 4.5). Até o convite por e-mail entrar, nessas instalações as contas novas são criadas pelo operador, no terminal. Com uma redação só, nada muda. Nenhuma outra operação recebe campo único da instalação.
+- A página (`GET /`), `GET /api/sessao` e `GET /api/integracao` também passam pelo portão: de uma redação suspensa, respondem 403 `redacao_suspensa` (a página, um aviso simples, sem dado nem token).
 - `data-papel` leva `admin` para o dono enquanto a interface não conhece os papéis novos; os outros papéis vão com o próprio nome. `GET /api/sessao` já devolve os valores novos e `capacidades`.
 - `pendencias` sai sempre vazia: segundo fator e termos entram com a seção 8.
 - Tentativas de entrada: vale o bloqueio por identificador e endereço de hoje. O teto por identificador, o modo protegido e o aparelho conhecido (seção 8.2) entram com a entrada em dois passos.

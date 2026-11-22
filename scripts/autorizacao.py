@@ -47,7 +47,7 @@ CAMPOS_RESTRITOS = {'codex-perguntar': {'caso', 'pergunta', 'conversa'}, 'codex-
 MENSAGEM_CAMPOS = {'codex-perguntar': 'Esta conta envia somente a pergunta e a conversa.',
                    'codex-retomar': 'Esta conta envia somente a conversa a retomar.'}
 # Operações que uma conta com pendência (segundo fator obrigatório, termos) ainda alcança.
-SEM_PENDENCIA = frozenset({'sessao-sair', 'GET /api/sessao'})
+SEM_PENDENCIA = frozenset({'sessao-sair', 'GET:/api/sessao'})
 ID_CONVERSA = re.compile(lixeira.ID_CONVERSA)
 
 
@@ -323,6 +323,11 @@ def conferir(root: Path, modo: str, principal: dict, operacao: str, dados: dict)
         # Enquanto a chave própria de cada redação não existe, a do serviço não se troca pela Mesa numa instalação
         # com mais de uma redação: seria uma redação mudando a conexão de todas.
         raise _proibida('A conexão com a IA deste serviço é definida por quem o administra.')
+    if operacao == 'contas-criar' and acesso.total_redacoes(root) > 1:
+        # The login is unique in the whole installation, so "this login already exists" would tell one newsroom
+        # that another has an account with it. Where there is more than one newsroom, nobody chooses a login in
+        # the Mesa: people come in by the operator's terminal until the invitation by e-mail replaces this.
+        raise _proibida('Neste serviço, as contas novas são criadas por quem o administra, até o convite por e-mail entrar.')
     if papel in RESTRITOS and operacao in CAMPOS_RESTRITOS and set(dados) - CAMPOS_RESTRITOS[operacao]:
         raise _proibida(MENSAGEM_CAMPOS[operacao], 'campos_nao_permitidos')
     novo = 'novo' in regra.resolvedor

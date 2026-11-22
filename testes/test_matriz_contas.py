@@ -17,9 +17,11 @@ from pathlib import Path
 import re
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import acesso
 import autorizacao
 import cenario_redacoes as cenario
 import interface_pesquisa
@@ -32,6 +34,8 @@ FORA_DA_TABELA = {
     'codex-desligar': 'no piloto o serviço não se encerra pela interface: recusado a todos (observação da linha)',
     'ia-config-salvar': 'com mais de uma redação, a chave do serviço não se troca pela Mesa até existir a chave própria '
                         'de cada redação (entrega seguinte)',
+    'contas-criar': 'com mais de uma redação, ninguém escolhe login pela Mesa: o login é único na instalação e a recusa '
+                    '"já existe" contaria a uma redação o que há na outra (operação em retirada; o convite a substitui)',
     'sessao-sair': 'encerra a sessão usada pelo próprio teste: conferida à parte, com uma sessão só para isso'}
 
 
@@ -302,6 +306,16 @@ class CelulasTest(cenario.DuasRedacoes):
             'anthropic': {'configurada': True, 'origem': 'servico', 'final': None},
             'openai': {'configurada': False, 'origem': None, 'final': None}})
         self.assertEqual(autorizacao.filtrar(self.root, 'local', principal, 'ia-config', resposta), resposta)
+
+    def test_contas_criar_e_recusada_a_todos_com_mais_de_uma_redacao_e_so_ai(self):
+        for papel in autorizacao.PAPEIS:
+            status, corpo, _ = self.post(papel, 'contas-criar', {'nome': 'Pessoa', 'login': 'pessoa.nova', 'papel': 'leitor'})
+            self.assertEqual((status, corpo.get('codigo')), (403, 'operacao_proibida'), papel)
+        principal = acesso.sessao(self.root, self.sessoes['dono'][0].split('=', 1)[1])
+        with patch.object(acesso, 'total_redacoes', return_value=1):  # one newsroom: its logins are all its own
+            self.assertEqual(autorizacao.conferir(self.root, 'piloto', principal, 'contas-criar', {}).operacao, 'contas-criar')
+        for operacao in ('contas-listar', 'contas-atualizar', 'contas-desativar', 'contas-reativar', 'contas-recuperar'):
+            self.assertEqual(autorizacao.conferir(self.root, 'piloto', principal, operacao, {}).operacao, operacao)
 
     def test_sessao_devolve_papel_redacao_alcance_explicito_e_capacidades(self):
         for papel, casos in (('dono', ['alpha', 'delta', 'gama']), ('editor', ['alpha']), ('reporter', ['alpha', 'gama']),
