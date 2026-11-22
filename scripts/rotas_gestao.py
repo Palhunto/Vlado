@@ -7,6 +7,7 @@ Exclusão, restauração e apagamento definitivo correm dentro da trava de cadas
 """
 from __future__ import annotations
 
+import acesso
 import apagamento
 import continuidade
 from inferencia_api import resumo_inferencia, salvar_inferencia
@@ -23,7 +24,7 @@ OPERACOES = ('ambiente', *IA_OPERACOES, *LIXEIRA, *GERENCIAR, 'continuidade-resu
 class RotasGestao:
     """Mixin of the request handler: uses its ``server``."""
 
-    def _gestao(self, operation, data, principal):
+    def _gestao(self, operation, data, principal, concedido=None):
         if operation == 'ambiente':
             return self.server.ambiente
         if operation == 'ia-config':
@@ -39,10 +40,15 @@ class RotasGestao:
                 nome = data.get('nome')
                 if not isinstance(nome, str) or nome.strip().casefold() != str(esperado).strip().casefold():
                     raise ValueError('Digite o nome do item exatamente como mostrado para confirmar.')
-                return lixeira.apagar_definitivamente(
+                resultado = lixeira.apagar_definitivamente(
                     self.server.root, data.get('item'), data.get('confirmacao'),
                     quem=principal.get('nome') or principal.get('conta') or 'operador local',
                     gerenciador=self.server.conversas, segundo_plano=True)
+                item = getattr(concedido, 'item', None)
+                if item and item.get('tipo') == 'caso':
+                    # The ownership record stays as a mark nobody reaches: the id is never used again.
+                    acesso.marcar_caso_apagado(self.server.root, item.get('caso'))
+                return resultado
         if operation in GERENCIAR:
             with self.server.cadastro_lock:
                 manager = self.server.conversas
@@ -50,7 +56,8 @@ class RotasGestao:
                     with manager.lock:
                         visible = catalogo(self.server.root)
                         selected = data.get('caso')
-                        return {**visible, 'lixeira': lixeira.ativos(self.server.root),
+                        return {**visible,
+                                'lixeira': apagamento.marcar_pendentes(self.server.root, lixeira.ativos(self.server.root)),
                                 'conversas': manager.listar(selected)['conversas']
                                 if selected in {c['id'] for c in visible['casos']} else []}
                 return manager.gerenciar(operation, data)

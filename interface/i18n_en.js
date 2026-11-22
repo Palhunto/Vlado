@@ -1360,6 +1360,7 @@ window.VLADO_I18N_EN = {
     "Hash (SHA-256)": "Hash (SHA-256)",
     "Identificador": "Identifier",
     "Imagem sem leitura": "Image not read",
+    "Sem texto lido": "No text read",
     "Lida em parte: confira as páginas sem texto": "Partly read: check the pages without text",
     "Não foi lido. O original ficou guardado.": "Not read. The original was kept.",
     "PDF, DOCX, XLSX, CSV, TXT e imagens · até 50 MB por arquivo": "PDF, DOCX, XLSX, CSV, TXT and images · up to 50 MB per file",
@@ -1390,7 +1391,8 @@ window.VLADO_I18N_EN = {
     "A apuração, suas conversas e rodadas sairão das listas.": "The investigation, its conversations and rounds will leave the lists.",
     "A conversa, suas perguntas complementares e rodadas sairão das listas.": "The conversation, its follow-up questions and rounds will leave the lists.",
     "Esta rodada e seus achados sairão das consultas.": "This round and its findings will leave the queries.",
-    "Há outra operação em andamento. Aguarde e tente de novo.": "Another operation is in progress. Wait and try again."
+    "Há outra operação em andamento. Aguarde e tente de novo.": "Another operation is in progress. Wait and try again.",
+    "Um apagamento definitivo desta apuração ficou pela metade e só se resolve na próxima partida da Mesa. Até lá, não é possível restaurar nem apagar este item; feche os programas que usem esses arquivos e reinicie a Mesa.": "A permanent deletion in this investigation was left halfway and is only settled the next time the Mesa starts. Until then, this item cannot be restored or deleted; close the programs using those files and restart the Mesa."
   },
   padroes: [
     // Cota do mês na barra lateral
@@ -1502,7 +1504,9 @@ window.VLADO_I18N_EN = {
     gasto_nao_registrado: "This month's spending cannot be recorded right now: no question is run until the record can be written again. Documents, review and the notebook keep working.",
     modelo_nao_permitido: "The selected model is not among those allowed on this installation. The previous configuration was kept; choose one of the allowed models or ask the installation owner.",
     execucoes_simultaneas_conta: "There are already {limite} question(s) running on this account. Conversations and documents stay available; send this one when one of them finishes.",
-    execucoes_simultaneas_mesa: "The Mesa already has {limite} questions running. Conversations and documents stay available; send this question in a few minutes.",
+    execucoes_simultaneas_mesa: "The Mesa is at its limit of questions running. Conversations and documents stay available; send this question in a few minutes.",
+    execucoes_simultaneas_redacao: "There are already {limite} questions running in this newsroom. Conversations and documents stay available; send this one when one of them finishes.",
+    limite_tokens_dia_redacao: "This newsroom's daily usage limit was reached. Try again tomorrow (UTC).",
     limite_tokens_dia: "The installation's daily usage limit was reached. Try again tomorrow (UTC).",
     limite_tokens_consulta: "This question used up its token limit. Ask the administrator to raise it.",
     pergunta_em_andamento: "A question is already running for this invitation. Wait for the answer or cancel it.",
@@ -1531,6 +1535,7 @@ window.VLADO_I18N_EN = {
     item_fora_da_lixeira: "This item is no longer in the trash. Refresh the list.",
     lixeira_id_invalido: "Invalid trash item. Refresh the list.",
     apagamento_incompleto: "Some files could not be deleted (in use or no permission). Close them and try again.",
+    apagamento_pendente: "A permanent deletion in this investigation was left halfway and is only settled the next time the Mesa starts. Until then, this item cannot be restored or deleted; close the programs using those files and restart the Mesa.",
     conferencia_sem_original: "To mark “Checked against the original”, first open the original of each cited excerpt (missing: {faltam}).",
     falha_leitura: "Could not read files on the server.",
     quadro_sem_caso: "Select an investigation for the evidence boards.",

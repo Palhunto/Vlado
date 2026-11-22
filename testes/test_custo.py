@@ -363,7 +363,8 @@ class CotaTest(Base):
 
     def test_configuracao_invalida_recusa_sem_gastar(self):
         for invalido in ({'mensal_por_conta_brl': 0}, {'mensal_organizacao_brl': 'muito'}, {'outro': 1},
-                         {'execucoes_simultaneas': 0}, {'modelos_permitidos': []}, {'cambio_brl_por_usd': -1}):
+                         {'execucoes_simultaneas': 0}, {'modelos_permitidos': []}, {'cambio_brl_por_usd': -1},
+                         {'execucoes_simultaneas_por_organizacao': 0}):
             with self.subTest(invalido):
                 self.orcamento(**invalido)
                 with self.assertRaises(ValueError):
@@ -514,8 +515,52 @@ class PerguntaTest(unittest.TestCase):
         self.ocupada('b')
         with self.assertRaises(ValueError) as recusa:
             self.manager.perguntar(self.pergunta(), conta='c')
-        self.assertTrue(str(recusa.exception).startswith('A Mesa já está com 2 perguntas em andamento.'))
-        self.assertEqual(erros.codigo_de(str(recusa.exception))[0], 'execucoes_simultaneas_mesa')
+        # The installation's count adds up every newsroom (accounts contract, 4.5): no number in it.
+        self.assertTrue(str(recusa.exception).startswith('A Mesa está no limite de perguntas em andamento.'))
+        self.assertNotRegex(str(recusa.exception), r'\d')
+        self.assertEqual(erros.codigo_de(str(recusa.exception)), ('execucoes_simultaneas_mesa', {}))
+
+    def test_teto_de_perguntas_simultaneas_por_redacao(self):
+        # Until the Onda 2 links accounts to newsrooms, chaves_orcamento says which: here 'a' and 'b' share one.
+        redacoes = {'a': 'redacao-1', 'b': 'redacao-1', 'c': 'redacao-2'}
+        original = custo.chaves_orcamento
+        por_redacao = lambda conta: {**original(conta), 'organizacao': redacoes.get(conta, custo.ORGANIZACAO)}
+        self.orcamento(execucoes_simultaneas_por_conta=2, execucoes_simultaneas=4)
+        self.ocupada('a')
+        self.ocupada('b')  # two in redacao-1
+        with mock.patch.object(custo, 'chaves_orcamento', por_redacao):
+            self.manager._conferir_simultaneas('b')  # null (the default): only the total counts
+        self.orcamento(execucoes_simultaneas_por_conta=2, execucoes_simultaneas_por_organizacao=2,
+                       execucoes_simultaneas=4)
+        with mock.patch.object(custo, 'chaves_orcamento', por_redacao):
+            with self.assertRaises(ValueError) as recusa:
+                self.manager.perguntar(self.pergunta(), conta='b')
+            self.assertTrue(str(recusa.exception).startswith('Já há 2 perguntas em andamento nesta redação.'))
+            self.assertEqual(erros.codigo_de(str(recusa.exception)), ('execucoes_simultaneas_redacao', {'limite': 2}))
+            # The Coruja's proof (B1): a guest of the newsroom got that sentence, with the number. Now the
+            # installation's, which says neither the count nor whether it is the newsroom's or the others'.
+            redacoes['convidado-b'] = 'redacao-1'
+            with self.assertRaises(ValueError) as recusa:
+                self.manager.perguntar(self.pergunta(), dono='convite-b', conta='convidado-b')
+            self.assertNotRegex(str(recusa.exception), r'\d')
+            self.assertEqual(erros.codigo_de(str(recusa.exception)), ('execucoes_simultaneas_mesa', {}))
+            self.assertTrue(self.manager.perguntar(self.pergunta(), conta='c')['conversa'])  # the other newsroom
+
+    def test_redacao_no_teto_recebe_a_recusa_dela_e_nao_a_da_instalacao(self):
+        # Both full: a newsroom at its own ceiling learns nothing of the others (checked before the total).
+        redacoes = {'a': 'redacao-1', 'b': 'redacao-1', 'c': 'redacao-2'}
+        original = custo.chaves_orcamento
+        por_redacao = lambda conta: {**original(conta), 'organizacao': redacoes.get(conta, custo.ORGANIZACAO)}
+        self.orcamento(execucoes_simultaneas_por_conta=2, execucoes_simultaneas_por_organizacao=1,
+                       execucoes_simultaneas=1)
+        self.ocupada('a')
+        with mock.patch.object(custo, 'chaves_orcamento', por_redacao):
+            with self.assertRaises(ValueError) as recusa:
+                self.manager.perguntar(self.pergunta(), conta='b')
+            self.assertEqual(erros.codigo_de(str(recusa.exception))[0], 'execucoes_simultaneas_redacao')
+            with self.assertRaises(ValueError) as recusa:
+                self.manager.perguntar(self.pergunta(), conta='c')  # within its own: the installation's
+            self.assertEqual(erros.codigo_de(str(recusa.exception)), ('execucoes_simultaneas_mesa', {}))
 
     def test_modelo_fora_da_lista_recusado_antes_da_pergunta(self):
         self.manager.factory, self.manager.rpc = ServidorRecusando, None  # the next status() asks the new one

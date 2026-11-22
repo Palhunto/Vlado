@@ -1,8 +1,10 @@
 """Registro de auditoria da Mesa hospedada (SEG-02): uma linha JSON por evento, sem conteúdo.
 
 O que entra: autenticação (entrada ok e falha, saída, sessão expirada, senha definida, ativação recusada), administração
-(conta criada, desativada, reativada, acesso alterado, recuperação, primeiro administrador, operação negada ou recusada)
-e downloads de originais e exportações. Cada linha leva horário UTC, evento, resultado, conta, IP e os poucos campos
+(conta criada, desativada, reativada, acesso alterado, recuperação, primeiro administrador, acesso negado com o motivo ou
+operação recusada), redações, apurações e participações (contrato de contas) e downloads de originais e exportações.
+O motivo de um acesso negado e o id da redação (`organizacao`, nunca o nome) ficam só neste registro, que só o operador lê:
+nada daqui volta em resposta nem aparece na atividade da equipe. Cada linha leva horário UTC, evento, resultado, conta, IP e os poucos campos
 permitidos abaixo.
 
 O que NUNCA entra, por construção: só campos de uma lista fechada são aceitos e cada valor passa por um formato estrito
@@ -58,7 +60,19 @@ EVENTOS = frozenset({
     'login_ok', 'login_falha', 'login_bloqueado', 'logout', 'sessao_expirada', 'senha_definida', 'ativacao_falha',
     # administração
     'conta_criada', 'conta_desativada', 'conta_reativada', 'acesso_alterado', 'recuperacao_emitida', 'primeiro_admin',
-    'operacao_negada', 'admin_recusada', 'migracao_v1',
+    # operacao_negada: nome antigo da recusa, mantido para as linhas antigas e o tipo_original; o contrato grava acesso_negado
+    'operacao_negada', 'acesso_negado', 'admin_recusada', 'migracao_v1', 'migracao_contas',
+    # redações, apurações e contas (contrato de contas, Onda 2, entregas E1 a E4)
+    'redacao_criada', 'redacao_suspensa', 'redacao_reativada', 'redacao_encerrada', 'chave_redacao_alterada',
+    'caso_criado', 'caso_atribuido', 'participacao_incluida', 'participacao_retirada', 'responsavel_alterado',
+    'senha_trocada', 'senha_redefinida', 'papel_alterado', 'teto_alterado', 'conta_atualizada', 'conta_excluida',
+    'conta_exportada', 'conta_expirada', 'sessao_encerrada_a_distancia',
+    'convite_enviado', 'convite_reenviado', 'convite_cancelado', 'convite_aceito',
+    'fator_ativado', 'fator_removido', 'fator_recusado', 'codigo_reserva_usado',
+    'recuperacao_pedida', 'recuperacao_confirmada', 'termos_aceitos',
+    # convite, e-mail, redefinição e troca de e-mail (E3); segundo fator, entrada em dois passos e ciclo de vida (E4)
+    'convite_expirado', 'redefinicao_pedida', 'email_troca_pedida', 'email_trocado', 'email_enviado', 'email_falhou',
+    'aparelho_novo', 'login_protegido', 'fator_codigos_gerados', 'conta_inativa_avisada',
     # downloads
     'download',
     # pedido recusado por excesso de pedidos em curso do mesmo endereço (429, CONF-03)
@@ -67,21 +81,40 @@ EVENTOS = frozenset({
     'evento_arquivado', 'registro_cheio'})
 RESULTADOS = frozenset({'ok', 'falha', 'negado', 'interrompido'})
 MOTIVOS = frozenset({'credenciais', 'bloqueado', 'limite_ip', 'expirada', 'inatividade', 'validacao', 'link_invalido',
-                     'papel', 'conta_inativa', 'erro', 'nao_encontrado'})
+                     'papel', 'conta_inativa', 'erro', 'nao_encontrado',
+                     # por que um acesso foi negado (acesso_negado): só o operador lê este registro
+                     'sem_participacao', 'outra_redacao', 'inexistente', 'redacao_suspensa', 'senha_incorreta',
+                     'ultimo_dono',
+                     # convite e e-mail (E3); segundo fator e ciclo de vida (E4)
+                     'link_expirado', 'email_em_uso', 'limite', 'codigo_invalido', 'protegido', 'pendencia'})
 TIPOS_DOWNLOAD = frozenset({'original', 'exportacao'})
-CODIGOS = frozenset({'operacao_proibida', 'caso_nao_liberado', 'campos_nao_permitidos', 'servico_nao_encerravel'})
+CODIGOS = frozenset({'operacao_proibida', 'caso_nao_liberado', 'campos_nao_permitidos', 'servico_nao_encerravel',
+                     'caso_indisponivel', 'conversa_indisponivel', 'lote_inexistente', 'redacao_suspensa',
+                     'pendencia_de_conta', 'operacao_inexistente', 'acesso_indisponivel', 'senha_atual_incorreta',
+                     'ultimo_dono', 'senha_necessaria',
+                     # convite e e-mail (E3); segundo fator (E4)
+                     'convite_duplicado', 'limite_de_convites', 'transporte_indisponivel', 'codigo_invalido',
+                     'fator_necessario'})
+# Qual e-mail saiu ou falhou (email_enviado, email_falhou): só o tipo, nunca o endereço nem o texto.
+MENSAGENS = frozenset({'convite', 'redefinicao', 'novo_acesso', 'senha_trocada', 'fator_alterado', 'recuperacao',
+                       'muitas_tentativas', 'email_novo', 'conta_inativa'})
 # Nomes de operação da API: lista fechada que o servidor registra ao importar (permitir_operacoes). Um nome fora dela
 # (um texto qualquer em forma de nome) é descartado.
 OPERACOES_PERMITIDAS: set = set()
-CAMPOS_DE_ACESSO = frozenset({'nome', 'papel', 'casos', 'cota'})
-PAPEIS = frozenset({'admin', 'convidado'})
+CAMPOS_DE_ACESSO = frozenset({'nome', 'papel', 'casos', 'cota', 'teto', 'idioma', 'email'})
+# Papéis da redação (contrato de contas); admin e convidado ficam para ler as linhas de antes da migração.
+PAPEIS = frozenset({'dono', 'editor', 'reporter', 'leitor', 'admin', 'convidado'})
 CLIENTES = frozenset({'web', 'android', 'cli'})
-OPERACOES_DE_ACESSO = frozenset({'entrar', 'ativar', 'consultar', 'primeiro_admin'})
+OPERACOES_DE_ACESSO = frozenset({'entrar', 'ativar', 'consultar', 'primeiro_admin',
+                                 'aceitar', 'redefinir', 'esqueci', 'confirmar_email', 'segundo_fator'})
 # Mapeamento dos tipos de evento do cadastro de contas (acesso.json) para os do registro.
 DO_ACESSO = {'sessao_encerrada': 'logout'}
 
 _ID = re.compile(r'[0-9a-f]{16}')                  # id de conta (secrets.token_hex(8)): nunca um nome nem um token
-AUTORES = frozenset({'cli', 'migracao', 'primeiro_acesso'})
+# manutencao: a varredura diária (acesso.py manutencao) que vence convites, avisa e desativa conta inativa.
+AUTORES = frozenset({'cli', 'migracao', 'primeiro_acesso', 'operador', 'manutencao'})
+# Redação: só o id (org + 16 hex, acesso.ID_ORGANIZACAO) ou 'instalacao' (modo sem contas); nunca o nome.
+_ORGANIZACAO = re.compile(r'org[0-9a-f]{16}|instalacao')
 _OPERACAO = re.compile(r'[a-z0-9-]{1,40}')         # nome de operação da API (lista fechada do servidor)
 _REF = re.compile(r'[0-9a-f]{12}')
 _DATA = re.compile(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?')
@@ -107,7 +140,7 @@ def iniciar_requisicao(ip=None, origem: str = 'web', raiz=None) -> None:
 
 
 def definir(**campos) -> None:
-    """Acrescenta ao contexto da requisição: conta, operacao, caso (o caso só vira referência)."""
+    """Acrescenta ao contexto da requisição: conta, operacao, organizacao (só o id) e caso (só vira referência)."""
     if hasattr(_CTX, 'dados'):
         _CTX.dados.update({k: v for k, v in campos.items() if v is not None})
 
@@ -241,7 +274,8 @@ CAMPOS = {
     'acesso_operacao': _enum(OPERACOES_DE_ACESSO),
     'caso_ref': lambda v: v if isinstance(v, str) and _REF.fullmatch(v) else None,
     'login_ref': lambda v: v if isinstance(v, str) and _REF.fullmatch(v) else None,
-    'bytes': _inteiro_pos, 'quantidade': _inteiro_pos, 'codigo': _enum(CODIGOS),
+    'bytes': _inteiro_pos, 'quantidade': _inteiro_pos, 'codigo': _enum(CODIGOS), 'mensagem': _enum(MENSAGENS),
+    'organizacao': lambda v: v if isinstance(v, str) and _ORGANIZACAO.fullmatch(v) else None,
     'campos': _lista_de_campos,
     'tipo_original': lambda v: v if isinstance(v, str) and (v in EVENTOS or v in DO_ACESSO) else None,
     'em_original': lambda v: v if isinstance(v, str) and _DATA.fullmatch(v) else None,
@@ -264,7 +298,7 @@ def montar(evento: str, resultado: str = 'ok', conta=None, momento: datetime | N
              'conta': _id(conta), 'ip': ip,
              'origem': origem if origem in ('web', 'cli', 'servidor') else contexto.get('origem', 'cli')}
     campos = {k: v for k, v in {'operacao': contexto.get('operacao'), 'caso_ref': contexto.get('caso_ref'),
-                                **extras}.items() if v is not None}
+                                'organizacao': contexto.get('organizacao'), **extras}.items() if v is not None}
     for nome, valor in campos.items():
         validador = CAMPOS.get(nome)
         limpo = validador(valor) if validador else None

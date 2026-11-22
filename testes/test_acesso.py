@@ -1,4 +1,5 @@
-"""Contas individuais com senha (acesso v2): armazenamento, ativação, sessões, bloqueio e migração.
+"""Contas individuais com senha: armazenamento em SQLite, redações, papéis, posse e participação por apuração,
+ativação, sessões, bloqueio e migração dos convites da versão 1 (a do acesso.json v2 está em test_migracao_contas.py).
 
 Sem rede nem chamadas de modelo. O hash argon2id usa parâmetros leves nos testes (velocidade);
 o servidor usa os parâmetros padrão do argon2-cffi.
@@ -7,6 +8,7 @@ import io
 import json
 import os
 from pathlib import Path
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -50,10 +52,30 @@ class Base(unittest.TestCase):
         acesso.limpar_limites()
 
     def bruto(self):
-        return (self.root / 'acesso/acesso.json').read_text(encoding='utf-8')
+        """Every byte of the store on disk (the file and its write-ahead log), as text, to look for secrets."""
+        return b''.join(p.read_bytes() for p in sorted((self.root / 'acesso').glob('contas.sqlite*'))).decode('latin-1')
 
-    def dados(self):
-        return json.loads(self.bruto())
+    def linhas(self, sql, *args):
+        con = sqlite3.connect(acesso.caminho_bd(self.root))
+        con.row_factory = sqlite3.Row
+        try:
+            return [dict(linha) for linha in con.execute(sql, args)]
+        finally:
+            con.close()
+
+    def gravar(self, sql, *args):
+        con = sqlite3.connect(acesso.caminho_bd(self.root))
+        try:
+            con.execute(sql, args)
+            con.commit()
+        finally:
+            con.close()
+
+    def registro(self, cid):
+        return self.linhas('SELECT * FROM contas WHERE id = ?', cid)[0]
+
+    def tipos(self):
+        return [e['tipo'] for e in self.linhas('SELECT tipo FROM eventos ORDER BY n')]
 
     def depois(self, **delta):
         return patch('acesso.agora', return_value=acesso.agora() + timedelta(**delta))
@@ -64,11 +86,10 @@ class ContasTest(Base):
         conta, token = acesso.criar_conta(self.root, 'Ana Silva', 'Ana.Silva', casos=['alpha'], cota_diaria=3)
         self.assertEqual((conta['login'], conta['situacao'], conta['casos']), ('ana.silva', 'aguardando_senha', ['alpha']))
         self.assertNotIn(token, self.bruto())
-        dados = self.dados()
-        self.assertEqual(dados['versao'], 2)
-        registro = dados['contas'][conta['id']]
+        self.assertEqual(self.linhas('PRAGMA user_version')[0]['user_version'], acesso.ESQUEMA)
+        registro = self.registro(conta['id'])
         self.assertIsNone(registro['senha_hash'])
-        self.assertEqual(registro['ativacao']['motivo'], 'criacao')
+        self.assertEqual(registro['ativacao_motivo'], 'criacao')
         with self.assertRaises(acesso.CredenciaisInvalidas):
             acesso.entrar(self.root, 'ana.silva', SENHA)
 
@@ -76,9 +97,9 @@ class ContasTest(Base):
         conta, token = acesso.criar_conta(self.root, 'Ana', 'ana', casos=['alpha'])
         self.assertEqual(acesso.consultar_ativacao(self.root, token)['login'], 'ana')
         acesso.ativar(self.root, token, SENHA)
-        registro = self.dados()['contas'][conta['id']]
+        registro = self.registro(conta['id'])
         self.assertTrue(registro['senha_hash'].startswith('$argon2id$'))
-        self.assertNotIn('ativacao', registro)
+        self.assertIsNone(registro['ativacao_sha256'])
         self.assertNotIn(SENHA, self.bruto())
         sid, csrf, publica = acesso.entrar(self.root, 'ANA', SENHA)
         self.assertEqual(publica['id'], conta['id'])
@@ -166,7 +187,7 @@ class SessaoTest(Base):
             acesso.entrar(self.root, 'ana.silva', SENHA)  # even the right password waits
         with self.depois(minutes=16):
             acesso.entrar(self.root, 'ana.silva', SENHA)
-        tipos = [e['tipo'] for e in self.dados()['eventos']]
+        tipos = self.tipos()
         self.assertIn('login_bloqueado', tipos)
         self.assertNotIn('login_falhou', tipos)  # single failures are not audited (keeps the 1000-event window)
 
@@ -231,19 +252,20 @@ class SessaoTest(Base):
 
     def test_ultimo_uso_e_gravado_no_maximo_a_cada_minuto(self):
         sid, _, _ = acesso.entrar(self.root, 'ana.silva', SENHA)
-        antes = self.bruto()
+        uso = lambda: self.linhas('SELECT ultimo_uso FROM sessoes')[0]['ultimo_uso']  # noqa: E731
+        antes = uso()
         with self.depois(seconds=30):
             acesso.sessao(self.root, sid)
-        self.assertEqual(antes, self.bruto())
+        self.assertEqual(antes, uso())
         with self.depois(seconds=90):
             acesso.sessao(self.root, sid)
-        self.assertNotEqual(antes, self.bruto())
+        self.assertNotEqual(antes, uso())
 
     def test_logout_encerra_a_sessao(self):
         sid, _, _ = acesso.entrar(self.root, 'ana.silva', SENHA)
         acesso.encerrar(self.root, sid)
         self.assertIsNone(acesso.sessao(self.root, sid))
-        self.assertIn('sessao_encerrada', [e['tipo'] for e in self.dados()['eventos']])
+        self.assertIn('sessao_encerrada', self.tipos())
 
     def test_desativar_derruba_sessoes_e_reativar_permite_entrar(self):
         sid, _, _ = acesso.entrar(self.root, 'ana.silva', SENHA)
@@ -268,7 +290,7 @@ class SessaoTest(Base):
         self.assertIsNone(acesso.sessao(self.root, sid))
         with self.assertRaises(acesso.CredenciaisInvalidas):
             acesso.entrar(self.root, 'ana.silva', SENHA)
-        self.assertEqual(self.dados()['contas'][self.conta['id']]['ativacao']['motivo'], 'recuperacao')
+        self.assertEqual(self.registro(self.conta['id'])['ativacao_motivo'], 'recuperacao')
         acesso.ativar(self.root, token, 'nova-senha-longa-9')
         acesso.entrar(self.root, 'ana.silva', 'nova-senha-longa-9')
 
@@ -276,8 +298,8 @@ class SessaoTest(Base):
         forte = PasswordHasher()
         with patch.object(acesso, '_HASHER', forte):
             acesso.entrar(self.root, 'ana.silva', SENHA)
-        self.assertTrue(forte.verify(self.dados()['contas'][self.conta['id']]['senha_hash'], SENHA))
-        self.assertFalse(forte.check_needs_rehash(self.dados()['contas'][self.conta['id']]['senha_hash']))
+        self.assertTrue(forte.verify(self.registro(self.conta['id'])['senha_hash'], SENHA))
+        self.assertFalse(forte.check_needs_rehash(self.registro(self.conta['id'])['senha_hash']))
 
     def test_sessao_com_identificador_estranho_e_ignorada(self):
         for sid in (None, '', 'x', 'y' * 500, 123):
@@ -303,17 +325,15 @@ class AdministracaoTest(Base):
         with self.assertRaises(acesso.CredenciaisInvalidas):
             acesso.entrar(self.root, 'ana', 'outra-senha-errada')
         _, token2 = acesso.recuperar(self.root, conta['id'], por='cli')
-        eventos = json.dumps(self.dados()['eventos'])
+        eventos = json.dumps(self.linhas('SELECT * FROM eventos'))
         for segredo in (token, token2, sid, csrf, SENHA, 'outra-senha-errada', '$argon2'):
             self.assertNotIn(segredo, eventos)
-        self.assertTrue({'conta_criada', 'senha_definida', 'recuperacao_emitida'}
-                        <= {e['tipo'] for e in self.dados()['eventos']})
-        dados = self.dados()
-        dados['eventos'] = [{'em': '2026-01-01T00:00:00Z', 'tipo': 'conta_criada', 'conta': 'x', 'por': 'cli'}] * 1200
-        (self.root / 'acesso/acesso.json').write_text(json.dumps(dados), encoding='utf-8')
+        self.assertTrue({'conta_criada', 'senha_definida', 'recuperacao_emitida'} <= set(self.tipos()))
+        for _ in range(1200):
+            self.gravar("INSERT INTO eventos (em, tipo, conta, por) VALUES ('2026-01-01T00:00:00Z', 'conta_criada', 'x', 'cli')")
         acesso.desativar(self.root, conta['id'], por='cli')
-        self.assertEqual(len(self.dados()['eventos']), 1000)
-        self.assertEqual(self.dados()['eventos'][-1]['tipo'], 'conta_desativada')
+        self.assertEqual(len(self.tipos()), 1000)
+        self.assertEqual(self.tipos()[-1], 'conta_desativada')
 
     def test_atualizar_valida_campos(self):
         conta = ativar_conta(self.root)
@@ -361,6 +381,18 @@ class CotaTest(Base):
         (self.root / 'acesso/acesso.json').write_text('[]', encoding='utf-8')
         with self.assertRaisesRegex(ValueError, 'ilegível'):
             acesso.listar(self.root)
+        self.assertFalse(acesso.caminho_bd(self.root).exists())  # nothing is created over a store it cannot read
+
+    def test_armazenamento_corrompido_gera_erro_claro_e_ninguem_entra(self):
+        ativar_conta(self.root)
+        acesso._PRONTOS.clear()
+        for sobra in (self.root / 'acesso').glob('contas.sqlite-*'):
+            sobra.unlink()
+        acesso.caminho_bd(self.root).write_bytes(b'isto nao e um banco de dados' * 50)
+        with self.assertRaises(acesso.RegistroIlegivel):
+            acesso.listar(self.root)
+        with self.assertRaises(acesso.RegistroIlegivel):
+            acesso.entrar(self.root, 'ana.silva', SENHA)
 
 
 class MigracaoTest(Base):
@@ -382,6 +414,8 @@ class MigracaoTest(Base):
                                    'expira_em': '2099-01-01T00:00:00Z'}},
             'uso': {'bbbb000011112222': {'2026-01-01': 2}}}
         (self.root / 'acesso').mkdir()
+        (self.root / 'casos').mkdir()
+        (self.root / 'casos/catalogo.json').write_text(json.dumps({'casos': [{'id': 'alpha'}, {'id': 'beta'}]}), encoding='utf-8')
         texto = json.dumps(dados)
         (self.root / 'acesso/acesso.json').write_text(texto, encoding='utf-8')
         return texto
@@ -391,19 +425,17 @@ class MigracaoTest(Base):
         contas = {c['id']: c for c in acesso.listar(self.root)}
         self.assertEqual(set(contas), {'aaaa000011112222', 'bbbb000011112222', 'cccc000011112222', 'dddd000011112222'})
         self.assertEqual((self.root / 'acesso/acesso.v1.json').read_text(encoding='utf-8'), original)
-        dados = self.dados()
-        self.assertEqual(dados['versao'], 2)
-        self.assertEqual(dados['sessoes'], {})
-        self.assertNotIn('convites', dados)
+        self.assertFalse((self.root / 'acesso/acesso.json').exists())
+        self.assertEqual(self.linhas('SELECT * FROM sessoes'), [])
         admin, ana, revogada, curta = (contas[k] for k in sorted(contas))
-        self.assertEqual((admin['papel'], admin['login'], admin['situacao']), ('admin', 'grupo.vlado', 'aguardando_senha'))
+        self.assertEqual((admin['papel'], admin['login'], admin['situacao']), ('dono', 'grupo.vlado', 'aguardando_senha'))
         self.assertEqual((ana['login'], ana['casos'], ana['cota_diaria'], ana['situacao']),
                          ('ana.silvia', ['alpha'], 7, 'aguardando_senha'))  # expired invitation: active, no password
         self.assertEqual((revogada['login'], revogada['situacao']), ('ana.silvia-2', 'desativada'))
         self.assertTrue(acesso.LOGIN.fullmatch(curta['login']))
-        self.assertTrue(all(c.get('migrada_de_convite') for c in dados['contas'].values()))
-        self.assertEqual(dados['uso'], {'bbbb000011112222': {'2026-01-01': 2}})
-        self.assertIn('migracao_v1', {e['tipo'] for e in dados['eventos']})
+        self.assertTrue(all(c['migrada_de_convite'] for c in contas.values()))
+        self.assertEqual(len({c['organizacao'] for c in contas.values()}), 1)  # one newsroom: the installation's
+        self.assertTrue({'migracao_v1', 'migracao_contas'} <= set(self.tipos()))
 
     def test_conta_migrada_entra_depois_da_recuperacao_e_mantem_o_id(self):
         self.v1()
@@ -469,7 +501,7 @@ class CliTest(Base):
         _, saida = self.cli('recuperar', conta['id'], '--origem', 'https://vlado.test')
         self.assertIn('https://vlado.test/ativar/', saida)
         self.assertEqual(acesso.listar(self.root)[0]['situacao'], 'aguardando_senha')
-        self.assertTrue(all(e['por'] == 'cli' for e in self.dados()['eventos'] if e['tipo'] != 'senha_definida'))
+        self.assertTrue(all(e['por'] == 'cli' for e in self.linhas('SELECT tipo, por FROM eventos') if e['tipo'] != 'senha_definida'))
 
     def test_cli_recusa_erro_com_codigo_1(self):
         script = Path(__file__).resolve().parents[1] / 'scripts/acesso.py'
@@ -478,6 +510,149 @@ class CliTest(Base):
                                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         self.assertEqual(resultado.returncode, 1)
         self.assertIn('Erro:', resultado.stderr)
+
+
+class RedacoesTest(Base):
+    """Newsrooms, the four roles, case ownership and participation (contrato de contas, seção 2)."""
+
+    def setUp(self):
+        super().setUp()
+        self.a, self.b = acesso.criar_redacao(self.root, 'Redação A')['id'], acesso.criar_redacao(self.root, 'Redação B')['id']
+        self.dono_a = self.pessoa('Dona A', 'dona.a', 'dono', self.a)
+        self.rep_a = self.pessoa('Rep A', 'rep.a', 'reporter', self.a)
+        self.dono_b = self.pessoa('Dono B', 'dono.b', 'dono', self.b)
+        self.rep_b = self.pessoa('Rep B', 'rep.b', 'reporter', self.b)
+        acesso.registrar_caso(self.root, 'caso_a', self.rep_a)
+        acesso.registrar_caso(self.root, 'caso_b', self.rep_b)
+
+    def pessoa(self, nome, login, papel, redacao, casos=()):
+        conta, token = acesso.criar_conta(self.root, nome, login, papel=papel, casos=list(casos), organizacao=redacao,
+                                          por='operador')
+        acesso.ativar(self.root, token, SENHA)
+        return conta['id']
+
+    def principal(self, login):
+        return acesso.sessao(self.root, acesso.entrar(self.root, login, SENHA)[0])
+
+    def test_papeis_validos_e_o_nome_antigo_admin_vira_dono(self):
+        self.assertEqual(acesso.PAPEIS, ('dono', 'editor', 'reporter', 'leitor', 'convidado'))
+        self.assertEqual(acesso.papel_valido('admin'), 'dono')
+        for papel in ('operador', 'root', '', None, 'Dono'):
+            with self.subTest(papel=papel), self.assertRaises(ValueError):
+                acesso.papel_valido(papel)
+        with self.assertRaises(sqlite3.IntegrityError):  # the store itself refuses a role outside the five
+            self.gravar("UPDATE contas SET papel = 'operador' WHERE id = ?", self.dono_a)
+
+    def test_quem_cria_responde_e_participa_e_o_dono_alcanca_todas_da_propria_redacao(self):
+        self.assertEqual(acesso.alcance(self.root, self.rep_a), (frozenset({'caso_a'}), frozenset({'caso_a'})))
+        self.assertEqual(acesso.alcance(self.root, self.dono_a), (frozenset({'caso_a'}), frozenset()))
+        self.assertEqual(acesso.alcance(self.root, self.dono_b)[0], frozenset({'caso_b'}))
+        principal = self.principal('dona.a')
+        self.assertEqual((principal['papel'], principal['casos'], principal['organizacao']['id']), ('dono', ['caso_a'], self.a))
+        self.assertIsNotNone(principal['casos'])  # never "every case": always the explicit list
+        self.assertEqual(self.principal('rep.b')['responsavel_de'], ['caso_b'])
+
+    def test_participacao_so_entre_conta_e_apuracao_da_mesma_redacao(self):
+        with self.assertRaisesRegex(ValueError, 'existentes'):
+            acesso.criar_conta(self.root, 'Leo', 'leo', papel='leitor', casos=['caso_b'], organizacao=self.a)
+        with self.assertRaisesRegex(ValueError, 'Conta não encontrada'):
+            acesso.incluir_participante(self.root, 'caso_a', self.rep_b, self.dono_a, self.a)
+        with self.assertRaisesRegex(ValueError, 'Apuração não encontrada'):
+            acesso.incluir_participante(self.root, 'caso_b', self.rep_a, self.dono_a, self.a)
+        with self.assertRaises(sqlite3.IntegrityError):  # and the store refuses it even if the code fails
+            self.gravar("INSERT INTO participacoes (caso, conta, incluida_em, origem) VALUES ('caso_a', ?, 'x', 'x')", self.rep_b)
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.gravar("UPDATE casos SET organizacao = ? WHERE caso = 'caso_a'", self.b)
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.gravar('UPDATE contas SET organizacao = ? WHERE id = ?', self.b, self.rep_a)
+        self.assertEqual(acesso.alcance(self.root, self.rep_b)[0], frozenset({'caso_b'}))
+
+    def test_incluir_retirar_e_trocar_o_responsavel(self):
+        editor = self.pessoa('Edu', 'edu', 'editor', self.a)
+        lista = acesso.incluir_participante(self.root, 'caso_a', editor, self.rep_a, self.a)
+        self.assertEqual({p['id'] for p in lista['participantes']}, {editor, self.rep_a})
+        self.assertEqual(acesso.alcance(self.root, editor), (frozenset({'caso_a'}), frozenset()))
+        with self.assertRaisesRegex(ValueError, 'responsável'):
+            acesso.retirar_participante(self.root, 'caso_a', self.rep_a, self.dono_a, self.a)
+        with self.assertRaisesRegex(ValueError, 'dono ou repórter'):
+            acesso.definir_responsavel(self.root, 'caso_a', editor, self.dono_a, self.a)
+        outra = self.pessoa('Rita', 'rita', 'reporter', self.a)
+        self.assertEqual(acesso.definir_responsavel(self.root, 'caso_a', outra, self.dono_a, self.a)['responsavel'], outra)
+        acesso.retirar_participante(self.root, 'caso_a', self.rep_a, self.dono_a, self.a)
+        self.assertEqual(acesso.alcance(self.root, self.rep_a)[0], frozenset())
+        acesso.retirar_participante(self.root, 'caso_a', editor, self.dono_a, self.a)
+        self.assertEqual(acesso.alcance(self.root, editor)[0], frozenset())
+
+    def test_rebaixar_ou_desativar_o_responsavel_deixa_a_apuracao_sem_responsavel(self):
+        acesso.atualizar(self.root, self.rep_a, por=self.dono_a, papel='leitor')
+        self.assertIsNone(acesso.posse(self.root, 'caso_a')['responsavel'])
+        self.assertEqual(acesso.alcance(self.root, self.rep_a), (frozenset({'caso_a'}), frozenset()))  # still takes part
+        acesso.desativar(self.root, self.rep_b, por=self.dono_b)
+        self.assertIsNone(acesso.posse(self.root, 'caso_b')['responsavel'])
+        self.assertEqual(acesso.alcance(self.root, self.rep_b), (frozenset(), frozenset()))  # inactive: reaches nothing
+
+    def test_ultimo_dono_e_protegido_em_cada_redacao(self):
+        with self.assertRaisesRegex(ValueError, 'último'):  # a dono in B does not make A's last one removable
+            acesso.desativar(self.root, self.dono_a, por='operador')
+        with self.assertRaisesRegex(ValueError, 'último'):
+            acesso.atualizar(self.root, self.dono_a, por='operador', papel='reporter')
+
+    def test_contas_de_outra_redacao_respondem_como_inexistentes(self):
+        for acao in (lambda: acesso.desativar(self.root, self.rep_b, por=self.dono_a, organizacao=self.a),
+                     lambda: acesso.reativar(self.root, self.rep_b, por=self.dono_a, organizacao=self.a),
+                     lambda: acesso.recuperar(self.root, self.rep_b, por=self.dono_a, organizacao=self.a),
+                     lambda: acesso.atualizar(self.root, self.rep_b, por=self.dono_a, nome='Outro', organizacao=self.a)):
+            with self.assertRaises(ValueError) as erro:
+                acao()
+            self.assertEqual(str(erro.exception), 'Conta não encontrada.')
+        self.assertEqual({c['login'] for c in acesso.listar(self.root, self.a)}, {'dona.a', 'rep.a'})
+        self.assertTrue(all(e['conta'] != self.rep_b for e in acesso.eventos(self.root, 50, self.a)))
+
+    def test_apuracao_sem_posse_nao_e_alcancada_por_ninguem_ate_o_operador_atribuir(self):
+        (self.root / 'casos').mkdir()
+        (self.root / 'casos/catalogo.json').write_text(json.dumps({'casos': [{'id': 'do_terminal'}]}), encoding='utf-8')
+        self.assertIsNone(acesso.posse(self.root, 'do_terminal'))
+        self.assertNotIn('do_terminal', acesso.alcance(self.root, self.dono_a)[0] | acesso.alcance(self.root, self.dono_b)[0])
+        acesso.atribuir_caso(self.root, 'do_terminal', self.b, self.rep_b)
+        self.assertIn('do_terminal', acesso.alcance(self.root, self.dono_b)[0])
+        self.assertNotIn('do_terminal', acesso.alcance(self.root, self.dono_a)[0])
+        with self.assertRaisesRegex(ValueError, 'já pertence'):
+            acesso.atribuir_caso(self.root, 'do_terminal', self.a)
+        with self.assertRaisesRegex(ValueError, 'Apuração não encontrada'):  # an id that exists cannot be registered again
+            acesso.registrar_caso(self.root, 'caso_b', self.rep_a)
+
+    def test_apuracao_apagada_sai_do_alcance_de_todos_e_o_id_nao_volta(self):
+        acesso.marcar_caso_apagado(self.root, 'caso_a')
+        self.assertEqual(acesso.alcance(self.root, self.dono_a)[0], frozenset())
+        self.assertEqual(acesso.alcance(self.root, self.rep_a), (frozenset(), frozenset()))
+        with self.assertRaises(ValueError):
+            acesso.atribuir_caso(self.root, 'caso_a', self.b)
+
+    def test_primeira_conta_de_uma_instalacao_cria_a_redacao_que_recebe_as_apuracoes_que_ja_existem(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        raiz = Path(temp.name)
+        (raiz / 'casos').mkdir()
+        (raiz / 'casos/catalogo.json').write_text(json.dumps({'casos': [{'id': 'alpha'}, {'id': 'beta'}]}), encoding='utf-8')
+        dono, _ = acesso.criar_conta(raiz, 'Editora', 'editora', papel='admin')
+        self.assertEqual(dono['papel'], 'dono')
+        self.assertEqual(acesso.alcance(raiz, dono['id'])[0], frozenset({'alpha', 'beta'}))
+        self.assertEqual(acesso.organizacao_inicial(raiz), dono['organizacao'])
+        self.assertEqual(acesso.organizacao_da_conta(raiz, dono['id']), dono['organizacao'])
+        acesso.criar_redacao(raiz, 'Segunda')
+        with self.assertRaisesRegex(ValueError, 'mais de uma redação'):
+            acesso.criar_conta(raiz, 'Sem redação', 'sem.redacao', papel='dono')
+
+    def test_copia_consistente_e_encerramento_de_todas_as_sessoes(self):
+        sid = acesso.entrar(self.root, 'dona.a', SENHA)[0]
+        copia = acesso.copia_consistente(self.root, self.root / 'copia' / 'contas.sqlite')
+        con = sqlite3.connect(copia)
+        try:
+            self.assertEqual(con.execute('SELECT COUNT(*) FROM contas').fetchone()[0], 4)
+        finally:
+            con.close()
+        self.assertEqual(acesso.encerrar_todas_as_sessoes(self.root), 1)
+        self.assertIsNone(acesso.sessao(self.root, sid))
 
 
 if __name__ == '__main__':

@@ -1,6 +1,8 @@
-"""Hosted mode over HTTP: sign-in, activation, sessions and authorization of every operation by role.
+"""Hosted mode over HTTP: sign-in, activation, sessions and what the dono and the legacy guest profile reach.
 
-Reuses the synthetic cases alpha/beta and the fake provider of the integration fixture. No paid API.
+One newsroom (the installation's first account creates it and it takes the cases alpha and beta, already there).
+The whole matrix of roles is in test_matriz_contas.py and the crossing between newsrooms in
+test_isolamento_redacoes.py. Reuses the synthetic cases and the fake provider of the integration fixture. No paid API.
 """
 import http.client
 import json
@@ -20,6 +22,11 @@ from test_acesso import SENHA, hasher_rapido
 from interface_pesquisa import Servidor
 
 ORIGEM = 'https://vlado.test'
+
+def bytes_do_armazenamento(root):
+    """Every byte of the accounts store on disk (the file and its write-ahead log), to look for secrets."""
+    return b''.join(p.read_bytes() for p in sorted((Path(root) / 'acesso').glob('contas.sqlite*'))).decode('latin-1')
+
 
 # Everything a guest must never reach, even with a released case in the body.
 SO_ADMIN = (
@@ -231,7 +238,10 @@ class EntrarTest(Http):
         self.assertEqual(self.post(self.ana, 'codex-status', {})[0], 200)
 
     def test_registro_de_acesso_corrompido_responde_503(self):
-        (self.root / 'acesso/acesso.json').write_text('{quebrado', encoding='utf-8')
+        acesso._PRONTOS.clear()
+        for sobra in (self.root / 'acesso').glob('contas.sqlite-*'):
+            sobra.unlink()
+        acesso.caminho_bd(self.root).write_bytes(b'{quebrado' * 200)
         self.assertEqual(self.get(self.ana, '/')[0], 503)
         self.assertEqual(self.post(self.ana, 'codex-status', {})[0], 503)
         self.assertEqual(self.publico('entrar', {'login': 'ana', 'senha': SENHA})[0], 503)
@@ -259,7 +269,7 @@ class AtivacaoTest(Http):
         texto = json.dumps(listadas)
         self.assertNotIn(token, texto)
         self.assertNotIn('senha_hash', texto)
-        self.assertNotIn(token, (self.root / 'acesso/acesso.json').read_text(encoding='utf-8'))
+        self.assertNotIn(token, bytes_do_armazenamento(self.root))
 
     def test_ativacao_expirada_e_recusada(self):
         _, token = acesso.criar_conta(self.root, 'Duda', 'duda', casos=['alpha'], horas=1)
@@ -319,8 +329,12 @@ class PapeisTest(Http):
         self.assertEqual(sorted(casos(self.admin)), ['alpha', 'beta'])
 
     def test_convidado_so_nos_casos_liberados_e_campos_permitidos(self):
-        self.assertEqual(self.post(self.ana, 'codex-listar', {'caso': 'beta'})[1]['codigo'], 'caso_nao_liberado')
-        self.assertEqual(self.post(self.ana, 'codex-perguntar', {'caso': 'beta', 'pergunta': 'x'})[0], 403)
+        # A case out of reach and a case that does not exist: the same answer, byte for byte.
+        fora = self.post(self.ana, 'codex-listar', {'caso': 'beta'})
+        self.assertEqual((fora[0], fora[1]['codigo']), (404, 'caso_indisponivel'))
+        self.assertEqual(fora, self.post(self.ana, 'codex-listar', {'caso': 'nao_existe'}))
+        self.assertEqual(fora, self.post(self.ana, 'codex-listar', {'caso': '../x'}))
+        self.assertEqual(self.post(self.ana, 'codex-perguntar', {'caso': 'beta', 'pergunta': 'x'}), fora)
         self.assertEqual(self.post(self.ana, 'codex-perguntar', {'caso': 'alpha', 'pergunta': 'x',
                                                                  'observacoes_humanas': {}})[0], 403)
         self.assertEqual(self.post(self.ana, 'codex-listar', {'caso': 'alpha'})[0], 200)
@@ -347,13 +361,13 @@ class PapeisTest(Http):
         conversa = self.perguntar(self.ana)
         status, _ = self.post(self.admin, 'contas-atualizar', {'id': self.ana_id, 'casos': ['beta']})
         self.assertEqual(status, 200)
-        self.assertEqual(self.post(self.ana, 'codex-listar', {'caso': 'alpha'})[0], 403)
+        self.assertEqual(self.post(self.ana, 'codex-listar', {'caso': 'alpha'})[0], 404)
         for operation in ('codex-eventos', 'codex-cancelar', 'codex-original', 'codex-retomar'):
             with self.subTest(operation=operation):
                 dados = {'conversa': conversa} if operation == 'codex-retomar' else {'conversa': conversa, 'referencia': '0' * 64}
                 status, result = self.post(self.ana, operation, dados)
                 self.assertEqual((status, result['codigo']), (400, 'conversa_indisponivel'), result)
-        self.assertEqual(self.post(self.ana, 'codex-perguntar', {'caso': 'alpha', 'pergunta': 'x', 'conversa': conversa})[0], 403)
+        self.assertEqual(self.post(self.ana, 'codex-perguntar', {'caso': 'alpha', 'pergunta': 'x', 'conversa': conversa})[0], 404)
         self.assertEqual([c['id'] for c in json.loads(self.get(self.ana, '/api/catalogo')[2])['casos']], ['beta'])
 
     def test_conta_desativada_ou_recuperada_perde_a_sessao_na_requisicao_seguinte(self):
@@ -418,10 +432,10 @@ class SegredosTest(Http):
         self.publico('entrar', {'login': 'fia', 'senha': 'senha-errada-da-fia'})
         fia = self.entrar('fia', 'senha-da-fia-123')
         self.post(fia, 'sessao-sair', {})
-        bruto = (self.root / 'acesso/acesso.json').read_text(encoding='utf-8')
+        bruto = bytes_do_armazenamento(self.root)
         for segredo in (token, criada['link'], 'senha-da-fia-123', 'senha-errada-da-fia', fia[0].split('=', 1)[1]):
             self.assertNotIn(segredo, bruto)
-        eventos = json.dumps(json.loads(bruto)['eventos'])
+        eventos = json.dumps(acesso.eventos(self.root, 1000))
         self.assertNotIn('$argon2', eventos)
         self.assertNotIn(fia[1], eventos)
         listados = self.post(self.admin, 'contas-listar', {})[1]

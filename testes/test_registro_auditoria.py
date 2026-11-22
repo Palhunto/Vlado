@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -275,22 +276,29 @@ class FalhaNaoDerrubaOPedidoTest(Base):
 
 
 class JanelaDeEventosDoAcessoTest(Base):
-    """acesso.json guarda os 1000 mais novos para a tela de administração; o que sai da janela é copiado ao registro."""
+    """O armazenamento de contas guarda os 1000 eventos mais novos para a tela de administração; o que sai da janela
+    é copiado ao registro."""
 
     def test_evento_que_sai_da_janela_vai_para_o_registro_em_vez_de_sumir(self):
         hasher_rapido(self)
         raiz = self.base / 'dados'
-        acesso.criar_conta(raiz, 'Ana', 'ana.silva', casos=['alpha'])
-        arquivo = acesso.caminho(raiz)
-        dados = json.loads(arquivo.read_text(encoding='utf-8'))
-        dados['eventos'] = [{'em': f'2026-01-01T00:00:{i % 60:02d}Z', 'tipo': 'conta_criada', 'conta': 'b1b2b3b4b5b6b7b8', 'por': 'cli'}
-                            for i in range(1200)]
-        arquivo.write_text(json.dumps(dados), encoding='utf-8')
+        cid = acesso.criar_conta(raiz, 'Ana', 'ana.silva', casos=['alpha'])[0]['id']
+        redacao = acesso.organizacao_da_conta(raiz, cid)
+        # 1200 old events put straight into the accounts store (acesso/contas.sqlite), in place of the ones it had.
+        con = sqlite3.connect(acesso.caminho_bd(raiz))
+        try:
+            with con:
+                con.execute('DELETE FROM eventos')
+                con.executemany("INSERT INTO eventos (em, tipo, conta, por, organizacao)"
+                                " VALUES (?, 'conta_criada', 'b1b2b3b4b5b6b7b8', 'cli', ?)",
+                                [(f'2026-01-01T00:00:{i % 60:02d}Z', redacao) for i in range(1200)])
+        finally:
+            con.close()
         antes = len(self.linhas())
-        cid = next(iter(dados['contas']))
         acesso.desativar(raiz, cid, por='cli')
-        armazenados = json.loads(arquivo.read_text(encoding='utf-8'))['eventos']
+        armazenados = acesso.eventos(raiz, 5000)
         self.assertEqual(len(armazenados), acesso.MAX_EVENTOS)
+        self.assertEqual(armazenados[0]['tipo'], 'conta_desativada')  # the newest stays; the oldest left
         arquivados = [l for l in self.linhas()[antes:] if l['evento'] == 'evento_arquivado']
         self.assertEqual(len(arquivados), 201, '1200 + o novo - 1000 = 201 saíram da janela e foram guardados')
         self.assertEqual({(l['tipo_original'], l['conta'], l['por']) for l in arquivados}, {('conta_criada', 'b1b2b3b4b5b6b7b8', 'cli')})

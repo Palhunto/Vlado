@@ -148,7 +148,7 @@ class PontaAPontaTest(unittest.TestCase):
             with self.subTest(operation=operation):
                 erro = self.json(bia, operation, {'conversa': CONVERSA_ANA}, esperado=400)
                 self.assertIn('indisponível', erro['erro'])
-        self.assertEqual(self.post(ana, 'codex-listar', {'caso': 'beta'})[0], 403)
+        self.assertEqual(self.post(ana, 'codex-listar', {'caso': 'beta'})[0], 404)  # out of reach: as nonexistent (contrato de contas, 4.3)
         self.assertEqual(self.post(ana, 'apuracao-notas', {'caso': 'alpha'})[0], 403)
 
 
