@@ -339,3 +339,20 @@ test('clique duplo no envio em JSON de antes também manda um pedido só, e uma 
   await mesa.esperar(8);
   assert.match(mesa.$('cadastro-erro').textContent, /O lote excede 50 MB/, 'um novo envio ainda é tentado (não ficou preso)');
 });
+
+test('aviso_natureza do servidor aparece no recibo do lote, como aviso (sinal e cor de aviso), e não como erro', async () => {
+  const AVISO = 'Os documentos deste lote foram informados como públicos, diferente da apuração (sintéticos): a apuração passa a natureza não informada (mista).';
+  const mesa = abrir({fila: () => ({lote: 'L1', estado: 'publicado', recibo: {recebidos: 1, novos: 1, duplicados: 0, aviso_natureza: AVISO}, arquivos: [{indice: 0, estado: 'pronto', extracao: 'extraido', paginas: 1}]})});
+  const promessa = mesa.janela.Envio.enviar({escopo: {caso: 'alfa', natureza: 'publicos'}, arquivos: [arquivo('a.pdf')], alvo: mesa.$('alvo')});
+  await livre(mesa);
+  mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', estado: 'enfileirado', arquivos: []}});
+  const final = await promessa;
+  assert.equal(final.avisos.length, 1);
+  mesa.janela.Envio.renderRecibo(mesa.$('cadastro-recibo'), final);
+  const aviso = mesa.$('cadastro-recibo').querySelector('.docs-aviso');
+  assert.ok(aviso, 'o aviso está no recibo');
+  assert.equal(aviso.textContent, AVISO);
+  assert.equal(aviso.getAttribute('role'), 'status', 'aviso, não alerta de erro');
+  assert.ok(aviso.querySelector('svg.estado-sinal'));
+  assert.equal(mesa.$('cadastro-recibo').querySelector('[role="alert"]'), null);
+});

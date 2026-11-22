@@ -412,7 +412,11 @@
     if(!current()){$('contexto-caso').focus();text('mesa-acervo-status','Escolha uma apuração para enviar documentos.');return;}
     window.Documentos.enviar(files,{caso:current(),alvo:$('documentos-envio'),alvoRecibo:$('documentos-recibo'),
       aoConcluir:async()=>{await loadInventory(true);if(typeof loadCatalog==='function')await loadCatalog();text('mesa-acervo-status','Documentos registrados. Aguardando sua pergunta.');},
-      aoIndisponivel:()=>$('inicio-adicionar').click()});
+      aoIndisponivel:files=>{
+        // Sem o envio em fluxo no servidor, a escolha segue para a tela de Nova apuração (envio em JSON), sem perder os arquivos.
+        try{const lote=new DataTransfer();for(const file of files)lote.items.add(file);$('cadastro-arquivos').files=lote.files;
+          $('cadastro-arquivos').dispatchEvent(new Event('change'));}catch{/* o navegador não deixa: a pessoa escolhe de novo */}
+        $('inicio-adicionar').click();}});
   }});
   $('mesa-perguntar').addEventListener('click',()=>{if(!current()){$('contexto-caso').focus();return;}navigate('codex');window.abrirComposicaoMesa?.();});
   $('mesa-aba-acervo').addEventListener('click',()=>chooseTab('acervo'));

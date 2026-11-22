@@ -42,7 +42,7 @@
     select.value = value;
   }
   function canSwitch(value) {
-    if(cadastroBusy){notice('Aguarde o recibo deste envio antes de trocar de apuração.');return false;}
+    if(cadastroBusy||window.Documentos?.ocupado()){notice('Aguarde o recibo deste envio antes de trocar de apuração.');return false;}
     if (window.estadoConversa?.().ocupada) {
       notice('Aguarde a execução ou reconecte o acompanhamento antes de trocar de apuração.'); return false;
     }

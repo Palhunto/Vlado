@@ -5,7 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {criarMesa, Evento, PILHA} = require('./dom_minimo.cjs');
 
-const ALFA = {id: 'alfa', titulo: 'Pauta Alfa', rodadas: []};
+const ALFA = {id: 'alfa', titulo: 'Pauta Alfa', rodadas: []}, BETA = {id: 'beta', titulo: 'Pauta Beta', rodadas: []};
 const doc = (id, nome, extracao_pdf) => ({id, nome_recebido: nome, sha256: id.toLowerCase().padEnd(64, 'a'), bytes: 2048, ...(extracao_pdf ? {extracao_pdf} : {})});
 const INVENTARIO = {caso_id: 'alfa', titulo: 'Pauta Alfa', corpus_id: 'c1', total_documentos: 6, documentos: [
   doc('D001', 'contrato_041.pdf', {paginas_pdf: 8, paginas_sem_texto: [], paginas_ocr: [], paginas_com_erro: []}),
@@ -22,10 +22,11 @@ function abrir({fluxo = true, papel = 'admin', desktop = true} = {}) {
     open() {} setRequestHeader() {} addEventListener(tipo, f) { this.ouvintes[tipo] = f; } send(corpo) { this.corpo = corpo; }
     responder(status, corpo) { this.status = status; this.responseText = JSON.stringify(corpo); this.ouvintes.load(); }
   }
-  const mesa = criarMesa({papel, desktop, catalogo: [ALFA], url: 'http://127.0.0.1:8765/?area=documentos&caso=alfa',
+  const mesa = criarMesa({papel, desktop, catalogo: [ALFA, BETA], url: 'http://127.0.0.1:8765/?area=documentos&caso=alfa',
     api: operacao => ({inventario: INVENTARIO, 'codex-listar': {conversas: []}}[operacao] || {}),
     preparar: janela => {
       janela.XMLHttpRequest = XHR; janela.TextEncoder = TextEncoder;
+      janela.DataTransfer = class { constructor() { const itens = []; this.items = {add: arquivo => itens.push(arquivo)}; this.files = itens; } };
       janela.setTimeout = (funcao, ms, ...resto) => (ms === 1500 ? setImmediate(funcao) : setTimeout(funcao, ms, ...resto));
       const original = janela.fetch;
       janela.fetch = async (endereco, opcoes) => {
@@ -144,6 +145,8 @@ test('sem o envio em fluxo no servidor, a área de envio leva à tela de Nova ap
   await mesa.esperar(8);
   assert.equal(mesa.pedidos.length, 0);
   assert.equal(mesa.$('area-cadastro').hidden, false);
+  assert.equal(mesa.$('cadastro-arquivos').files.length, 1, 'os arquivos escolhidos seguem para a Nova apuração, sem escolher de novo');
+  assert.equal(mesa.$('cadastro-arquivos').files[0].name, 'novo.pdf');
 });
 
 test('o convidado não vê a área de envio', async () => {
@@ -170,4 +173,20 @@ test('soltar arquivos duas vezes enquanto a Mesa consulta o servidor manda o lot
   await mesa.esperar(4);
   mesa.liberar(); await mesa.esperar(8);
   assert.equal(mesa.pedidos.length, 1);
+});
+
+test('durante um envio em Documentos não se troca de apuração: o lote iria para a apuração errada', async () => {
+  const mesa = abrir();
+  await mesa.esperar(12);
+  const soltar = new Evento('drop', {bubbles: true, cancelable: true});
+  soltar.dataTransfer = {files: [{name: 'novo.pdf', size: 500}]};
+  mesa.$('documentos-zona').dispatchEvent(soltar);
+  await mesa.esperar(8);
+  assert.equal(mesa.janela.Documentos.ocupado(), true);
+  assert.equal(mesa.janela.definirContextoCaso('beta'), false, 'trocar de apuração espera o envio');
+  assert.match(mesa.$('mesa-aviso')?.textContent || mesa.doc.body.textContent, /Aguarde o recibo deste envio antes de trocar de apuração\./);
+  mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', caso: 'alfa', estado: 'enfileirado', arquivos: []}});
+  await mesa.esperar(30);
+  assert.equal(mesa.janela.Documentos.ocupado(), false);
+  assert.equal(mesa.janela.definirContextoCaso('beta'), true, 'depois do recibo a troca é permitida');
 });

@@ -232,7 +232,7 @@
       if (motivo) { linha.estado = 'recusado'; linha.motivo = motivo; }
     }
     const ui = cartao(alvo, ctx);
-    const resultado = {caso_id: escopo.caso, lotes: [], enviados: 0, recebidos: 0, novos: 0, duplicados: 0, pendentes: 0, recusados: ctx.linhas.filter(l => l.estado === 'recusado').length, cancelado: false};
+    const resultado = {caso_id: escopo.caso, lotes: [], enviados: 0, recebidos: 0, novos: 0, duplicados: 0, pendentes: 0, avisos: [], recusados: ctx.linhas.filter(l => l.estado === 'recusado').length, cancelado: false};
     ui.desenhar();
 
     const lotesPlanejados = planejar(ctx.linhas.filter(l => l.estado === 'aguardando'));
@@ -282,6 +282,9 @@
           continue;
         }
         resultado.lotes.push(atual);
+        // Aviso do servidor sobre a natureza dos documentos (informada diferente da apuração): vai para o recibo, como aviso e não como erro.
+        const aviso = atual.recibo?.aviso_natureza;
+        if (aviso && !resultado.avisos.includes(aviso)) resultado.avisos.push(aviso);
         resultado.enviados += dosArquivos.length;
         resultado.recebidos += atual.recibo?.recebidos ?? dosArquivos.length;
         resultado.novos += atual.recibo?.novos ?? 0;
@@ -310,8 +313,13 @@
     const linhaTecnica = no('p', '', `${t('Apuração')}: ${resultado.caso_id} · ${t('Corpus')}: ${resultado.corpus_id || '—'}`); linhaTecnica.setAttribute('translate', 'no');
     tecnicos.append(no('summary', '', t('Detalhes técnicos')), linhaTecnica);
     const contagem = [plural(resultado.novos, t('novo'), t('novos'), t('nenhum novo')), plural(resultado.duplicados, t('duplicado'), t('duplicados'), t('nenhum duplicado'))].join(' · ');
+    const avisos = (resultado.avisos || []).map(texto => {
+      const linha = no('p', 'docs-aviso'); linha.setAttribute('role', 'status');
+      linha.append(window.Estados.sinal('parcial'), t(texto));
+      return linha;
+    });
     destino.replaceChildren(no('h3', 'docs-recibo-titulo', t('Recibo do lote: {n} de {total} arquivos', {n: resultado.recebidos, total: resultado.arquivos.length})),
-      no('p', '', contagem), tecnicos);
+      no('p', '', contagem), ...avisos, tecnicos);
     destino.hidden = false;
   }
   // O que pede conferência antes da pergunta: leitura com erro, em parte ou sem texto.

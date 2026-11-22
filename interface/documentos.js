@@ -142,7 +142,7 @@
     if (ocupado) return null;
     ocupado = true;   // antes de qualquer espera: um segundo clique durante a consulta ao servidor não manda o lote duas vezes
     try {
-      if (!window.Envio || !(await window.Envio.disponivel())) { aoIndisponivel?.(); return null; }
+      if (!window.Envio || !(await window.Envio.disponivel())) { aoIndisponivel?.(arquivos); return null; }
       // Sem "natureza": o servidor usa a que a apuração já tem.
       const resultado = await window.Envio.enviar({escopo: {novo: false, caso}, arquivos, alvo, alvoRecibo});
       if (resultado.recebidos) { window.Envio.renderRecibo(alvoRecibo, resultado); await aoConcluir?.(resultado); }
@@ -150,5 +150,5 @@
     } finally { ocupado = false; }
   }
 
-  window.Documentos = {zona, lista, leitura, enviar};
+  window.Documentos = {zona, lista, leitura, enviar, ocupado: () => ocupado};
 })();
