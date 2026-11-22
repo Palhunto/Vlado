@@ -5,7 +5,8 @@
   const button = document.getElementById('mesa-tema');
   const meta = document.querySelector('meta[name="theme-color"]');
   function apply(value) {
-    const theme = value === 'light' ? 'light' : 'dark';
+    // Sem valor guardado ("Do sistema", em Minha conta), vale a preferência do sistema, como na entrada; sem a consulta, o escuro de sempre.
+    const theme = value === 'light' || value === 'dark' ? value : (typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
     document.documentElement.dataset.theme = theme;
     const label = theme === 'dark' ? 'Modo claro' : 'Modo escuro';
     button.textContent = label;
@@ -367,7 +368,7 @@
   loadQuota(true);
   window.addEventListener('focus',()=>loadQuota());
   // Profile in the sidebar footer: name and role from the session; it opens Configurações (shown only when piloto.js allows it).
-  const ROLES={admin:'Administrador',convidado:'Convidado'};
+  const ROLES={admin:'Administrador',dono:'Dono',editor:'Editor',reporter:'Repórter',leitor:'Leitor',convidado:'Convidado'};
   Promise.resolve(window.fetch?.('/api/sessao')).then(res=>res?.ok?res.json():null).then(data=>{
     const account=data?.conta;if(!account?.nome)return;
     const name=String(account.nome).trim(),initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0].toUpperCase()).join('');

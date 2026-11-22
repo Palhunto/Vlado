@@ -19,9 +19,9 @@
   });
 
   if (body.dataset.papel !== 'admin') {
-    // Sem permissão de administrador só existe "Perguntar à IA": toda troca de área mostra a conversa.
-    // O `name` que os demais ganchos recebem continua sendo o pedido (comportamento de antes, preservado).
-    registrarGanchoArea({forcar: () => 'codex'});
+    // Sem permissão de administrador só existe "Perguntar à IA": toda troca de área mostra a conversa, salvo a página da própria conta
+    // (Minha conta, W08, que toda pessoa com conta tem). O `name` que os demais ganchos recebem continua sendo o pedido (comportamento de antes).
+    registrarGanchoArea({forcar: nome => (nome === 'configuracoes' ? 'configuracoes' : 'codex')});
     const abrir = () => mostrarAreaBase('codex');
     if (document.readyState === 'complete') abrir(); else window.addEventListener('load', abrir);
     return;
