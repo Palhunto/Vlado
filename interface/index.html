@@ -240,29 +240,7 @@
     </div>
     </section>
     <section id="area-configuracoes" aria-labelledby="configuracoes-titulo" hidden>
-      <div class="panel"><h2 id="configuracoes-titulo">Configurações</h2><p class="small">Somente a administração vê esta área. Adicione contas para outras pessoas usarem a Mesa neste computador.</p></div>
-      <div id="acesso-painel" class="panel" hidden>
-        <h2>Contas de acesso</h2>
-        <p class="small">Cada pessoa entra com login e senha próprios. Quem recebe uma conta define a senha pelo link de ativação.</p>
-        <form id="acesso-form" class="ia-config" autocomplete="off">
-          <h3>Nova conta</h3>
-          <label>Nome<input id="acesso-nome" type="text" maxlength="120" required></label>
-          <label>Login<input id="acesso-login" type="text" maxlength="64" required autocapitalize="none" autocorrect="off" spellcheck="false" pattern="[a-z0-9][a-z0-9._\-]{2,63}" aria-describedby="acesso-login-dica"></label>
-          <p id="acesso-login-dica" class="small">De 3 a 64 caracteres: letras minúsculas, números, ponto, hífen ou sublinhado.</p>
-          <label>Papel<select id="acesso-papel"><option value="convidado">Convidado (só pergunta à IA)</option><option value="admin">Administração</option></select></label>
-          <label id="acesso-casos-rotulo">Apurações liberadas<select id="acesso-casos" multiple size="4"></select></label>
-          <label id="acesso-cota-rotulo">Consultas por dia<input id="acesso-cota" type="number" min="1" max="500" value="20" required></label>
-          <label>Validade do link (horas)<input id="acesso-horas" type="number" min="1" max="168" value="72" required></label>
-          <div class="actions"><button type="submit">Criar conta</button></div>
-        </form>
-        <div id="acesso-link-caixa" class="notice" hidden>
-          <p id="acesso-link-aviso">Link de ativação de <strong id="acesso-link-quem" translate="no"></strong>. Envie por um canal seguro (pessoalmente ou mensageiro cifrado). Ele vale uma única vez e não será mostrado de novo.</p>
-          <div class="inline-actions"><input id="acesso-link" type="text" readonly translate="no" aria-labelledby="acesso-link-aviso"><button id="acesso-copiar" class="secondary" type="button">Copiar link</button><button id="acesso-link-fechar" class="secondary" type="button">Já enviei</button></div>
-        </div>
-        <p id="acesso-mensagem" class="small" role="status" aria-live="polite"></p>
-        <h3>Contas</h3>
-        <ul id="acesso-lista" class="manage-list"></ul>
-      </div>
+      <div class="panel"><h2 id="configuracoes-titulo">Configurações</h2><p class="small">O provedor e a chave da IA ficam em Perguntar, em Conexão e opções.</p></div>
     </section>
     <section id="area-gerenciar" aria-labelledby="gerenciar-titulo" hidden>
       <div class="panel">

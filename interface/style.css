@@ -1732,7 +1732,6 @@ body[data-papel="convidado"] #mesa-etapas{
   display:none;
 }
 body[data-modo="piloto"] #codex-desligar{display:none}
-#acesso-link{width:100%;font-family:var(--fonte-mono)}
 /* While "Conexão e opções" is open, the question composer must not cover the settings form. */
 #area-codex:has(#codex-conexao[open]) #codex-form{position:static;max-height:none}
 /* Citation chip: the cited page, one click from the original. Inline, so no 44px box. */

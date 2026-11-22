@@ -704,7 +704,6 @@ window.areaMesa = Object.freeze({ir: showArea, nucleo: mostrarAreaBase});
 //   Sessao.pronta            promessa dos dados da sessão (null quando não há)
 //   Sessao.pode(operacao)    a pessoa alcança a operação?
 //   Sessao.areaPermitida(a)  a pessoa alcança a área?
-//   Sessao.administra()      vê as contas de acesso (a tela antiga em Configurações)
 //   Sessao.aplicar()         reaplica data-requer e a navegação (depois de criar elementos novos)
 //   Sessao.suspender()       o estado "Redação suspensa" para a Mesa inteira (403 redacao_suspensa em qualquer pedido)
 const CAPACIDADE_DA_AREA = {inicio: '', configuracoes: '', documentos: 'inventario', codex: 'codex-listar', achados: 'achados-catalogo',
@@ -717,7 +716,6 @@ window.Sessao = (() => {
   const conhecidas = () => Array.isArray(dados?.capacidades);
   const pode = operacao => (conhecidas() ? dados.capacidades.includes(operacao) : papel() !== 'convidado' || SO_PERGUNTA.test(operacao));
   const areaPermitida = area => !CAPACIDADE_DA_AREA[area] || pode(CAPACIDADE_DA_AREA[area]);
-  const administra = () => (conhecidas() ? pode('contas-listar') : papel() === 'admin');
   function aplicar() {
     for (const no of document.querySelectorAll('[data-requer]')) {
       if (no.dataset.requer.split(/\s+/).some(pode)) no.removeAttribute('data-sem-capacidade'); else no.setAttribute('data-sem-capacidade', '');
@@ -758,7 +756,7 @@ window.Sessao = (() => {
   // A área pedida que o papel não alcança vira a Visão geral, também quando a pessoa a pede depois da carga.
   registrarGanchoArea({forcar: nome => (areaPermitida(nome) || papel() === 'convidado' ? nome : 'inicio')});
   document.addEventListener('DOMContentLoaded', aplicar);
-  return {pronta, pode, areaPermitida, administra, aplicar, suspender, recusada, dados: () => dados};
+  return {pronta, pode, areaPermitida, aplicar, suspender, recusada, dados: () => dados};
 })();
 for (const area of ['inicio','cadastro','documentos','achados','codex','gerenciar','configuracoes','caderno','apuracao','diligencias','quadros']) $('ver-' + area).addEventListener('click', () => showArea(area));
 window.addEventListener('acervo-alterado', () => {

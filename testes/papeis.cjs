@@ -15,7 +15,7 @@ const sessaoDe = (papel, extra = {}) => ({conta: {id: ID.ana, nome: 'Ana Lima', 
 
 async function abrir({papel = 'dono', url = 'http://127.0.0.1:8765/', idioma = 'pt', api = () => undefined, desktop = true} = {}) {
   const respostas = {sessao: sessaoDe(papel), 'conta-ver': {conta: {id: ID.ana, nome: 'Ana Lima', papel, idioma: 'pt'}, organizacao: {id: 'o1', nome: 'Redação Serena'}},
-    'conta-sessoes': {sessoes: []}, cota: {conta: {gasto_brl: '1.00', teto_brl: '50.00', saldo_brl: '49.00', esgotada: false}}, 'contas-listar': {contas: []}};
+    'conta-sessoes': {sessoes: []}, cota: {conta: {gasto_brl: '1.00', teto_brl: '50.00', saldo_brl: '49.00', esgotada: false}}};
   const mesa = criarMesa({modo: 'piloto', papel: papel === 'dono' ? 'admin' : papel, idioma, desktop, scripts: SCRIPTS, url, catalogo: CATALOGO,
     armazenamento: idioma === 'en' ? {'vlado-idioma': 'en'} : {},
     api: (operacao, dados) => {
@@ -56,11 +56,11 @@ test('as capacidades diferem de verdade entre os papéis (o teste acima não é 
   assert.deepEqual(quem('ia-config'), ['dono']);
 });
 
-test('a tela de contas de acesso e o botão Configurações só aparecem para o dono; o perfil, para toda pessoa com conta', async () => {
+test('o botão Configurações só aparece para o dono; o perfil, para toda pessoa com conta', async () => {
   for (const papel of ['dono', 'editor', 'reporter', 'leitor']) {
     const mesa = await abrir({papel});
     assert.equal(mesa.$('ver-configuracoes').hidden, false, `perfil de ${papel}`);
-    assert.equal(mesa.$('acesso-painel').hidden, papel !== 'dono', `contas de acesso de ${papel}`);
+    assert.equal(mesa.$('acesso-painel'), null, 'a tela antiga de contas de acesso saiu (P30)');
     assert.equal(mesa.$('mesa-configuracoes').hidden, false, 'o botão existe; quem some com ele é a capacidade');
     assert.equal(semCapacidade(mesa, 'mesa-configuracoes'), papel !== 'dono');
   }
