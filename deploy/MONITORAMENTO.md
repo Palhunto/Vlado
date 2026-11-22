@@ -102,6 +102,7 @@ JSON por evento, no volume `registro` (`/app/registro`, arquivo `auditoria-AAAA-
 | Autenticação | `login_ok`, `login_falha` (motivo: `credenciais`, `bloqueado`, `limite_ip`), `login_bloqueado`, `logout`, `sessao_expirada` (motivo `expirada` ou `inatividade`, uma linha por sessão), `senha_definida`, `ativacao_falha` |
 | Administração | `conta_criada`, `conta_desativada`, `conta_reativada`, `acesso_alterado` (campos mudados e o papel novo), `recuperacao_emitida`, `primeiro_admin`, `admin_recusada` (operação recusada), `operacao_negada` (convidado tentando o que não pode) |
 | Downloads | `download` (tipo `original` ou `exportacao`, operação, tamanho em bytes, resultado `ok`, `falha` ou `interrompido`) |
+| Pedidos recusados | `pedido_recusado` (o 429 por excesso de pedidos em curso do mesmo endereço, CONF-03): **uma linha por IP e por minuto**, com `quantidade`, como as falhas de login acima do limite; classe anônima (teto de 50 MB por dia) |
 | Do registro | `evento_arquivado` (um evento que saiu da janela de 1000 do `acesso.json`), `registro_cheio` (com a `classe` que estourou: `anonimo` ou `total`) |
 
 **O que nunca entra, por construção:** só uma lista fechada de campos é aceita, cada um com formato estrito; senha, token,

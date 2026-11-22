@@ -512,11 +512,21 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             if em_curso < MAXIMO_POR_IP:
                 self.server._por_ip[ip], self._ip_contado = em_curso + 1, ip
                 return True
+        self._auditar_pedido_recusado(ip)
         self.close_connection = True
         self._descartar_corpo_pequeno()
         self._send(429, json.dumps({'erro': MENSAGEM_POR_IP}, ensure_ascii=False).encode('utf-8'),
                    extra={'Retry-After': '2'})
         return False
+
+    def _auditar_pedido_recusado(self, ip):
+        """SEG-02: the 429 goes to the audit log as ONE line per address and minute with the count (anonymous class: an
+        address that floods never costs the log its sign-in or administration events). Never raises."""
+        registro_acesso.iniciar_requisicao(raiz=self.server.root)  # the audit folder follows the data root
+        try:
+            registro_acesso.registrar_limite_ip('pedido_recusado', ip, acesso._rede(ip))
+        finally:
+            registro_acesso.encerrar_requisicao()
 
     def _sair_do_teto_por_ip(self):
         ip = self.__dict__.pop('_ip_contado', None)
