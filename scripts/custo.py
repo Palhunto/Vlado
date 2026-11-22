@@ -31,7 +31,9 @@ gravação).
 **Um lugar só para os valores.** ``precos_modelos.json`` também traz o câmbio (``cambio``) e os
 padrões do orçamento (``orcamento_padrao``): ``mensal_por_conta_brl``, ``mensal_organizacao_brl``,
 ``estimativa_minima_tokens`` (entrada e saída de uma pergunta curta, ao preço do modelo),
-``execucoes_simultaneas_por_conta``, ``execucoes_simultaneas`` e ``modelos_permitidos``. Cada um
+``execucoes_simultaneas_por_conta``, ``execucoes_simultaneas_por_organizacao`` (de cada redação nos
+modos com contas; ``null``, o padrão, deixa só o total), ``execucoes_simultaneas`` (o total da
+instalação) e ``modelos_permitidos``. Cada um
 pode ser sobreposto na instalação por ``configuracao.json`` → ``"orcamento"``, que aceita também
 ``cambio_brl_por_usd``.
 Nenhuma chamada de modelo nem de rede.
@@ -57,7 +59,8 @@ TIPOS = ('entrada_sem_cache', 'cache_leitura', 'saida')
 PRECO_DE = {'entrada_sem_cache': 'entrada', 'cache_leitura': 'cache_leitura', 'saida': 'saida'}
 ESCRITA = re.compile(r'cache_escrita_\d+[mh]')
 CHAVES_ORCAMENTO = ('mensal_por_conta_brl', 'mensal_organizacao_brl', 'estimativa_minima_tokens',
-                    'execucoes_simultaneas_por_conta', 'execucoes_simultaneas', 'modelos_permitidos')
+                    'execucoes_simultaneas_por_conta', 'execucoes_simultaneas_por_organizacao',
+                    'execucoes_simultaneas', 'modelos_permitidos')
 ORGANIZACAO = 'instalacao'  # the one organization until Onda 2 (accounts and organizations)
 CONTA_LOCAL = 'local'  # the single operator of the local mode
 MICRO = Decimal(1_000_000)
@@ -151,6 +154,8 @@ def ler_orcamento(root) -> dict:
         _numero_positivo(resultado['cambio_brl_por_usd'], 'cambio_brl_por_usd')
     for nome in ('execucoes_simultaneas_por_conta', 'execucoes_simultaneas'):
         _inteiro_positivo(resultado[nome], nome)
+    if resultado['execucoes_simultaneas_por_organizacao'] is not None:  # null: only the installation's total
+        _inteiro_positivo(resultado['execucoes_simultaneas_por_organizacao'], 'execucoes_simultaneas_por_organizacao')
     estimativa = resultado['estimativa_minima_tokens']
     if not isinstance(estimativa, dict) or set(estimativa) != {'entrada', 'saida'}:
         raise ValueError('orcamento.estimativa_minima_tokens deve ter "entrada" e "saida".')

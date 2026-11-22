@@ -89,12 +89,15 @@ def inventario(root, caso):
             'estado': 'cadastrado_aguardando_pergunta'}
 
 
+NOMES_NATUREZA = {'publicos': 'públicos', 'sinteticos': 'sintéticos', 'nao_informada': 'natureza não informada'}
+
+
 def validar_pedido(caso, natureza, sources, novo, modo_fontes, dominio_permitido):
     """Checks of a cadastro request that need neither files nor the case; returns the web mode."""
     if not isinstance(caso, str) or not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}', caso):
         raise ValueError('ID do caso: letras minúsculas, números, hífen ou underscore; até 64 caracteres.')
-    if natureza not in ('publicos', 'sinteticos', 'nao_informada'):
-        raise ValueError('Natureza documental inválida.')
+    if natureza is not None and natureza not in ('publicos', 'sinteticos', 'nao_informada'):
+        raise ValueError('Natureza documental inválida.')  # None: the case's own (see publicar)
     if not sources:
         raise ValueError('Envie pelo menos um arquivo.')
     if not novo and (modo_fontes or dominio_permitido):
@@ -451,9 +454,12 @@ def publicar(root, plano, trabalho, resultados, *, ligar=False):
     files into the batch (queue, same volume) instead of copying them.
     """
     caso, new, nature, operacao = plano['caso'], plano['novo'], plano['natureza'], plano['operacao']
+    informada = nature is not None
     ctx = _contexto(root, caso, new, plano['titulo'], remover_sobra=True)
     destination, catalog_path, catalog_before = ctx['destination'], ctx['catalog_path'], ctx['catalog_before']
     catalog, entry, manifest_path, manifest_before = ctx['catalog'], ctx['entry'], ctx['manifest_path'], ctx['manifest_before']
+    if nature is None:  # not informed: an existing case's own nature (a new case: not informed)
+        nature = 'nao_informada' if new else ctx['manifest'].get('natureza_informada') or 'nao_informada'
     if new:
         manifest = {'versao': '1.0.0', 'caso_id': caso, 'titulo': plano['titulo'].strip(),
                     'natureza_informada': nature, 'corpus_id': f'{caso}_v1',
@@ -466,6 +472,7 @@ def publicar(root, plano, trabalho, resultados, *, ligar=False):
         if hashlib.sha256(manifest_before).hexdigest() != plano.get('manifesto_sha256'):
             list(arquivos_do_corpus(root, manifest))  # changed since the plan: check the corpus again
     previous = deepcopy(manifest)
+    aviso_natureza = None
     known = {d['sha256']: d for d in manifest['documentos']}
     used = {d['id'] for d in manifest['documentos']}
     batch = plano['lote']
@@ -572,6 +579,10 @@ def publicar(root, plano, trabalho, resultados, *, ligar=False):
             manifest.update(corpus_id=f'{caso}_v{revision}', revisao_cadastro=revision,
                             protocolo={'piloto_estabilizado': False, 'teste_principal_autorizado': False})
             if manifest['natureza_informada'] != nature:
+                if informada and not new and manifest['natureza_informada'] != 'nao_informada':
+                    aviso_natureza = (f'Os documentos deste lote foram informados como {NOMES_NATUREZA[nature]}, '
+                                      f'diferente da apuração ({NOMES_NATUREZA[manifest["natureza_informada"]]}): '
+                                      'a apuração passa a natureza não informada (mista).')
                 manifest['natureza_informada'] = 'nao_informada'
         for item in receipts:
             doc = known[item['sha256']]
@@ -592,7 +603,8 @@ def publicar(root, plano, trabalho, resultados, *, ligar=False):
                    'arquivos': receipts, 'extracao_pdf_resumo': summary,
                    'extracao_office_resumo': _resumo_office(offices, office_processed),
                    'ocr_imagens_resumo': _resumo_imagens(images, image_processed, ocr_imagens),
-                   'estado': 'cadastrado_aguardando_pergunta'}
+                   'estado': 'cadastrado_aguardando_pergunta',
+                   **({'aviso_natureza': aviso_natureza} if aviso_natureza else {})}
         escrever_json(work / 'recibo.json', receipt, exclusivo=True)
         receipt_record = {'arquivo': f'{prefix}/recibo.json', 'sha256': sha256(work / 'recibo.json')}
         manifest.setdefault('registros_cadastro', []).append(receipt_record)

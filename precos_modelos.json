@@ -15,6 +15,7 @@
     "mensal_organizacao_brl": 500.0,
     "estimativa_minima_tokens": {"entrada": 60000, "saida": 8000},
     "execucoes_simultaneas_por_conta": 2,
+    "execucoes_simultaneas_por_organizacao": null,
     "execucoes_simultaneas": 4,
     "modelos_permitidos": [
       "claude-sonnet-5-5",

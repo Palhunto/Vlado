@@ -705,6 +705,9 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                              'revisao_humana': True, 'continuar_observacoes': True, 'continuar_documentos': True, 'caderno_humano': True, 'diligencias': True, 'quadros_evidencia': True,
                              'tabelas_apuracao': True, 'continuidade_resumo': True, 'conferencia_redacao': True, 'entrevistas': True,
                              'fontes_web': True,
+                             # CONF-03 and UX-05: the batch streamed as application/vnd.vlado.lote, and GET
+                             # /api/fila by case for whoever sees the case; a page reads these before using them.
+                             'envio_fluxo': True, 'fila_por_caso': True,
                              'extracao_pdf': self.server.ambiente['extracao_pdf']})
             return
         if path == '/api/fila':
@@ -956,13 +959,14 @@ def servir(server, prazo=PRAZO_ENCERRAMENTO):
         resumo = {}
     if resumo.get('abandonada') or resumo.get('antiga_removida') or resumo.get('preparo_removido'):
         print('Partida: trava de cadastro recuperada de uma execução interrompida.', flush=True)
-    try:  # a permanent deletion cut by a crash: back to the trash, whole, or concluded (in the background)
-        apagados = apagamento.retomar(server.root, segundo_plano=True)
-    except OSError as exc:
-        print(f'Partida: apagamento definitivo interrompido não retomado ({exc.strerror or exc}).', file=sys.stderr, flush=True)
-    else:
-        if apagados['desfeitos'] or apagados['concluidos']:
-            print('Partida: apagamento definitivo interrompido retomado.', flush=True)
+    # A permanent deletion cut by a crash: back to the trash, whole, or concluded (files in the background).
+    # The start never falls for it: when it cannot run now, it is retried in the background.
+    apagados = apagamento.retomar_na_partida(server.root)
+    if apagados is None:
+        print('Partida: apagamento definitivo interrompido não retomado agora; nova tentativa em segundo plano.',
+              file=sys.stderr, flush=True)
+    elif apagados['desfeitos'] or apagados['concluidos'] or apagados['ilegiveis']:
+        print('Partida: apagamento definitivo interrompido retomado.', flush=True)
     anteriores = {}
     if threading.current_thread() is threading.main_thread():
         for nome in ('SIGTERM', 'SIGBREAK'):

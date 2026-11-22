@@ -124,7 +124,8 @@ def receber_documentos(root, data, fila=None, fluxo=None):
     case = data.get('caso')
     if data.get('novo') and not case:
         case = 'apuracao_' + uuid.uuid4().hex
-    opcoes = {'titulo': data.get('titulo'), 'natureza': data.get('natureza', 'nao_informada'),
+    # Nature omitted (or null) for an existing case: the case's own, decided when the batch is published.
+    opcoes = {'titulo': data.get('titulo'), 'natureza': data.get('natureza'),
               'novo': data.get('novo', False), 'modo_fontes': data.get('modo_fontes'),
               'dominio_permitido': data.get('dominio_permitido')}
     if fila is None:
