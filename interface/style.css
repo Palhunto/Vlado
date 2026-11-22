@@ -2607,3 +2607,12 @@ ins.comparar-incluido,p.comparar-incluido{
 @media (prefers-reduced-motion:reduce) {
   .quadros-abas [role=tab]{transition:none}
 }
+
+/* Papéis e estados da Mesa inteira (Sessao em app.js; docs/design/componentes.md#estados) */
+[data-sem-capacidade]{display:none!important}
+.estado-bloco.estado-aviso{background:var(--theme-warning-bg);border-color:var(--theme-warning-line)}
+.estado-aviso .estado-titulo{color:var(--theme-warning)}
+.estado-suspensa .estado-titulo{margin:0}
+.estado-sinal-texto{flex:none;width:var(--espaco-4);text-align:center;font-weight:700}
+body[data-suspensa] #conteudo>:not(.estado-suspensa),body[data-suspensa] .sidebar,body[data-suspensa] #mesa-menu,
+body[data-suspensa] .persistent-context,body[data-suspensa] #mesa-configuracoes,body[data-suspensa] #mesa-versao{display:none!important}

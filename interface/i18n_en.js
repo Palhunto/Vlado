@@ -1397,6 +1397,10 @@ window.VLADO_I18N_EN = {
     "Sua senha": "Your password",
     "Confirme com a sua senha": "Confirm with your password",
     "Esta ação pede a sua senha.": "This action asks for your password.",
+    // Estado da Mesa inteira (Sessao, app.js)
+    "Redação suspensa": "Newsroom suspended",
+    "Ninguém desta redação usa a Mesa enquanto a suspensão durar. Nada foi apagado: apurações, documentos e registros continuam guardados.": "Nobody in this newsroom uses the desk while the suspension lasts. Nothing was deleted: investigations, documents and records are still kept.",
+    "Fale com quem administra o serviço.": "Talk to whoever runs the service.",
     "A senha com que você entra na Mesa.": "The password you use to sign in to the desk.",
     "Muitas senhas erradas seguidas. Por 15 minutos, as ações que pedem a senha ficam bloqueadas para a sua conta; o resto da Mesa continua.": "Too many wrong passwords in a row. For 15 minutes, actions that ask for your password are blocked for your account; the rest of the desk keeps working.",
     "Senha incorreta. Confira e tente de novo.": "Wrong password. Check it and try again.",

@@ -9,10 +9,12 @@
   const desktop = matchMedia('(min-width:1024px)');
   // Guests work only in "Ask the AI"; the server enforces access, this keeps the screen honest.
   const guest = document.body.dataset.papel === 'convidado';
+  // O perfil antigo só pergunta; os demais papéis veem as áreas que as capacidades da sessão alcançam (Sessao, app.js).
   window.limitarNavegacaoConvidado = () => {
-    if (!guest) return;
     for (const item of document.querySelector('.areas').children) {
-      if (['A','BUTTON'].includes(item.tagName) && item.id !== 'ver-codex') item.hidden = true;
+      if (!['A','BUTTON'].includes(item.tagName)) continue;
+      const area = item.id.replace('ver-', '');
+      if (guest ? item.id !== 'ver-codex' : window.Sessao && !window.Sessao.areaPermitida(area)) item.hidden = true;
     }
   };
   window.limitarNavegacaoConvidado();
