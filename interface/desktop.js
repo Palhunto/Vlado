@@ -32,7 +32,7 @@
   const form = $('codex-form'), header = document.querySelector('.app-header');
   const navigation = [...document.querySelectorAll('.areas button:not([hidden])')].map(button => ({button,id:button.id,link:null}));
   const metadata = new Map();
-  let body = null, toolbar = null, toggle = null, caption = null, collapsed = false, hadAnswer = false;
+  let body = null, toolbar = null, toggle = null, caption = null, collapsed = false, hadAnswer = false, defaultDecided = false;
   let findingControls = null, findingFormNodes = null;
   let findingSearchPosition = null;
   let appliedDesktop = null;
@@ -91,6 +91,13 @@
     if (!body) return;
     const hasAnswer = !!$('codex-mensagens').querySelector(desktop.matches ? '.codex-answer' : '.codex-user,.codex-answer');
     const hasPending = [...body.querySelectorAll('.feedback-preview')].some(panel => !panel.hidden);
+    // Saved conversations (or an answer) behind the field: it starts folded, so it does not cover them (UX-19). Decided once per case;
+    // typed text, focus in the field or a pending contribution keep it open.
+    const saved = $('codex-conversa').options.length > 1;
+    if (!defaultDecided && (saved || hasAnswer)) {
+      defaultDecided = true;
+      if (!hasPending && !$('codex-pergunta').value.trim() && !body.contains(document.activeElement)) collapsed = true;
+    }
     if (hasPending) collapsed = false;
     else if (hasAnswer && !hadAnswer && !$('codex-pergunta').value.trim() && document.activeElement !== $('codex-pergunta')) collapsed = true;
     else if (!hasAnswer && hadAnswer) collapsed = false;
@@ -169,6 +176,8 @@
   window.addEventListener('mesa-rota-alterada',navigationState);
   window.addEventListener('mesa-consulta',event => {if (event.detail.area === 'achados') compactFindings();});
   new MutationObserver(composerState).observe($('codex-mensagens'),{childList:true,subtree:true});
+  new MutationObserver(composerState).observe($('codex-conversa'),{childList:true});
+  window.addEventListener('mesa-contexto-alterado',() => {defaultDecided = false;composerState();});
   new MutationObserver(composerState).observe(form,{attributes:true,attributeFilter:['hidden'],subtree:true});
   new MutationObserver(feedbackState).observe($('observacoes-contagem'),{childList:true});
   $('codex-pergunta').addEventListener('input',() => {if (body) renderComposer();});
