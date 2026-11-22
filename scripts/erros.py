@@ -150,7 +150,11 @@ PADROES: tuple[tuple[str, str], ...] = (
                            r'(?P<onde>desta apuração|na Mesa) sendo lidos?\.'),
     # Month's quota in reais and execution ceilings (scripts/custo.py, codex_apuracao): W11 'limite' block.
     ('cota_mensal_conta', r'^Sua cota do mês acabou\. Você usou R\$ (?P<usado>[\d.]+,\d{2}) de R\$ (?P<teto>[\d.]+,\d{2})\.'),
+    # The same ceiling reached mid-question: it goes to the conversation, which colleagues read, so never a number.
+    ('cota_mensal_pessoa', r'^A cota do mês de quem fez a pergunta acabou\.'),
     ('cota_mensal_organizacao', r'^A cota do mês da instalação acabou\.'),
+    ('cota_mensal_redacao', r'^A cota do mês da redação acabou\.'),
+    ('cota_mensal_instalacao', r'^A cota do mês da Mesa acabou\.'),
     ('gasto_ilegivel', r'^O registro do gasto do mês está ilegível'),
     ('gasto_nao_registrado', r'^O gasto do mês não pode ser registrado agora'),
     ('modelo_nao_permitido', r'^O modelo .+ não está entre os permitidos nesta instalação'),

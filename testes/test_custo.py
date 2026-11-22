@@ -172,10 +172,12 @@ class CotaTest(Base):
     def test_gasto_mensal_por_conta_e_da_organizacao_renova_no_mes_seguinte(self):
         with mock.patch.object(custo, 'mes', return_value='2026-11'):
             self.gastar('a', 30)
-            self.assertEqual(self.gastar('b', 12.5), {'conta': 12_500_000, 'organizacao': 42_500_000})
-            self.assertEqual(custo.gasto(self.root, 'a'), {'conta': 30_000_000, 'organizacao': 42_500_000})
+            self.assertEqual(self.gastar('b', 12.5), {'conta': 12_500_000, 'organizacao': 42_500_000,
+                                                          'instalacao': 42_500_000})
+            self.assertEqual(custo.gasto(self.root, 'a'), {'conta': 30_000_000, 'organizacao': 42_500_000,
+                                                              'instalacao': 42_500_000})
         with mock.patch.object(custo, 'mes', return_value='2026-12'):
-            self.assertEqual(custo.gasto(self.root, 'a'), {'conta': 0, 'organizacao': 0})
+            self.assertEqual(custo.gasto(self.root, 'a'), {'conta': 0, 'organizacao': 0, 'instalacao': 0})
             custo.conferir_antes(self.root, 'a', SONNET)
         registro = ler_json(self.root / 'ajustes/gasto_mensal.json')
         self.assertEqual(sorted(registro['meses']), ['2026-11', '2026-12'])  # the check before the question writes it
@@ -243,7 +245,8 @@ class CotaTest(Base):
         with self.assertLogs('vlado.custo', 'WARNING') as aviso:
             custo.conferir_antes(self.root, 'a', SONNET)  # the check before the next question writes it
         self.assertIn('somadas agora', '\n'.join(aviso.output))
-        self.assertEqual(custo.gasto(self.root, 'a'), {'conta': 643500, 'organizacao': 643500})
+        self.assertEqual(custo.gasto(self.root, 'a'), {'conta': 643500, 'organizacao': 643500,
+                                                              'instalacao': 643500})
         self.assertEqual(custo.somar_gasto(self.root, 'a', 1)['conta'], 643501)  # added once
 
     def test_copia_que_nao_grava_nao_conta_de_novo(self):
@@ -454,9 +457,16 @@ class PerguntaTest(unittest.TestCase):
         self.assertFalse(ctx.get('cancel'))
         rpc.emit('item/usage', {'turnId': 'turn-1', 'modelo': SONNET, 'uso': uso})  # R$ 1,287 > R$ 1,00
         aguardar_fim(self.manager, identificador)
-        eventos = self.manager.eventos(identificador)['eventos']
+        lido = self.manager.eventos(identificador)
+        eventos = lido['eventos']
+        # The conversation is read by the colleagues of the case: what the ceiling says there has no number (B1 of P1).
         self.assertTrue(any(e['tipo'] == 'erro' and e['dados']['mensagem'].startswith(
-            'Sua cota do mês acabou. Você usou R$ 1,29 de R$ 1,00.') for e in eventos))
+            'A cota do mês de quem fez a pergunta acabou.') for e in eventos))
+        for e in eventos:
+            if e['tipo'] in ('erro', 'aviso'):
+                self.assertNotRegex(json.dumps(e['dados'], ensure_ascii=False), r'\d', e)
+        self.assertNotRegex(lido['conversa']['situacao']['mensagem'], r'\d')
+        self.assertEqual(erros.codigo_de(lido['conversa']['situacao']['mensagem'])[0], 'cota_mensal_pessoa')
         self.assertTrue(any(method == 'turn/interrupt' for method, _ in rpc.calls))
         self.assertEqual(ctx['meta']['situacao']['causa'], 'limite_cota_conta')
         self.assertEqual(custo.gasto(self.root, None)['conta'], 1_287_000)
@@ -524,7 +534,7 @@ class PerguntaTest(unittest.TestCase):
         # Until the Onda 2 links accounts to newsrooms, chaves_orcamento says which: here 'a' and 'b' share one.
         redacoes = {'a': 'redacao-1', 'b': 'redacao-1', 'c': 'redacao-2'}
         original = custo.chaves_orcamento
-        por_redacao = lambda conta: {**original(conta), 'organizacao': redacoes.get(conta, custo.ORGANIZACAO)}
+        por_redacao = lambda conta, root=None: {**original(conta, root), 'organizacao': redacoes.get(conta, custo.ORGANIZACAO)}
         self.orcamento(execucoes_simultaneas_por_conta=2, execucoes_simultaneas=4)
         self.ocupada('a')
         self.ocupada('b')  # two in redacao-1
@@ -550,7 +560,7 @@ class PerguntaTest(unittest.TestCase):
         # Both full: a newsroom at its own ceiling learns nothing of the others (checked before the total).
         redacoes = {'a': 'redacao-1', 'b': 'redacao-1', 'c': 'redacao-2'}
         original = custo.chaves_orcamento
-        por_redacao = lambda conta: {**original(conta), 'organizacao': redacoes.get(conta, custo.ORGANIZACAO)}
+        por_redacao = lambda conta, root=None: {**original(conta, root), 'organizacao': redacoes.get(conta, custo.ORGANIZACAO)}
         self.orcamento(execucoes_simultaneas_por_conta=2, execucoes_simultaneas_por_organizacao=1,
                        execucoes_simultaneas=1)
         self.ocupada('a')
