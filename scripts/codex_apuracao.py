@@ -5,6 +5,7 @@ import base64
 from contextlib import contextmanager
 import hashlib
 from datetime import datetime, timezone
+import itertools
 import json
 from pathlib import Path
 import re
@@ -32,6 +33,10 @@ import diligencias
 import limites
 
 ACTIVE = {'preparando', 'executando', 'cancelando', 'publicando'}
+# Conversations kept in memory (CONF-03): idle ones are dropped and read again from disk when used,
+# in the same state a restart leaves them. Never one that is running or receiving documents.
+MAXIMO_CONTEXTOS = 200
+OCIOSO_CONTEXTO = 30 * 60  # seconds without use
 LIMITE_RESULTADO = 60_000    # characters of one tool result sent back to the model
 LIMITE_ARGUMENTOS = 8_000    # characters of tool arguments kept in the round's records
 # Seconds a question waits for a cadastro in progress before freezing (it holds no other lock
@@ -160,6 +165,7 @@ class Conversas:
         self.lock = threading.RLock()
         self.condition = threading.Condition(self.lock)
         self.contexts = {}
+        self._usos = itertools.count(1)  # order of use: the clock ties within 16 ms on Windows
         self.loaded = set()
         self.stopping = False
         self.workers = []
@@ -235,8 +241,27 @@ class Conversas:
                     self._event(identifier, 'erro', {'mensagem': 'Backend reiniciado durante a execução; saída parcial preservada.'})
                     self._save(identifier)
             ctx = self.contexts[identifier]
+            ctx['usado_em'], ctx['uso'] = time.monotonic(), next(self._usos)
+            self._descartar_ociosos(identifier)
             lixeira.conferir_disponivel(self.root, ctx['meta']['caso'], conversa=identifier)
             return ctx
+
+    @staticmethod
+    def _descartavel(ctx) -> bool:
+        """A context whose reload from disk gives the state a restart gives: nothing in course."""
+        return not (ctx.get('busy') or ctx['meta'].get('estado') in ACTIVE or ctx.get('documentos_em_cadastro'))
+
+    def _descartar_ociosos(self, manter=None):
+        """Drop idle conversations from memory (CONF-03): unused for OCIOSO_CONTEXTO, and the least
+        recently used past MAXIMO_CONTEXTOS. ``manter`` is the one being used now. Caller holds the lock."""
+        agora_ = time.monotonic()
+        livres = sorted((ctx.get('uso', 0), ctx.get('usado_em', 0.0), ident)
+                        for ident, ctx in self.contexts.items() if ident != manter and self._descartavel(ctx))
+        excesso = len(self.contexts) - MAXIMO_CONTEXTOS
+        for _, usado_em, ident in livres:
+            if excesso > 0 or agora_ - usado_em > OCIOSO_CONTEXTO:
+                del self.contexts[ident]
+                excesso -= 1
 
     def _save(self, identifier):
         with self.lock:  # stage thread and provider notifications both save the conversation
@@ -511,7 +536,8 @@ class Conversas:
                        'corpus_id': inventory['corpus_id'], 'criada_em_utc': agora(),
                        'estado': 'pronto', 'thread_id': None, 'rodadas': [], 'turn_id': None,
                        'modelo': None, 'dono': dono, 'politica': 'read-only; on-request; sem web/conectores/shell'},
-                       'events': [], 'busy': False}
+                       'events': [], 'busy': False, 'usado_em': time.monotonic(),
+                       'uso': next(self._usos)}
                 self.contexts[identifier] = ctx
                 if feedback:
                     ctx['meta']['rodada_base'] = feedback['conteudo']['rodada_origem']

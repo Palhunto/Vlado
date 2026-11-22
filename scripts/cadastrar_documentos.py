@@ -43,7 +43,7 @@ def _trava(root, **opcoes):
     return trava_cadastro.trava(root, **opcoes)
 
 
-def _atomico(path, content):
+def _atomico(path, content, tentativas=40):
     """Publish a metadata file without exposing partial JSON."""
     with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as stream:
         temp = Path(stream.name)
@@ -51,12 +51,12 @@ def _atomico(path, content):
     try:
         # Windows refuses os.replace while another writer or an antivirus scan holds the
         # destination for a moment; retry briefly instead of failing the whole operation.
-        for tentativa in range(40):
+        for tentativa in range(max(1, tentativas)):
             try:
                 os.replace(temp, path)
                 break
             except PermissionError:
-                if tentativa == 39:
+                if tentativa >= tentativas - 1:
                     raise
                 time.sleep(0.025)
     finally:
