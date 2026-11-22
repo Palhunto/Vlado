@@ -1390,7 +1390,8 @@ window.VLADO_I18N_EN = {
     "A apuração, suas conversas e rodadas sairão das listas.": "The investigation, its conversations and rounds will leave the lists.",
     "A conversa, suas perguntas complementares e rodadas sairão das listas.": "The conversation, its follow-up questions and rounds will leave the lists.",
     "Esta rodada e seus achados sairão das consultas.": "This round and its findings will leave the queries.",
-    "Há outra operação em andamento. Aguarde e tente de novo.": "Another operation is in progress. Wait and try again."
+    "Há outra operação em andamento. Aguarde e tente de novo.": "Another operation is in progress. Wait and try again.",
+    "Um apagamento definitivo desta apuração ficou pela metade e só se resolve na próxima partida da Mesa. Até lá, não é possível restaurar nem apagar este item; feche os programas que usem esses arquivos e reinicie a Mesa.": "A permanent deletion of this investigation was left half done and is only settled the next time the desk starts. Until then this item cannot be restored or deleted; close any programs using those files and restart the desk."
   },
   padroes: [
     // Cota do mês na barra lateral
