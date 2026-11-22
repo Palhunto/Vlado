@@ -44,6 +44,11 @@ class PortaoFilaTest(unittest.TestCase):
     def setUp(self):
         temp, self.root, _ = copiar('CodexIntegrationTest', integracao.CodexIntegrationTest.montar)
         self.addCleanup(temp.cleanup)
+        # The gate measures that the queue never blocks the Mesa: the ceilings of questions at the same
+        # time (CUS-01, tested in test_custo) are opened for its ten simultaneous questions.
+        config = json.loads((self.root / 'configuracao.json').read_text(encoding='utf-8'))
+        config['orcamento'] = {'execucoes_simultaneas_por_conta': SESSOES, 'execucoes_simultaneas': SESSOES}
+        (self.root / 'configuracao.json').write_text(json.dumps(config), encoding='utf-8')
         self.server = Servidor(('127.0.0.1', 0), self.root, extracao='processos')
         self.server.conversas.factory = integracao.FakeServer
         thread = threading.Thread(target=self.server.serve_forever, daemon=True)

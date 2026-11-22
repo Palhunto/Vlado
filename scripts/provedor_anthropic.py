@@ -99,8 +99,17 @@ class ProvedorAnthropic:
         if not interrompido and final.stop_reason in PARADAS_COM_ERRO:
             mensagem, codigo = PARADAS_COM_ERRO[final.stop_reason]
             raise ErroIA(mensagem, codigo=codigo)
-        uso = final.usage
-        return Resposta(texto, chamadas, {
-            'entrada': uso.input_tokens or 0, 'saida': uso.output_tokens or 0,
-            'cache_leitura': getattr(uso, 'cache_read_input_tokens', None) or 0,
-            'cache_escrita': getattr(uso, 'cache_creation_input_tokens', None) or 0}, final.model)
+        return Resposta(texto, chamadas, uso_da_resposta(final.usage), final.model)
+
+
+def uso_da_resposta(uso) -> dict:
+    """Usage in the priced kinds (custo.TIPOS). Here ``input_tokens`` excludes the cache, which
+    comes apart: reads, and writes split by validity (5 minutes, the TTL these requests use, or 1 hour)."""
+    entrada = getattr(uso, 'input_tokens', None) or 0
+    escrita = getattr(uso, 'cache_creation_input_tokens', None) or 0
+    criacao = getattr(uso, 'cache_creation', None)
+    escrita_1h = (getattr(criacao, 'ephemeral_1h_input_tokens', None) or 0) if criacao is not None else 0
+    return {'entrada': entrada, 'saida': getattr(uso, 'output_tokens', None) or 0,
+            'cache_leitura': getattr(uso, 'cache_read_input_tokens', None) or 0, 'cache_escrita': escrita,
+            'entrada_sem_cache': entrada, 'cache_escrita_5m': max(0, escrita - escrita_1h),
+            'cache_escrita_1h': min(escrita_1h, escrita) if escrita else escrita_1h}
