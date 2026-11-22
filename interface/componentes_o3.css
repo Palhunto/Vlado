@@ -35,3 +35,27 @@
 @media (prefers-reduced-motion:reduce) {
   .medidor-progresso::before{transition:none}
 }
+
+/* === Estados de tela (componentes.md#estados; estados.js) === */
+.estado-bloco{display:flex;flex-direction:column;gap:var(--espaco-2);padding:var(--espaco-4);border:1px solid var(--theme-line);border-radius:var(--raio-cartao);
+  background:var(--theme-surface);color:var(--theme-text);margin:var(--espaco-4) 0}
+.estado-bloco :is(p,details){margin:0}
+.estado-titulo{display:flex;align-items:center;gap:var(--espaco-2);font-size:var(--text-base);font-weight:600;line-height:1.5}
+.estado-texto{font-size:var(--text-base);line-height:1.5}
+.estado-nota{font-size:var(--text-md);line-height:1.5;color:var(--theme-muted)}
+.estado-acoes{display:flex;flex-wrap:wrap;gap:var(--espaco-2);padding-top:var(--espaco-2)}
+.estado-erro{background:var(--theme-danger-bg);border-color:var(--theme-danger-line)}
+.estado-erro .estado-titulo{color:var(--theme-danger)}
+.estado-sinal{flex:none;width:var(--espaco-4);height:var(--espaco-4);fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.estado-detalhes{font-size:var(--text-md);color:var(--theme-muted)}
+.estado-detalhes summary{cursor:pointer;min-height:44px;display:flex;align-items:center}
+.estado-detalhes code{overflow-wrap:anywhere}
+/* Espera curta: três barras, 70, 90 e 50 % da largura. Sem animação: com prefers-reduced-motion e sem, o esqueleto fica parado. */
+.estado-esqueleto{display:flex;flex-direction:column;gap:var(--espaco-2);padding:var(--espaco-4) 0}
+.estado-esqueleto span{display:block;height:14px;border-radius:var(--raio-folha);background:var(--theme-line)}
+.estado-esqueleto span:nth-child(1){width:70%}
+.estado-esqueleto span:nth-child(2){width:90%}
+.estado-esqueleto span:nth-child(3){width:50%}
+.campo-erro{margin:var(--espaco-1) 0 0;font-size:var(--text-md);line-height:1.5;color:var(--theme-danger)}
+:is(input,select,textarea)[aria-invalid="true"]{border:2px solid var(--theme-danger)}
+button[aria-disabled="true"]{cursor:progress}

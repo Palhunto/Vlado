@@ -19,13 +19,26 @@ window.Quadros = (() => {
   const caso = () => window.contextoCaso?.() || '';
 
   // Loading, empty and error states share one element so a screen reader hears each change.
-  function estado(alvo, tipo, texto) {
-    const p = element('p', texto, `quadro-estado ${tipo === 'erro' ? 'notice' : 'small'}`);
-    p.dataset.estado = tipo;
-    p.setAttribute('role', tipo === 'erro' ? 'alert' : 'status');
-    alvo.replaceChildren(p);
-    return p;
+  // With estados.js (W11): esqueleto for waiting, block with what the thing is and an action for empty, three-part block for errors.
+  // `extra`: {titulo, acao: {rotulo, aoClicar}} for empty; {titulo, acoes} for errors.
+  function estado(alvo, tipo, texto, extra = {}) {
+    const E = window.Estados;
+    let bloco;
+    if (E && tipo === 'carregando') { E.esqueleto(alvo, {rotulo: texto}); return alvo.firstChild; }
+    if (E && tipo === 'vazio') bloco = E.vazio(alvo, {titulo: extra.titulo, texto, acao: extra.acao});
+    else if (E && tipo === 'erro') bloco = E.erro(alvo, {titulo: extra.titulo || t('Não deu para abrir este quadro.'), texto, acoes: extra.acoes});
+    else {
+      bloco = element('p', texto, `${tipo === 'erro' ? 'notice' : 'small'}`);
+      bloco.dataset.estado = tipo;
+      bloco.setAttribute('role', tipo === 'erro' ? 'alert' : 'status');
+      alvo.replaceChildren(bloco);
+    }
+    bloco.classList.add('quadro-estado');
+    return bloco;
   }
+  // Empty states lead somewhere that exists: another area of the desk.
+  const irPara = area => () => window.areaMesa?.ir(area);
+  const perguntar = () => ({rotulo: t('Fazer uma pergunta'), aoClicar: irPara('codex')});
 
   // The server announces each board in /api/integracao; an older server keeps the screen honest.
   let integracao = null;
@@ -117,7 +130,7 @@ window.Quadros = (() => {
     let sequencia = 0;
     return async (painel, casoId) => {
       const pedido = ++sequencia;
-      if (!casoId) { estado(painel, 'vazio', t('Escolha uma apuração no topo da Mesa para ver este quadro.')); return; }
+      if (!casoId) { estado(painel, 'vazio', t('Escolha uma apuração no topo da Mesa para ver este quadro.'), {titulo: t('Nenhuma apuração escolhida'), acao: {rotulo: t('Escolher apuração'), aoClicar: () => document.getElementById('contexto-caso')?.focus()}}); return; }
       estado(painel, 'carregando', t('Carregando…'));
       try {
         if (!await disponivel(chave)) { if (pedido === sequencia) estado(painel, 'erro', t('Este quadro ainda não está disponível neste servidor. Atualize a Mesa para a versão mais recente.')); return; }
@@ -125,7 +138,7 @@ window.Quadros = (() => {
       } catch (erro) { if (pedido === sequencia) estado(painel, 'erro', erro.message); }
     };
   }
-  return {t, dado, botao, estado, evidencia, abrirOriginal, disponivel, registrarAba, selecionar, quadro, SUPORTE, NATUREZA, caso};
+  return {t, dado, botao, estado, irPara, perguntar, evidencia, abrirOriginal, disponivel, registrarAba, selecionar, quadro, SUPORTE, NATUREZA, caso};
 })();
 
 // Hypotheses: three columns per hypothesis; the declared situation is a person's, never the board's.
@@ -185,7 +198,7 @@ window.Quadros = (() => {
   Q.registrarAba({id: 'hipoteses', rotulo: t('Hipóteses'), carregar: Q.quadro('quadros_evidencia', async (painel, casoId, vigente) => {
     const dados = await api('hipoteses-quadro', {caso: casoId});
     if (!vigente()) return;
-    if (!dados.hipoteses?.length) { Q.estado(painel, 'vazio', t('Nenhuma hipótese registrada nesta apuração.')); return; }
+    if (!dados.hipoteses?.length) { Q.estado(painel, 'vazio', t('Uma hipótese é uma afirmação que os documentos podem sustentar ou contrariar.'), {titulo: t('Nenhuma hipótese ainda'), acao: Q.perguntar()}); return; }
     const corpo = [element('p', t(dados.aviso || ''), 'small quadro-aviso')];
     for (const h of dados.hipoteses) corpo.push(hipotese(casoId, h));
     if (dados.divergentes?.length) corpo.push(element('p', t('{n} registros com histórico divergente ficaram de fora.', {n: dados.divergentes.length}), 'notice'));
@@ -257,7 +270,8 @@ window.Quadros = (() => {
     const lista = element('ol', undefined, 'tempo-lista');
     lista.setAttribute('aria-label', t('Linha do tempo: {n} eventos', {n: dados.entradas?.length || 0}));
     for (const e of dados.entradas || []) lista.append(entrada(casoId, e));
-    if (!dados.entradas?.length) corpo.push(Q.estado(element('div'), 'vazio', escolhidos ? t('Nenhum evento com os tipos de data escolhidos.') : t('Nenhum evento registrado na linha do tempo.')));
+    if (!dados.entradas?.length) corpo.push(escolhidos ? Q.estado(element('div'), 'vazio', t('Nenhum evento com os tipos de data escolhidos.'), {titulo: t('Nenhum acontecimento com esses tipos de data')})
+      : Q.estado(element('div'), 'vazio', t('A linha do tempo reúne os acontecimentos datados que os documentos registram.'), {titulo: t('Nenhum acontecimento com data ainda'), acao: Q.perguntar()}));
     else corpo.push(lista);
     if (dados.fontes_indisponiveis?.length) corpo.push(element('p', t('{n} fontes de data estão indisponíveis.', {n: dados.fontes_indisponiveis.length}), 'notice'));
     painel.replaceChildren(...corpo);

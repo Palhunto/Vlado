@@ -368,7 +368,7 @@ function analisar(html, doc) {
 
 // Builds a window around index.html. `scripts` run in order in one shared realm, like
 // deferred <script> tags. `api` answers POST /api/* and `catalogo` answers /api/catalogo.
-const PILHA = ['i18n_en.js', 'i18n.js', 'leitura.js', 'dialogo.js', 'app.js', 'fontes_web.js', 'revisao.js', 'observacoes.js', 'continuidade.js', 'caderno.js',
+const PILHA = ['i18n_en.js', 'i18n.js', 'leitura.js', 'dialogo.js', 'estados.js', 'app.js', 'fontes_web.js', 'revisao.js', 'observacoes.js', 'continuidade.js', 'caderno.js',
   'editor_notas.js', 'apuracao.js', 'diligencias.js', 'codex.js', 'configuracao_ia.js', 'piloto.js', 'gerenciar.js',
   'experiencia.js', 'desktop.js'];
 
