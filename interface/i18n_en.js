@@ -1371,7 +1371,18 @@ window.VLADO_I18N_EN = {
     "Nenhum documento nesta seleção": "No documents in this selection",
     "Tente outro nome ou remova o filtro.": "Try another name or remove the filter.",
     "Nenhum documento nesta apuração ainda": "No documents in this investigation yet",
-    "Envie os primeiros arquivos na área acima. Cada um recebe um resultado e o lote recebe um recibo.": "Upload the first files in the area above. Each gets a result and the batch gets a receipt."
+    "Envie os primeiros arquivos na área acima. Cada um recebe um resultado e o lote recebe um recibo.": "Upload the first files in the area above. Each gets a result and the batch gets a receipt.",
+    "1 com leitura a conferir": "1 with reading to check",
+    "{n} com leitura a conferir": "{n} with reading to check",
+    "1 não cadastrado": "1 not registered",
+    "{n} não cadastrados": "{n} not registered",
+    "Recibo do lote: {n} de {total} arquivos": "Batch receipt: {n} of {total} files",
+    "duplicado": "duplicate",
+    "duplicados": "duplicates",
+    "nenhum duplicado": "no duplicates",
+    "nenhum novo": "none new",
+    "novo": "new",
+    "novos": "new"
   },
   padroes: [
     // Cota do mês na barra lateral
