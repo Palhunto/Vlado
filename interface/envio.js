@@ -221,7 +221,7 @@
     }
   }
 
-  async function enviar({escopo, arquivos, alvo}) {
+  async function enviar({escopo, arquivos, alvo, alvoRecibo}) {
     const ctx = {linhas: [], cancelado: false, cancelarEnvio: null, redesenhar: () => ui.desenhar(), aoVerRecibo: null};
     ctx.linhas = Array.from(arquivos).map(arquivo => ({arquivo, nome: arquivo.name, bytes: arquivo.size, estado: 'aguardando', fracao: 0}));
     for (const linha of ctx.linhas) {
@@ -293,7 +293,7 @@
       || (l.estado === 'pronto' && ['erro', 'sem_texto', 'pendente'].includes(l.extracao))).length;
     resultado.arquivos = ctx.linhas;
     ui.mostrarRecibo(resultado.enviados || resultado.recusados ? {recebidos: resultado.recebidos, total: ctx.linhas.length, pendentes: resultado.pendentes} : null);
-    ctx.aoVerRecibo = () => { const detalhe = document.getElementById('cadastro-recibo'); if (detalhe && !detalhe.hidden) { detalhe.scrollIntoView({block: 'start'}); detalhe.focus?.(); } };
+    ctx.aoVerRecibo = () => { const detalhe = alvoRecibo || document.getElementById('cadastro-recibo'); if (detalhe && !detalhe.hidden) { detalhe.scrollIntoView({block: 'start'}); detalhe.focus?.(); } };
     ui.desenhar();
     return resultado;
   }

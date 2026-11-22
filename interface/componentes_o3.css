@@ -87,3 +87,58 @@ button[aria-disabled="true"]{cursor:progress}
   .envio-arquivo,.envio-arquivo[data-falha="true"]{grid-template-columns:minmax(0,1fr)}
   .envio-ajuda{justify-self:start}
 }
+
+/* === Documentos (componentes.md#documentos, W02; documentos.js) === */
+.docs-topo{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:var(--espaco-3) var(--espaco-4);margin-bottom:var(--espaco-4)}
+.docs-contagem{margin:0;font-size:var(--text-base);color:var(--theme-muted)}
+.docs-busca{display:flex;flex-direction:column;gap:var(--espaco-1);width:min(420px,100%);font-size:var(--text-md);font-weight:600;color:var(--theme-muted)}
+.docs-busca input{min-height:44px;font-weight:400;font-size:var(--text-base)}
+/* Área de envio: arrastar ou escolher; no celular, só o botão principal e a linha de formatos. */
+.docs-zona{display:flex;flex-direction:column;align-items:center;gap:var(--espaco-2);padding:var(--espaco-6);margin-bottom:var(--espaco-4);text-align:center;
+  border:2px dashed var(--theme-input-line);border-radius:var(--raio-cartao);background:var(--theme-surface);color:var(--theme-text)}
+.docs-zona[hidden]{display:none}
+.docs-zona-ativa{border-color:var(--theme-accent);background:var(--theme-soft)}
+.docs-zona p{margin:0}
+.docs-zona-chamada{font-size:var(--text-base)}
+.docs-formatos{font-size:var(--text-md);color:var(--theme-muted)}
+.docs-escolher,.docs-abrir{min-height:0;padding:0;border:0;background:none;color:var(--theme-accent);font-size:inherit;font-weight:600;text-decoration:underline;cursor:pointer}
+.docs-escolher:hover,.docs-abrir:hover{background:none;color:var(--theme-primary-hover)}
+.docs-abrir{min-height:44px;padding:0 var(--espaco-2);font-size:var(--text-base)}
+.docs-escolher-celular{display:none;width:100%;min-height:48px}
+@media (max-width:719px) {
+  .docs-zona{padding:0;border:0;background:none;text-align:left;align-items:stretch}
+  .docs-zona-chamada{display:none}
+  .docs-escolher-celular{display:inline-flex}
+  .docs-formatos{text-align:center}
+}
+.docs-recibo{padding:var(--espaco-4);margin-bottom:var(--espaco-4);border:1px solid var(--theme-line);border-radius:var(--raio-cartao);background:var(--theme-surface)}
+.docs-recibo[hidden]{display:none}
+.docs-recibo :is(h3,p,ul){margin:0 0 var(--espaco-2)}
+/* Lista: tabela num cartão; no celular, um cartão por documento. */
+.docs-tabela{margin-bottom:var(--espaco-4);border:1px solid var(--theme-line);border-radius:var(--raio-cartao);background:var(--theme-surface);overflow:hidden}
+.docs-lista{width:100%;border-collapse:collapse;font-size:var(--text-base)}
+.docs-lista th{padding:var(--espaco-3) var(--espaco-4);text-align:left;font-size:var(--text-md);font-weight:600;color:var(--theme-muted);background:var(--theme-reading)}
+.docs-lista td{padding:var(--espaco-3) var(--espaco-4);border-top:1px solid var(--theme-line);vertical-align:middle}
+.docs-lista tbody tr:first-child td{border-top:0}
+.docs-acao{text-align:right}
+.docs-titulo{overflow-wrap:anywhere}
+.docs-leitura{display:inline-flex;align-items:flex-start;gap:var(--espaco-2);color:var(--theme-muted)}
+.docs-leitura[data-tom="ok"]{color:var(--theme-accent)}
+.docs-leitura[data-tom="aviso"]{color:var(--theme-warning);font-weight:600}
+.docs-leitura[data-tom="erro"]{color:var(--theme-danger);font-weight:600}
+.docs-tecnicos{margin-top:var(--espaco-1);font-size:var(--text-md);color:var(--theme-muted)}
+.docs-tecnicos summary{cursor:pointer}
+.docs-tecnicos-dados{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:var(--espaco-1) var(--espaco-3);margin:var(--espaco-2) 0 0}
+.docs-tecnicos-dados dt{font-weight:600}
+.docs-tecnicos-dados dd{margin:0;overflow-wrap:anywhere}
+@media (max-width:719px) {
+  .docs-tabela{border:0;background:none;overflow:visible}
+  .docs-lista,.docs-lista tbody,.docs-lista tr,.docs-lista td{display:block}
+  .docs-lista thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+  .docs-lista tr{display:flex;flex-direction:column;gap:var(--espaco-2);padding:var(--espaco-4);margin-bottom:var(--espaco-3);border:1px solid var(--theme-line);border-radius:var(--raio-cartao);background:var(--theme-surface)}
+  .docs-lista td{padding:0;border:0}
+  .docs-nome .docs-titulo{font-weight:600}
+  .docs-paginas{font-size:var(--text-md);color:var(--theme-muted)}
+  .docs-acao{text-align:left}
+  .docs-abrir{padding:0}
+}
