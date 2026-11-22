@@ -168,16 +168,136 @@ class QuedaTest(Base):
         apagamento.retomar(self.root)  # the next start: the file is free now
         self.assert_apagado_sem_sobra()
 
+    def test_renomeacao_e_desfazer_que_falham_dizem_a_verdade_e_a_partida_devolve(self):
+        real, feitas = os.rename, [0]
+
+        def em_uso(origem, destino):
+            if apagamento.QUARENTENA in Path(origem).parts:  # putting a root back: in use too
+                raise PermissionError(13, 'arquivo em uso')
+            feitas[0] += 1
+            if feitas[0] > 1:  # the second root is in use
+                raise PermissionError(13, 'arquivo em uso')
+            return real(origem, destino)
+        with mock.patch('apagamento.ESPERA_S', 0), mock.patch('apagamento.os.rename', side_effect=em_uso), \
+                self.assertLogs('vlado.apagamento', 'WARNING'):
+            with self.assertRaisesRegex(ValueError, 'volta à lixeira na próxima partida') as recusa:
+                apagamento.apagar(self.root, self.item['id'], self.token(), quem='admin')
+        self.assertNotIn('continua na lixeira', str(recusa.exception))  # not the whole truth any more
+        self.assertEqual([m['fase'] for m in self.manifestos()], ['renomeando'])
+        apagamento.retomar(self.root)  # the next start
+        self.assert_inteiro_na_lixeira()
+
+    def test_manifesto_ilegivel_conclui_o_apagamento_confirmado_pela_lixeira(self):
+        real, vezes = os.rename, [0]
+
+        def cai_na_segunda(origem, destino):
+            vezes[0] += 1
+            if vezes[0] == 2:
+                raise Queda()
+            return real(origem, destino)
+        with mock.patch('apagamento.os.rename', side_effect=cai_na_segunda), self.assertRaises(Queda):
+            apagamento.apagar(self.root, self.item['id'], self.token(), quem='admin')
+        manifesto = self.root / apagamento.MANIFESTOS / f'{self.item["id"]}.json'
+        manifesto.write_text('{quebrado', encoding='utf-8')  # unreadable, with a root in the quarantine
+        with self.assertLogs('vlado.apagamento', 'WARNING') as aviso:
+            self.assertEqual(apagamento.retomar(self.root)['ilegiveis'], 1)
+        self.assertIn('manifesto ilegível', '\n'.join(aviso.output))
+        self.assertEqual(self.retrato(), {})  # the quarantined root and the ones still in place: all gone
+        self.assertEqual((lixeira.ativos(self.root), self.no_catalogo()), ([], False))
+        self.assertEqual((self.quarentena(), self.manifestos()), ([], []))
+        self.assertEqual([(r['item_id'], r['confirmacao']) for r in self.registros()],
+                         [(self.item['id'], 'manifesto_ilegivel')])
+
+    def test_remocao_de_um_ilegivel_fica_fora_da_trava(self):
+        # The Coruja's proof: with an unreadable manifest the files were removed inside the cadastro lock.
+        from cadastrar_documentos import _trava
+        real, vezes = os.rename, [0]
+
+        def cai_na_segunda(origem, destino):
+            vezes[0] += 1
+            if vezes[0] == 2:
+                raise Queda()
+            return real(origem, destino)
+        with mock.patch('apagamento.os.rename', side_effect=cai_na_segunda), self.assertRaises(Queda):
+            apagamento.apagar(self.root, self.item['id'], self.token(), quem='admin')
+        (self.root / apagamento.MANIFESTOS / f'{self.item["id"]}.json').write_text('{quebrado', encoding='utf-8')
+        desfeito = os.unlink
+
+        def devagar(caminho, *args, **kwargs):  # about 70 files at 50 ms: some seconds of removal
+            if na_quarentena(caminho):
+                time.sleep(0.05)
+            return desfeito(caminho, *args, **kwargs)
+        self.addCleanup(apagamento.aguardar, 60)
+        with mock.patch('apagamento.os.unlink', side_effect=devagar), self.assertLogs('vlado.apagamento', 'WARNING'):
+            self.assertEqual(apagamento.retomar(self.root, segundo_plano=True)['ilegiveis'], 1)
+            self.assertTrue(self.quarentena())  # still being removed
+            inicio = time.monotonic()
+            with _trava(self.root, espera=1.0):  # another taking of the lock gets it
+                pass
+            self.assertLess(time.monotonic() - inicio, 1.0)
+            self.assertTrue(self.quarentena(), 'a remoção terminou antes da conferência: o teste não mediu nada')
+            self.assertTrue(apagamento.aguardar(60))
+        self.assertEqual(self.retrato(), {})
+        self.assertEqual((lixeira.ativos(self.root), self.no_catalogo()), ([], False))
+        self.assertEqual((self.quarentena(), self.manifestos()), ([], []))
+        self.assertEqual([(r['item_id'], r['confirmacao']) for r in self.registros()],
+                         [(self.item['id'], 'manifesto_ilegivel')])
+
+    def test_partida_nunca_cai_e_tenta_de_novo_em_segundo_plano(self):
+        import trava_cadastro
+        chamadas, feito = [], threading.Event()
+
+        def ocupada_na_primeira(root, **opcoes):
+            chamadas.append(opcoes)
+            if len(chamadas) == 1:
+                raise trava_cadastro.TravaOcupada('trava de cadastro ocupada por outro processo')
+            feito.set()
+            return {'desfeitos': 0, 'concluidos': 0, 'orfas': 0, 'ilegiveis': 0}
+        with mock.patch.object(apagamento, 'retomar', side_effect=ocupada_na_primeira), \
+                self.assertLogs('vlado.apagamento', 'WARNING'):
+            self.assertIsNone(apagamento.retomar_na_partida(self.root, intervalo=0.05))  # no exception
+            self.assertTrue(feito.wait(5), 'a retomada não foi tentada de novo')
+        self.assertEqual(chamadas[0].get('espera'), 2.0)  # the start waits little for the lock
+
     def test_quarentena_sem_manifesto_e_removida_e_o_resto_fica(self):
         orfa = self.root / 'casos' / apagamento.QUARENTENA / ('d' * 32) / '0'
         orfa.mkdir(parents=True)
         (orfa / 'sobra.txt').write_text('sobra sintética', encoding='utf-8')
         alheia = self.root / 'casos' / apagamento.QUARENTENA / 'nao-e-um-item'
         alheia.mkdir()
-        self.assertEqual(apagamento.retomar(self.root)['orfas'], 1)
+        with self.assertLogs('vlado.apagamento', 'WARNING'):
+            self.assertEqual(apagamento.retomar(self.root)['orfas'], 1)
         self.assertFalse(orfa.parent.exists())
         self.assertTrue(alheia.exists())  # not a name this module writes: left alone
         self.assertEqual(self.retrato(), self.antes)
+        self.assertEqual((self.manifestos(), self.registros()), ([], []))  # nothing to record
+
+    def test_remocao_de_quarentena_sem_manifesto_fica_fora_da_trava(self):
+        # The Coruja's second proof: a leftover with no manifest was removed inside the cadastro lock.
+        from cadastrar_documentos import _trava
+        sobra = self.root / 'conversas' / apagamento.QUARENTENA / ('e' * 32) / '0'
+        sobra.mkdir(parents=True)
+        for numero in range(70):
+            (sobra / f'sobra_{numero:02}.txt').write_text('sobra sintética', encoding='utf-8')
+        desfeito = os.unlink
+
+        def devagar(caminho, *args, **kwargs):  # 70 files at 50 ms: about 3.5 s of removal
+            if na_quarentena(caminho):
+                time.sleep(0.05)
+            return desfeito(caminho, *args, **kwargs)
+        self.addCleanup(apagamento.aguardar, 60)
+        with mock.patch('apagamento.os.unlink', side_effect=devagar), self.assertLogs('vlado.apagamento', 'WARNING'):
+            self.assertEqual(apagamento.retomar(self.root, segundo_plano=True)['orfas'], 1)
+            self.assertTrue(self.quarentena())  # still being removed
+            inicio = time.monotonic()
+            with _trava(self.root, espera=1.0):  # another taking of the lock gets it
+                pass
+            self.assertLess(time.monotonic() - inicio, 1.0)
+            self.assertTrue(self.quarentena(), 'a remoção terminou antes da conferência: o teste não mediu nada')
+            self.assertTrue(apagamento.aguardar(60))
+        self.assertFalse(sobra.parent.exists())
+        self.assertEqual((self.quarentena(), self.manifestos(), self.registros()), ([], [], []))
+        self.assertEqual(self.retrato(), self.antes)  # the item in the trash untouched
 
 
 class MesaRespondeTest(Base):
