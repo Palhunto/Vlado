@@ -116,8 +116,8 @@ Colunas:
 | Conferir achados (`achados`) | C | C | — | **F**: em 1440 e 1024 px, o botão "Conferir" sai cortado no pé de cada cartão da lista (`achados__1440__claro`, `__escuro`) → **R1** | C | C (canvas "Conferir achado"); "3 achado(s) nesta seleção" usa "(s)" → **R7** |
 | Caderno, notas (`apuracao`) | C | C | — | C | C | C (P14, P14b) |
 | Caderno, trechos (`caderno`) | C | C | **F** no escuro → **R2** | C | C | C (P14b.6) |
-| Pedidos e prazos (`diligencias`) | C | C | — | C | C | **F**: o item "Pedidos e prazos" da barra abre a tela Diligências de hoje, sem a prancha aprovada (P15.5) → **R3** |
-| Quadros, hipóteses (`quadros`) | C | C | — | C | C | **F**: sete abas e barra lateral, contra cinco abas (P15.1) e quadros sem barra, com "‹ Apuração" (P11.7); hipóteses sem a prancha aprovada (P15.2) → **R3** |
+| Pedidos e prazos (`diligencias`) | C | C | — | C | C | **E**: o item "Pedidos e prazos" da barra abre a tela Diligências de hoje, sem a prancha aprovada (P15.5); exceção declarada da Onda 4 (decisão do Maestro, 22/11/2026; ver R3 abaixo) |
+| Quadros, hipóteses (`quadros`) | C | C | — | C | C | **E**: sete abas e barra lateral, contra cinco abas (P15.1) e quadros sem barra, com "‹ Apuração" (P11.7); hipóteses sem a prancha aprovada (P15.2); exceção declarada da Onda 4 (decisão do Maestro, 22/11/2026; ver R3 abaixo) |
 | Linha do tempo (`quadros_linha`) | C | C | — | C | C | C (canvas "Tempo", parte E), dentro da moldura de abas da R3 |
 | Mapa de relações (`quadros_mapa`) | C | C | — | C: o nome do nó corta na segunda linha, mas sai inteiro na lista abaixo e ao leitor de tela (`b5874ad`) | C | C (canvas "Mapa", parte E; escala 1) |
 | Apurações e lixeira (`gerenciar`) | C | C | — | C | C | E: sem desenho (`componentes.md`, "O que ainda falta desenhar") |
@@ -130,12 +130,12 @@ Minha conta, Equipe, convite e redefinir a senha (Onda 2) não estão nesta linh
 
 | Nº | O que falta | Onde | Dono |
 |---|---|---|---|
-| R1 | Botão "Conferir" cortado no pé dos cartões de achado. O cartão deve crescer com o conteúdo, com altura mínima no lugar de fixa (P11.5) | Conferir achados, 1440 e 1024 | Frontend |
-| R2 | Botão desabilitado no escuro igual ao habilitado. Ele deve usar a aparência "Indisponível" também no escuro (`componentes.md#botao`) | Caderno, aba Trechos, e qualquer botão desabilitado no escuro | Frontend |
-| R3 | Quadros e Pedidos e prazos ainda no desenho antigo: sete abas, barra lateral e Diligências no lugar da prancha (P11.7, P15.1, P15.2, P15.5). Se isso for da Onda 4, o Maestro registra como exceção com a data de volta | Quadros, Pedidos e prazos | Frontend; o Maestro decide a onda |
-| R4 | A área "Cadastrar arquivos" continua a existir (P16.5) | Cadastrar arquivos | Frontend |
-| R5 | O Entrar não segue o canvas: marca, frase, aviso de teste, rodapé e "E-mail" no lugar de "Login" (com a Onda 2, o campo aceita e-mail) | Entrar | Frontend (junto com as seções da Onda 2 do Entrar) |
+| R1 | Botão "Conferir" cortado no pé dos cartões de achado. O cartão deve crescer com o conteúdo, com altura mínima no lugar de fixa (P11.5) | Conferir achados, 1440 e 1024 | Frontend (Lume), junto com as correções do AA (`componentes.md#foco-aa`) |
+| R2 | Botão desabilitado no escuro igual ao habilitado. Ele deve usar a aparência "Indisponível" também no escuro (`componentes.md#botao`) | Caderno, aba Trechos, e qualquer botão desabilitado no escuro | Frontend (Lume), junto com as correções do AA (`componentes.md#foco-aa`) |
+| R3 | **Exceção declarada, não é falta** (decisão do Maestro, 22/11/2026): Quadros com sete abas e barra lateral, e Pedidos e prazos abrindo Diligências, ficam como estão até a Onda 4, porque a página dos quadros ainda espera desenho. **Volta quando** a Onda 4 entregar a página dos quadros com as cinco abas, sem barra lateral e com "‹ Apuração" (P11.7, P15.1, P15.2) e a área Pedidos e prazos da prancha P15.5; nesse ponto as duas telas são conferidas de novo | Quadros, Pedidos e prazos | Onda 4 |
+| R4 | A área "Cadastrar arquivos" continua a existir (P16.5) | Cadastrar arquivos | Frontend (Lume), junto com as correções do AA (`componentes.md#foco-aa`) |
+| R5 | O Entrar não segue o canvas: marca, frase, aviso de teste, rodapé e "E-mail" no lugar de "Login" (com a Onda 2, o campo aceita e-mail) | Entrar | Frontend (Lume), na frente do Entrar |
 | R6 | Faltam capturas em paisagem de celular, em celular grande (430 px) e com texto a 200 % | linha de base | QA (Sonda) |
-| R7 | Textos: "3 achado(s)" sem concordância (o plural deve concordar, sem "(s)"); o texto de Configurações no modo `local` fala de contas que não aparecem | Conferir achados, Configurações | Frontend |
+| R7 | Textos: "3 achado(s)" sem concordância (o plural deve concordar, sem "(s)"); o texto de Configurações no modo `local` fala de contas que não aparecem | Conferir achados, Configurações | Frontend (Lume), junto com as correções do AA (`componentes.md#foco-aa`) |
 
-R1 e R2 são da lista da skill. R3 a R5 são divergências do desenho aprovado. R6 é falta de prova. R7 é texto.
+R1 e R2 são da lista da skill. R4 e R5 são divergências do desenho aprovado; R3 também, mas é exceção declarada até a Onda 4. R6 é falta de prova. R7 é texto.

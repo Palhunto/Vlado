@@ -24,7 +24,7 @@ Para ver como era antes da Onda 3, use a mesma captura em `3bf52c8`, por exemplo
 - Abaixo de 1280 px, a barra vira gaveta e abre pelo botão de menu.
 - Botões e campos de 44 px; anel de foco ocre.
 
-Antes de aprovar, veja a [lista de pré-entrega](pre-entrega.md). Ela tem sete ressalvas (R1 a R7), três delas visíveis nas capturas: o botão cortado em Conferir achados (R1), o desabilitado no escuro (R2) e os quadros no desenho antigo (R3).
+Antes de aprovar, veja a [lista de pré-entrega](pre-entrega.md). Ela tem seis ressalvas com dono (R1, R2 e R4 a R7) e uma exceção declarada até a Onda 4 (R3). Três aparecem nas capturas: o botão cortado em Conferir achados (R1), o desabilitado no escuro (R2) e os quadros no desenho antigo (R3, exceção).
 
 ## Ordem
 
@@ -37,10 +37,10 @@ Antes de aprovar, veja a [lista de pré-entrega](pre-entrega.md). Ela tem sete r
 | 5 | Conferir achados | `achados__…` | Selos novos: o da IA tracejado, com "IA ·" (P20a), e "○ Pendente". Contador "3" no item Conferir. Botão "Conferir" cortado na lista (R1) |
 | 6 | Caderno, notas | `apuracao__…` | Abas em pílula; no celular, "Notas" e "Fontes da nota" com contagem |
 | 7 | Caderno, trechos | `caderno__…` | Abas em pílula. No escuro, os botões desabilitados parecem habilitados (R2) |
-| 8 | Quadros, hipóteses | `quadros__…` | A aba ativa vira pílula; as colunas Sustenta, Contraria e Falta ganham traço no topo. Continuam as sete abas e a barra lateral (R3) |
+| 8 | Quadros, hipóteses | `quadros__…` | A aba ativa vira pílula; as colunas Sustenta, Contraria e Falta ganham traço no topo. Continuam as sete abas e a barra lateral até a Onda 4 (R3, exceção declarada) |
 | 9 | Linha do tempo | `quadros_linha__…` | Redesenho da parte E: agrupada por ano, marco cheio para data exata e vazado para parcial, ícone do tipo, fonte em cada acontecimento, filtros em pílula e "Como ler" |
 | 10 | Mapa de relações | `quadros_mapa__…` | Redesenho da parte E: nós com ícone e nome, ligação com o rótulo do tipo, legenda abaixo, lista de pessoas e organizações abaixo do mapa, desenho em escala 1 |
-| 11 | Pedidos e prazos | `diligencias__…` | Abre pelo item novo "Pedidos e prazos"; colunas por estado com filete; botões de 44 px. Ainda não é a prancha aprovada (R3) |
+| 11 | Pedidos e prazos | `diligencias__…` | Abre pelo item novo "Pedidos e prazos"; colunas por estado com filete; botões de 44 px. A prancha aprovada fica para a Onda 4 (R3, exceção declarada) |
 | 12 | Apurações e lixeira | `gerenciar__…` | Sai da barra lateral; só a moldura nova |
 | 13 | Configurações | `configuracoes__…` | Só a moldura nova |
 | 14 | Cadastrar arquivos | `cadastro__…` | Só a moldura nova; a área deveria ter saído (R4) |
@@ -52,4 +52,4 @@ Minha conta, Equipe, o convite e redefinir a senha são da Onda 2 e ainda não e
 
 ## Para responder
 
-Para cada tela: "aprovada", "aprovada com ressalva" ou "muda", e o quê. As ressalvas R1 a R7 já têm dono na lista de pré-entrega. O dono diz se alguma delas impede a aprovação.
+Para cada tela: "aprovada", "aprovada com ressalva" ou "muda", e o quê. As ressalvas já têm dono na lista de pré-entrega, e a R3 é exceção até a Onda 4. O dono diz se alguma delas impede a aprovação.
