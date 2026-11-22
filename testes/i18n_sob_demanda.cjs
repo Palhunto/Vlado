@@ -50,6 +50,22 @@ test('se o dicionário não carregar, a tela segue em português e não trava', 
   scriptsDoDicionario(mesa)[0].onerror();
   await promessa;
   assert.equal(rotulo.textContent, 'Visão geral');
+  // O idioma não vira inglês: lang continua pt-BR (leitor de tela) e a preferência não é gravada (a pessoa não fica presa em inglês).
+  assert.equal(mesa.janela.I18N.idioma(), 'pt');
+  assert.equal(mesa.doc.documentElement.lang, 'pt-BR');
+  assert.notEqual(mesa.janela.localStorage.getItem('vlado-idioma'), 'en');
+});
+
+test('preferência já gravada em inglês e dicionário que falha: a tela fica em português e a preferência é mantida para tentar de novo', async () => {
+  const mesa = criarMesa({idioma: 'pt', armazenamento: {'vlado-idioma': 'en'}, scripts: ['i18n.js'], url: 'http://127.0.0.1:8765/?area=inicio'});
+  await mesa.esperar(6);
+  const tag = scriptsDoDicionario(mesa)[0];
+  assert.ok(tag, 'a carga em inglês pede o dicionário');
+  tag.onerror();
+  await mesa.esperar(6);
+  assert.equal(mesa.janela.I18N.idioma(), 'pt');
+  assert.equal(mesa.doc.documentElement.lang, 'pt-BR');
+  assert.equal(mesa.janela.localStorage.getItem('vlado-idioma'), 'en', 'a preferência continua gravada');
 });
 
 test('a URL do dicionário leva o hash do <meta name="vlado-versoes"> quando o servidor o informa', async () => {

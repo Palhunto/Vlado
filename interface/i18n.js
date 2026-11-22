@@ -119,10 +119,10 @@
     return Object.entries(vars).reduce((texto, [nome, valor]) => texto.split(`{${nome}}`).join(String(valor)), modelo);
   }
   function idioma() { return lingua; }
-  function aplicarLingua(nova) {
+  function aplicarLingua(nova, gravar = true) {
     lingua = nova === 'en' ? 'en' : 'pt';
     document.documentElement.lang = lingua === 'en' ? 'en' : 'pt-BR';
-    try { localStorage.setItem(CHAVE, lingua); } catch (_) { /* Storage may be blocked; the switch still works. */ }
+    if (gravar) try { localStorage.setItem(CHAVE, lingua); } catch (_) { /* Storage may be blocked; the switch still works. */ }
     aplicar(document.body);
     const botao = document.getElementById('mesa-idioma');
     if (botao) {
@@ -132,7 +132,9 @@
     window.dispatchEvent(new CustomEvent('vlado-idioma', {detail: lingua}));
   }
   function definir(nova) {
-    if (nova === 'en' && !temDicionario()) return carregarDicionario().then(() => aplicarLingua(nova));
+    // Sem o dicionário a tela continua em português: lang=pt (o leitor de tela não lê português com voz inglesa) e a preferência não
+    // é gravada; se ela já era inglês, fica como está para a próxima carga tentar de novo.
+    if (nova === 'en' && !temDicionario()) return carregarDicionario().then(() => (temDicionario() ? aplicarLingua(nova) : aplicarLingua('pt', false)));
     return aplicarLingua(nova);
   }
   let salvo = '';
