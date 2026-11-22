@@ -34,7 +34,7 @@ test('a lista de folhas vem do disco e não encolhe em silêncio', () => {
 
 test('tokens.css é carregado antes das folhas da Mesa e da página de entrada', () => {
   for (const pagina of ['index.html', 'entrar.html']) {
-    const html = ler(pagina), base = html.indexOf('href="/tokens.css"'), estilo = html.indexOf('href="/style.css"');
+    const html = ler(pagina), base = html.indexOf('href="/tokens.css'), estilo = html.indexOf('href="/style.css');
     assert.ok(base > 0, `${pagina}: link para /tokens.css`);
     assert.ok(base < estilo, `${pagina}: tokens.css antes de style.css`);
   }
