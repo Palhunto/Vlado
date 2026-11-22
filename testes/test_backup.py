@@ -1,7 +1,9 @@
 """Backup and restore of the pilot's data folders; no network."""
 import io
+import json
 import os
 from pathlib import Path
+import sqlite3
 import sys
 import tarfile
 import tempfile
@@ -68,26 +70,109 @@ class BackupTest(unittest.TestCase):
         self.assertTrue((self.root / 'casos/catalogo.json').is_file())
         self.assertEqual([p.name for p in self.root.iterdir() if p.name.startswith('.')], [])
 
-    def test_contas_de_acesso_v2_voltam_com_a_restauracao(self):
+    def contas(self):
+        """The accounts module on a store of its own in ``self.root`` (no JSON store left), with the fast hasher."""
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
         import acesso
         from test_acesso import RAPIDO
-        with patch.dict('os.environ', {'VLADO_ACESSO': ''}), patch.object(acesso, '_HASHER', RAPIDO):
-            (self.root / 'acesso/acesso.json').unlink()
-            conta, token = acesso.criar_conta(self.root, 'Ana', 'ana', casos=['alpha'])
-            acesso.ativar(self.root, token, 'senha-longa-de-teste-1')
-            arquivo = backup.criar(self.root, self.base / 'copias')
-            destino = self.base / 'destino'
-            backup.restaurar(destino, arquivo)
-            sid, _, _ = acesso.entrar(self.root, 'ana', 'senha-longa-de-teste-1')
-            arquivo = backup.criar(self.root, self.base / 'copias2')
-            destino = self.base / 'destino2'
-            backup.restaurar(destino, arquivo)
-            self.assertIsNone(acesso.sessao(destino, sid))  # sessions in a backup do not survive the restore
-            _, _, publica = acesso.entrar(destino, 'ana', 'senha-longa-de-teste-1')
+        for ativo in (patch.dict('os.environ', {'VLADO_ACESSO': ''}), patch.object(acesso, '_HASHER', RAPIDO)):
+            ativo.start()
+            self.addCleanup(ativo.stop)
+        (self.root / 'acesso/acesso.json').unlink()
+        return acesso
+
+    def test_contas_voltam_com_a_restauracao_e_as_sessoes_do_backup_nao_voltam_vivas(self):
+        acesso = self.contas()
+        conta, token = acesso.criar_conta(self.root, 'Ana', 'ana', casos=['alpha'])
+        acesso.ativar(self.root, token, 'senha-longa-de-teste-1')
+        arquivo = backup.criar(self.root, self.base / 'copias')
+        destino = self.base / 'destino'
+        backup.restaurar(destino, arquivo)
+        sid, _, _ = acesso.entrar(self.root, 'ana', 'senha-longa-de-teste-1')
+        self.assertIsNotNone(acesso.sessao(self.root, sid))
+        arquivo = backup.criar(self.root, self.base / 'copias2')
+        with tarfile.open(arquivo) as pacote:  # the session was in the store that went into the backup
+            copia = self.base / 'conferencia.sqlite'
+            copia.write_bytes(pacote.extractfile('acesso/contas.sqlite').read())
+        ligacao = sqlite3.connect(copia)
+        try:
+            self.assertEqual(ligacao.execute('SELECT COUNT(*) FROM sessoes').fetchone()[0], 1)
+        finally:
+            ligacao.close()
+        destino = self.base / 'destino2'
+        backup.restaurar(destino, arquivo)
+        self.assertIsNone(acesso.sessao(destino, sid))  # sessions in a backup do not survive the restore
+        self.assertIsNotNone(acesso.sessao(self.root, sid))  # and the one in use where the backup was made goes on
+        _, _, publica = acesso.entrar(destino, 'ana', 'senha-longa-de-teste-1')
         self.assertEqual(publica['id'], conta['id'])
         if os.name != 'nt':
-            self.assertEqual((destino / 'acesso/acesso.json').stat().st_mode & 0o777, 0o600)
+            self.assertEqual((destino / 'acesso/contas.sqlite').stat().st_mode & 0o777, 0o600)
+
+    def test_restaurar_por_cima_de_contas_em_uso_tambem_encerra_as_sessoes_do_backup(self):
+        acesso = self.contas()
+        _, token = acesso.criar_conta(self.root, 'Ana', 'ana', casos=['alpha'])
+        acesso.ativar(self.root, token, 'senha-longa-de-teste-1')
+        do_backup, _, _ = acesso.entrar(self.root, 'ana', 'senha-longa-de-teste-1')
+        arquivo = backup.criar(self.root, self.base / 'copias')
+        acesso.encerrar(self.root, do_backup)  # ended after the backup: the backup still holds it
+        backup.restaurar(self.root, arquivo, substituir=True)
+        acesso._PRONTOS.clear()  # the store on disk is another one now
+        self.assertIsNone(acesso.sessao(self.root, do_backup))
+        self.assertEqual(acesso.encerrar_todas_as_sessoes(self.root), 0)
+
+    def test_backup_das_contas_e_uma_copia_consistente_com_o_que_ainda_esta_no_diario(self):
+        acesso = self.contas()
+        acesso.criar_conta(self.root, 'Ana', 'ana', casos=['alpha'])
+        banco = acesso.caminho_bd(self.root)
+        self.assertEqual(banco.name, backup.BANCO_DE_CONTAS)  # the names this script uses are the store's
+        aberta = sqlite3.connect(banco)  # a connection kept open: later writes stay in the write-ahead log
+        try:
+            self.assertEqual(aberta.execute(f'SELECT COUNT(*) FROM {backup.TABELA_DE_SESSOES}').fetchone()[0], 0)
+            bia, _ = acesso.criar_conta(self.root, 'Bia', 'bia', casos=['alpha'])
+            diario = banco.with_name(banco.name + '-wal')
+            self.assertGreater(diario.stat().st_size, 0)
+            sozinho = self.base / 'so-o-arquivo.sqlite'  # the file alone does not have Bia yet
+            sozinho.write_bytes(banco.read_bytes())
+            so_arquivo = sqlite3.connect(sozinho.resolve().as_uri() + '?mode=ro&immutable=1', uri=True)
+            try:
+                self.assertEqual(so_arquivo.execute("SELECT COUNT(*) FROM contas WHERE login = 'bia'").fetchone()[0], 0)
+            finally:
+                so_arquivo.close()
+            arquivo = backup.criar(self.root, self.base / 'copias')
+        finally:
+            aberta.close()
+        with tarfile.open(arquivo) as pacote:
+            nomes = [n for n in pacote.getnames() if n.startswith('acesso/')]
+            manifesto = json.loads(pacote.extractfile('manifesto_backup.json').read())
+        self.assertEqual(nomes, ['acesso/contas.sqlite'])  # no log, no index, no lock file
+        self.assertEqual(manifesto['avisos'], [])
+        destino = self.base / 'destino'
+        backup.restaurar(destino, arquivo)
+        self.assertEqual({c['login'] for c in acesso.listar(destino)}, {'ana', 'bia'})
+        self.assertIn(bia['id'], {c['id'] for c in acesso.listar(destino)})
+
+    def test_sem_abrir_o_banco_pela_api_o_backup_copia_o_arquivo_e_avisa_se_havia_diario(self):
+        acesso = self.contas()
+        acesso.criar_conta(self.root, 'Ana', 'ana', casos=['alpha'])
+        with patch.object(backup, '_copia_do_banco', return_value=None):
+            arquivo = backup.criar(self.root, self.base / 'copias')
+            with tarfile.open(arquivo) as pacote:
+                self.assertEqual(json.loads(pacote.extractfile('manifesto_backup.json').read())['avisos'], [])
+            aberta = sqlite3.connect(acesso.caminho_bd(self.root))
+            try:
+                aberta.execute('SELECT 1 FROM contas').fetchall()
+                acesso.criar_conta(self.root, 'Bia', 'bia', casos=['alpha'])
+                arquivo = backup.criar(self.root, self.base / 'copias2')
+            finally:
+                aberta.close()
+        with tarfile.open(arquivo) as pacote:
+            avisos = json.loads(pacote.extractfile('manifesto_backup.json').read())['avisos']
+            self.assertEqual([n for n in pacote.getnames() if n.startswith('acesso/')], ['acesso/contas.sqlite'])
+        self.assertEqual(len(avisos), 1)
+        self.assertIn('acesso/contas.sqlite: copiado sem o diário de escrita', avisos[0])
+        destino = self.base / 'destino'
+        backup.restaurar(destino, arquivo)
+        self.assertEqual([c['login'] for c in acesso.listar(destino)], ['ana'])  # whole, and older
 
     def test_restauracao_grava_dentro_de_volumes_sem_renomear_os_pontos_de_montagem(self):
         arquivo = backup.criar(self.root, self.base / 'copias')
