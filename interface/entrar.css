@@ -16,7 +16,9 @@
 .entrar-preferencias{display:flex;gap:8px;flex-wrap:wrap}
 .entrar-cartao section{background:var(--white);border:1px solid var(--line);border-radius:10px;padding:24px}
 .entrar-cartao h1{font-size:var(--text-xl);margin-top:0}
-.entrar-cartao form{display:flex;flex-direction:column;gap:18px;margin-top:18px}
+.entrar-cartao form{--entrar-intervalo:18px;display:flex;flex-direction:column;gap:var(--entrar-intervalo);margin-top:18px}
+/* Erro de campo a 4 px do campo (--espaco-1, regra de .campo-erro), mesmo com o aviso fora do label: desconta o intervalo do formulário. */
+.entrar-cartao form>.campo-erro{margin-top:calc(var(--espaco-1) - var(--entrar-intervalo))}
 .entrar-cartao form>button[type=submit]{width:100%;font-size:var(--text-base)}
 .entrar-cartao input[readonly]{background:var(--theme-soft);color:var(--theme-text)}
 .entrar-senha-linha{display:flex;gap:8px;align-items:stretch}
@@ -35,8 +37,6 @@
 #ativar-dica{margin:-8px 0 0}
 @media(max-width:719px) {
   .entrar-cartao section{padding:18px}
-  .entrar-senha-linha{flex-direction:column}
-  .entrar-mostrar{align-self:flex-start}
 }
 @media(prefers-reduced-motion:reduce) {
   *{transition:none!important;animation:none!important}

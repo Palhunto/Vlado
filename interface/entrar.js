@@ -18,10 +18,13 @@
       tema_claro: 'Modo claro', tema_escuro: 'Modo escuro',
       erro_credenciais: 'Login ou senha incorretos.',
       erro_bloqueado: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.',
-      erro_preencher: 'Preencha login e senha.',
+      erro_login_vazio: 'Falta o login. Use o login da sua conta.',
+      erro_senha_vazia: 'Falta a senha. Use a senha da sua conta.',
+      erro_nome_vazio: 'Falta o nome. Escreva o seu nome.',
+      erro_login_regra: 'Login inválido. Use de 3 a 64 caracteres: letras minúsculas, números, ponto, hífen ou sublinhado, começando por letra ou número.',
       erro_ativacao: 'Este link de ativação é inválido, já foi usado ou expirou. Peça um novo link à administração.',
       erro_senha_tamanho: 'A senha deve ter de 12 a 256 caracteres.',
-      erro_senha_diferente: 'As duas senhas não coincidem.',
+      erro_senha_diferente: 'As duas senhas não coincidem. Digite a mesma senha nos dois campos.',
       erro_indisponivel: 'O acesso está indisponível no momento. Avise a administração.',
       erro_rede: 'Sem conexão com o servidor. Verifique a rede e tente de novo.',
       erro_geral: 'Não foi possível concluir. Recarregue a página e tente de novo.',
@@ -49,10 +52,13 @@
       tema_claro: 'Light mode', tema_escuro: 'Dark mode',
       erro_credenciais: 'Incorrect login or password.',
       erro_bloqueado: 'Too many attempts. Wait a few minutes and try again.',
-      erro_preencher: 'Enter your login and password.',
+      erro_login_vazio: 'The login is missing. Use the login of your account.',
+      erro_senha_vazia: 'The password is missing. Use the password of your account.',
+      erro_nome_vazio: 'The name is missing. Write your name.',
+      erro_login_regra: 'Invalid login. Use 3 to 64 characters: lowercase letters, numbers, dot, hyphen or underscore, starting with a letter or number.',
       erro_ativacao: 'This activation link is invalid, already used or expired. Ask the administrators for a new one.',
       erro_senha_tamanho: 'The password must have 12 to 256 characters.',
-      erro_senha_diferente: 'The two passwords do not match.',
+      erro_senha_diferente: 'The two passwords do not match. Type the same password in both fields.',
       erro_indisponivel: 'Access is unavailable right now. Tell the administrators.',
       erro_rede: 'No connection to the server. Check the network and try again.',
       erro_geral: 'Could not finish. Reload the page and try again.',
@@ -158,7 +164,8 @@
     $('entrar-form').addEventListener('submit', async evento => {
       evento.preventDefault();
       const login = $('entrar-login').value.trim(), senha = $('entrar-senha').value;
-      if (!login || !senha) { mostrarNoCampo('erro_preencher', login ? $('entrar-senha') : $('entrar-login')); return; }
+      if (!login) { mostrarNoCampo('erro_login_vazio', $('entrar-login')); return; }   // com os dois em branco, a mensagem vai no login
+      if (!senha) { mostrarNoCampo('erro_senha_vazia', $('entrar-senha')); return; }
       const botao = $('entrar-enviar');
       ocupado(botao, true, 'entrando');
       try {
@@ -216,8 +223,8 @@
       evento.preventDefault();
       const nome = $('primeiro-nome').value.trim(), login = $('primeiro-login').value.trim().toLowerCase();
       const senha = $('primeiro-senha').value, confirmacao = $('primeiro-confirmar').value;
-      if (!nome) { mostrarNoCampo('erro_nome_login', $('primeiro-nome')); return; }
-      if (!/^[a-z0-9][a-z0-9._-]{2,63}$/.test(login)) { mostrarNoCampo('erro_nome_login', $('primeiro-login')); return; }
+      if (!nome) { mostrarNoCampo('erro_nome_vazio', $('primeiro-nome')); return; }
+      if (!/^[a-z0-9][a-z0-9._-]{2,63}$/.test(login)) { mostrarNoCampo('erro_login_regra', $('primeiro-login')); return; }
       if (senha.length < 12 || senha.length > 256) { mostrarNoCampo('erro_senha_tamanho', $('primeiro-senha')); return; }
       if (senha !== confirmacao) { mostrarNoCampo('erro_senha_diferente', $('primeiro-confirmar')); return; }
       ocupado(botao, true, 'criando');
