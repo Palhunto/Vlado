@@ -26,11 +26,12 @@
     if (aoClicar) controle.addEventListener('click', aoClicar);
     return controle;
   }
-  // O ✕ não existe nas fontes da Mesa e a CSP não aceita imagem data:; o sinal é SVG criado aqui (docs/design/icones/sinal-sem-suporte.svg).
-  function sinalErro() {
+  // O ✕ e o ◐ não existem nas fontes da Mesa e a CSP não aceita imagem data:; os sinais são SVG criado aqui (docs/design/icones/).
+  const SINAIS = {'sem-suporte': 'M7 7l10 10M17 7L7 17', parcial: 'M20 12a8 8 0 11-16 0 8 8 0 0116 0zM12 4v16M12 8h3M12 12h4M12 16h3'};
+  function sinal(nome = 'sem-suporte') {
     const svg = document.createElementNS(SVG, 'svg');
     svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('class', 'estado-sinal');
-    const caminho = document.createElementNS(SVG, 'path'); caminho.setAttribute('d', 'M7 7l10 10M17 7L7 17');
+    const caminho = document.createElementNS(SVG, 'path'); caminho.setAttribute('d', SINAIS[nome]);
     svg.append(caminho);
     return svg;
   }
@@ -97,7 +98,7 @@
   // Erro em três partes: o que houve (título), o que foi preservado e o que fazer (texto/ações). O código interno vai em "Detalhes".
   function erro(alvo, {titulo, texto, preservado, acoes = [], detalhes} = {}) {
     const bloco = no('div', 'estado-bloco estado-erro'); bloco.dataset.estado = 'erro'; bloco.setAttribute('role', 'alert');
-    const cabeca = no('p', 'estado-titulo'); cabeca.append(sinalErro(), no('span', '', t(titulo || 'Não deu para concluir.')));
+    const cabeca = no('p', 'estado-titulo'); cabeca.append(sinal('sem-suporte'), no('span', '', t(titulo || 'Não deu para concluir.')));
     bloco.append(cabeca);
     if (texto) bloco.append(no('p', 'estado-texto', t(texto)));
     if (preservado) bloco.append(no('p', 'estado-texto', t(preservado)));
@@ -157,5 +158,5 @@
     };
   }
 
-  window.Estados = {vazio, esqueleto, espera, erro, erroCampo, limparErroCampo, ocupado};
+  window.Estados = {vazio, esqueleto, espera, erro, erroCampo, limparErroCampo, ocupado, sinal};
 })();

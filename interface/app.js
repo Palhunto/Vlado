@@ -473,12 +473,21 @@ function encodeFile(file) {
     reader.readAsDataURL(file);
   });
 }
+// Envio em fluxo (W02, UX-05): cada arquivo com a própria barra e o próprio resultado, em lotes de até 50 MB. Só com um servidor que o anuncia
+// em /api/integracao (envio_fluxo); sem isso vale o envio em JSON de antes.
+async function sendByStream(files, scope) {
+  const envio = await Envio.enviar({escopo:scope, arquivos:files, alvo:$('cadastro-envio')});
+  if (!envio.recebidos) throw envio.erro || new Error(envio.cancelado ? 'Envio cancelado. Nada foi cadastrado.' : 'Nenhum arquivo foi cadastrado. Confira o resultado de cada arquivo acima.');
+  Envio.renderRecibo($('cadastro-recibo'), envio);
+  return {caso_id:envio.caso_id, inventario:await api('inventario', {caso:envio.caso_id}), limitacao:Envio.comLimitacao(envio) || !!envio.pendentes};
+}
 $('cadastro').addEventListener('submit', async event => {
   event.preventDefault(); uploadError();
   if (cadastroBusy) return;
   const files = Array.from($('cadastro-arquivos').files);
   if (!files.length) return;
-  if (files.reduce((sum, file) => sum + file.size, 0) > 50 * 1024 * 1024) {
+  const byStream = !!(window.Envio && await window.Envio.disponivel());
+  if (!byStream && files.reduce((sum, file) => sum + file.size, 0) > 50 * 1024 * 1024) {
     uploadError('O lote excede 50 MB. Divida o envio em lotes menores; nenhum arquivo foi enviado.'); return;
   }
   const isNew = !$('cadastro-caso').value;
@@ -492,12 +501,16 @@ $('cadastro').addEventListener('submit', async event => {
   $('cadastro-recibo').hidden = true; $('cadastro-perguntar').hidden=true;
   $('cadastro-status').textContent = `Enviando e cadastrando ${files.length} arquivo(s)…`;
   try {
-    const arquivos = await Promise.all(files.map(encodeFile));
-    const result = await api('cadastrar', {...scope, arquivos});
-    if (result.recebidos !== files.length || result.arquivos.length !== files.length) {
-      throw new Error('Recibo incompleto. Confira o inventário antes de considerar o lote confirmado.');
+    let result;
+    if (byStream) result = await sendByStream(files, scope);
+    else {
+      const arquivos = await Promise.all(files.map(encodeFile));
+      result = await api('cadastrar', {...scope, arquivos});
+      if (result.recebidos !== files.length || result.arquivos.length !== files.length) {
+        throw new Error('Recibo incompleto. Confira o inventário antes de considerar o lote confirmado.');
+      }
+      renderReceipt(result);
     }
-    renderReceipt(result);
     showInventory(result.inventario);
     await loadCatalog();
     $('cadastro-caso').value = result.caso_id;
@@ -508,7 +521,7 @@ $('cadastro').addEventListener('submit', async event => {
     $('cadastro-arquivos').value = '';
     $('arquivos-selecionados').textContent = 'Pronto para selecionar outro lote.';
     const pdf = result.extracao_pdf_resumo;
-    $('cadastro-status').textContent = pdf && (pdf.erro || pdf.parcial || pdf.sem_texto)
+    $('cadastro-status').textContent = result.limitacao || pdf && (pdf.erro || pdf.parcial || pdf.sem_texto)
       ? 'Originais registrados. Confira as limitações de extração no recibo antes da pergunta.'
       : 'Documentos registrados. Aguardando sua pergunta.';
   } catch (failure) {

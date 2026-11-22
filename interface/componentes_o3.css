@@ -59,3 +59,24 @@
 .campo-erro{margin:var(--espaco-1) 0 0;font-size:var(--text-md);line-height:1.5;color:var(--theme-danger)}
 :is(input,select,textarea)[aria-invalid="true"]{border:2px solid var(--theme-danger)}
 button[aria-disabled="true"]{cursor:progress}
+
+/* === Envio por arquivo (componentes.md#documentos, W02; envio.js) === */
+.envio-cartao{display:flex;flex-direction:column;gap:var(--espaco-3);padding:var(--espaco-4) var(--espaco-5);margin:var(--espaco-4) 0;
+  border:1px solid var(--theme-line);border-radius:var(--raio-cartao);background:var(--theme-background);color:var(--theme-text)}
+.envio-cartao :is(p,ul){margin:0}
+.envio-titulo{font-size:var(--text-base);font-weight:600;line-height:1.5}
+.envio-lista{display:flex;flex-direction:column;gap:var(--espaco-4);padding:0;list-style:none}
+.envio-arquivo{display:grid;grid-template-columns:minmax(0,260px) minmax(var(--espaco-8),1fr) minmax(0,200px);align-items:center;column-gap:var(--espaco-4);row-gap:var(--espaco-2)}
+.envio-nome{overflow-wrap:anywhere;font-size:var(--text-base)}
+.envio-resultado{display:flex;align-items:flex-start;gap:var(--espaco-2);font-size:var(--text-md);line-height:1.5;color:var(--theme-muted)}
+.envio-resultado[data-tom="ok"]{color:var(--theme-accent)}
+.envio-resultado[data-tom="aviso"]{color:var(--theme-warning);font-weight:600}
+.envio-resultado[data-tom="erro"]{color:var(--theme-danger);font-weight:600}
+.envio-lado{display:flex;flex-direction:column;gap:var(--espaco-1);min-width:0}
+.envio-ajuda{font-size:var(--text-md);color:var(--theme-muted)}
+.envio-ajuda summary{cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--theme-text)}
+.envio-recibo{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--espaco-3);padding-top:var(--espaco-3);border-top:1px solid var(--theme-line);font-size:var(--text-md)}
+.envio-recibo[hidden],.envio-ajuda[hidden],.envio-cartao .estado-acoes[hidden]{display:none}
+@media (max-width:719px) {
+  .envio-arquivo{grid-template-columns:minmax(0,1fr)}
+}
