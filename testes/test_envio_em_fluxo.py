@@ -120,6 +120,28 @@ class EnvioEmFluxoTest(Base):
                 self.assertIn(mensagem, resposta['erro'])
                 self.assertEqual(self.lotes_na_fila(), [])  # nothing queued, nothing written
 
+    def test_manifesto_recusado_responde_e_fecha_logo_sem_esperar_o_resto(self):
+        # The rest of the body never comes: the answer arrives and the slot is free in well under the
+        # 10 s of the body's deadline (the Coruja's ressalva 2).
+        linha = json.dumps({'caso': 'alpha', 'arquivos': [{'nome': 'a.txt', 'tamanho': 10}]}).encode() + b'\n'
+        conexao = self.conectar()
+        conexao.sendall(self.cabecalhos(len(linha) + 100000) + linha)
+        inicio = time.monotonic()
+        resposta = http.client.HTTPResponse(conexao)
+        resposta.begin()
+        self.assertEqual(resposta.status, 400)
+        self.assertIn('não confere', json.loads(resposta.read())['erro'])
+        conexao.settimeout(5)
+        try:
+            while conexao.recv(65536):
+                pass
+        except ConnectionError:
+            pass  # closed with what was unread: a reset after the answer
+        self.assertLess(time.monotonic() - inicio, 2)
+
+    def test_taxa_minima_padrao_deixa_passar_64_kbit_s(self):
+        self.assertLessEqual(interface_pesquisa.TAXA_MINIMA_CORPO, 8 * 1024)  # weak 3G or EDGE still sends
+
     def test_sessao_errada_nao_le_o_lote(self):
         status, resposta = self.enviar(self.lote([('a.txt', b'Documento sintetico.\n')]), token='outra')
         self.assertEqual(status, 403, resposta)

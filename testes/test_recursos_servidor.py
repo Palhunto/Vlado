@@ -5,9 +5,10 @@
   acima do teto não atrasa o 503 dos outros e é fechado no prazo ou no teto de bytes (B1).
 - A linha do pedido e os cabeçalhos têm prazo total, mesmo chegando um byte por vez; conexão parada
   sai no mesmo prazo e devolve a vaga.
-- No modo piloto, um mesmo endereço de cliente (o do registro de acessos, com os proxies confiáveis)
-  tem no máximo ``MAXIMO_POR_IP`` pedidos em curso; acima disso, 429 na hora, e os outros clientes
-  seguem. Atrás de um proxy fora da lista o cliente não é conhecido e não há teto por endereço.
+- No modo piloto, um mesmo endereço de cliente (o que a lista de proxies confiáveis dá) tem no
+  máximo ``MAXIMO_POR_IP`` pedidos em curso; acima disso, 429 na hora, e os outros clientes seguem.
+  Fora da lista conta o par TCP, com ou sem X-Forwarded-For (o cabeçalho não escolhe a contagem);
+  só ``MAXIMO_POR_IP`` 0 desliga.
 - Conversa ociosa sai da memória (tempo sem uso, e a mais antiga quando passa do teto) e volta do
   disco no próximo uso, como depois de uma reinicialização; conversa em execução ou recebendo
   documentos nunca sai.
@@ -167,7 +168,7 @@ class TetoPorEnderecoTest(unittest.TestCase):
         self.addCleanup(lambda: (self.server.shutdown(), self.server.server_close(), thread.join(5)))
 
     def em_curso(self, cliente):
-        """A request in course for ``cliente`` (behind the trusted proxy): its body never comes."""
+        """A request in course with X-Forwarded-For ``cliente``: its body never comes."""
         conexao = socket.create_connection(('127.0.0.1', self.server.server_port), timeout=10)
         self.addCleanup(conexao.close)
         linhas = ['POST /api/entrar HTTP/1.1', 'Host: vlado.test', 'Content-Type: application/json',
@@ -209,11 +210,29 @@ class TetoPorEnderecoTest(unittest.TestCase):
         # Nothing left counted (each request leaves the count just after its answer is sent).
         esperar(lambda: self.server._por_ip == {}, 5, f'contagem por endereço sobrou: {self.server._por_ip}')
 
-    def test_atras_de_proxy_fora_da_lista_nao_ha_teto_por_endereco(self):
-        with mock.patch.dict(os.environ, {'VLADO_PROXIES_CONFIAVEIS': ''}):
+    def contado_pelo_par(self, ambiente):
+        # The Coruja's proof (B1): the TCP peer is not a trusted proxy, so the header, even a new value at
+        # each request, never moves the request out of the peer's count.
+        with mock.patch.dict(os.environ, ambiente):
+            self.em_curso('6.6.6.1'), self.em_curso('6.6.6.2')
+            time.sleep(0.3)
+            self.assertEqual(self.saude('6.6.6.3')[0], 429)
+            self.assertEqual(self.saude()[0], 429)  # without the header: the same count
+
+    def test_par_fora_da_lista_conta_pelo_par_com_ou_sem_cabecalho(self):
+        self.contado_pelo_par({'VLADO_PROXIES_CONFIAVEIS': '10.0.0.0/8'})
+
+    def test_sem_lista_conta_pelo_par(self):
+        self.contado_pelo_par({'VLADO_PROXIES_CONFIAVEIS': ''})
+
+    def test_confiar_proxy_antigo_nao_escolhe_a_contagem(self):
+        self.contado_pelo_par({'VLADO_PROXIES_CONFIAVEIS': '', 'VLADO_CONFIAR_PROXY': '1'})
+
+    def test_so_o_zero_desliga(self):
+        with mock.patch.object(interface_pesquisa, 'MAXIMO_POR_IP', 0):
             self.em_curso('203.0.113.7'), self.em_curso('203.0.113.7'), self.em_curso('203.0.113.7')
             time.sleep(0.3)
-            self.assertEqual(self.saude('203.0.113.7')[0], 200)  # all seem to come from the proxy: not limited
+            self.assertEqual(self.saude('203.0.113.7')[0], 200)
 
 
 class ConversasOciosasTest(unittest.TestCase):

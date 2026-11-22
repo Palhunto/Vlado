@@ -87,15 +87,22 @@ MAXIMO_RECUSAS = 128
 PRAZO_CABECALHOS = 10.0
 # A request body must keep coming (CONF-03): PRAZO_CORPO seconds, plus one more for each
 # TAXA_MINIMA_CORPO bytes received (a minimum rate); a body sent a byte at a time no longer holds
-# its thread, and a large upload has the time its size needs at that rate.
+# its thread, and a large upload has the time its size needs at that rate. 8 KiB/s is about
+# 64 kbit/s: a reporter on weak 3G or EDGE still sends (32 KiB/s cut below about 256 kbit/s). A
+# client that keeps that rate holds its slot as long as its size needs (50 MB: under 2 hours), and
+# pays the bandwidth; MAXIMO_POR_IP keeps it from holding many.
 PRAZO_CORPO = 10.0
-TAXA_MINIMA_CORPO = 32 * 1024
+TAXA_MINIMA_CORPO = 8 * 1024
+# A refused streamed upload: what already arrived is read for at most this long after the answer,
+# then the connection closes (the slot is not held for the rest of the body).
+PRAZO_DRENO = 0.5
 # Requests in course from one client address at a time, in pilot mode (CONF-03): past it, 429 at
 # once, without reading the body, so one client cannot take all MAXIMO_CONEXOES. The address is the
-# one of the limits and the audit (rotas_contas._ip, with the trusted proxies of SEG-05). Half the
-# connections by default: a newsroom behind one NAT shares an address. Behind a proxy that is not on
-# the list every request seems to come from the proxy, so then there is no per-address ceiling (it
-# would be one ceiling for the whole site). 0 turns it off.
+# one the trusted proxies of SEG-05 give (VLADO_PROXIES_CONFIAVEIS): the TCP peer whenever it is not a
+# trusted proxy, with or without X-Forwarded-For (a header the client writes never chooses its
+# bucket; the old VLADO_CONFIAR_PROXY trusts anyone, so it does not count here). Behind a proxy not on
+# the list every request counts for the proxy: list it (deploy/MONITORAMENTO.md). Half the connections
+# by default: a newsroom behind one NAT shares an address. Only VLADO_MAXIMO_POR_IP=0 turns it off.
 MAXIMO_POR_IP = int(os.environ.get('VLADO_MAXIMO_POR_IP') or max(1, MAXIMO_CONEXOES // 2))
 MENSAGEM_POR_IP = 'Muitas requisições ao mesmo tempo deste endereço. Aguarde alguns segundos e tente de novo.'
 # Case data answered by ``executar`` (frozen analyses, intake, search index).
@@ -497,9 +504,9 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         self._ip_contado = None
         if self.server.modo != 'piloto' or MAXIMO_POR_IP <= 0:
             return True
-        ip = self._ip()
-        if ip == self.client_address[0] and self.headers.get('X-Forwarded-For'):
-            return True  # behind a proxy not on the list: the client is not known
+        par, redes = self.client_address[0], proxies_confiaveis.do_ambiente()
+        ip = (proxies_confiaveis.ip_do_cliente(par, ','.join(self.headers.get_all('X-Forwarded-For') or []), redes)
+              if redes else par)
         with self.server._por_ip_trava:
             em_curso = self.server._por_ip.get(ip, 0)
             if em_curso < MAXIMO_POR_IP:
@@ -522,17 +529,24 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                     self.server._por_ip.pop(ip, None)
 
     def finish(self):
-        """An upload refused before its files were read: read (and drop) what the client still sends, up to
-        rotas_documentos.LIMITE_DRENO and at the body's minimum rate, so the answer is not lost to a reset."""
+        """An upload refused before its files were read: the answer is sent, the end of it goes (SHUT_WR),
+        and what already arrived is dropped for at most PRAZO_DRENO, then the connection closes: closing
+        with unread bytes is a reset on Windows that could destroy the answer, but the slot is not held
+        for the rest of the body."""
         fluxo = self.__dict__.get('_fluxo')
-        if fluxo is not None and 0 < fluxo.restante <= rotas_documentos.LIMITE_DRENO:
-            self._leitura.corpo_desde, self._leitura.corpo_lido = time.monotonic(), 0
+        if fluxo is not None and fluxo.restante > 0:
+            fim = time.monotonic() + PRAZO_DRENO
+            self._leitura.corpo_desde = None
             try:
-                while fluxo.restante > 0:
-                    lido = self.rfile.read1(min(65536, fluxo.restante))
+                self.wfile.flush()
+                self.connection.shutdown(socket.SHUT_WR)
+                lidos = 0
+                while lidos < rotas_documentos.LIMITE_DRENO and (resta := fim - time.monotonic()) > 0:
+                    self.connection.settimeout(resta)
+                    lido = self.connection.recv(65536)
                     if not lido:
                         break
-                    fluxo.restante -= len(lido)
+                    lidos += len(lido)
             except OSError:
                 pass
         super().finish()
