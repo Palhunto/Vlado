@@ -143,6 +143,7 @@ main{padding:30px 32px;min-width:0}
   flex-direction:column;
   gap:10px;
   text-align:left;
+  justify-content:flex-start;
   border:1px solid var(--line);
   color:var(--theme-text);
   background:var(--paper);
@@ -697,12 +698,13 @@ h1,h2,h3{font-optical-sizing:auto}
   grid-template-columns:none;
   align-items:center;
   text-align:left;
+  justify-content:flex-start;
 }
 #diligencias-form input,#diligencias-form select{width:100%;min-width:0}
 /* Editable notebook and its preserved source references. */
 .notebook-workspace{display:grid;grid-template-columns:minmax(160px,240px) minmax(0,1fr);gap:20px;align-items:start}
 #apuracao-notas{display:flex;flex-direction:column;gap:8px}
-#apuracao-notas button{text-align:left;overflow-wrap:anywhere}
+#apuracao-notas button{text-align:left;justify-content:flex-start;overflow-wrap:anywhere}
 #apuracao-notas button[aria-current="true"]{border:2px solid currentColor}
 #apuracao-editor{min-width:0}
 #apuracao-previa, #apuracao-fontes{overflow-wrap:anywhere}
@@ -980,6 +982,7 @@ progress{accent-color:var(--green)}
   align-items:center;
   gap:10px;
   text-align:left;
+  justify-content:flex-start;
   margin:0 0 25px;
   background:var(--white);
   border-color:var(--theme-input-line);
@@ -990,6 +993,7 @@ progress{accent-color:var(--green)}
   align-items:center;
   gap:var(--espaco-3);
   text-align:left;
+  justify-content:flex-start;
   border:0;
   min-height:44px;
   border-radius:var(--raio-controle);
@@ -1140,6 +1144,7 @@ main{padding:var(--espaco-8);max-width:1600px;min-height:calc(100dvh - var(--cab
   min-height:35px;
   padding:0;
   text-align:left;
+  justify-content:flex-start;
   background:none;
   border:0;
   color:var(--ink);
@@ -1294,6 +1299,7 @@ main{padding:var(--espaco-8);max-width:1600px;min-height:calc(100dvh - var(--cab
   color:var(--ink);
   font-size:var(--text-md);
   text-align:left;
+  justify-content:flex-start;
   font-weight:500;
   border-radius:var(--raio-controle);
   padding:15px 13px;
@@ -1456,6 +1462,7 @@ footer{font-size:var(--text-xs);margin-top:32px;padding-top:20px;color:var(--mut
     visibility:hidden;
   }
   .mesa-menu-open .sidebar{transform:translateX(0);visibility:visible}
+  .mesa-menu-open::before{content:'';position:fixed;inset:0;background:var(--theme-backdrop);z-index:calc(var(--camada-gaveta) - 1)}
 }
 @media (max-width:719px) {
   :root{--cabecalho-altura:78px}
@@ -1601,7 +1608,7 @@ body>svg:has(>defs>symbol[id^="vditor-icon-"]){position:absolute;width:0;height:
 #apuracao-vditor button:disabled{background:transparent;opacity:.5}
 #apuracao-vditor .vditor-toolbar .vditor-tooltipped{padding:8px;font-size:var(--text-md)}
 #apuracao-vditor .vditor-toolbar svg{width:16px;height:16px}
-#apuracao-vditor .vditor-hint button{display:block;text-align:left;width:100%;font-size:var(--text-sm)}
+#apuracao-vditor .vditor-hint button{display:block;text-align:left;justify-content:flex-start;width:100%;font-size:var(--text-sm)}
 #apuracao-vditor .vditor-content{min-width:0;border-radius:0 0 8px 8px}
 #apuracao-vditor .vditor-reset{font:var(--text-lg)/1.85 var(--fonte-interface);overflow-wrap:anywhere}
 #apuracao-vditor .vditor-wysiwyg>.vditor-reset,
@@ -1945,6 +1952,7 @@ main:has(#area-achados:not([hidden])) .intro{margin-bottom:16px}
   background:transparent;
   color:var(--ink);
   text-align:left;
+  justify-content:flex-start;
   font-weight:400;
 }
 #apuracao-notas .note-item:hover{background:var(--soft)}
@@ -2032,6 +2040,7 @@ main:has(#area-achados:not([hidden])) .intro{margin-bottom:16px}
   font-weight:500;
   line-height:1.5;
   text-align:left;
+  justify-content:flex-start;
   color:var(--ink);
   overflow-wrap:anywhere;
 }
@@ -2126,7 +2135,7 @@ body[data-ambiente] .app-header{top:var(--faixa-ambiente)}
     align-items:center;
     min-height:44px;
   }
-  .mesa-document-name{min-height:44px;min-width:44px;text-align:left}
+  .mesa-document-name{min-height:44px;min-width:44px;text-align:left;justify-content:flex-start}
   .feedback-choice,.delete-confirm{min-height:44px}
   input[type=checkbox],input[type=radio]{width:24px;height:24px}
 }

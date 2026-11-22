@@ -23,6 +23,7 @@
   font:inherit;
   font-weight:400;
   text-align:left;
+  justify-content:flex-start;
   white-space:pre-wrap;
   cursor:pointer;
 }
