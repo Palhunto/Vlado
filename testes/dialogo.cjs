@@ -132,7 +132,7 @@ test('espera curta: ação no gerúndio, aria-busy, Cancelar desabilitado; erro 
   await mesa.esperar();
   assert.equal(caixa(mesa).getAttribute('aria-busy'), 'true');
   assert.equal(acao.textContent, 'Excluindo…');
-  assert.equal(acao.disabled, true);
+  assert.equal(acao.getAttribute('aria-disabled'), 'true', 'a ação fica aria-disabled na espera');
   assert.equal(cancelar.disabled, true, 'na espera curta não se cancela');
   tecla(mesa, caixa(mesa), 'Escape');
   assert.equal(caixa(mesa).open, true, 'Esc também espera a resposta');
@@ -143,7 +143,7 @@ test('espera curta: ação no gerúndio, aria-busy, Cancelar desabilitado; erro 
   assert.equal(erro.getAttribute('role'), 'alert');
   assert.equal(erro.textContent, 'Não deu para excluir. Tente de novo.');
   assert.equal(caixa(mesa).getAttribute('aria-busy'), null);
-  assert.equal(acao.disabled, false);
+  assert.equal(acao.getAttribute('aria-disabled'), 'false');
   acao.click(); await mesa.esperar();
   liberar.resolve();
   assert.equal(await promessa, true);
@@ -204,4 +204,43 @@ test('a interface não usa mais o confirm() do navegador (UX-16, W11 regra 8)', 
   const usos = fs.readdirSync(pasta).filter(nome => nome.endsWith('.js') && nome !== 'dialogo.js')
     .filter(nome => /\b(window\.)?confirm\(/.test(fs.readFileSync(path.join(pasta, nome), 'utf8').replace(/\bDialogo\.confirmar\(/g, '')));
   assert.deepEqual(usos, [], 'troque por Dialogo.confirmar');
+});
+
+test('na espera o foco não sai do diálogo: o campo fica só leitura, a ação aria-disabled, e o clique na ação é ignorado (ressalva da Coruja)', async () => {
+  const mesa = abrir();
+  mesa.$('gatilho').focus();
+  let tentativas = 0, liberar;
+  const promessa = mesa.janela.Dialogo.confirmar({variante: 'campo', titulo: 'Apagar definitivamente', nome: 'x', acao: 'Apagar definitivamente', ocupado: 'Apagando…',
+    executar: () => { tentativas++; return new Promise(resolve => { liberar = resolve; }); }});
+  await mesa.esperar();
+  const campo = caixa(mesa).querySelector('input'), [cancelar, acao] = botoes(mesa);
+  digitar(campo, 'x');
+  assert.ok(mesa.doc.activeElement === campo);
+  tecla(mesa, campo, 'Enter');
+  await mesa.esperar();
+  assert.equal(campo.readOnly, true, 'o campo não é desabilitado: o foco fica nele');
+  assert.equal(campo.disabled, false);
+  assert.equal(cancelar.disabled, true, 'espera curta: não se cancela');
+  assert.ok(caixa(mesa).contains(mesa.doc.activeElement), 'o foco continua dentro do diálogo');
+  acao.click(); tecla(mesa, campo, 'Enter');
+  assert.equal(tentativas, 1, 'clique ou Enter na espera não confirmam de novo');
+  liberar();
+  assert.equal(await promessa, true);
+  assert.equal(mesa.$('conteudo').inert, false, 'a página volta a funcionar');
+  assert.ok(mesa.doc.activeElement === mesa.$('gatilho'));
+});
+
+test('se o navegador recusar o showModal, a página não fica inerte e a promessa devolve false', async () => {
+  const mesa = abrir();
+  const original = mesa.doc.createElement.bind(mesa.doc);
+  mesa.doc.createElement = etiqueta => { const no = original(etiqueta); if (etiqueta === 'dialog') no.showModal = () => { throw new Error('InvalidStateError'); }; return no; };
+  const resultado = await mesa.janela.Dialogo.confirmar({titulo: 'Sair?', acao: 'Sair'});
+  assert.equal(resultado, false);
+  assert.equal(mesa.$('conteudo').inert, false);
+  assert.equal(caixa(mesa), null);
+  mesa.doc.createElement = original;
+  const seguinte = mesa.janela.Dialogo.confirmar({titulo: 'De novo?', acao: 'Sim'});
+  await mesa.esperar();
+  botoes(mesa)[1].click();
+  assert.equal(await seguinte, true, 'a fila de confirmações continua funcionando');
 });

@@ -56,13 +56,14 @@ test('recusa antes do envio: nome que a Mesa não aceita e arquivo acima de 50 M
   assert.match(resultado(ruim), /Renomeie/);
   assert.match(resultado(enorme), /Passa de 50 MB/);
   assert.equal(ruim.querySelector('svg.estado-sinal') !== null, true, 'a recusa leva sinal, não só cor');
+  assert.equal(ruim.querySelector('[role="progressbar"]').hidden, true, 'linha recusada não tem medidor');
   mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', estado: 'publicado', arquivos: [{indice: 0, estado: 'pronto', extracao: 'extraido', paginas: 3}], recibo: {recebidos: 1, novos: 1, duplicados: 0, corpus_id: 'c1'}}});
   const final = await promessa;
   assert.equal(final.recusados, 2);
   assert.equal(final.recebidos, 1);
-  assert.equal(final.pendentes, 2);
+  assert.equal(final.pendentes, 2); assert.equal(final.naoCadastrados, 2); assert.equal(final.aConferir, 0);
   assert.match(resultado(bom), /Pronto, 3 pág\./);
-  assert.match(mesa.$('alvo').querySelector('.envio-recibo').textContent, /Recibo do lote: 1 de 3 cadastrados, 2 pendentes\. É conferido antes da primeira pergunta\./);
+  assert.match(mesa.$('alvo').querySelector('.envio-recibo').textContent, /Recibo do lote: 1 de 3 cadastrados, 2 não cadastrados\. É conferido antes da primeira pergunta\./);
 });
 
 test('formato em fluxo: tipo, token, manifesto de uma linha com nome e tamanho, assincrono, e os bytes depois', async () => {
@@ -111,7 +112,7 @@ test('barra por arquivo: bytes enviados repartidos na ordem; depois a etapa de l
   assert.equal(cartao.getAttribute('aria-busy'), 'false');
   assert.equal(final.recebidos, 2); assert.equal(final.corpus_id, 'c9');
   assert.match(mesa.$('alvo').querySelector('[role="status"]').textContent, /2 de 2 arquivos concluídos/);
-  assert.match(mesa.$('alvo').querySelector('.envio-recibo').textContent, /2 de 2 cadastrados\. É conferido/);
+  assert.match(mesa.$('alvo').querySelector('.envio-recibo').textContent, /2 de 2 cadastrados, 1 com leitura a conferir\. É conferido/);
 });
 
 test('a falha de um arquivo não derruba os outros: resultado com sinal e texto, o que foi preservado e "O que fazer" (regras 2, 5 e 6)', async () => {
@@ -128,11 +129,40 @@ test('a falha de um arquivo não derruba os outros: resultado com sinal e texto,
   assert.match(resultado(erro), /Não foi possível ler este arquivo\. O original ficou guardado\./);
   assert.equal(erro.querySelector('.envio-resultado').dataset.tom, 'erro');
   assert.ok(erro.querySelector('svg.estado-sinal'));
-  assert.equal(erro.querySelector('details').hidden, false, '"O que fazer" aparece só onde há erro');
-  assert.equal(ok.querySelector('details').hidden, true);
+  assert.equal(erro.querySelector('.envio-ajuda').hidden, false, '"O que fazer" aparece só onde há erro');
+  assert.equal(erro.querySelector('.envio-ajuda').className.includes('secondary'), true, '"O que fazer" é botão secundário');
+  assert.equal(ok.querySelector('.envio-ajuda').hidden, true);
+  assert.equal(erro.querySelector('[role="progressbar"]').hidden, true, 'linha que falhou não tem medidor: a barra cheia leria como sucesso');
+  assert.equal(erro.dataset.falha, 'true');
+  assert.equal(ok.querySelector('[role="progressbar"]').hidden, false);
+  const explicacao = erro.querySelector('.envio-explicacao'), ajuda = erro.querySelector('.envio-ajuda');
+  assert.equal(explicacao.hidden, true);
+  ajuda.click();
+  assert.equal(explicacao.hidden, false); assert.equal(ajuda.getAttribute('aria-expanded'), 'true');
+  assert.match(explicacao.textContent, /O original está guardado no caso/);
+  const link = mesa.$('alvo').querySelector('.envio-recibo a');
+  assert.equal(link.textContent, 'Ver recibo'); assert.equal(link.localName, 'a', '"Ver recibo" é link, não botão');
+  assert.equal(mesa.$('alvo').querySelector('.envio-cabeca').children.length, 2, 'título e aviso na mesma linha');
   assert.match(resultado(parcial), /Lida em parte/);
   assert.equal(parcial.querySelector('.envio-resultado').dataset.tom, 'aviso', 'aviso nas cores de aviso, nunca de erro (regra 6)');
-  assert.equal(final.pendentes, 1, 'só o com erro é pendente no recibo do lote; o lido em parte é aviso, não pendência');
+  assert.equal(final.aConferir, 2, 'o com erro e o lido em parte têm leitura a conferir; os três estão cadastrados');
+  assert.equal(final.naoCadastrados, 0);
+  assert.match(mesa.$('alvo').querySelector('.envio-recibo').textContent, /3 de 3 cadastrados, 2 com leitura a conferir\./);
+});
+
+test('texto que passou pelo OCR vira "Lida por OCR: confira números", com sinal parcial e cor de aviso', async () => {
+  let estado = {lote: 'L1', estado: 'processando', arquivos: [{indice: 0, estado: 'ocr', etapa: 'reconhecimento', pagina: 1, paginas: 3, extracao: null}]};
+  const mesa = abrir({fila: () => estado});
+  const promessa = mesa.janela.Envio.enviar({escopo: {caso: 'alfa'}, arquivos: [arquivo('digitalizado.pdf')], alvo: mesa.$('alvo')});
+  await livre(mesa);
+  mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', estado: 'enfileirado', arquivos: []}});
+  await livre(mesa);
+  estado = {lote: 'L1', estado: 'publicado', recibo: {recebidos: 1, novos: 1, duplicados: 0}, arquivos: [{indice: 0, estado: 'pronto', extracao: 'extraido', paginas: 3}]};
+  await promessa;
+  const li = linhas(mesa)[0];
+  assert.match(resultado(li), /Lida por OCR: confira números/);
+  assert.equal(li.querySelector('.envio-resultado').dataset.tom, 'aviso');
+  assert.ok(li.querySelector('svg.estado-sinal'));
 });
 
 test('lotes: mais de 50 MB somados ou 100 arquivos viram mais de um lote, em ordem', () => {
@@ -215,7 +245,10 @@ async function abrirCadastro({fluxo}) {
       janela.setTimeout = (funcao, ms, ...resto) => (ms === 1500 ? setImmediate(funcao) : setTimeout(funcao, ms, ...resto));   // o intervalo da fila
       const original = janela.fetch;   // o /api/integracao é lido no carregamento: a troca vem antes dos scripts
       janela.fetch = async (endereco, opcoes) => {
-        if (String(endereco) === '/api/integracao') return {ok: true, json: async () => (fluxo ? {envio_fluxo: true} : {})};
+        if (String(endereco) === '/api/integracao') {
+          const resposta = {ok: true, json: async () => (fluxo ? {envio_fluxo: true} : {})};
+          return janela.__segurar ? janela.__segurar.then(() => resposta) : resposta;   // a resposta lenta, liberada pelo teste
+        }
         if (String(endereco).startsWith('/api/fila?lote=')) return {ok: true, json: async () => ({lote})};
         return original(endereco, opcoes);
       };
@@ -236,7 +269,7 @@ test('Cadastrar com o servidor em fluxo: o submit usa o envio por arquivo, mostr
   mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', caso: 'alfa', estado: 'enfileirado', arquivos: []}});
   await mesa.esperar(20);
   assert.equal(mesa.$('cadastro-recibo').hidden, false);
-  assert.match(mesa.$('cadastro-recibo').textContent, /Envio conferido: 2 de 2 arquivo\(s\)/);
+  assert.match(mesa.$('cadastro-recibo').textContent, /Recibo do lote: 2 de 2 arquivos/);
   assert.ok(mesa.chamadas.some(c => c.operacao === 'inventario'), 'o inventário é relido depois do envio');
   assert.match(mesa.$('cadastro-status').textContent, /Confira as limitações de extração no recibo antes da pergunta/, 'arquivo sem texto pede conferência');
   assert.equal(mesa.$('cadastro-perguntar').hidden, false);
@@ -252,4 +285,74 @@ test('Cadastrar com um servidor sem envio em fluxo não cria pedido em fluxo (o 
   await mesa.esperar(8);
   assert.equal(mesa.pedidos.length, 0);
   assert.equal(mesa.$('cadastro-envio').childNodes.length, 0);
+});
+
+test('recibo conferido: só a contagem do lote e Detalhes técnicos, plural concordado e sem repetir o resultado de cada arquivo', () => {
+  const mesa = abrir();
+  const destino = mesa.$('cadastro-recibo');
+  const lote = (novos, duplicados, nomes) => ({caso_id: 'alfa', corpus_id: 'c1', recebidos: novos + duplicados, novos, duplicados, arquivos: nomes.map(nome => ({nome, estado: 'pronto', extracao: 'extraido'}))});
+  mesa.janela.Envio.renderRecibo(destino, lote(3, 0, ['a.pdf', 'b.pdf', 'c.pdf']));
+  assert.equal(destino.hidden, false);
+  assert.equal(destino.querySelector('h3').textContent, 'Recibo do lote: 3 de 3 arquivos');
+  assert.equal(destino.querySelectorAll('p')[0].textContent, '3 novos · nenhum duplicado');
+  assert.equal(destino.querySelectorAll('li').length, 0, 'sem a lista de arquivos: o cartão de envio já a mostra');
+  assert.match(destino.querySelector('details').textContent, /Apuração: alfa · Corpus: c1/);
+  mesa.janela.Envio.renderRecibo(destino, lote(1, 1, ['a.pdf', 'b.pdf']));
+  assert.equal(destino.querySelectorAll('p')[0].textContent, '1 novo · 1 duplicado');
+  mesa.janela.Envio.renderRecibo(destino, lote(0, 2, ['a.pdf', 'b.pdf']));
+  assert.equal(destino.querySelectorAll('p')[0].textContent, 'nenhum novo · 2 duplicados');
+});
+
+test('clique duplo em Enviar enquanto a Mesa consulta o servidor manda o lote uma vez só, no envio em fluxo (B1 da Coruja)', async () => {
+  const mesa = await abrirCadastro({fluxo: true});
+  mesa.janela.__segurar = new Promise(resolver => { mesa.liberar = resolver; });
+  Object.defineProperty(mesa.$('cadastro-arquivos'), 'files', {value: [arquivo('a.pdf', 100)]});
+  mesa.$('cadastro-caso').value = 'alfa';
+  mesa.$('cadastro').requestSubmit();
+  mesa.$('cadastro').requestSubmit();
+  await mesa.esperar(4);
+  mesa.liberar(); await mesa.esperar(8);
+  assert.equal(mesa.pedidos.length, 1, 'um segundo clique na espera não manda o lote de novo');
+  mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', caso: 'alfa', estado: 'enfileirado', arquivos: []}});
+  await mesa.esperar(20);
+  assert.equal(mesa.$('enviar-documentos').disabled, false, 'a tela volta a ficar livre ao terminar');
+});
+
+test('clique duplo no envio em JSON de antes também manda um pedido só, e uma saída antecipada solta o ocupado', async () => {
+  const mesa = await abrirCadastro({fluxo: false});
+  mesa.janela.FileReader = class { readAsDataURL() { this.result = 'data:;base64,AAAA'; this.onload(); } };
+  mesa.janela.__segurar = new Promise(resolver => { mesa.liberar = resolver; });
+  Object.defineProperty(mesa.$('cadastro-arquivos'), 'files', {value: [arquivo('a.pdf', 100)], configurable: true});
+  mesa.$('cadastro-caso').value = 'alfa';
+  mesa.$('cadastro').requestSubmit();
+  mesa.$('cadastro').requestSubmit();
+  await mesa.esperar(4);
+  mesa.liberar(); await mesa.esperar(12);
+  assert.equal(mesa.chamadas.filter(c => c.operacao === 'cadastrar').length, 1, 'um pedido só');
+  // Lote acima de 50 MB no envio antigo: a recusa sai cedo e a tela não fica presa em "ocupado".
+  Object.defineProperty(mesa.$('cadastro-arquivos'), 'files', {value: [arquivo('enorme.pdf', 60 * 1024 * 1024)], configurable: true});
+  mesa.janela.__segurar = null;
+  mesa.$('cadastro').requestSubmit();
+  await mesa.esperar(8);
+  assert.match(mesa.$('cadastro-erro').textContent, /O lote excede 50 MB/);
+  mesa.$('cadastro').requestSubmit();
+  await mesa.esperar(8);
+  assert.match(mesa.$('cadastro-erro').textContent, /O lote excede 50 MB/, 'um novo envio ainda é tentado (não ficou preso)');
+});
+
+test('aviso_natureza do servidor aparece no recibo do lote, como aviso (sinal e cor de aviso), e não como erro', async () => {
+  const AVISO = 'Os documentos deste lote foram informados como públicos, diferente da apuração (sintéticos): a apuração passa a natureza não informada (mista).';
+  const mesa = abrir({fila: () => ({lote: 'L1', estado: 'publicado', recibo: {recebidos: 1, novos: 1, duplicados: 0, aviso_natureza: AVISO}, arquivos: [{indice: 0, estado: 'pronto', extracao: 'extraido', paginas: 1}]})});
+  const promessa = mesa.janela.Envio.enviar({escopo: {caso: 'alfa', natureza: 'publicos'}, arquivos: [arquivo('a.pdf')], alvo: mesa.$('alvo')});
+  await livre(mesa);
+  mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', estado: 'enfileirado', arquivos: []}});
+  const final = await promessa;
+  assert.equal(final.avisos.length, 1);
+  mesa.janela.Envio.renderRecibo(mesa.$('cadastro-recibo'), final);
+  const aviso = mesa.$('cadastro-recibo').querySelector('.docs-aviso');
+  assert.ok(aviso, 'o aviso está no recibo');
+  assert.equal(aviso.textContent, AVISO);
+  assert.equal(aviso.getAttribute('role'), 'status', 'aviso, não alerta de erro');
+  assert.ok(aviso.querySelector('svg.estado-sinal'));
+  assert.equal(mesa.$('cadastro-recibo').querySelector('[role="alert"]'), null);
 });
