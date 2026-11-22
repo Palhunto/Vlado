@@ -354,7 +354,7 @@ window.Quadros = (() => {
     if (!vigente()) return;
     tipos = dados.tipos_data || tipos || {};
     const corpo = [filtro(painel, casoId, carregar), comoLer(), element('p', t(dados.aviso || ''), 'small quadro-aviso')];
-    if (!dados.entradas?.length) corpo.push(escolhidos ? Q.estado(element('div'), 'vazio', t('Nenhum acontecimento tem os tipos de data escolhidos.'), {acao: {rotulo: t('Mostrar tudo'), aoClicar: () => { escolhidos = null; carregar(painel, casoId); }}})
+    if (!dados.entradas?.length) corpo.push(escolhidos ? Q.estado(element('div'), 'vazio', t('Nenhum acontecimento tem os tipos de data escolhidos.'), {titulo: t('Nenhum acontecimento com esses tipos de data'), acao: {rotulo: t('Mostrar tudo'), aoClicar: () => { escolhidos = null; carregar(painel, casoId); }}})
       : Q.estado(element('div'), 'vazio', t('A linha do tempo reúne os acontecimentos datados que os documentos registram.'), {titulo: t('Nenhum acontecimento com data ainda'), acao: Q.perguntar()}));
     else {
       const linha = element('div', undefined, 'tempo-linha');

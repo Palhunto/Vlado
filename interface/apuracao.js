@@ -539,7 +539,7 @@
     } finally { creating = false; if (!offeredDraft) lockEditing(false); controls(); }
   });
   $('apuracao-excluir').addEventListener('click', async () => {
-    if (!current || !(await Dialogo.confirmar({variante:'destrutivo', titulo:'Excluir {item}?', item:current.titulo, texto:'As fontes serão preservadas.', acao:'Excluir nota', gatilho:$('apuracao-excluir')}))) return;
+    if (!current || !(await Dialogo.confirmar({variante:'destrutivo', titulo:'Excluir {item}?', item:current.nota.titulo, texto:'As fontes serão preservadas.', acao:'Excluir nota', gatilho:$('apuracao-excluir')}))) return;
     await flush();
     const target = current;
     loading = true; controls(); error();

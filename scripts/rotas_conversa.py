@@ -13,6 +13,7 @@ from __future__ import annotations
 import threading
 
 import acesso
+import autorizacao
 import custo
 import diligencias
 from rotas_documentos import receber_documentos
@@ -37,15 +38,19 @@ class RotasConversa:
     """Mixin of the request handler: uses its ``_send``, ``_json`` and ``server``."""
 
     def _cota(self):
-        """`GET /api/cota`: this month's spend and balance in reais (the quota bar). A guest sees only
-        its own account; an administrator also sees the organization's. No case content."""
+        """`GET /api/cota`: this month's spend and balance in reais (the quota bar). Each account sees its
+        own; the dono also sees the newsroom's. No case content."""
         principal = self._principal()
         if principal is None:
             self._proibido()
             return
         try:
+            autorizacao.conferir(self.server.root, self.server.modo, principal, 'GET:/api/cota', {})
             self._json(200, custo.situacao(self.server.root, principal['conta'],
-                                           administrador=principal['papel'] == 'admin'))
+                                           administrador=autorizacao.gasto_da_redacao(self.server.root, self.server.modo,
+                                                                                      principal)))
+        except autorizacao.Recusa as recusa:
+            self._recusado(recusa, principal)
         except ValueError as exc:
             self._json(400, {'erro': str(exc)}, exc)
 

@@ -16,6 +16,7 @@
   const NOME_RUIM = /[\\/:*?"<>|\x00-\x1f]/;
   const RESERVADO = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
   const TIPO_LOTE = 'application/vnd.vlado.lote';
+  let sequencia = 0;
   const sessao = () => document.querySelector('meta[name="session-token"]')?.getAttribute('content') || '';
   const esperar = ms => new Promise(resolver => setTimeout(resolver, ms));
 
@@ -54,8 +55,11 @@
     const paginas = linha.paginas ? t('{n} pág.', {n: linha.paginas}) : '';
     if (linha.extracao === 'parcial') return {tom: 'aviso', sinal: 'parcial', texto: t('Lida em parte: confira as páginas sem texto no original.')};
     if (linha.extracao === 'sem_texto') return {tom: 'aviso', sinal: 'parcial', texto: t('Sem texto lido. O original ficou guardado.')};
-    if (linha.extracao === 'erro') return {tom: 'erro', sinal: 'sem-suporte', texto: linha.motivo ? mensagemDe({erro: linha.motivo}) : t('Não foi possível ler este arquivo. O original ficou guardado.'), ajuda: true};
+    if (linha.extracao === 'erro') return {tom: 'erro', sinal: 'sem-suporte', semMedidor: true, ajuda: true,
+      texto: linha.motivo ? mensagemDe({erro: linha.motivo}) : t('Não foi possível ler este arquivo. O original ficou guardado.')};
     if (linha.extracao === 'pendente') return {tom: 'aviso', sinal: 'parcial', texto: t('Leitura pendente. O original ficou guardado.')};
+    // O texto veio do OCR: o reconhecimento automático erra números e nomes (W02, regra 5).
+    if (linha.passouPorOcr) return {tom: 'aviso', sinal: 'parcial', texto: t('Lida por OCR: confira números')};
     return {tom: 'ok', texto: paginas ? `✓ ${t('Pronto, {paginas}', {paginas})}` : `✓ ${t('Pronto')}`};
   }
   function descrever(linha) {
@@ -66,11 +70,11 @@
       case 'extraindo': return {tom: 'neutro', texto: linha.pagina && linha.paginas ? t('Lendo pág. {n} de {m}', {n: linha.pagina, m: linha.paginas}) : t('Lendo o texto')};
       case 'ocr': return {tom: 'neutro', texto: linha.pagina && linha.paginas ? t('Lendo por OCR, pág. {n} de {m}', {n: linha.pagina, m: linha.paginas}) : t('Lendo por OCR')};
       case 'pronto': return resultadoPronto(linha);
-      case 'falha': return {tom: 'erro', sinal: 'sem-suporte', texto: linha.motivo ? mensagemDe({erro: linha.motivo}) : t('A leitura parou. O original foi cadastrado e a falha está no recibo.'), ajuda: true};
-      case 'recusado': return {tom: 'erro', sinal: 'sem-suporte', texto: linha.motivo, ajuda: false};
-      case 'cancelado': return {tom: 'aviso', sinal: 'parcial', texto: t('Envio cancelado. Nada deste arquivo foi cadastrado.')};
-      case 'sem-acompanhamento': return {tom: 'aviso', sinal: 'parcial', texto: t('Recebido. Não foi possível acompanhar a leitura; confira em Documentos.')};
-      case 'nao-enviado': return {tom: 'erro', sinal: 'sem-suporte', texto: linha.motivo || t('Não foi enviado. Tente de novo.'), ajuda: false};
+      case 'falha': return {tom: 'erro', sinal: 'sem-suporte', semMedidor: true, texto: linha.motivo ? mensagemDe({erro: linha.motivo}) : t('A leitura parou. O original foi cadastrado e a falha está no recibo.'), ajuda: true};
+      case 'recusado': return {tom: 'erro', sinal: 'sem-suporte', semMedidor: true, texto: linha.motivo, ajuda: false};
+      case 'cancelado': return {tom: 'aviso', sinal: 'parcial', semMedidor: true, texto: t('Envio cancelado. Nada deste arquivo foi cadastrado.')};
+      case 'sem-acompanhamento': return {tom: 'aviso', sinal: 'parcial', semMedidor: true, texto: t('Recebido. Não foi possível acompanhar a leitura; confira em Documentos.')};
+      case 'nao-enviado': return {tom: 'erro', sinal: 'sem-suporte', semMedidor: true, texto: linha.motivo || t('Não foi enviado. Tente de novo.'), ajuda: false};
       default: return {tom: 'neutro', texto: ''};
     }
   }
@@ -84,13 +88,15 @@
   // O cartão de envio: título, uma linha por arquivo, recibo do lote. aria-busy enquanto houver arquivo em andamento.
   function cartao(alvo, ctx) {
     const raiz = no('div', 'envio-cartao'); raiz.dataset.estado = 'ocupado';
+    const cabeca = no('div', 'envio-cabeca');
     const titulo = no('p', 'envio-titulo');
     const aviso = no('p', 'estado-nota', t('Você pode continuar trabalhando e sair desta tela.'));
+    cabeca.append(titulo, aviso);
     const lista = no('ul', 'envio-lista');
     const recibo = no('div', 'envio-recibo'); recibo.hidden = true;
     const acoes = no('div', 'estado-acoes'); acoes.hidden = true;
     const anuncio = no('p', 'sr-only'); anuncio.setAttribute('role', 'status');
-    raiz.append(titulo, aviso, lista, recibo, acoes, anuncio);
+    raiz.append(cabeca, lista, recibo, acoes, anuncio);
     alvo.replaceChildren(raiz);
     const itens = new Map();
     let ultimoAnuncio = '';
@@ -103,13 +109,15 @@
       const barra = no('div', 'medidor-progresso'); barra.setAttribute('role', 'progressbar');
       barra.setAttribute('aria-valuemin', '0'); barra.setAttribute('aria-valuemax', '100'); barra.setAttribute('aria-label', t('Progresso de {nome}', {nome: linha.nome}));
       const resultado = no('span', 'envio-resultado');
-      const ajuda = no('details', 'envio-ajuda'); ajuda.hidden = true;
-      ajuda.append(no('summary', '', t('O que fazer')), no('p', 'estado-texto',
-        t('O original está guardado no caso. Abra o recibo para ver o que a Mesa registrou ou envie uma cópia corrigida, por exemplo sem macro e sem senha.')));
-      const lado = no('div', 'envio-lado'); lado.append(resultado, ajuda);
-      li.append(nome, barra, lado);
+      const ajuda = no('button', 'secondary envio-ajuda', t('O que fazer')); ajuda.type = 'button'; ajuda.hidden = true;
+      const explicacao = no('p', 'envio-explicacao estado-texto',
+        t('O original está guardado no caso. Abra o recibo para ver o que a Mesa registrou ou envie uma cópia corrigida, por exemplo sem macro e sem senha.'));
+      explicacao.hidden = true; explicacao.id = `envio-explicacao-${++sequencia}`;
+      ajuda.setAttribute('aria-expanded', 'false'); ajuda.setAttribute('aria-controls', explicacao.id);
+      ajuda.addEventListener('click', () => { explicacao.hidden = !explicacao.hidden; ajuda.setAttribute('aria-expanded', String(!explicacao.hidden)); });
+      li.append(nome, barra, resultado, ajuda, explicacao);
       lista.append(li);
-      item = {li, barra, resultado, ajuda};
+      item = {li, barra, resultado, ajuda, explicacao};
       itens.set(linha, item);
       return item;
     }
@@ -126,11 +134,14 @@
         const pct = Math.round(fracaoDe(linha) * 100);
         item.barra.style.setProperty('--uso', `${pct}%`); item.barra.setAttribute('aria-valuenow', String(pct));
         item.li.dataset.estado = linha.estado; item.resultado.dataset.tom = situacao.tom;
+        // Linha que falhou não tem medidor: o texto do erro ocupa o lugar da barra (a barra cheia leria como sucesso).
+        item.barra.hidden = !!situacao.semMedidor; item.li.dataset.falha = String(!!situacao.semMedidor);
         const partes = [];
         if (situacao.sinal) partes.push(window.Estados.sinal(situacao.sinal));
         partes.push(situacao.texto);
         item.resultado.replaceChildren(...partes);
         item.ajuda.hidden = !situacao.ajuda;
+        if (!situacao.ajuda) item.explicacao.hidden = true;
       }
       // Só as mudanças de estado são anunciadas, não cada passo da barra.
       const resumo = `${linhas.filter(l => ['pronto', 'falha', 'recusado', 'cancelado', 'nao-enviado', 'sem-acompanhamento'].includes(l.estado)).length}/${linhas.length}`;
@@ -143,11 +154,14 @@
       recibo.hidden = !resumo;
       if (!resumo) return;
       const forte = no('strong', '', t('{n} de {total} cadastrados', {n: resumo.recebidos, total: resumo.total}));
-      const pendentes = resumo.pendentes ? `, ${resumo.pendentes === 1 ? t('1 pendente') : t('{n} pendentes', {n: resumo.pendentes})}` : '';
+      const partes = [];
+      if (resumo.naoCadastrados) partes.push(resumo.naoCadastrados === 1 ? t('1 não cadastrado') : t('{n} não cadastrados', {n: resumo.naoCadastrados}));
+      if (resumo.aConferir) partes.push(resumo.aConferir === 1 ? t('1 com leitura a conferir') : t('{n} com leitura a conferir', {n: resumo.aConferir}));
+      const pendentes = partes.length ? `, ${partes.join(', ')}` : '';
       const texto = no('span');
       texto.append(`${t('Recibo do lote')}: `, forte, `${pendentes}. ${t('É conferido antes da primeira pergunta.')}`);
-      const ver = no('button', 'secondary', t('Ver recibo')); ver.type = 'button';
-      ver.addEventListener('click', () => ctx.aoVerRecibo?.());
+      const ver = no('a', 'envio-link', t('Ver recibo')); ver.href = '#cadastro-recibo';
+      ver.addEventListener('click', evento => { evento.preventDefault(); ctx.aoVerRecibo?.(); });
       recibo.replaceChildren(texto, ver);
     }
     function mostrarAcoes(lista_) {
@@ -206,10 +220,11 @@
       const linha = linhas[arquivo.indice];
       if (!linha) continue;
       Object.assign(linha, {estado: arquivo.estado, pagina: arquivo.pagina, paginas: arquivo.paginas, extracao: arquivo.extracao, motivo: arquivo.motivo});
+      if (arquivo.estado === 'ocr' || ['orientacao', 'reconhecimento'].includes(arquivo.etapa)) linha.passouPorOcr = true;
     }
   }
 
-  async function enviar({escopo, arquivos, alvo}) {
+  async function enviar({escopo, arquivos, alvo, alvoRecibo}) {
     const ctx = {linhas: [], cancelado: false, cancelarEnvio: null, redesenhar: () => ui.desenhar(), aoVerRecibo: null};
     ctx.linhas = Array.from(arquivos).map(arquivo => ({arquivo, nome: arquivo.name, bytes: arquivo.size, estado: 'aguardando', fracao: 0}));
     for (const linha of ctx.linhas) {
@@ -217,7 +232,7 @@
       if (motivo) { linha.estado = 'recusado'; linha.motivo = motivo; }
     }
     const ui = cartao(alvo, ctx);
-    const resultado = {caso_id: escopo.caso, lotes: [], enviados: 0, recebidos: 0, novos: 0, duplicados: 0, pendentes: 0, recusados: ctx.linhas.filter(l => l.estado === 'recusado').length, cancelado: false};
+    const resultado = {caso_id: escopo.caso, lotes: [], enviados: 0, recebidos: 0, novos: 0, duplicados: 0, pendentes: 0, avisos: [], recusados: ctx.linhas.filter(l => l.estado === 'recusado').length, cancelado: false};
     ui.desenhar();
 
     const lotesPlanejados = planejar(ctx.linhas.filter(l => l.estado === 'aguardando'));
@@ -267,6 +282,9 @@
           continue;
         }
         resultado.lotes.push(atual);
+        // Aviso do servidor sobre a natureza dos documentos (informada diferente da apuração): vai para o recibo, como aviso e não como erro.
+        const aviso = atual.recibo?.aviso_natureza;
+        if (aviso && !resultado.avisos.includes(aviso)) resultado.avisos.push(aviso);
         resultado.enviados += dosArquivos.length;
         resultado.recebidos += atual.recibo?.recebidos ?? dosArquivos.length;
         resultado.novos += atual.recibo?.novos ?? 0;
@@ -277,30 +295,31 @@
     await fazer(lotesPlanejados);
     ui.mostrarAcoes([]);
     resultado.cancelado = ctx.cancelado;
-    resultado.pendentes = ctx.linhas.filter(l => ['nao-enviado', 'cancelado', 'recusado', 'falha', 'sem-acompanhamento'].includes(l.estado)
-      || (l.estado === 'pronto' && ['erro', 'sem_texto', 'pendente'].includes(l.extracao))).length;
+    resultado.naoCadastrados = ctx.linhas.filter(l => ['nao-enviado', 'cancelado', 'recusado', 'falha', 'sem-acompanhamento'].includes(l.estado)).length;
+    resultado.aConferir = ctx.linhas.filter(l => l.estado === 'pronto' && (['erro', 'sem_texto', 'pendente', 'parcial'].includes(l.extracao) || l.passouPorOcr)).length;
+    resultado.pendentes = resultado.naoCadastrados + resultado.aConferir;
     resultado.arquivos = ctx.linhas;
-    ui.mostrarRecibo(resultado.enviados || resultado.recusados ? {recebidos: resultado.recebidos, total: ctx.linhas.length, pendentes: resultado.pendentes} : null);
-    ctx.aoVerRecibo = () => { const detalhe = document.getElementById('cadastro-recibo'); if (detalhe && !detalhe.hidden) { detalhe.scrollIntoView({block: 'start'}); detalhe.focus?.(); } };
+    ui.mostrarRecibo(resultado.enviados || resultado.recusados ? {recebidos: resultado.recebidos, total: ctx.linhas.length, naoCadastrados: resultado.naoCadastrados, aConferir: resultado.aConferir} : null);
+    ctx.aoVerRecibo = () => { const detalhe = alvoRecibo || document.getElementById('cadastro-recibo'); if (detalhe && !detalhe.hidden) { detalhe.scrollIntoView({block: 'start'}); detalhe.focus?.(); } };
     ui.desenhar();
     return resultado;
   }
 
-  // Recibo do lote em detalhe (o "Ver recibo" do cartão): contagens, um resultado por arquivo e, em "Detalhes técnicos", o que não é para a lista
-  // (identificadores, W02 regra 7).
+  // Recibo do lote em detalhe (o "Ver recibo" do cartão): só o que o cartão de envio ainda não diz, a contagem do lote e, em "Detalhes técnicos",
+  // o que não é para a lista (apuração e versão, W02 regra 7). O resultado de cada arquivo já está no cartão.
+  const plural = (n, um, varios, nenhum) => (n === 0 ? nenhum : n === 1 ? `1 ${um}` : `${n} ${varios}`);
   function renderRecibo(destino, resultado) {
-    const lista = no('ul', 'document-list');
-    for (const linha of resultado.arquivos) {
-      const item = no('li');
-      const nome = no('span', '', linha.nome); nome.setAttribute('translate', 'no');
-      item.append(nome, ` · ${descrever(linha).texto}`);
-      lista.append(item);
-    }
     const tecnicos = no('details', 'estado-detalhes');
     const linhaTecnica = no('p', '', `${t('Apuração')}: ${resultado.caso_id} · ${t('Corpus')}: ${resultado.corpus_id || '—'}`); linhaTecnica.setAttribute('translate', 'no');
     tecnicos.append(no('summary', '', t('Detalhes técnicos')), linhaTecnica);
-    destino.replaceChildren(no('h3', '', t('Envio conferido: {n} de {total} arquivo(s)', {n: resultado.recebidos, total: resultado.arquivos.length})),
-      no('p', '', t('{novos} novo(s) · {duplicados} duplicado(s).', {novos: resultado.novos, duplicados: resultado.duplicados})), lista, tecnicos);
+    const contagem = [plural(resultado.novos, t('novo'), t('novos'), t('nenhum novo')), plural(resultado.duplicados, t('duplicado'), t('duplicados'), t('nenhum duplicado'))].join(' · ');
+    const avisos = (resultado.avisos || []).map(texto => {
+      const linha = no('p', 'docs-aviso'); linha.setAttribute('role', 'status');
+      linha.append(window.Estados.sinal('parcial'), t(texto));
+      return linha;
+    });
+    destino.replaceChildren(no('h3', 'docs-recibo-titulo', t('Recibo do lote: {n} de {total} arquivos', {n: resultado.recebidos, total: resultado.arquivos.length})),
+      no('p', '', contagem), ...avisos, tecnicos);
     destino.hidden = false;
   }
   // O que pede conferência antes da pergunta: leitura com erro, em parte ou sem texto.

@@ -71,6 +71,14 @@ PASTAS_COM_QUARENTENA = ('casos', 'conversas', 'execucoes', 'lixeira')
 # `casos/.fila/<lote>/` (uploads not yet published: originals, plan, state), IS part of the backup, taken before the
 # cases (see `_entradas`); `.novo_<id>` there (a batch being assembled, renamed when complete) is a marker above.
 ARQUIVOS_DE_TRAVA = (TRAVA_CADASTRO, '.coordenador')
+# The accounts store (scripts/acesso.py: `acesso/contas.sqlite`, SQLite in WAL mode). This image carries only this
+# script and the standard library, so the store is handled here with `sqlite3`, by its file and table names
+# (testes/test_backup.py ties both to acesso.py). The file alone may lack what is still in its write-ahead log, and
+# a log copied at another instant does not belong to it: the backup takes one consistent snapshot through SQLite's
+# backup API and leaves out the log, its index and a store still being built.
+BANCO_DE_CONTAS = 'contas.sqlite'
+SOBRAS_DO_BANCO = (BANCO_DE_CONTAS + '-wal', BANCO_DE_CONTAS + '-shm')
+TABELA_DE_SESSOES = 'sessoes'
 # A staging folder older than this is leftover of a crash (the application only clears it on its next start):
 # it is left out of the backup and reported, but it no longer makes the backup wait.
 MARCADOR_IDADE_MAX_S = 7200.0
@@ -206,6 +214,9 @@ def _entradas(root: Path, pastas: tuple[str, ...]):
                     continue  # deleted data in quarantine (see EXCLUIDOS_NA_RAIZ)
                 if item.is_file(follow_symlinks=False) and (item.name in ARQUIVOS_DE_TRAVA or item.name.endswith('.lock')):
                     continue  # lock files are not data: a restored lock record would look like an abandoned lock
+                if atual == base and pasta == 'acesso' and (item.name in SOBRAS_DO_BANCO or (
+                        item.name.startswith(BANCO_DE_CONTAS + '.') and item.name.endswith('.tmp'))):
+                    continue  # the store's log and index (their content goes in the snapshot) and a store being built
                 if item.is_symlink() or not (item.is_dir(follow_symlinks=False) or item.is_file(follow_symlinks=False)):
                     ignorados.append(relativo)
                     continue
@@ -257,6 +268,51 @@ def _copiar(caminho: Path, trabalho: Path):
     return destino, resumo.hexdigest(), antes, depois
 
 
+def _eh_banco_de_contas(root: Path, caminho: Path) -> bool:
+    return caminho.name == BANCO_DE_CONTAS and caminho.parent == root / 'acesso'
+
+
+def _copia_do_banco(caminho: Path, trabalho: Path):
+    """One consistent snapshot of the accounts store, read-only, with what is still in its write-ahead log.
+    Same return as `_copia_estavel`; None when SQLite cannot open the store this way (the caller then copies the file)."""
+    import sqlite3
+    descritor, nome = tempfile.mkstemp(dir=trabalho, prefix='copia-')
+    os.close(descritor)
+    destino = Path(nome)
+    try:
+        origem = sqlite3.connect(caminho.resolve().as_uri() + '?mode=ro', uri=True, timeout=30)
+        try:
+            copia = sqlite3.connect(str(destino))
+            try:
+                origem.backup(copia)
+            finally:
+                copia.close()
+        finally:
+            origem.close()
+        # `immutable`: check the copy without creating a log or an index beside it.
+        conferida = sqlite3.connect(destino.resolve().as_uri() + '?mode=ro&immutable=1', uri=True)
+        try:
+            problema = None if conferida.execute('PRAGMA quick_check').fetchone()[0] == 'ok' else 'SQLite com falha no quick_check'
+        finally:
+            conferida.close()
+        atual = os.stat(caminho)
+    except (sqlite3.Error, OSError):
+        destino.unlink(missing_ok=True)
+        return None
+    resumo = hashlib.sha256()
+    with open(destino, 'rb') as origem:
+        for bloco in iter(lambda: origem.read(1 << 20), b''):
+            resumo.update(bloco)
+    return destino, resumo.hexdigest(), destino.stat().st_size, (atual.st_size, atual.st_mtime_ns), problema
+
+
+def _diario_pendente(caminho: Path) -> bool:
+    try:
+        return caminho.with_name(caminho.name + '-wal').stat().st_size > 0
+    except OSError:
+        return False
+
+
 def _copia_estavel(caminho: Path, trabalho: Path, tentativas: int = 4):
     """Copy one file so that it is a state the writer really had: size and mtime must not change while reading
     and the copy must be valid (JSON parses, SQLite passes quick_check). After the retries the last readable
@@ -304,7 +360,13 @@ def _escrever_pacote(root: Path, pacote: tarfile.TarFile, incluir_segredos: bool
                 info.uname = info.gname = ''
                 pacote.addfile(info)
                 continue
-            copia = _copia_estavel(caminho, trabalho)
+            copia = _copia_do_banco(caminho, trabalho) if _eh_banco_de_contas(root, caminho) else None
+            if copia is None:
+                pendente = _eh_banco_de_contas(root, caminho) and _diario_pendente(caminho)
+                copia = _copia_estavel(caminho, trabalho)
+                if copia is not None and (pendente or (_eh_banco_de_contas(root, caminho) and _diario_pendente(caminho))):
+                    # Copied as a plain file while its log held changes: a whole, but older, state of the accounts.
+                    copia = (*copia[:4], copia[4] or 'copiado sem o diário de escrita; as últimas mudanças de contas podem faltar')
             if copia is None:
                 continue  # removed while the backup ran: not part of this state
             destino, resumo, tamanho, chave, problema = copia
@@ -482,8 +544,35 @@ def _restrito(caminho: Path) -> None:
         pass
 
 
+def _encerrar_sessoes_do_banco(banco: Path) -> None:
+    """Empty the sessions of a restored accounts store (what `acesso.encerrar_todas_as_sessoes` does)."""
+    import sqlite3
+    if not banco.is_file():
+        return
+    try:
+        ligacao = sqlite3.connect(str(banco), timeout=30, isolation_level=None)
+        try:
+            ligacao.execute('BEGIN IMMEDIATE')
+            ligacao.execute(f'DELETE FROM {TABELA_DE_SESSOES}')
+            ligacao.execute('COMMIT')
+        finally:
+            ligacao.close()
+    except sqlite3.OperationalError as exc:
+        if 'no such table' in str(exc):
+            return  # not a store the Mesa accepts: it answers 503 and nobody gets in
+        # Busy or read-only: the accounts are back and so are their sessions. Never silent.
+        raise ValueError('As contas foram restauradas, mas as sessões que estavam no backup não puderam ser encerradas '
+                         f'({exc}). Pare a Mesa e restaure de novo antes de liberar o acesso.') from exc
+    except sqlite3.DatabaseError:
+        return  # unreadable store: the server reports it on its own and lets nobody in
+    for sobra in SOBRAS_DO_BANCO:
+        _restrito(banco.with_name(sobra))
+
+
 def _encerrar_sessoes_restauradas(arquivo: Path) -> None:
-    """Sessions in a backup are stale: everyone signs in again after a restore."""
+    """Sessions in a backup are stale: everyone signs in again after a restore. `arquivo` is the old JSON store
+    (a backup made before the accounts moved to SQLite); the store beside it is emptied of sessions too."""
+    _encerrar_sessoes_do_banco(arquivo.with_name(BANCO_DE_CONTAS))
     if not arquivo.is_file():
         return
     try:

@@ -295,29 +295,10 @@
   }
   function formatBytes(n){if(!Number.isFinite(n))return '';return new Intl.NumberFormat('pt-BR',{maximumFractionDigits:1}).format(n>=1048576?n/1048576:n/1024)+(n>=1048576?' MB':' KB');}
   function documentTable(){
-    const target=$('mesa-acervo-lista');target.replaceChildren();
+    const target=$('mesa-acervo-lista');target.replaceChildren();text('docs-contagem','');
     if(!inventory){const empty=element('div',undefined,'empty');empty.append(element('h2',current()?'O acervo ainda não está disponível.':'Escolha uma apuração para ver seus documentos.'),element('p',current()?'Use Atualizar acervo para tentar novamente.':'Você também pode começar uma nova apuração e cadastrar seu primeiro lote.'));target.append(empty);return;}
-    const query=$('mesa-filtrar-documento').value.toLocaleLowerCase('pt-BR'),gaps=$('mesa-filtrar-leitura').value==='limitacoes';
-    const list=inventory.documentos.filter(d=>Leitura.nome(d).toLocaleLowerCase('pt-BR').includes(query)&&(!gaps||Leitura.lacunas(d).length));
-    const wrapper=element('div',undefined,'mesa-table-wrap'),table=element('table',undefined,'mesa-file-table');
-    const caption=element('caption',`${inventory.titulo} · ${inventory.corpus_id}`,'sr-only');table.append(caption);
-    const head=element('thead'),tr=element('tr');for(const title of ['DOCUMENTO','CONTEÚDO','LEITURA','ORIGINAL']){const th=element('th',title);th.scope='col';tr.append(th);}head.append(tr);table.append(head);
-    const tbody=element('tbody');
-    for(const doc of list){
-      const row=element('tr'),name=element('td'),contents=element('td'),coverage=element('td'),actions=element('td');
-      const label=element('button',Leitura.nome(doc),'mesa-document-name');label.type='button';label.addEventListener('click',()=>openDocument(doc,label));
-      name.append(label,element('small',[doc.id,formatBytes(doc.bytes)].filter(Boolean).join(' · ')));
-      const pdf=doc.extracao_pdf,limited=Leitura.lacunas(doc).length>0;
-      name.append(element('small',pdf?extractionMessage(pdf):'Original preservado','mesa-mobile-coverage'));
-      contents.append(element('span',pdf?.paginas_pdf!=null?Leitura.quantidade(pdf.paginas_pdf,'página'):(doc.nome_recebido.split('.').pop()||'Arquivo').toUpperCase()));
-      const badge=element('span',pdf?(limited?'Com limitação de extração':'Texto extraído'):'Original preservado',limited?'mesa-pill warning':'mesa-pill');coverage.append(badge);
-      if(pdf)coverage.append(element('small',extractionMessage(pdf)));
-      const open=element('button',Leitura.rotuloOriginal(null),'secondary');open.type='button';open.addEventListener('click',()=>openDocument(doc,open));actions.append(open);
-      row.append(name,contents,coverage,actions);tbody.append(row);
-    }
-    table.append(tbody);wrapper.append(table);target.append(wrapper);
-    if(!list.length)target.append(element('p',inventory.documentos.length?'Nenhum documento nesta seleção. Tente outro nome ou remova o filtro.':'Nenhum documento cadastrado. Adicione o primeiro lote.','mesa-table-empty'));
-    target.append(element('p',`${Leitura.quantidade(list.length,'documento')} nesta seleção · ${inventory.corpus_id}`,'mesa-table-foot'));
+    const list=window.Documentos.lista(target,inventory,{consulta:$('mesa-filtrar-documento').value,limitacoes:$('mesa-filtrar-leitura').value==='limitacoes',abrir:openDocument});
+    text('docs-contagem',Leitura.quantidade(inventory.documentos.length,'documento'));
   }
   async function openDocument(doc,button){
     const caseId=current(),ticket=sequence;button.disabled=true;$('mesa-acervo-erro').hidden=true;
@@ -341,7 +322,7 @@
     text('mesa-acervo-status','Conferindo os documentos cadastrados…');text('mesa-versao','Conferindo acervo…');
     try{
       const result=await api('inventario',{caso:caseId});if(ticket!==sequence||caseId!==current())return;
-      inventory=result;documentTable();home();window.barraMesa.definir('documentos',result.total_documentos?String(result.total_documentos):'');text('mesa-versao',`Versão dos documentos: ${result.corpus_id}`);text('mesa-acervo-status',`${Leitura.quantidade(result.total_documentos,'documento')} cadastrado(s). Os originais estão preservados; a extração não substitui a conferência.`);
+      inventory=result;documentTable();home();window.barraMesa.definir('documentos',result.total_documentos?String(result.total_documentos):'');text('mesa-versao',`Versão dos documentos: ${result.corpus_id}`);text('mesa-acervo-status','Os originais estão preservados; a extração não substitui a conferência.');
     }catch(error){if(ticket===sequence){$('mesa-acervo-erro').textContent=error.message;$('mesa-acervo-erro').hidden=false;text('mesa-acervo-status','A conferência do acervo falhou. Isso não equivale a um acervo vazio.');text('mesa-versao','Acervo indisponível');}}
     finally{if(ticket===sequence){loading=false;$('mesa-atualizar-acervo').disabled=false;}}
   }
@@ -425,8 +406,18 @@
   });
   // "Trocar de apuração" opens the list of investigations (and the trash), which left the sidebar.
   $('inicio-trocar').addEventListener('click',()=>navigate('gerenciar'));
-  $('mesa-adicionar').addEventListener('click',()=>$('inicio-adicionar').click());
-  $('mesa-aba-recibo').addEventListener('click',()=>navigate('cadastro'));
+  // Área de envio de Documentos (W02): envia para a apuração escolhida. Sem o envio em fluxo no servidor, o caminho é a tela de Nova apuração.
+  if(document.body.dataset.papel==='convidado')$('documentos-zona').hidden=true;
+  else window.Documentos.zona($('documentos-zona'),{aoEscolher:files=>{
+    if(!current()){$('contexto-caso').focus();text('mesa-acervo-status','Escolha uma apuração para enviar documentos.');return;}
+    window.Documentos.enviar(files,{caso:current(),alvo:$('documentos-envio'),alvoRecibo:$('documentos-recibo'),
+      aoConcluir:async()=>{await loadInventory(true);if(typeof loadCatalog==='function')await loadCatalog();text('mesa-acervo-status','Documentos registrados. Aguardando sua pergunta.');},
+      aoIndisponivel:files=>{
+        // Sem o envio em fluxo no servidor, a escolha segue para a tela de Nova apuração (envio em JSON), sem perder os arquivos.
+        try{const lote=new DataTransfer();for(const file of files)lote.items.add(file);$('cadastro-arquivos').files=lote.files;
+          $('cadastro-arquivos').dispatchEvent(new Event('change'));}catch{/* o navegador não deixa: a pessoa escolhe de novo */}
+        $('inicio-adicionar').click();}});
+  }});
   $('mesa-perguntar').addEventListener('click',()=>{if(!current()){$('contexto-caso').focus();return;}navigate('codex');window.abrirComposicaoMesa?.();});
   $('mesa-aba-acervo').addEventListener('click',()=>chooseTab('acervo'));
   $('mesa-aba-pesquisa').addEventListener('click',()=>chooseTab('pesquisa'));

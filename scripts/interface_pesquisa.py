@@ -33,10 +33,12 @@ from ambiente import diagnostico
 import fontes_web
 import revisao_humana
 import apuracao
+import autorizacao
 import rotas_achados
 import rotas_caderno
 import rotas_conversa
 import rotas_downloads
+import rotas_equipe
 import rotas_evidencia
 import rotas_gestao
 import rotas_redacao
@@ -56,7 +58,7 @@ from indice_sqlite import ID_CASO, caminho_rodada, cobertura, ler_passagem, pesq
 from rotas_caderno import CADERNO_OPERACOES, DILIGENCIAS_OPERACOES
 from rotas_contas import (RotasContas, CONTAS_OPERACOES, OPERACOES_CONVIDADO, OPERACOES_CONVERSA,  # noqa: F401
                           OPERACOES_PUBLICAS, AMBIENTES, SEM_SESSAO, OPERACOES_COM_COTA, ATIVOS_CONVERSA,
-                          COOKIE_PILOTO)
+                          COOKIE_PILOTO, CONTA_PROPRIA)
 from rotas_conversa import RotasConversa, RESPONDIDO, CAMPOS_INTERNOS_CONVERSA, _sem_internos  # noqa: F401
 import rotas_documentos
 from rotas_documentos import MAX_UPLOAD, catalogo, receber_documentos  # noqa: F401
@@ -111,19 +113,24 @@ MENSAGEM_POR_IP = 'Muitas requisições ao mesmo tempo deste endereço. Aguarde 
 CONSULTA_OPERACOES = ('analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario', 'preparar-pdfs')
 # Answered by the extraction queue in do_POST, outside cadastro_lock (executar still serves direct calls).
 CADASTRO_NA_FILA = ('cadastrar', 'preparar-pdfs')
+ROTAS_GET_COM_PARAMETROS = ('/api/catalogo', '/api/fila', '/api/cota')  # each one calls the gate where it is served
 # Every POST operation behind a session; anything else is 404 before the body is parsed.
 OPERACOES_API = (*rotas_conversa.OPERACOES, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES,
                  *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, *rotas_redacao.OPERACOES,
                  *rascunhos.OPERACOES, *fontes_web.OPERACOES, *rotas_gestao.OPERACOES, *CONTAS_OPERACOES, 'sessao-sair',
-                 *rotas_achados.OPERACOES, *CONSULTA_OPERACOES)
+                 *rotas_achados.OPERACOES, *CONSULTA_OPERACOES, *rotas_equipe.OPERACOES, *CONTA_PROPRIA)
 registro_acesso.permitir_operacoes((*OPERACOES_API, *OPERACOES_PUBLICAS))  # SEG-02: o registro só aceita nomes que existem
 
 
-def executar(root, operation, data, conta=None, originais_abertos=None, casos=None):
-    """`conta` is the authenticated pilot account ({'id', 'nome'}); None in local mode.
+def executar(root, operation, data, conta=None, originais_abertos=None, casos=None, restrito=False):
+    """`conta` is the authenticated account ({'id', 'nome'}); None in local mode.
 
-    `casos` limits the evidence boards to the account's investigations (None: all, as for admins).
+    `casos` is the account's reach (None only in the local mode, where the single operator reaches everything):
+    the gate (`autorizacao.conferir`) already checked the case, and it is checked again here, so a failure of the
+    gate still does not open a case. `restrito`: reader or guest, who keep only the draft of the question.
     """
+    if casos is not None and data.get('caso') not in casos:
+        raise ValueError('Apuração não liberada para esta conta.')
     if operation == 'analises':
         case = data.get('caso')
         if not isinstance(case, str) or not re.fullmatch(ID_CASO, case):
@@ -162,7 +169,7 @@ def executar(root, operation, data, conta=None, originais_abertos=None, casos=No
         return rotas_redacao.executar(root, operation, data, conta, casos)
     if operation in rascunhos.OPERACOES:
         # Unconfirmed drafts per account, case and screen; guests (casos is a list) keep only the question.
-        return rascunhos.executar(root, operation, data, conta, casos, convidado=casos is not None)
+        return rascunhos.executar(root, operation, data, conta, casos, convidado=restrito)
     if operation == 'cadastrar':
         return receber_documentos(root, data)
     if operation == 'inventario':
@@ -667,6 +674,14 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         if path == '/saude':
             self._json(200, {'ok': True})
             return
+        if 'GET:' + path in autorizacao.MATRIZ and path not in ROTAS_GET_COM_PARAMETROS and self._principal() is not None:
+            # The page, the session and the server's capabilities pass through the gate too: a suspended
+            # newsroom gets none of them (the three listings below ask the gate themselves, with their parameters).
+            try:
+                autorizacao.conferir(self.server.root, self.server.modo, self._principal(), 'GET:' + path, {})
+            except autorizacao.Recusa as recusa:
+                self._recusado(recusa, self._principal(), pagina=path == '/')
+                return
         if path == '/api/sessao':
             self._sessao_atual()
             return
@@ -708,11 +723,13 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             self._cota()
             return
         if path == '/api/catalogo':
+            principal = self._principal()
             try:
-                dados, principal = catalogo(self.server.root), self._principal()
-                if principal['casos'] is not None:
-                    dados = {'casos': [c for c in dados['casos'] if c['id'] in principal['casos']]}
-                self._json(200, dados)
+                autorizacao.conferir(self.server.root, self.server.modo, principal, 'GET:/api/catalogo', {})
+                self._json(200, autorizacao.filtrar(self.server.root, self.server.modo, principal, 'GET:/api/catalogo',
+                                                    catalogo(self.server.root)))
+            except autorizacao.Recusa as recusa:
+                self._recusado(recusa, principal)
             except (ValueError, OSError, KeyError) as exc:
                 self._json(400, {'erro': str(exc)})
             return
@@ -759,7 +776,8 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             # A batch streamed to disk (CONF-03): the manifest line now, the files' bytes by the route.
             em_fluxo = operation in rotas_documentos.EM_FLUXO and self.headers.get_content_type() == rotas_documentos.TIPO_LOTE
             # Guests only call small JSON operations: never read a large body before the role check.
-            maximum = (32768 if principal is not None and principal['papel'] != 'admin'
+            maximum = (32768 if principal is not None and (autorizacao.restrito(principal) or not autorizacao.corpo_grande(
+                           self.server.modo, principal, operation))
                        else MAX_UPLOAD + rotas_documentos.LIMITE_MANIFESTO if em_fluxo
                        else 72 * 1024 * 1024 if operation in ('cadastrar', 'codex-documentos-cadastrar')
                        else 2 * 1024 * 1024 if operation in (*apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS,
@@ -785,7 +803,8 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         if principal is None:
             self._sem_principal(api=True)
             return
-        registro_acesso.definir(conta=principal.get('conta'))
+        # The newsroom goes in every audit line of this request (its id only; none in the local mode).
+        registro_acesso.definir(conta=principal.get('conta'), organizacao=(principal.get('organizacao') or {}).get('id'))
         # Pilot mode requires an explicit Origin; local mode keeps accepting same-origin requests without it.
         origem = self.headers.get('Origin', None if self.server.com_contas else self.server.origin)
         if (origem != self.server.origin
@@ -798,21 +817,25 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         if operation not in OPERACOES_API:
             self._json(404, {'erro': 'Operação não encontrada.'})
             return
+        caso_novo = None  # a case whose ownership this request registered, undone if the creation is refused
         try:
             data = json.loads(body)
             if not isinstance(data, dict):
                 raise ValueError('Requisição deve ser um objeto JSON.')
             registro_acesso.definir(operacao=operation)
             registro_acesso.referenciar_caso(data.get('caso'))  # só uma referência com chave: o nome do caso não vai ao registro
-            negado = self._negado(operation, data, principal)
-            if negado:
-                registro_acesso.registrar('operacao_negada', 'negado', principal.get('conta'), codigo=negado[1])
-                self._proibido(*negado)
+            # The gate: role, newsroom and participation, in one place (scripts/autorizacao.py), before any route.
+            try:
+                concedido = autorizacao.conferir(self.server.root, self.server.modo, principal, operation, data)
+            except autorizacao.Recusa as recusa:
+                self._recusado(recusa, principal)
                 return
-            convidado = principal['papel'] != 'admin'
-            dono = principal['conta'] if convidado else None
-            # A guest reaches its own conversations only while their case is still released (re-read each request).
-            casos_liberados = (principal['casos'] or []) if convidado else None
+            # `dono`: the account, when it only reaches its own conversations. `casos_liberados`: its reach,
+            # re-read on each request (None only in the local mode).
+            data, dono, casos_liberados = concedido.dados, concedido.dono, principal['casos']
+            if concedido.novo:
+                data = autorizacao.registrar_novo(self.server.root, principal, data)
+                caso_novo = data['caso']
             if operation == 'sessao-sair':
                 self._sair()
                 return
@@ -833,7 +856,9 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 # Through the extraction queue: no lock is held while files are read (CONF-02).
                 result = self._cadastro_na_fila(operation, data)
             elif operation in rotas_gestao.OPERACOES:
-                result = self._gestao(operation, data, principal)
+                result = self._gestao(operation, data, principal, concedido)
+            elif operation in rotas_equipe.OPERACOES or operation in CONTA_PROPRIA:
+                result = self._equipe(operation, data, principal)
             elif operation in rotas_conversa.OPERACOES:
                 result = self._conversa(operation, data, dono, casos_liberados, consulta_contada,
                                         conta=principal['conta'])
@@ -845,13 +870,15 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 abertos = (self.server.originais_abertos(self._chave_originais(principal, data))
                            if operation == 'achados-revisao-salvar' else None)
                 with self.server.cadastro_lock:
-                    result = executar(self.server.root, operation, data, conta, abertos, casos=principal['casos'])
+                    result = executar(self.server.root, operation, data, conta, abertos, casos=principal['casos'],
+                                      restrito=concedido.restrito)
                     if operation in rotas_downloads.ORIGINAIS_PASSAGEM:
                         # Read where it was validated; the slow part (sending) runs after the lock.
                         conteudo = self._ler_original(operation, data, result)
             if operation in rotas_downloads.ORIGINAIS_PASSAGEM:
                 self._enviar_original(operation, data, conteudo, principal)
             else:
+                result = autorizacao.filtrar(self.server.root, self.server.modo, principal, operation, result)
                 estado = 400 if result.get('estado') == 'erro_consulta' else 200
                 if operation in EXPORTACOES_EM_JSON and estado == 200:
                     self._auditar_download('ok')  # recorded before answering: the answer is the delivery
@@ -862,14 +889,32 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             self._json(409, {'estado': 'erro', 'codigo': 'conflito', 'erro': str(exc), 'atual': exc.atual})
         except rascunhos.ConflitoRascunho as exc:
             self._json(409, {'estado': 'erro', 'codigo': 'rascunho_conflito', 'erro': str(exc), 'atual': exc.atual})
+        except acesso.Bloqueado as exc:  # too many wrong passwords on a sensitive operation
+            self._json(429, {'estado': 'bloqueado', 'codigo': 'bloqueado', 'erro': str(exc)})
+        except acesso.Recusada as exc:  # a refusal with its own status and code (password asked again, last dono)
+            self._json(exc.status, {'estado': 'proibido' if exc.status == 403 else 'erro', 'codigo': exc.codigo,
+                                    'erro': str(exc)})
         except (ValueError, OSError, KeyError, TypeError, sqlite3.Error) as exc:
             if operation in DOWNLOADS:
                 self._auditar_download('falha')
-            convidado = principal['papel'] != 'admin'
+            if caso_novo:
+                autorizacao.desfazer_novo(self.server.root, caso_novo)
+            convidado = autorizacao.restrito(principal)
             # Guests get user-facing ValueError messages only; internal errors stay generic.
             mensagem = ('Falha ao processar a requisição no servidor.'
                         if convidado and not isinstance(exc, ValueError) else str(exc))
             self._json(400, {'estado': 'erro', 'erro': mensagem}, exc)
+
+    def _recusado(self, recusa, principal, pagina=False):
+        """Answer a refusal of the gate. The real reason goes to the audit log only (`acesso_negado`, with
+        `motivo`), never to the browser."""
+        registro_acesso.registrar('acesso_negado', 'negado', (principal or {}).get('conta'), codigo=recusa.codigo,
+                                  motivo=recusa.motivo,
+                                  organizacao=((principal or {}).get('organizacao') or {}).get('id'))
+        if pagina:
+            self._pagina_recusada(recusa)
+        else:
+            self._json(recusa.status, recusa.corpo)
 
     def _cadastro_na_fila(self, operation, data):
         """Upload or PDF preparation through `server.fila`: the receipt, or the queue state if asynchronous."""
@@ -887,11 +932,11 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
     def _estado_da_fila(self):
         """`GET /api/fila?lote=<id>` or `?caso=<id>`: state of the extraction queue.
 
-        Read only, no case content; the contract of each batch is in `fila_extracao`. Administrators
-        see every batch. Whoever else sees a case (a guest, in the cases released to it, re-read at each
-        request) sees that case's batches, for the progress of an upload (UX-05): ``?caso=`` of one of
-        them, or ``?lote=`` of a batch of one of them; another case's batch reads as not found (its
-        existence is not told), and the receipt goes without its file path.
+        Read only, no case content; the contract of each batch is in `fila_extracao`. Whoever reaches a
+        case sees its batches, for the progress of an upload (UX-05): ``?caso=`` of a case within reach,
+        ``?lote=`` of a batch of one of them, or no parameter for the batches of every case within reach.
+        A batch of a case out of reach reads as not found (its existence is not told), and outside the
+        local mode the receipt goes without its file path (`autorizacao.filtrar`).
         """
         principal = self._principal()
         if principal is None:
@@ -900,25 +945,12 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         consulta = parse_qs(urlsplit(self.path).query)
         lote, caso = (consulta.get(k, [None])[0] for k in ('lote', 'caso'))
         try:
-            if principal['papel'] == 'admin':
-                self._json(200, self.server.fila.consultar(lote=lote, caso=caso))
-                return
-            liberados = principal.get('casos') or []
-            if lote is not None:
-                resposta = self.server.fila.consultar(lote=lote)
-                if resposta['lote'].get('caso') not in liberados:
-                    raise ValueError('Lote não encontrado na fila.')
-                lotes = [resposta['lote']]
-            elif isinstance(caso, str) and caso in liberados:
-                resposta = self.server.fila.consultar(caso=caso)
-                lotes = resposta['lotes']
-            else:
-                self._proibido()
-                return
-            for item in lotes:
-                if isinstance(item.get('recibo'), dict):
-                    item['recibo'] = {k: v for k, v in item['recibo'].items() if k != 'arquivo_recibo'}
-            self._json(200, resposta)
+            autorizacao.conferir(self.server.root, self.server.modo, principal, 'GET:/api/fila',
+                                 {k: v for k, v in (('lote', lote), ('caso', caso)) if v is not None})
+            self._json(200, autorizacao.filtrar(self.server.root, self.server.modo, principal, 'GET:/api/fila',
+                                                self.server.fila.consultar(lote=lote, caso=caso)))
+        except autorizacao.Recusa as recusa:
+            self._recusado(recusa, principal)
         except ValueError as exc:
             self._json(400, {'erro': str(exc)})
 

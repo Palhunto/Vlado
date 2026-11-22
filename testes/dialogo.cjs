@@ -132,7 +132,7 @@ test('espera curta: ação no gerúndio, aria-busy, Cancelar desabilitado; erro 
   await mesa.esperar();
   assert.equal(caixa(mesa).getAttribute('aria-busy'), 'true');
   assert.equal(acao.textContent, 'Excluindo…');
-  assert.equal(acao.disabled, true);
+  assert.equal(acao.getAttribute('aria-disabled'), 'true', 'a ação fica aria-disabled na espera');
   assert.equal(cancelar.disabled, true, 'na espera curta não se cancela');
   tecla(mesa, caixa(mesa), 'Escape');
   assert.equal(caixa(mesa).open, true, 'Esc também espera a resposta');
@@ -143,7 +143,7 @@ test('espera curta: ação no gerúndio, aria-busy, Cancelar desabilitado; erro 
   assert.equal(erro.getAttribute('role'), 'alert');
   assert.equal(erro.textContent, 'Não deu para excluir. Tente de novo.');
   assert.equal(caixa(mesa).getAttribute('aria-busy'), null);
-  assert.equal(acao.disabled, false);
+  assert.equal(acao.getAttribute('aria-disabled'), 'false');
   acao.click(); await mesa.esperar();
   liberar.resolve();
   assert.equal(await promessa, true);
@@ -205,3 +205,121 @@ test('a interface não usa mais o confirm() do navegador (UX-16, W11 regra 8)', 
     .filter(nome => /\b(window\.)?confirm\(/.test(fs.readFileSync(path.join(pasta, nome), 'utf8').replace(/\bDialogo\.confirmar\(/g, '')));
   assert.deepEqual(usos, [], 'troque por Dialogo.confirmar');
 });
+
+test('na espera o foco não sai do diálogo: o campo fica só leitura, a ação aria-disabled, e o clique na ação é ignorado (ressalva da Coruja)', async () => {
+  const mesa = abrir();
+  mesa.$('gatilho').focus();
+  let tentativas = 0, liberar;
+  const promessa = mesa.janela.Dialogo.confirmar({variante: 'campo', titulo: 'Apagar definitivamente', nome: 'x', acao: 'Apagar definitivamente', ocupado: 'Apagando…',
+    executar: () => { tentativas++; return new Promise(resolve => { liberar = resolve; }); }});
+  await mesa.esperar();
+  const campo = caixa(mesa).querySelector('input'), [cancelar, acao] = botoes(mesa);
+  digitar(campo, 'x');
+  assert.ok(mesa.doc.activeElement === campo);
+  tecla(mesa, campo, 'Enter');
+  await mesa.esperar();
+  assert.equal(campo.readOnly, true, 'o campo não é desabilitado: o foco fica nele');
+  assert.equal(campo.disabled, false);
+  assert.equal(cancelar.disabled, true, 'espera curta: não se cancela');
+  assert.ok(caixa(mesa).contains(mesa.doc.activeElement), 'o foco continua dentro do diálogo');
+  acao.click(); tecla(mesa, campo, 'Enter');
+  assert.equal(tentativas, 1, 'clique ou Enter na espera não confirmam de novo');
+  liberar();
+  assert.equal(await promessa, true);
+  assert.equal(mesa.$('conteudo').inert, false, 'a página volta a funcionar');
+  assert.ok(mesa.doc.activeElement === mesa.$('gatilho'));
+});
+
+test('se o navegador recusar o showModal, a página não fica inerte e a promessa devolve false', async () => {
+  const mesa = abrir();
+  const original = mesa.doc.createElement.bind(mesa.doc);
+  mesa.doc.createElement = etiqueta => { const no = original(etiqueta); if (etiqueta === 'dialog') no.showModal = () => { throw new Error('InvalidStateError'); }; return no; };
+  const resultado = await mesa.janela.Dialogo.confirmar({titulo: 'Sair?', acao: 'Sair'});
+  assert.equal(resultado, false);
+  assert.equal(mesa.$('conteudo').inert, false);
+  assert.equal(caixa(mesa), null);
+  mesa.doc.createElement = original;
+  const seguinte = mesa.janela.Dialogo.confirmar({titulo: 'De novo?', acao: 'Sim'});
+  await mesa.esperar();
+  botoes(mesa)[1].click();
+  assert.equal(await seguinte, true, 'a fila de confirmações continua funcionando');
+});
+
+test('linha do item: rótulo da interface e dado que não se traduz, logo abaixo do título', async () => {
+  const mesa = abrir();
+  mesa.janela.Dialogo.confirmar({variante: 'destrutivo', titulo: 'Apagar definitivamente', linha: ['Apuração', 'Vila Serena — contrato'], acao: 'Apagar'});
+  await mesa.esperar();
+  const linha = caixa(mesa).querySelector('.dialogo-linha');
+  assert.equal(linha.textContent, 'Apuração · Vila Serena — contrato');
+  assert.equal(linha.querySelector('span').getAttribute('translate'), 'no');
+  assert.ok(caixa(mesa).querySelector('.dialogo-titulo').nextSibling === linha);
+});
+
+test('preparar: o conteúdo vem depois de aberto; com o nome, o campo é habilitado e recebe o foco se a pessoa não mexeu em nada', async () => {
+  const mesa = abrir();
+  let liberar, contexto;
+  mesa.janela.Dialogo.confirmar({variante: 'campo', titulo: 'Apagar definitivamente', acao: 'Apagar',
+    preparar: ctx => { contexto = ctx; return new Promise(resolve => { liberar = resolve; }); }});
+  await mesa.esperar();
+  const dlg = caixa(mesa), [cancelar, acao] = botoes(mesa);
+  assert.equal(campoDe(dlg).disabled, true, 'sem o nome, o campo e a ação ficam desabilitados');
+  assert.equal(acao.disabled, true);
+  assert.ok(mesa.doc.activeElement === cancelar, 'sem o nome, o foco inicial fica em Cancelar');
+  contexto.estado('Calculando…');
+  assert.equal(dlg.querySelector('[role="status"]').textContent, 'Calculando…');
+  contexto.corpo.append(mesa.doc.createElement('table'));
+  assert.ok(dlg.querySelector('.dialogo-corpo table'));
+  contexto.nome('Conversa velha');
+  assert.equal(campoDe(dlg).disabled, false);
+  assert.ok(mesa.doc.activeElement === campoDe(dlg), 'o nome chegou: o foco passa ao campo');
+  assert.match(dlg.querySelector('label').textContent, /Digite «Conversa velha» para confirmar/);
+  campoDe(dlg).value = 'conversa velha'; campoDe(dlg).dispatchEvent(new Evento('input', {bubbles: true}));
+  assert.equal(acao.disabled, false);
+  assert.equal(contexto.valor(), 'conversa velha');
+  assert.equal(contexto.fechou(), false);
+  cancelar.click();
+  assert.equal(contexto.fechou(), true);
+  liberar();
+});
+
+test('se a pessoa já mexeu no diálogo, o nome que chega depois não rouba o foco', async () => {
+  const mesa = abrir();
+  let contexto;
+  mesa.janela.Dialogo.confirmar({variante: 'campo', titulo: 'Apagar definitivamente', acao: 'Apagar', preparar: ctx => { contexto = ctx; }});
+  await mesa.esperar();
+  const [cancelar] = botoes(mesa);
+  tecla(mesa, cancelar, 'Tab', {shiftKey: false});
+  cancelar.focus();
+  contexto.nome('x');
+  assert.ok(mesa.doc.activeElement === cancelar);
+});
+
+test('aoIdioma é chamado se a língua mudar com o diálogo aberto, e só enquanto ele está aberto', async () => {
+  const mesa = abrir();
+  let chamadas = 0;
+  const promessa = mesa.janela.Dialogo.confirmar({titulo: 'Sair?', acao: 'Sair', preparar: () => {}, aoIdioma: () => { chamadas++; }});
+  await mesa.esperar();
+  mesa.janela.dispatchEvent(new Evento('vlado-idioma'));
+  assert.equal(chamadas, 1);
+  botoes(mesa)[0].click();
+  await promessa;
+  mesa.janela.dispatchEvent(new Evento('vlado-idioma'));
+  assert.equal(chamadas, 1, 'depois de fechado, nada');
+});
+
+test('depois de uma recusa na variante com campo, o foco volta ao campo (a ação pode estar desabilitada)', async () => {
+  const mesa = abrir();
+  const promessa = mesa.janela.Dialogo.confirmar({variante: 'campo', titulo: 'Apagar', nome: 'x', acao: 'Apagar', ocupado: 'Apagando…',
+    executar: async ctx => { ctx.limparCampo(); throw new Error('Recusado.'); }});
+  await mesa.esperar();
+  const dlg = caixa(mesa);
+  digitar(campoDe(dlg), 'x');
+  botoes(mesa)[1].click();
+  await mesa.esperar();
+  assert.equal(erro(mesa), 'Recusado.');
+  assert.ok(mesa.doc.activeElement === campoDe(dlg));
+  botoes(mesa)[0].click();
+  await promessa;
+});
+const campoDe = dlg => dlg.querySelector('input');
+const erro = mesa => caixa(mesa).querySelector('.dialogo-erro').textContent;

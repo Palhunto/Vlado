@@ -20,6 +20,7 @@ import rotas_achados  # noqa: E402
 import rotas_caderno  # noqa: E402
 import rotas_conversa  # noqa: E402
 import rotas_downloads  # noqa: E402
+import rotas_equipe  # noqa: E402
 import rotas_evidencia  # noqa: E402
 import rotas_gestao  # noqa: E402
 import rotas_redacao  # noqa: E402
@@ -31,6 +32,10 @@ OPERACOES = {
     'apuracao-adicionar', 'apuracao-excluir', 'apuracao-exportar', 'apuracao-listar', 'apuracao-nota',
     'apuracao-nota-excluir', 'apuracao-nota-inserir', 'apuracao-nota-salvar', 'apuracao-notas',
     'apuracao-original', 'apuracao-salvar', 'buscar', 'cadastrar', 'caderno-cruzar', 'caderno-detalhe',
+    'caso-incluir', 'caso-participantes', 'caso-responsavel', 'caso-retirar',
+    'conta-atualizar', 'conta-senha-trocar', 'conta-sessao-encerrar', 'conta-sessoes', 'conta-sessoes-encerrar-outras',
+    'conta-ver', 'equipe-atividade', 'equipe-desativar', 'equipe-listar', 'equipe-papel', 'equipe-reativar',
+    'equipe-remover', 'equipe-teto',
     'caderno-documentos', 'caderno-exportar', 'caderno-listar', 'caderno-original', 'caderno-salvar',
     'cobertura', 'codex-caderno-previa', 'codex-cancelar', 'codex-corpus-previa', 'codex-desligar',
     'codex-diligencias-previa', 'codex-documentos-cadastrar', 'codex-eventos', 'codex-listar',
@@ -54,9 +59,10 @@ OPERACOES = {
 
 
 class RotasModulosTest(unittest.TestCase):
-    def test_lista_branca_tem_as_114_operacoes(self):
-        self.assertEqual(len(OPERACOES), 114)
-        self.assertEqual(len(interface_pesquisa.OPERACOES_API), 114, 'operação repetida na lista branca')
+    def test_lista_branca_tem_as_131_operacoes(self):
+        # The 114 of before, the four `caso-*` (contrato de contas, 5.6), six `conta-*` (5.4) and seven `equipe-*` (5.5).
+        self.assertEqual(len(OPERACOES), 131)
+        self.assertEqual(len(interface_pesquisa.OPERACOES_API), 131, 'operação repetida na lista branca')
         self.assertEqual(set(interface_pesquisa.OPERACOES_API), OPERACOES)
 
     def test_publicas_ficam_fora_da_lista_com_sessao(self):
@@ -70,6 +76,7 @@ class RotasModulosTest(unittest.TestCase):
             'downloads': set(rotas_downloads.OPERACOES),
             'captura web': {fontes_web.CAPTURAR},
             'gestao': set(rotas_gestao.OPERACOES),
+            'equipe': set(rotas_equipe.OPERACOES) | set(interface_pesquisa.CONTA_PROPRIA),
             'conversa': set(rotas_conversa.OPERACOES),
         }
         for (a, x), (b, y) in combinations(ramos.items(), 2):

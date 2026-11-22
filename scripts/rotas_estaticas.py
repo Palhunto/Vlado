@@ -38,6 +38,8 @@ import sys
 import threading
 from urllib.parse import urlsplit
 
+import autorizacao
+
 # Inside the PyInstaller bundle the interface lives next to the frozen modules (sys._MEIPASS).
 ASSETS = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1])) / 'interface'
 ARQUIVOS = {'/': ('index.html', 'text/html; charset=utf-8'),
@@ -85,6 +87,7 @@ ARQUIVOS = {'/': ('index.html', 'text/html; charset=utf-8'),
             '/dialogo.js': ('dialogo.js', 'text/javascript; charset=utf-8'),
             '/estados.js': ('estados.js', 'text/javascript; charset=utf-8'),
             '/envio.js': ('envio.js', 'text/javascript; charset=utf-8'),
+            '/documentos.js': ('documentos.js', 'text/javascript; charset=utf-8'),
             '/quadros.js': ('quadros.js', 'text/javascript; charset=utf-8'),
             '/analise.js': ('analise.js', 'text/javascript; charset=utf-8'),
             '/indicador_salvamento.js': ('indicador_salvamento.js', 'text/javascript; charset=utf-8'),
@@ -229,7 +232,7 @@ class RotasEstaticas:
             piloto = self.server.modo == 'piloto'
             content = (content.replace(b'__SESSION_TOKEN__', principal['csrf'].encode('ascii'))
                        .replace(b'__IDIOMA_PADRAO__', b'en' if piloto else b'pt')
-                       .replace(b'__PAPEL__', principal['papel'].encode('ascii'))
+                       .replace(b'__PAPEL__', autorizacao.papel_para_interface(principal).encode('ascii'))
                        .replace(b'__MODO__', self.server.modo.encode('ascii')))
             extra = ({} if self.server.com_contas
                      else {'Set-Cookie': f'apuracao_session={self.server.token}; HttpOnly; SameSite=Strict; Path=/'})
