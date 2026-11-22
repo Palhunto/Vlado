@@ -10,7 +10,7 @@ related: ['[[PLANO_LANCAMENTO]]', '[[DIAGNOSTICO_LANCAMENTO]]', '[[CONTRATO_EVID
 
 Este é o contrato do sistema de contas da Onda 2 (branch `lancamento/contas-o2`, criada de `cb9afa8`). Ele define redações, papéis, posse de apuração, a matriz operação × papel, o isolamento entre redações, a migração das contas atuais e o armazenamento, e desenha e-mail, segundo fator, sessões e ciclo de vida. Fecha CON-01 a CON-07, PROD-04 e SEG-07 e liga a cota de CUS-01 às contas.
 
-**Nenhum código foi escrito.** O contrato precisa do parecer do Revisor, da segunda leitura da matriz pelo Maestro e da aprovação do dono do projeto. Onde o texto diz "hoje", descreve o código em `cb9afa8`. Onde diz "passa a", descreve o que a Onda 2 entrega. Nomes de módulos, operações e campos novos são propostas que este contrato fixa quando for aprovado. As perguntas da seção 11 trazem uma recomendação cada; o resto do texto assume a recomendação e diz o que muda se a resposta for outra.
+**Nenhum código foi escrito.** O contrato precisa do parecer do Revisor, da segunda leitura da matriz pelo Maestro e da aprovação do dono do projeto. Onde o texto diz "hoje", descreve o código em `cb9afa8`. Onde diz "passa a", descreve o que a Onda 2 entrega. Nomes de módulos, operações e campos novos são propostas que este contrato fixa quando for aprovado. As 16 perguntas que a primeira versão levou ao dono do projeto foram respondidas em 22/11/2026 (P27), todas pela recomendação; a seção 11 as registra como decisões, e o texto cita cada uma como "decisão N".
 
 Dois usos da palavra "dono" aparecem aqui. **Dono**, sem complemento, é o papel dentro de uma redação. **Dono do projeto** é quem decide sobre o Vlado.
 
@@ -42,9 +42,9 @@ Dois usos da palavra "dono" aparecem aqui. **Dono**, sem complemento, é o papel
 | Responsável | A conta que responde pela apuração: quem a criou, até o dono transferir. |
 | Participação | Ligação entre uma conta e uma apuração da mesma redação. |
 | Convite | Pedido de entrada numa redação, enviado por e-mail, com prazo. |
-| Autor restrito | Campo `dono` de `conversa.json`. O nome é antigo e não tem relação com o papel dono: marca a conversa de um leitor ou convidado, que só ele continua. |
+| Autor restrito | Campo `dono` de `conversa.json`. O nome é antigo e não tem relação com o papel dono: marca a conversa aberta por um leitor ou por um convidado. Só o autor acrescenta pergunta a ela e a retoma; o dono e o responsável pela apuração podem cancelar uma execução em curso. As outras são conversas da equipe, que dono, editor e repórter continuam. A regra completa está na seção 5.8. |
 
-Uma conta pertence a uma redação só. Quem trabalha para duas redações convidadas usa dois e-mails (pergunta 2).
+Uma conta pertence a uma redação só. Quem trabalha para duas redações convidadas usa dois e-mails (decisão 2).
 
 ### 2.2 Redação
 
@@ -93,13 +93,13 @@ Só o operador cria, suspende e encerra redações (D3). Nenhuma rota HTTP cria 
 | Captura página da web | sim | não | não | não |
 | Convida, muda papéis, define tetos, troca a chave de IA, vê a atividade | sim | não | não | não |
 
-**O que o editor faz que o repórter não faz (PROD-04).** O editor marca afirmações do texto como revisadas (`redacao-revisar`): a revisão humana da matéria é dele e do dono, não de quem apurou (pergunta 7). Fora isso, o editor faz o trabalho de mesa que hoje exige ser administrador: confere achados, escreve no caderno, abre e responde diligências, edita quadros. O que o editor não faz é o que cria ou destrói: não abre apuração, não envia documentos, não inclui pessoas, não manda nada para a lixeira e não administra a redação.
+**O que o editor faz que o repórter não faz (PROD-04).** O editor marca afirmações do texto como revisadas (`redacao-revisar`): a revisão humana da matéria é dele e do dono, não de quem apurou (decisão 7). Fora isso, o editor faz o trabalho de mesa que hoje exige ser administrador: confere achados, escreve no caderno, abre e responde diligências, edita quadros. O que o editor não faz é o que cria ou destrói: não abre apuração, não envia documentos, não inclui pessoas, não manda nada para a lixeira e não administra a redação.
 
-**O leitor** lê tudo da apuração em que foi incluído (pergunta 8) e faz perguntas. As conversas dele são dele: não acrescenta pergunta à conversa de outra pessoa, e envia só `caso`, `pergunta` e `conversa`, como o convidado de hoje.
+**O leitor** lê tudo da apuração em que foi incluído (decisão 8) e faz perguntas. As conversas dele são dele: não acrescenta pergunta à conversa de outra pessoa, ninguém acrescenta pergunta à dele (seção 5.8), e ele envia só `caso`, `pergunta` e `conversa`, como o convidado de hoje.
 
 **Captura web** fica com o dono no lançamento. O plano já põe "captura web para quem não é administrador" fora do lançamento.
 
-**Perfil legado `convidado`.** É o convidado de hoje, sem mudança: pergunta nas apurações liberadas, vê só as próprias conversas e guarda só o rascunho da pergunta. Não pode ser atribuído a ninguém depois da migração. O dono converte cada convidado em leitor ou em outro papel pela tela Equipe, ou o remove. Ele existe porque transformar convidado em leitor daria às contas atuais a leitura do caderno, dos achados e do texto das apurações liberadas, o que o princípio 9 proíbe sem decisão humana (pergunta 1).
+**Perfil legado `convidado`.** É o convidado de hoje, sem mudança: pergunta nas apurações liberadas, vê só as próprias conversas e guarda só o rascunho da pergunta. Não pode ser atribuído a ninguém depois da migração. O dono converte cada convidado em leitor ou em outro papel pela tela Equipe, ou o remove. Ele existe porque transformar convidado em leitor daria às contas atuais a leitura do caderno, dos achados e do texto das apurações liberadas, o que o princípio 9 proíbe sem decisão humana (decisão 1).
 
 ### 2.5 Posse e participação
 
@@ -110,6 +110,7 @@ Só o operador cria, suspende e encerra redações (D3). Nenhuma rota HTTP cria 
 - **Quem inclui e retira pessoas:** o dono e o responsável. Só entram contas da mesma redação; o armazenamento recusa participação entre redações diferentes.
 - **Quem manda para a lixeira e restaura:** o dono e o responsável.
 - **Quem apaga de vez:** só o dono, com o nome do item digitado e a senha.
+- **A lixeira não muda posse nem alcance.** Uma apuração na lixeira continua da mesma redação, com o mesmo responsável e os mesmos participantes, até ser restaurada ou apagada de vez. O que cada pedido recebe nesse intervalo está na seção 4.6.
 - **Responsável exige papel dono ou repórter.** Se o responsável é rebaixado, desativado ou excluído, a apuração fica sem responsável e o dono atribui outro. Uma apuração sem responsável continua visível aos participantes e ao dono.
 - **Mudança de papel não mexe nas participações.** A conta continua nas mesmas apurações, com o que o papel novo permite.
 - **Conta desativada** mantém as participações (reativar devolve o acesso). **Conta excluída** as perde.
@@ -183,11 +184,13 @@ Depois de resolvida, a apuração precisa estar em `principal['casos']`. Os iden
 5. A operação existe.
 6. Pendências da conta.
 7. O papel alcança a operação e os campos enviados.
-8. A apuração do pedido está ao alcance.
+8. A apuração do pedido está ao alcance. Se ela está na lixeira, só passam as operações de lixeira (seção 4.6).
 9. Regra do objeto: responsável, ou autor da conversa.
 10. O módulo da rota valida o resto.
 
 O papel vem antes da apuração. Assim, a recusa por papel depende só de quem pergunta e nunca diz nada sobre a apuração.
+
+**Envio em fluxo.** Nas operações que recebem arquivos em fluxo (`cadastrar` e `codex-documentos-cadastrar`, tipo `application/vnd.vlado.lote`), o corpo lido no passo 3 é só a primeira linha, o manifesto em JSON, de até 64 KB. Os passos 4 a 9 são decididos com o manifesto, que traz `caso`, `conversa` e `novo`. Os bytes dos arquivos só começam a ser lidos pela rota depois do passo 9. Uma recusa em qualquer passo anterior responde sem ler nem gravar nenhum byte de arquivo, e o resto do corpo é descartado como hoje.
 
 ### 4.3 Respostas de recusa
 
@@ -206,7 +209,7 @@ O papel vem antes da apuração. Assim, a recusa por papel depende só de quem p
 | Item da lixeira ou lote fora do alcance | 400 | A mesma resposta do item ou lote inexistente, como hoje |
 | Senha de confirmação errada numa operação sensível | 403 | `codigo: "senha_atual_incorreta"`; conta para o teto de tentativas |
 
-As cinco causas de `caso_indisponivel` têm o mesmo corpo, byte a byte, e a mesma sequência de leituras no servidor. A causa verdadeira vai só para o registro de auditoria, no evento `acesso_negado` com `motivo` (`papel`, `sem_participacao`, `outra_redacao`, `inexistente`), para o operador enxergar tentativas de travessia. `caso_indisponivel` substitui `caso_nao_liberado`.
+As cinco causas de `caso_indisponivel` têm o mesmo corpo, byte a byte, e a mesma sequência de leituras no servidor. A causa verdadeira vai só para o registro de auditoria, no evento `acesso_negado` com `motivo` (`papel`, `sem_participacao`, `outra_redacao`, `inexistente`), para o operador enxergar tentativas de travessia. Esse evento não aparece em `equipe-atividade` nem em nenhuma resposta da Mesa: o motivo distingue "não existe" de "é de outra redação", e mostrá-lo ao dono de uma redação seria o mesmo vazamento por outro caminho. Só o operador o lê, no registro de auditoria. `caso_indisponivel` substitui `caso_nao_liberado`.
 
 ### 4.4 Ids de apuração iguais em redações diferentes
 
@@ -223,14 +226,31 @@ Não existem. O espaço de ids é um só por instalação, e o disco continua `c
 |---|---|---|
 | Existência de apuração, conversa, item ou lote | Mensagens diferentes para "não existe" e "não liberado"; `contas-criar` confere `casos` contra o catálogo inteiro | Tabela 4.3. Toda conferência de ids é feita contra o alcance de quem pede. |
 | Títulos de apurações e nomes de arquivos | `casos/catalogo.json`, `lixeira/registro.json` e a fila são da instalação | Só saem por `filtrar`. |
-| Existência de e-mail ou conta | Entrada, "esqueci a senha", convite para e-mail que já tem conta | Uma resposta só. Convidar um e-mail que já é de outra redação responde "convite enviado"; quem recebe o e-mail é a pessoa, com a explicação. |
+| Existência de e-mail ou conta | Entrada e seus contadores de tentativa, "esqueci a senha", troca de e-mail, convite para e-mail que já tem conta | Em cada caminho, a mesma resposta exista a conta ou não. Entrada: a mesma recusa, os mesmos contadores e o mesmo 429, contados pelo identificador digitado (seção 8.2). "Esqueci a senha": a mesma resposta. `conta-email-trocar` para e-mail já usado responde igual ao livre (seção 5.4). Convite para e-mail de outra redação responde como qualquer convite e fica entre os pendentes (seção 8.1). Limitação conhecida: o transporte `tela` não esconde os dois últimos (seção 8.1). |
 | Nomes de pessoas e de redações | Lista de contas e eventos da instalação | `equipe-*` só lê a própria redação. E-mails só citam a redação de quem convida. |
 | Contagens | "A Mesa já está com N perguntas em andamento" conta a instalação inteira; número de contas e de lotes | Nenhuma resposta leva número que some redações. Os tetos passam a contar por redação (seção 8.5). |
 | Gasto e cota | `GET /api/cota` com o bloco da organização | O bloco da redação só vai ao dono dela. |
 | Configuração do servidor | `ambiente` devolve o caminho do Python; `ia-config` devolve os quatro últimos caracteres da chave da instalação | No modo `piloto`, `ambiente` sai sem caminhos e `ia-config` mostra só a chave da própria redação. Da chave do serviço, a redação sabe apenas que existe. |
 | Autoria | `criado_por` e `autor` nos registros | Só aparecem em respostas de apurações ao alcance. |
 
-Recursos que continuam compartilhados e não levam dado: o teto de conexões do servidor, a fila de extração (uma redação pode atrasar a outra, sem ver nada dela) e os arquivos estáticos.
+Recursos que continuam compartilhados e não levam dado: o teto de conexões do servidor, a fila de extração (uma redação pode atrasar a outra, sem ver nada dela), os arquivos estáticos e o disco.
+
+**Limitação conhecida: não há teto de disco por redação.** Os limites de hoje são por lote (50 MB, 100 arquivos) e por apuração (20 documentos). Uma redação pode abrir quantas apurações quiser e encher o disco de todas. Isso não vaza dado, mas derruba o serviço para as outras. A regra não entra nesta onda. Quem a faria é a Plataforma, junto com o limite de documentos por organização da Onda 4 (PROD-05, item 5): o registro de posse deste contrato dá a ela o que falta, que é saber de que redação é cada apuração. Até lá, o alerta de disco do monitoramento da Infra avisa o operador, que pode suspender a redação (`redacao-suspender`).
+
+### 4.6 Apuração na lixeira
+
+Mandar uma apuração para a lixeira não muda a posse, o responsável nem as participações. Ela continua em `principal['casos']` de quem a alcançava, e o portão a trata como qualquer outra. É isso que permite `restaurar`, `lixeira-alcance` e `lixeira-apagar`, cujo resolvedor (`item`) chega à apuração e à posse dela.
+
+| Quem pede | O que recebe para uma apuração na lixeira |
+|---|---|
+| Conta sem alcance (situações N e X) | A recusa de alcance de sempre. A lixeira nunca muda essa resposta, então ela não revela que a apuração existe nem que foi excluída. |
+| Conta com alcance, em leitura ou escrita | A recusa de item na lixeira, com a mensagem e o código de hoje (`lixeira.conferir_disponivel`, HTTP 400), em todos os papéis. Hoje cada módulo faz essa conferência por conta própria. Passa a ser feita também no portão, logo depois do alcance, para toda operação que não seja uma das quatro de lixeira abaixo: nenhuma leitura devolve conteúdo de apuração que está na lixeira. |
+| `GET /api/catalogo` | Não lista a apuração, como hoje. |
+| `gerenciar-listar` | Lista o item entre os da lixeira, para o dono e para o repórter que alcança a apuração. |
+| `restaurar` | Dono e responsável, pela matriz. |
+| `lixeira-alcance`, `lixeira-apagar` | Só o dono. |
+
+O mesmo vale para conversa e rodada na lixeira: o alcance vem da apuração a que pertencem. Depois do apagamento definitivo, o registro de posse vira uma marca de apuração apagada, que ninguém alcança, e as participações somem. O id não volta a ser usado por nenhuma redação. Durante a quarentena do apagamento, a apuração já está fora do alcance de todos.
 
 ## 5. Matriz operação × papel
 
@@ -243,6 +263,8 @@ Cada linha é uma operação que existe hoje (114 `POST /api/…` com sessão, 4
 | `sim` | Permitido em toda apuração ao alcance. Em operação sem apuração, permitido. |
 | `resp` | Permitido só nas apurações em que a conta é responsável. |
 | `autor` | Permitido só em conversa criada pela própria conta, numa apuração ao alcance. |
+| `equipe` | Permitido em conversa da equipe e em conversa de autor restrito da própria conta. Negado em conversa de autor restrito de outra conta (seção 5.8). |
+| `equipe ou resp` | Como `equipe`; além disso, o responsável pela apuração alcança qualquer conversa dela. |
 | `—` | Negado pelo papel. |
 
 Cada célula se abre nas quatro situações da seção 2.6 por esta regra, sem exceção:
@@ -253,7 +275,11 @@ Cada célula se abre nas quatro situações da seção 2.6 por esta regra, sem e
 | `sim`, demais colunas | passa | passa | recusa de alcance | recusa de alcance |
 | `resp` | passa | 403 `operacao_proibida` | recusa de alcance | recusa de alcance |
 | `autor` | passa na conversa própria; `conversa_indisponivel` na de outro | igual a P | recusa de alcance | recusa de alcance |
+| `equipe` | passa em conversa da equipe e na de autor restrito própria; `conversa_indisponivel` na de autor restrito alheio | igual a P | recusa de alcance | recusa de alcance |
+| `equipe ou resp` | passa em qualquer conversa da apuração | como `equipe` | recusa de alcance | recusa de alcance |
 | `—` | 403 `operacao_proibida` | 403 | 403 | 403 |
+
+Na coluna D, a situação N vale como P em toda célula: o dono alcança todas as apurações da redação.
 
 "Recusa de alcance" é `caso_indisponivel` quando a apuração veio do campo `caso`, `conversa_indisponivel` quando veio de `conversa`, e a resposta de item ou lote inexistente nos outros dois resolvedores. **Em X, nenhum papel passa em nenhuma linha.**
 
@@ -299,7 +325,7 @@ Resolvedor `nenhum`. Toda operação age só sobre a conta da sessão. O id de o
 | `conta-ver`\* | L | sim | sim | sim | sim | sim | Perfil, redação, papel, segundo fator, termos. |
 | `conta-atualizar`\* | E | sim | sim | sim | sim | sim | Nome e idioma. |
 | `conta-senha-trocar`\* | A | sim | sim | sim | sim | sim | Pede a senha atual; encerra as outras sessões (W08, regra 2). |
-| `conta-email-trocar`\* | A | sim | sim | sim | sim | sim | Pede a senha; confirma pelo e-mail novo e avisa o antigo. |
+| `conta-email-trocar`\* | A | sim | sim | sim | sim | sim | Pede a senha; confirma pelo e-mail novo e avisa o antigo. E-mail já usado por outra conta, de qualquer redação, responde igual ao livre ("confirmação enviada"): o servidor grava um pedido sem efeito, nada muda na conta e nenhuma mensagem vai ao endereço em uso. |
 | `conta-fator-iniciar`\*, `conta-fator-confirmar`\* | A | sim | sim | sim | sim | sim | Cadastro do autenticador; os códigos de reserva aparecem uma vez. |
 | `conta-fator-codigos`\* | A | sim | sim | sim | sim | sim | Gera códigos novos e invalida os antigos. Pede senha e código. |
 | `conta-fator-remover`\* | A | — | — | sim | sim | sim | Negado a quem tem segundo fator obrigatório. |
@@ -316,12 +342,12 @@ Resolvedor `nenhum`. Toda operação age só sobre a redação da sessão. O id 
 | Operação | Tipo | D | E | R | L | C | Observação |
 |---|---|---|---|---|---|---|---|
 | `equipe-listar`\* | L | sim | — | — | — | — | Pessoas, papéis, apurações de cada uma, gasto do mês, convites pendentes. |
-| `equipe-convidar`\*, `equipe-convite-reenviar`\*, `equipe-convite-cancelar`\* | A | sim | — | — | — | — | Seção 8.1. |
+| `equipe-convidar`\*, `equipe-convite-reenviar`\*, `equipe-convite-cancelar`\* | A | sim | — | — | — | — | Seção 8.1. Convidar com o papel dono pede a senha. |
 | `equipe-papel`\* | A | sim | — | — | — | — | Recusa rebaixar o último dono ativo. Promover a dono pede a senha. Nunca atribui `convidado`. |
 | `equipe-desativar`\*, `equipe-reativar`\*, `equipe-remover`\* | A | sim | — | — | — | — | Recusam o último dono ativo. Desativar encerra as sessões e para as execuções em curso, como hoje. |
 | `equipe-recuperar`\*, `equipe-recuperar-confirmar`\* | A | sim | — | — | — | — | Seção 8.2. Nunca devolvem link no modo `piloto`. |
 | `equipe-teto`\* | A | sim | — | — | — | — | Teto mensal por pessoa, até o teto da redação. |
-| `equipe-atividade`\* | L | sim | — | — | — | — | Acessos e ações de administração da redação, sem conteúdo (W09, regra 8). |
+| `equipe-atividade`\* | L | sim | — | — | — | — | Acessos e ações de administração da redação, sem conteúdo (W09, regra 8). Não inclui `acesso_negado` (seção 4.3). |
 | `ia-config` | L | sim | — | — | — | — | No modo `piloto`: provedor, modelo e a chave da própria redação (presença e quatro últimos caracteres). |
 | `ia-config-salvar` | A | sim | — | — | — | — | No modo `piloto`: só grava ou remove a chave da própria redação, e pede a senha. Provedor e modelo da instalação são do operador. Nos modos locais, como hoje. |
 | `ambiente` | L | sim | — | sim | — | — | No modo `piloto`, sem caminhos do servidor. |
@@ -339,7 +365,7 @@ Resolvedor `nenhum`. Toda operação age só sobre a redação da sessão. O id 
 | `caso-participantes`\* | `caso` | L | sim | sim | sim | sim | — | |
 | `caso-incluir`\*, `caso-retirar`\* | `caso` | A | sim | — | resp | — | — | Só contas da mesma redação. Conta de outra redação responde como inexistente. |
 | `caso-responsavel`\* | `caso` | A | sim | — | — | — | — | O novo responsável precisa ser dono ou repórter da redação. |
-| `excluir` | `caso` | E | sim | — | resp | — | — | Manda apuração, conversa ou rodada para a lixeira. |
+| `excluir` | `caso`; com `tipo: "conversa"`, `caso` e `conversa` | E | sim | — | resp | — | — | Manda apuração, conversa ou rodada para a lixeira. Quando o item é uma conversa, o portão resolve a conversa e exige que ela seja da apuração do pedido, como nas `codex-*`, sem depender da conferência que `Conversas.gerenciar` já faz. A rodada é resolvida dentro da apuração, pelo módulo. |
 | `restaurar` | `item` | E | sim | — | resp | — | — | |
 | `lixeira-alcance` | `item` | L | sim | — | — | — | — | |
 | `lixeira-apagar` | `item` | A | sim | — | — | — | — | Apagamento definitivo. Além do nome do item, passa a pedir a senha. |
@@ -362,13 +388,25 @@ Resolvedor `caso` em todas.
 |---|---|---|---|---|---|---|---|---|
 | `codex-listar` | `caso` | L | sim | sim | sim | sim | autor | Convidado recebe só as próprias conversas. |
 | `codex-perguntar`, conversa nova | `caso` | IA | sim | sim | sim | sim | sim | Leitor e convidado enviam só `caso` e `pergunta`. A conversa deles nasce com autor restrito. |
-| `codex-perguntar`, com `conversa` | `caso` e `conversa` | IA | sim | sim | sim | autor | autor | Leitor e convidado enviam só `caso`, `pergunta` e `conversa`. |
-| `codex-retomar`, `codex-cancelar` | `conversa` | IA | sim | sim | sim | autor | autor | Retomar gasta a cota de quem retoma. |
+| `codex-perguntar`, com `conversa` | `caso` e `conversa` | IA | equipe | equipe | equipe | autor | autor | Leitor e convidado enviam só `caso`, `pergunta` e `conversa`. |
+| `codex-retomar` | `conversa` | IA | equipe | equipe | equipe | autor | autor | Retomar gasta a cota de quem retoma. |
+| `codex-cancelar` | `conversa` | E | sim | equipe | equipe ou resp | autor | autor | Para uma execução em curso. Não gasta cota. |
 | `codex-eventos` | `conversa` | L | sim | sim | sim | sim | autor | Leitor e convidado recebem a conversa sem os campos internos e sem o texto bruto de erros, como o convidado de hoje. |
 | `codex-original` | `conversa` | B | sim | sim | sim | sim | autor | |
 | `codex-observacoes` | `caso` | L | sim | sim | sim | — | — | |
 | `codex-corpus-previa`, `codex-caderno-previa`, `codex-diligencias-previa` | `caso` e `conversa` | L | sim | sim | sim | — | — | |
-| `codex-documentos-cadastrar` | `caso` e `conversa` | E | sim | — | sim | — | — | |
+| `codex-documentos-cadastrar` | `caso` e `conversa` | E | equipe | — | equipe | — | — | Continua a conversa com documentos novos. |
+
+**Quem continua uma conversa. A regra é uma só, e vale aqui e na seção 2.1.**
+
+- Há dois tipos de conversa. A **conversa de autor restrito** é a aberta por um leitor ou por um convidado; o campo `dono` de `conversa.json` guarda o id de quem a abriu. A **conversa da equipe** é a aberta por dono, editor ou repórter; o campo `dono` fica vazio, como nas conversas dos administradores de hoje.
+- **Ler** (`codex-listar`, `codex-eventos`, `codex-original`): qualquer conta com alcance sobre a apuração lê os dois tipos. O convidado legado lê só as próprias.
+- **Acrescentar pergunta, retomar e continuar com documentos:**
+  - na conversa de autor restrito, só o autor. Nem o dono acrescenta pergunta à conversa de um leitor;
+  - na conversa da equipe, dono, editor e repórter com alcance, como os administradores de hoje. Leitor e convidado, nunca.
+- **Cancelar uma execução em curso:** quem pode continuar a conversa, e também o dono e o responsável pela apuração, em qualquer conversa dela. Cancelar não lê nem escreve conteúdo; só para o gasto.
+- O autor é conferido pelo id da conta. Um leitor promovido a repórter continua autor das conversas que abriu como leitor.
+- Quem não pode continuar uma conversa recebe `conversa_indisponivel`, a mesma resposta da conversa inexistente.
 
 A cota diária de perguntas (`OPERACOES_COM_COTA`) continua valendo só para o convidado. Os quatro papéis são limitados pelos tetos mensais em reais (seção 8.5).
 
@@ -429,11 +467,11 @@ Resolvedor `caso` em todas. O rascunho é sempre da conta da sessão: ninguém l
 
 ### 5.15 Operações sensíveis pedem a senha de novo
 
-`conta-senha-trocar`, `conta-email-trocar`, `conta-fator-iniciar`, `conta-fator-codigos`, `conta-fator-remover`, `conta-excluir`, `equipe-papel` (ao promover a dono), `equipe-remover`, `equipe-recuperar`, `ia-config-salvar` e `lixeira-apagar` levam a senha da conta no corpo. Uma sessão aberta num computador esquecido, ou um conteúdo malicioso exibido na Mesa (seção 9), não consegue executá-las.
+`conta-senha-trocar`, `conta-email-trocar`, `conta-fator-iniciar`, `conta-fator-codigos`, `conta-fator-remover`, `conta-excluir`, `equipe-convidar` (ao convidar como dono), `equipe-papel` (ao promover a dono), `equipe-remover`, `equipe-recuperar`, `ia-config-salvar` e `lixeira-apagar` levam a senha da conta no corpo. Uma sessão aberta num computador esquecido, ou um conteúdo malicioso exibido na Mesa (seção 9), não consegue executá-las.
 
 ### 5.16 Operador do Vlado
 
-O operador não tem conta, sessão nem papel na Mesa: em toda linha desta matriz, a célula dele é "sem sessão, 401". Ele age pelo terminal do servidor (pergunta 6). O armazenamento recusa qualquer papel fora dos cinco da seção 2.3.
+O operador não tem conta, sessão nem papel na Mesa: em toda linha desta matriz, a célula dele é "sem sessão, 401". Ele age pelo terminal do servidor (decisão 6). O armazenamento recusa qualquer papel fora dos cinco da seção 2.3.
 
 | Comando (`python scripts/acesso.py …`) | O que faz |
 |---|---|
@@ -460,8 +498,8 @@ Toda ação do operador vira evento com `por: "operador"`, visível ao dono da r
    - Célula que recusa: o status e o código exatos da tabela 5.1.
    - Recusa em operação de tipo `E`, `IA` ou `A`: além da resposta, nada mudou em `casos/`, `execucoes/`, `conversas/`, `lixeira/` nem no armazenamento de contas (resumo por hash antes e depois).
    - Recusa em operação de tipo `L` ou `B`: o corpo não contém nenhuma das sentinelas da outra redação (título de apuração, nome de arquivo, nome e e-mail de pessoa, nome da redação).
-5. **O cenário.** Duas redações semeadas por `scripts/dados_sinteticos.py`. A redação A tem dono, editor, dois repórteres, leitor e convidado, com uma apuração de cada repórter e participações que produzem P, I e N para cada papel. A redação B tem dono e repórter, com uma apuração de **mesmo título** de uma de A e registros de **mesmos ids internos** (R001, D001, mesma `requisicao_id`). Os ids de B são usados pelas sessões de A.
-6. **Travessia, além das células.** `testes/test_isolamento_redacoes.py` cobre o que a matriz não expressa: cada resolvedor (`conversa`, `item`, `lote`) com id da outra redação; referência de evidência de outra apuração dentro de um corpo válido; as três listagens; convite, inclusão e mudança de papel com id de conta da outra redação; e-mail já usado em outra redação; a igualdade byte a byte das cinco causas de `caso_indisponivel`.
+5. **O cenário.** Duas redações semeadas por `scripts/dados_sinteticos.py`. A redação A tem dono, editor, dois repórteres, leitor e convidado, com uma apuração de cada repórter e participações que produzem P, I e N para cada papel. A redação B tem dono e repórter, com uma apuração de **mesmo título** de uma de A e registros de **mesmos ids internos** (R001, D001, mesma `requisicao_id`). Os ids de B são usados pelas sessões de A. Cada apuração de A tem uma conversa da equipe e uma conversa de autor restrito, aberta pelo leitor, para as células `autor`, `equipe` e `equipe ou resp`. Uma apuração de A está na lixeira, para a tabela da seção 4.6.
+6. **Travessia, além das células.** `testes/test_isolamento_redacoes.py` cobre o que a matriz não expressa: cada resolvedor (`conversa`, `item`, `lote`) com id da outra redação; referência de evidência de outra apuração dentro de um corpo válido; as três listagens; convite, inclusão e mudança de papel com id de conta da outra redação; a igualdade byte a byte das cinco causas de `caso_indisponivel`. E a enumeração de contas: 11 senhas erradas, de dois endereços, para um e-mail com conta e para um sem conta, com a mesma sequência de status e de corpos; "esqueci a senha" para os dois; `conta-email-trocar` para e-mail livre e para e-mail usado em outra redação; convite para e-mail de outra redação, que responde igual e aparece entre os pendentes.
 7. **Invariantes.** Nos modos com contas nenhum principal tem `casos: None`; apuração sem posse não é alcançada por ninguém; nenhum módulo de rota lê `principal['papel']` (teste estático sobre `scripts/rotas_*.py`).
 
 São 108 operações atuais que ficam (as 114 menos as seis retiradas) e 30 novas com sessão, vezes cinco papéis e até quatro situações: mais de 2.000 células. As 4 públicas atuais e as 5 novas têm testes próprios, sem papel. O teste roda sem modelo e sem rede, com o hash de senha rápido que `testes/test_acesso.py` já usa.
@@ -533,7 +571,7 @@ Forma do banco, em linhas gerais:
 
 O banco usa modo WAL, chaves estrangeiras ligadas, escrita em transação imediata, permissão 0600 e versão do esquema em `user_version`. Banco ilegível ou que falha na conferência de integridade responde 503 e não deixa ninguém entrar, como o arquivo ilegível de hoje. O banco fica em disco local do servidor ou em volume Docker local; sistema de arquivos de rede não é suportado.
 
-**A semente do segundo fator é cifrada** (AES-GCM, biblioteca `cryptography`) com uma chave em `segredos/contas.chave`, fora do volume de contas e fora do backup comum, como a chave do registro de auditoria. Quem copiar só o banco não gera códigos (pergunta 13). As chaves de IA das redações ficam em `segredos/chaves.json`, numa seção por redação.
+**A semente do segundo fator é cifrada** (AES-GCM, biblioteca `cryptography`) com uma chave em `segredos/contas.chave`, fora do volume de contas e fora do backup comum, como a chave do registro de auditoria. Quem copiar só o banco não gera códigos (decisão 13). As chaves de IA das redações ficam em `segredos/chaves.json`, numa seção por redação.
 
 ## 8. Desenho do que a Onda 2 entrega
 
@@ -550,27 +588,39 @@ Esta seção fixa comportamento, não implementação.
 - **Só texto.** Sem HTML, sem imagem, sem link que não seja da própria instalação. Os modelos são versionados, em português e inglês. Nome de pessoa e de redação entram sem quebras de linha.
 - **O token só existe no link.** O servidor guarda o hash. Falha de envio aparece ao dono na Equipe, e reenviar gera um token novo e invalida o anterior.
 - **Convite:** vale 7 dias, uma única vez. O dono reenvia ou cancela. O e-mail vem do convite e não pode ser trocado ao aceitar (W10, regra 3). O convite leva papel e apurações; ao aceitar, a conta nasce com as participações.
-- **Sem transporte real** (`tela`), "esqueci a senha" fica desligado, porque não há a quem mostrar o link, e a recuperação é feita pelo dono com dupla confirmação (seção 8.2). A produção não sobe com `tela` (pergunta 12).
+- **Convite para e-mail que já tem conta em outra redação:** quem convida recebe a mesma resposta de qualquer convite. O convite aparece entre os pendentes, pode ser reenviado e cancelado e vence no prazo, como os outros. Quem recebe o e-mail é a pessoa, com a explicação de que no teste uma conta pertence a uma redação só; o link não cria conta. Convite para e-mail que já é da própria redação é recusado dizendo a razão, porque o dono já vê quem é da redação. Para o convite não virar meio de encher a caixa de alguém, cada redação tem teto de convites pendentes (50) e cada convite é reenviado no máximo uma vez por hora.
+- **Sem transporte real** (`tela`), "esqueci a senha" fica desligado, porque não há a quem mostrar o link, e a recuperação é feita pelo dono com dupla confirmação (seção 8.2). A produção não sobe com `tela` (decisão 12).
+- **Limitação conhecida do transporte `tela`** (modo `local-contas` e homologação do `piloto`). O link aparece na tela de quem pediu, e o servidor não tem como esconder dele o que o link faz. Quem convida um e-mail de outra redação abre o link e vê que ele não cria conta. Quem troca o próprio e-mail por um já usado vê que a confirmação não se completa. No `local-contas` há uma redação só, e isso não revela nada de outra. Na homologação com mais de uma redação, revela que aquele e-mail tem conta em alguma redação, sem dizer qual. A limitação é aceita e fica registrada; com o transporte `smtp` ela não existe.
 
 ### 8.2 Senha, segundo fator, tentativas e recuperação (CON-03)
 
 - **Senha:** 12 a 256 caracteres, argon2id, como hoje, aceitando colar e gerenciador (W08, regra 4). Trocar pede a atual e encerra as outras sessões. Redefinir por e-mail usa link de 1 hora e uso único; a conta com segundo fator informa também o código.
 - **Segundo fator:** TOTP (RFC 6238, 6 dígitos, 30 segundos, um passo de tolerância). O mesmo código não vale duas vezes. Dez códigos de reserva de uso único, mostrados uma vez.
-- **Obrigatório para dono e editor** no modo `piloto`, como dizem as regras do W08 e do W10; o plano dizia só dono (pergunta 3). Quem tem a obrigação e ainda não cadastrou fica com a pendência `segundo_fator`.
-- **Chave de acesso** (passkey), que o W08 e o W10 mostram como alternativa, fica fora do lançamento (pergunta 4).
+- **Obrigatório para dono e editor** no modo `piloto`, como dizem as regras do W08 e do W10; o plano dizia só dono (decisão 3). Quem tem a obrigação e ainda não cadastrou fica com a pendência `segundo_fator`.
+- **Chave de acesso** (passkey), que o W08 e o W10 mostram como alternativa, fica fora do lançamento (decisão 4).
 - **Entrada em dois passos:** senha certa numa conta com segundo fator não abre sessão; devolve um cookie de 5 minutos que só serve para `entrar-segundo-fator`. Cinco códigos errados invalidam esse cookie.
-- **Teto por conta.** Continua o bloqueio de hoje, por conta e endereço (5 falhas, 15 minutos). Acrescenta-se um teto por conta, somando todos os endereços: 10 falhas de senha ou de código em 1 hora põem a conta em modo protegido por 1 hora. Nesse modo só tenta quem vem de um aparelho que a conta já usou; os demais recebem 429. A conta recebe um e-mail de aviso. Um bloqueio total por conta permitiria a qualquer pessoa trancar o dono fora sabendo o e-mail dele; o modo protegido para a força bruta distribuída sem dar esse poder.
+- **Teto por identificador digitado.** Todo contador de falha de entrada é contado pelo identificador que a pessoa digitou (o e-mail ou o login antigo, em minúsculas), **exista a conta ou não**, como o código de hoje já faz com o login (`acesso._chave_tentativa`, `acesso.py:572`). Nenhum contador, bloqueio ou resposta depende de a conta existir.
+  - Continua o bloqueio de hoje, por identificador e endereço: 5 falhas, 15 minutos.
+  - Acrescenta-se um teto por identificador, somando todos os endereços: 10 falhas em 1 hora põem o identificador em modo protegido por 1 hora.
+  - No modo protegido, toda tentativa recebe o mesmo 429, com o corpo `bloqueado` de hoje, haja ou não conta com aquele identificador. Quem manda 11 senhas erradas de dois endereços recebe a mesma sequência de respostas para um e-mail com conta e para um e-mail sem conta.
+  - A única tentativa que atravessa o modo protegido é a que traz a marca de um aparelho que aquela conta já usou. Um identificador sem conta não tem aparelho conhecido, e quem ataca uma conta alheia não tem a marca dela: para ele os dois casos são iguais.
+  - O contador de um identificador sem conta é guardado e vence como o de uma conta: some quando o prazo acaba e nunca é despejado antes. Quem limita o crescimento da tabela é o teto por endereço (20 tentativas por minuto).
+  - O hash de senha continua sendo calculado para identificador sem conta, como hoje, para o tempo de resposta não distinguir os dois casos.
+  - O e-mail de aviso de muitas tentativas só sai quando a conta existe, e quem ataca não o vê.
+  - As falhas do código do segundo fator contam no mesmo teto. Elas só acontecem depois da senha certa, quando a existência da conta já não é segredo para quem tenta.
+
+  Um bloqueio total permitiria a qualquer pessoa trancar o dono fora sabendo o e-mail dele; o modo protegido para a força bruta distribuída sem dar esse poder.
 - **Aparelho conhecido:** um cookie próprio, aleatório e de longa duração, cujo hash fica na conta. Serve ao modo protegido e ao aviso de novo acesso.
 - **Recuperação entre administradores, com dupla confirmação.** Recuperar encerra as sessões, invalida senha e segundo fator e manda à pessoa um link para refazer os dois. Sempre há duas partes:
   - Alvo que não é dono: o dono pede e a própria pessoa confirma pelo link, que só ela recebe.
   - Alvo que é dono: outro dono pede e um terceiro dono confirma (`equipe-recuperar-confirmar`). Sem terceiro dono, quem confirma é o operador, pelo terminal.
   - Transporte `tela`: toda recuperação exige a segunda confirmação antes de o link aparecer.
   O dono nunca troca o e-mail de outra pessoa, para a recuperação não virar tomada de conta.
-- **O único dono que perdeu senha, aparelho e códigos** é recuperado pelo operador (`dono-convidar`), com aviso ao e-mail do dono e espera de 24 horas (pergunta 14).
+- **O único dono que perdeu senha, aparelho e códigos** é recuperado pelo operador (`dono-convidar`), com aviso ao e-mail do dono e espera de 24 horas (decisão 14).
 
 ### 8.3 Sessões e acessos (CON-04)
 
-- **Lista de sessões** da própria conta: aparelho (navegador e sistema, tirados do cabeçalho do navegador), cliente, criação, último uso, endereço e a marca "esta". A cidade aproximada do W08 depende de uma base de localização por IP e fica fora do lançamento (pergunta 5).
+- **Lista de sessões** da própria conta: aparelho (navegador e sistema, tirados do cabeçalho do navegador), cliente, criação, último uso, endereço e a marca "esta". A cidade aproximada do W08 depende de uma base de localização por IP e fica fora do lançamento (decisão 5).
 - **Encerrar** uma sessão ou todas as outras vale na requisição seguinte. Uma espera de eventos já aberta pode durar até 20 segundos depois do encerramento.
 - **Acesso com IP.** Toda entrada grava data, aparelho e IP: a pessoa vê as próprias, o registro de auditoria da Onda 1 guarda todas, e o dono vê na atividade "entrou de aparelho novo", sem o IP.
 - **Novo acesso avisa por e-mail** quando a entrada vem de aparelho que a conta nunca usou (W08, regra 6).
@@ -581,7 +631,7 @@ Esta seção fixa comportamento, não implementação.
 - **Aceite de termos:** o convite mostra a versão vigente, e o aceite grava versão, data e IP. Versão nova gera a pendência `termos` no próximo acesso. O texto é da Documentação e depende de D6.
 - **Exportar meus dados:** um arquivo com perfil, redação e papel, aceites, sessões, acessos e eventos da conta, e a lista do que a pessoa criou (tipo, apuração, data, identificador). O conteúdo das apurações não entra: é da redação, e sai pela exportação da apuração (PROD-08).
 - **Excluir conta:** pede a senha e o nome digitado. Encerra sessões, apaga senha, segundo fator, e-mail, nome e participações, e deixa só o `id` com a situação `excluida`. O `id` nunca é reaproveitado. O último dono não se exclui.
-- **O que acontece com o trabalho feito:** notas, revisões e conversas ficam com a redação. Os registros são encadeados por hash e não podem ser reescritos (contrato de evidência), então o nome continua gravado nos arquivos antigos e nos backups. Na Mesa e nas exportações novas, o autor de conta excluída aparece como "Conta excluída": a troca é feita num ponto só, na saída, pelo `id`. O W08 promete "sem seu nome"; isso vale para o que a Mesa mostra, não para o arquivo histórico (pergunta 10).
+- **O que acontece com o trabalho feito:** notas, revisões e conversas ficam com a redação. Os registros são encadeados por hash e não podem ser reescritos (contrato de evidência), então o nome continua gravado nos arquivos antigos e nos backups. Na Mesa e nas exportações novas, o autor de conta excluída aparece como "Conta excluída": a troca é feita num ponto só, na saída, pelo `id`. O W08 promete "sem seu nome"; isso vale para o que a Mesa mostra, não para o arquivo histórico (decisão 10).
 - **Remover da redação** (`equipe-remover`) tem o mesmo efeito, por decisão do dono.
 - **Conta inativa:** 180 dias sem entrar geram um aviso por e-mail; 30 dias depois, a conta é desativada, não apagada. O dono a reativa. Conta `aguardando_senha` cujo convite venceu some com o convite.
 - **Redação encerrada** (pelo operador): exportação entregue ao dono, depois apagamento das apurações pela quarentena da Onda 1 e exclusão das contas. O apagamento não alcança backups já feitos; a retenção deles é da Infra e entra na política de privacidade.
@@ -596,7 +646,7 @@ Esta seção fixa comportamento, não implementação.
   3. da instalação, a soma do que o serviço aceita pagar, definido pelo operador;
   4. o teto no painel do provedor, fora do Vlado.
 - **Quem vê o quê:** a pessoa vê o próprio gasto (`GET /api/cota`); o dono vê o da redação e o de cada pessoa (`equipe-listar`); o operador vê o total de cada redação. Sempre em reais.
-- **Chave própria da redação (opcional):** o dono a cadastra em `ia-config-salvar`. Com ela, as perguntas da redação usam essa chave e o gasto não desconta da cota paga pelo serviço. O teto por pessoa continua valendo e o gasto continua medido, num lançamento separado. O navegador só vê se a chave existe e os quatro últimos caracteres. Guardar a chave e decidir quem a troca é desta onda; usar a chave da redação na chamada ao provedor é mudança em arquivo da Plataforma (pergunta 11).
+- **Chave própria da redação (opcional):** o dono a cadastra em `ia-config-salvar`. Com ela, as perguntas da redação usam essa chave e o gasto não desconta da cota paga pelo serviço. O teto por pessoa continua valendo e o gasto continua medido, num lançamento separado. O navegador só vê se a chave existe e os quatro últimos caracteres. Guardar a chave e decidir quem a troca é desta onda; usar a chave da redação na chamada ao provedor é mudança em arquivo da Plataforma (decisão 11).
 - **Vizinho barulhento.** O teto de execuções simultâneas e o limite diário de tokens (`limites.conferir_dia`) são hoje da instalação: uma redação consegue esgotá-los para todas. Passam a existir por redação, com um total da instalação por cima, e a mensagem de recusa deixa de citar o número de perguntas da instalação. São mudanças em arquivos da Plataforma (seção 10).
 
 ## 9. Reavaliação de S2 e S6 (SEG-07)
@@ -634,10 +684,10 @@ O mesmo cuidado vale para todo texto que uma conta escreve e outra lê: nome de 
 
 | Para | Pedido |
 |---|---|
-| Plataforma | `custo.chaves_orcamento` devolve a redação da conta; tetos simultâneos e limite diário por redação; mensagem de recusa sem contagem da instalação; `segredos.ler_chave` com a redação, e a chamada ao provedor usando a chave da redação quando houver; listas fechadas de `registro_acesso.py` com os eventos, papéis e códigos novos e o campo `organizacao`. |
+| Plataforma | `custo.chaves_orcamento` devolve a redação da conta; tetos simultâneos e limite diário por redação; mensagem de recusa sem contagem da instalação; `segredos.ler_chave` com a redação, e a chamada ao provedor usando a chave da redação quando houver; listas fechadas de `registro_acesso.py` com os eventos, papéis e códigos novos e o campo `organizacao`; teto de disco por redação, com PROD-05 na Onda 4 (limitação registrada na seção 4.5). |
 | Infra | Backup do banco pela cópia consistente; restauração chamando o encerramento de sessões; `manutencao` agendada; variáveis do SMTP; `cryptography` como dependência direta em `requirements.txt` e no arquivo de trava (já está nele, por via do OCR). |
 | Frontend | Telas W08, W09 e W10; `data-papel` com os valores novos e `capacidades`; `piloto.js` deixa de chamar `contas-*`; páginas `/aceitar/` e `/redefinir/`; campo de senha nas operações da seção 5.15; desenho do código QR a partir do endereço `otpauth://` que o servidor entrega (sem CDN); traduções dos códigos novos; condições 1 a 3 de S6. |
-| Design | Exceções por escrito ao W08 e ao W10, se as perguntas 4 e 5 forem aprovadas; estado "redação suspensa"; como o perfil legado `convidado` aparece na Equipe. Configuração da organização continua sem desenho. |
+| Design | Exceções por escrito ao W08 e ao W10, pelas decisões 4 e 5; estado "redação suspensa"; como o perfil legado `convidado` aparece na Equipe. Configuração da organização continua sem desenho. |
 | QA | Os oito testes de outros donos que leem `acesso.json` direto (os outros dois, `test_acesso.py` e `test_autorizacao.py`, são de Contas); bateria de S6; a matriz na suíte rápida. |
 | Documentação | Texto e versão dos termos; texto dos e-mails; roteiro do operador (criar redação, migrar, recuperar dono). |
 | Produto e Core | Nada muda na forma dos registros. O nome do autor de conta excluída é trocado na saída, sem tocar nos módulos. |
@@ -648,28 +698,28 @@ O mesmo cuidado vale para todo texto que uma conta escreve e outra lê: nome de 
 
 **Como pedir mudança neste contrato:** ao agente de Contas, pelo Maestro. Mudança na matriz altera este arquivo e `autorizacao.MATRIZ` no mesmo commit e passa pelo Revisor e pela segunda leitura do Maestro.
 
-## 11. Perguntas para o dono do projeto
+## 11. Decisões do dono do projeto
 
-O contrato assume a recomendação de cada uma.
+O dono do projeto respondeu às 16 perguntas deste contrato em 22/11/2026 e adotou a recomendação em todas (registro P27 nas decisões do dono). Nenhuma pergunta segue aberta. A decisão 10 ainda depende da confirmação de quem responde pela LGPD (D6), que é Manual Follow-Up do dono do projeto.
 
-| # | Pergunta | Recomendação | Se a resposta for outra |
-|---|---|---|---|
-| 1 | Os convidados atuais continuam como perfil legado `convidado`, ou viram leitor na migração? | **Legado.** Virar leitor daria a eles a leitura do caderno, dos achados e do texto das apurações liberadas sem ninguém ter decidido isso. Cada dono converte quem quiser pela Equipe. | Some a coluna C da matriz e a migração passa a ampliar acesso, com registro explícito. |
-| 2 | Uma pessoa pode estar em duas redações com a mesma conta? | **Não, no teste.** Uma conta, uma redação. O isolamento fica simples e as telas W08 e W09 não têm troca de redação. | Papel e alcance passam a depender de uma redação ativa na sessão; muda a seção 3 e as telas. |
-| 3 | Segundo fator obrigatório para quem? O plano diz dono; o W08 e o W10 dizem dono e editor. | **Dono e editor**, como nos wireframes. | Só dono: o editor fica com "recomendado". |
-| 4 | A chave de acesso (passkey) do W08 e do W10 entra no lançamento? | **Não.** Exige implementar WebAuthn; o código do autenticador cobre o teste. O Design registra a exceção. | Tarefa nova, com biblioteca nova e revisão própria. |
-| 5 | A lista de sessões mostra "cidade aproximada" (W08, regra 5)? | **Não no lançamento.** Exige uma base de localização por IP dentro do servidor, com licença e atualização. Mostrar aparelho, data e endereço. | Escolher a base e quem a atualiza. |
-| 6 | O operador do Vlado tem tela na Mesa? | **Não.** Só terminal do servidor. Uma conta web que cruza todas as redações seria o alvo mais valioso do serviço, e não há wireframe dela. | Desenhar a tela e acrescentar um papel fora das redações. |
-| 7 | Quem marca afirmação do texto como revisada? | **Editor e dono.** Quem apurou não revisa a própria matéria. Na redação de uma pessoa só, ela é dona e faz as duas coisas. | O repórter ganha `redacao-revisar` e o editor deixa de ter operação só dele. |
-| 8 | O leitor lê tudo da apuração em que foi incluído, inclusive diligências, entrevistas e o texto da matéria? | **Sim.** Uma regra só; quem inclui decide. | Leitor sem diligências, entrevistas e texto: três grupos de linhas mudam para `—`. |
-| 9 | Quem inclui pessoas numa apuração? | **O dono e o repórter responsável.** | Só o dono: `caso-incluir` e `caso-retirar` ficam `—` para o repórter. |
-| 10 | Ao excluir uma conta, o nome some da tela e das exportações novas, mas continua nos registros antigos e nos backups, que não podem ser reescritos. Aceita? | **Sim, com o texto da tela dizendo isso**, e confirmação de quem responde pela LGPD (D6). | Reescrever os registros quebra o encadeamento por hash do contrato de evidência; seria decisão sobre o Core. |
-| 11 | A chave de IA própria da redação entra inteira na Onda 2? | **Sim**, com a parte da Plataforma. Sem ela, o botão "Cadastrar chave" do W09 guardaria uma chave que ninguém usa. | O bloco da chave fica escondido até a parte da Plataforma existir. |
-| 12 | Enquanto D7 não fecha, a homologação usa o transporte `tela`, com o link mostrado a quem convida e "esqueci a senha" desligado? | **Sim, só na homologação.** A produção não sobe sem envio real. | A Onda 2 só fecha depois de D7. |
-| 13 | A semente do segundo fator é cifrada com a biblioteca `cryptography`, que passa a ser dependência direta? | **Sim.** Já está instalada por causa do OCR. | A semente fica em claro no banco, protegida pela permissão do arquivo e pela cifra do backup. |
-| 14 | O único dono de uma redação perdeu senha, aparelho e códigos. O operador o recupera pelo terminal, com aviso por e-mail e espera de 24 horas? | **Sim.** | Sem a espera, a recuperação é imediata e depende só do operador. |
-| 15 | Prazos: convite 7 dias; redefinição 1 hora; conta inativa avisada em 180 dias e desativada 30 dias depois; atividade da redação guardada por 90 dias. | **Esses.** | São constantes; trocar não muda o desenho. |
-| 16 | S2 fica como está e S6 fica aceita com as seis condições da seção 9? | **Sim.** | S6 sem as condições não se sustenta com papéis; a alternativa é limpar o HTML no servidor. |
+| # | Pergunta | Decisão |
+|---|---|---|
+| 1 | Os convidados atuais continuam como perfil legado `convidado`, ou viram leitor na migração? | Decidido pelo dono em 22/11/2026 (P27): **legado.** Virar leitor daria a eles a leitura do caderno, dos achados e do texto das apurações liberadas sem ninguém ter decidido isso. Cada dono converte quem quiser pela Equipe. |
+| 2 | Uma pessoa pode estar em duas redações com a mesma conta? | Decidido pelo dono em 22/11/2026 (P27): **não, no teste.** Uma conta, uma redação. |
+| 3 | Segundo fator obrigatório para quem? O plano dizia dono; o W08 e o W10 dizem dono e editor. | Decidido pelo dono em 22/11/2026 (P27): **dono e editor**, como nos wireframes. |
+| 4 | A chave de acesso (passkey) do W08 e do W10 entra no lançamento? | Decidido pelo dono em 22/11/2026 (P27): **não.** O Design registra a exceção ao W08 e ao W10. |
+| 5 | A lista de sessões mostra "cidade aproximada" (W08, regra 5)? | Decidido pelo dono em 22/11/2026 (P27): **não no lançamento.** Mostra aparelho, data e endereço. O Design registra a exceção ao W08. |
+| 6 | O operador do Vlado tem tela na Mesa? | Decidido pelo dono em 22/11/2026 (P27): **não.** Só terminal do servidor. |
+| 7 | Quem marca afirmação do texto como revisada? | Decidido pelo dono em 22/11/2026 (P27): **editor e dono.** Quem apurou não revisa a própria matéria. |
+| 8 | O leitor lê tudo da apuração em que foi incluído, inclusive diligências, entrevistas e o texto da matéria? | Decidido pelo dono em 22/11/2026 (P27): **sim.** Uma regra só; quem inclui decide. |
+| 9 | Quem inclui pessoas numa apuração? | Decidido pelo dono em 22/11/2026 (P27): **o dono e o repórter responsável.** |
+| 10 | Ao excluir uma conta, o nome some da tela e das exportações novas, mas continua nos registros antigos e nos backups, que não podem ser reescritos. Aceita? | Decidido pelo dono em 22/11/2026 (P27): **sim, com o texto da tela dizendo isso.** Continua dependendo da confirmação de quem responde pela LGPD (D6). |
+| 11 | A chave de IA própria da redação entra inteira na Onda 2? | Decidido pelo dono em 22/11/2026 (P27): **sim**, com a parte da Plataforma. |
+| 12 | Enquanto D7 não fecha, a homologação usa o transporte `tela`, com o link mostrado a quem convida e "esqueci a senha" desligado? | Decidido pelo dono em 22/11/2026 (P27): **sim, só na homologação.** A produção não sobe sem envio real. As limitações do transporte `tela` estão na seção 8.1. |
+| 13 | A semente do segundo fator é cifrada com a biblioteca `cryptography`, que passa a ser dependência direta? | Decidido pelo dono em 22/11/2026 (P27): **sim.** |
+| 14 | O único dono de uma redação perdeu senha, aparelho e códigos. O operador o recupera pelo terminal, com aviso por e-mail e espera de 24 horas? | Decidido pelo dono em 22/11/2026 (P27): **sim.** |
+| 15 | Prazos: convite 7 dias; redefinição 1 hora; conta inativa avisada em 180 dias e desativada 30 dias depois; atividade da redação guardada por 90 dias. | Decidido pelo dono em 22/11/2026 (P27): **esses.** |
+| 16 | S2 fica como está e S6 fica aceita com as seis condições da seção 9? | Decidido pelo dono em 22/11/2026 (P27): **sim.** |
 
 Depende também de decisões já registradas: D6 (controlador dos dados), para os termos e a política; D7 (e-mail do domínio), para o transporte real.
 
@@ -685,6 +735,6 @@ Nada a rodar ainda: este contrato não tem código. Quando houver:
 
 Portão da Onda 2: a matriz inteira coberta por teste; o Revisor tenta atravessar de uma redação para outra e não consegue; segunda leitura da matriz pelo Maestro.
 
-**Manual Follow-Up** (exige pessoa; nenhum agente marca como feito): aprovação deste contrato pelo dono do projeto; respostas às perguntas da seção 11; confirmação jurídica da pergunta 10; contratação do envio de e-mail (D7); ensaio da migração numa cópia dos dados reais, pelo operador; conferência do segundo fator no aplicativo Android, que está congelado (D8).
+**Manual Follow-Up** (exige pessoa; nenhum agente marca como feito): aprovação deste contrato pelo dono do projeto; confirmação, por quem responde pela LGPD (D6), da decisão 10; contratação do envio de e-mail (D7); ensaio da migração numa cópia dos dados reais, pelo operador; conferência do segundo fator no aplicativo Android, que está congelado (D8).
 
-Status: proposta, sem código. Aguarda o Revisor, a segunda leitura da matriz pelo Maestro e a aprovação do dono do projeto.
+Status: proposta, sem código. Revisão 2, de 22/11/2026, sobre `1972f1b`: decisões do dono do projeto registradas (P27); correção do achado B1 do Revisor e da família dele (seções 4.5, 5.4, 8.1 e 8.2); ressalvas do Revisor (seções 4.2, 4.3, 4.5, 5.5, 5.15 e 10); ressalvas M1 a M3 da segunda leitura do Maestro (M1 na seção 5.6; M2 nas seções 2.1, 2.4, 5.1 e 5.8; M3 nas seções 2.5, 4.2 e 4.6). Aguarda a conferência do Revisor e do Maestro e a aprovação do dono do projeto.
