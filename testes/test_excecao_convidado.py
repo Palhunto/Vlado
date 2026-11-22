@@ -316,9 +316,77 @@ class EventoDeErroSemPublicaTest(Base):
         """Ninguém grava um evento de erro com dicionário literal só com `mensagem`: use registrar_falha ou evento_curado."""
         fonte = (Path(ca.__file__)).read_text(encoding='utf-8')
         sem_publica = re.findall(r"_event\(identifier, '(?:erro|aviso)', \{'mensagem': (?:seguro|str)\(", fonte)
+        sem_publica += re.findall(r"_event\(identifier, 'aviso', \{'mensagem': pipeline\.last_error", fonte)
         self.assertEqual(sem_publica, [], 'evento com texto de exceção sem passar por registrar_falha')
         literais = re.findall(r"_event\(identifier, 'erro', \{'mensagem'", fonte)
         self.assertEqual(literais, [], "evento de erro com dicionário literal: use evento_curado(...)")
+
+
+class EtapaSemEntregaTest(Base):
+    """Ressalva do SEG-06: o aviso de etapa sem entrega leva o texto de qualquer exceção ao guardar a etapa (`last_error`)."""
+
+    def test_o_convidado_le_so_o_texto_fixo_e_o_administrador_le_o_detalhe(self):
+        import fluxo_codex
+        caminho = '/dados/vlado/execucoes/alpha/R001/saidas/inventario.json'
+        original = fluxo_codex.Fluxo.artifact
+
+        def quebra(self_, etapa, conteudo):
+            raise OSError(28, 'No space left on device', caminho)
+        fluxo_codex.Fluxo.artifact = quebra
+        self.addCleanup(setattr, fluxo_codex.Fluxo, 'artifact', original)
+        identifier = self.manager.perguntar({'caso': 'alpha', 'pergunta': 'Pergunta técnica sintética.'}, dono=CONVIDADO)['conversa']
+        meta = lambda: self.manager.contexts[identifier]['meta']
+        esperar(lambda: meta().get('etapa') == 'inventario' and meta().get('turn_id'))
+        self.manager.ferramenta(identifier, {'acao': 'cobertura'})  # sem ela o inventário é recusado antes de gravar
+        try:
+            self.manager.ferramenta(identifier, {'acao': 'guardar', 'etapa': 'inventario', 'texto': 'x'})
+        except (ValueError, OSError):
+            pass
+        self.manager.rpc.emit('turn/completed', {'turn': {'id': meta()['turn_id'], 'status': 'completed'}})
+        sem_entrega = lambda e: e['tipo'] == 'aviso' and 'terminou sem uma entrega' in (e['dados'].get('publica') or e['dados']['mensagem'])
+        esperar(lambda: any(sem_entrega(e) for e in self.manager.eventos(identifier)['eventos']))
+        convidado = [e for e in self.manager.eventos(identifier, dono=CONVIDADO)['eventos'] if sem_entrega(e)]
+        self.assertEqual(len(convidado), 1)
+        mensagem = convidado[0]['dados']['mensagem']
+        self.assertTrue(mensagem.startswith('A etapa inventario terminou sem uma entrega validada. Nova tentativa automática. (ref. '), mensagem)
+        for proibido in (caminho, '/dados/', 'vlado', 'No space left', 'Errno', 'inventario.json', 'alpha'):
+            self.assertNotIn(proibido, self.texto_de_tudo(convidado), proibido)
+        admin = [e['dados'] for e in self.manager.eventos(identifier)['eventos'] if sem_entrega(e)]
+        self.assertIn(caminho, admin[0]['mensagem'], 'o administrador vê o detalhe completo')
+        self.assertEqual(admin[0]['ref'], REF.search(mensagem).group(1))
+        self.manager.cancelar(identifier)
+
+
+class FiltroDeAparenciaTest(unittest.TestCase):
+    """A rede de segurança para aviso sem `publica`: omite o que parece caminho, nome de arquivo ou erro de sistema."""
+
+    OMITE = (
+        'Falhou em /app/casos/x/y.pdf', '/dados/vlado/execucoes/alpha/R001/saidas', 'erro lendo /srv/mesa/x', 'usou /usr/bin/python',
+        'em /tmp', 'sob /raiz/qualquer/coisa/aqui', 'falhou em ~/x', 'C:\\dados\\vlado\\x', 'C:/dados/vlado/x', '\\\\servidor\\pasta\\x',
+        'dados\\vlado\\x', 'em execucoes/alpha/R001', 'em saidas/consultas_sqlite', '[Errno 2] No such file', '[WinError 5] Acesso negado',
+        'Traceback (most recent call last)', 'abriu notas.md', 'gravou eventos.jsonl', 'leu resumo.txt', 'relatorio.PDF', 'planilha.xlsx',
+        'registro.log', 'banco.sqlite', 'copia.age', 'foto.jpeg',
+    )
+    PASSA = (
+        'Etapa plano terminou sem uma entrega validada.', 'Aguardando o fim de um cadastro em andamento.', 'Limites de tokens não conferidos.',
+        'e/ou ainda', 'TCP/IP', '1/2 das etapas', '3/5 referências', 'input/output', 'Nova tentativa automática.', 'Veja (a/b).',
+        'R$ 1,50/hora', 'Texto. Depois outro.', 'cache 12h/30m', 'Fluxo editorial incompleto; etapas não registradas: plano, busca',
+        '2 referência(s) da resposta sem leitura registrada nesta rodada. Conferência pendente.',
+    )
+
+    def test_omite_caminho_absoluto_de_qualquer_raiz_relativo_da_mesa_e_extensoes_que_a_mesa_grava(self):
+        for texto in self.OMITE:
+            self.assertIsNotNone(ca.SUSPEITO.search(texto), texto)
+
+    def test_deixa_passar_o_aviso_comum(self):
+        for texto in self.PASSA:
+            self.assertIsNone(ca.SUSPEITO.search(texto), texto)
+
+    def test_na_leitura_do_convidado_o_aviso_antigo_com_caminho_fora_da_lista_antiga_e_omitido(self):
+        antigo = {'seq': 1, 'em_utc': 'x', 'tipo': 'aviso', 'dados': {'mensagem': 'Falhou em /dados/vlado/execucoes/alpha/R001/saidas'}}
+        self.assertEqual(ca.evento_para_convidado(antigo)['dados']['mensagem'], ca.AVISO_OMITIDO)
+        comum = {'seq': 2, 'em_utc': 'x', 'tipo': 'aviso', 'dados': {'mensagem': 'Nova tentativa automática.'}}
+        self.assertEqual(ca.evento_para_convidado(comum), comum)
 
 
 class AjudantesTest(unittest.TestCase):
