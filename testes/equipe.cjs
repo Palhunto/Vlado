@@ -322,6 +322,8 @@ test('Atividade recente: cinco últimas, uma frase por evento, "Mostrar mais" tr
 test('Atividade: cada tipo que o servidor grava tem frase (nenhum cai em "Ação de administração"); quem não tem frase cai nela; operador, conta removida e a mesma conta', async () => {
   const TIPOS = ['papel_alterado', 'conta_desativada', 'conta_reativada', 'conta_excluida', 'conta_criada', 'participacao_incluida', 'participacao_retirada', 'responsavel_alterado',
     'teto_alterado', 'senha_trocada', 'senha_definida', 'sessao_encerrada_a_distancia', 'conta_atualizada', 'recuperacao_emitida', 'login_bloqueado', 'sessao_encerrada',
+    'convite_enviado', 'convite_reenviado', 'convite_cancelado', 'convite_aceito', 'convite_expirado', 'recuperacao_pedida', 'recuperacao_confirmada', 'senha_redefinida',
+    'redefinicao_pedida', 'email_troca_pedida', 'email_trocado',
     'acesso_alterado', 'caso_atribuido', 'caso_criado', 'primeiro_admin', 'migracao_contas', 'redacao_criada', 'redacao_suspensa', 'redacao_reativada', 'redacao_encerrada'];
   const {mesa} = await abrirEquipe(com([ANA(), RUI()]));
   const {Equipe} = mesa.janela;
@@ -339,16 +341,11 @@ test('Atividade: cada tipo que o servidor grava tem frase (nenhum cai em "Ação
   assert.equal(hostil.querySelector('img'), null, 'o nome entra como texto');
 });
 
-test('sem atividade: "Nenhuma ação registrada ainda."; sem Convidar: só o texto da exceção abaixo da tabela, e nenhum botão de convite', async () => {
+test('sem atividade: "Nenhuma ação registrada ainda."; o texto da exceção do convite saiu (o convite por e-mail existe), e "Recuperar acesso" não tem tela do Design ainda', async () => {
   const {mesa} = await abrirEquipe(com([ANA()]));
   assert.equal(texto(mesa.doc.querySelector('[data-cartao="atividade"] .conta-cartao-corpo')), 'Nenhuma ação registrada ainda.');
-  assert.equal(texto(painelEquipe(mesa).querySelector('.equipe-convite')), 'Para incluir alguém, crie uma conta em Configurações, Contas de acesso.');
-  assert.ok(![...painelEquipe(mesa).querySelectorAll('button')].some(b => /convid|recuperar|reenviar/i.test(b.textContent)), 'sem Convidar, Reenviar nem Recuperar acesso');
-  const link = botaoPorTexto(painelEquipe(mesa).querySelector('.equipe-convite'), 'Contas de acesso');
-  assert.ok(link, '"Contas de acesso" é um link para a aba Configurações');
-  link.click(); await esperar(mesa);
-  assert.equal(mesa.$('conta-aba-configuracoes').getAttribute('aria-pressed'), 'true'); assert.ok(!mesa.$('conta-painel-configuracoes').hidden); assert.ok(mesa.$('conta-painel-equipe').hidden);
-  assert.ok(mesa.$('acesso-painel'), 'o painel de Contas de acesso segue em Configurações até o convite por e-mail');
+  assert.equal(painelEquipe(mesa).querySelector('.equipe-convite'), null, 'sem o texto de "fale com quem administra o serviço"');
+  assert.ok(![...painelEquipe(mesa).querySelectorAll('button')].some(b => /recuperar/i.test(b.textContent)), 'sem Recuperar acesso: falta a tela do Design');
 });
 
 test('a coluna do papel mantém a largura mínima com a linha de Gerenciar aberta, e em inglês a atividade mostra a frase', async () => {

@@ -6,7 +6,7 @@ const {criarMesa, Evento, PILHA} = require('./dom_minimo.cjs');
 const SCRIPTS = PILHA.flatMap(nome => (nome === 'gerenciar.js' ? [nome, 'conta.js', 'equipe.js'] : [nome]));
 const DIA = 86400000;
 const ID = {ana: 'a'.repeat(16), rui: 'b'.repeat(16), cora: 'c'.repeat(16), davi: 'd'.repeat(16), eva: 'e'.repeat(16)};
-const CAPACIDADES_DONO = ['conta-ver', 'conta-atualizar', 'conta-sessoes', 'equipe-listar', 'equipe-atividade', 'ia-config'];
+const CAPACIDADES_DONO = ['conta-ver', 'conta-atualizar', 'conta-sessoes', 'equipe-listar', 'equipe-atividade', 'equipe-convidar', 'equipe-convite-reenviar', 'equipe-convite-cancelar', 'ia-config'];
 const CAPACIDADES_REPORTER = ['conta-ver', 'conta-atualizar', 'conta-sessoes'];
 
 const sessaoDe = (papel = 'dono', extra = {}) => ({
@@ -32,6 +32,10 @@ const pessoa = (id, nome, papel, extra = {}) => ({id, nome, login: nome.toLowerC
   gasto: {mes: '2026-11', gasto_brl: '18.40', teto_brl: '50.00', saldo_brl: '31.60', esgotada: false}, ...extra});
 const equipeListar = (pessoas, extra = {}) => ({redacao: {id: 'o1', nome: 'Redação Serena', situacao: 'ativa', cota_mensal_brl: '150', teto_por_pessoa_brl: '50.00'},
   pessoas, gasto: {mes: '2026-11', gasto_brl: '24.50', teto_brl: '150.00', saldo_brl: '125.50', esgotada: false}, convites: [], ...extra});
+
+// Um convite pendente como `equipe-listar` o devolve (acesso._convite_publico).
+const convite = (id, email, extra = {}) => ({id, email, papel: 'leitor', casos: [], idioma: 'pt', estado: 'pendente', criado_em: new Date(Date.now() - 2 * DIA).toISOString(),
+  enviado_em: new Date(Date.now() - 2 * DIA).toISOString(), expira_em: new Date(Date.now() + 5 * DIA).toISOString(), envio: 'enviado', convidado_por: ID.ana, convidado_por_nome: 'Ana Lima', ...extra});
 
 // A resposta de uma operação: função ou valor; `Error` com `result` é a recusa do servidor.
 const recusa = (codigo, erro, estado = 'erro') => Object.assign(new Error(erro), {result: {estado, codigo, erro}});
@@ -59,5 +63,5 @@ const dialogo = mesa => mesa.doc.querySelector('dialog.dialogo');
 const dados = valor => JSON.parse(JSON.stringify(valor));
 const tecla = (alvo, key) => { const evento = new Evento('keydown', {key, bubbles: true, cancelable: true}); alvo.dispatchEvent(evento); return evento; };
 
-module.exports = {SCRIPTS, abrir, esperar, texto, digitar, mudar, botaoPorTexto, dialogo, dados, tecla, recusa, sessaoDe, contaVer, sessaoItem, equipeListar, pessoa, ID, CATALOGO, ALFA, BETA, GAMA, DELTA,
+module.exports = {convite, SCRIPTS, abrir, esperar, texto, digitar, mudar, botaoPorTexto, dialogo, dados, tecla, recusa, sessaoDe, contaVer, sessaoItem, equipeListar, pessoa, ID, CATALOGO, ALFA, BETA, GAMA, DELTA,
   DIA, Evento, CAPACIDADES_DONO, CAPACIDADES_REPORTER};

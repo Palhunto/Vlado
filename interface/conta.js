@@ -52,6 +52,21 @@
     if (lingua() === 'en') return outroAno ? `${mes} ${diaDoMes}, ${quando.getFullYear()}` : `${mes} ${diaDoMes}, ${hora}`;
     return outroAno ? `${diaDoMes} de ${mes} de ${quando.getFullYear()}` : `${diaDoMes} de ${mes}, ${hora}`;
   }
+  // O dia por extenso curto, sem hora: "29 de nov.", "29 de nov. de 2025" (convites: "vale até 29 de nov.").
+  function dia(iso, agora = new Date()) {
+    const quando = new Date(iso);
+    if (!iso || Number.isNaN(quando.getTime())) return '';
+    const mes = (lingua() === 'en' ? MESES_EN : MESES)[quando.getMonth()], outroAno = quando.getFullYear() !== agora.getFullYear();
+    if (lingua() === 'en') return outroAno ? `${mes} ${quando.getDate()}, ${quando.getFullYear()}` : `${mes} ${quando.getDate()}`;
+    return outroAno ? `${quando.getDate()} de ${mes} de ${quando.getFullYear()}` : `${quando.getDate()} de ${mes}`;
+  }
+  // O texto de uma recusa do servidor: em português, o dele; em inglês, a tradução do texto quando o dicionário a tem (a Mesa conhece as recusas de
+  // convite e de recuperação pelo texto, porque um mesmo código leva mais de uma frase); senão, a mensagem que a Mesa já montou.
+  function textoDoServidor(falha) {
+    const original = falha?.result?.erro;
+    if (original && lingua() === 'en') { const traduzido = window.I18N?.traduzir?.(original); if (traduzido) return traduzido; }
+    return falha?.message || original || '';
+  }
   // Reais: gasto sempre com centavos; teto sem centavos quando inteiro (W08, regra 7: nunca em tokens).
   function reais(valor, {centavos = true} = {}) {
     const numero = Number(valor);
@@ -105,16 +120,26 @@
     for (const [id, aba] of registro) aba.botao.hidden = !visiveis.some(([outro]) => outro === id);
     abas.hidden = visiveis.length < 2;  // quem só tem Minha conta não vê a linha de abas
   }
-  function estado(texto, {erro = false} = {}) {
+  // `aviso`: o resultado não é erro de ninguém, mas pede atenção (o e-mail do convite não saiu): cores de aviso, role=status, sem o ✓ (o texto traz o "!").
+  function estado(texto, {erro = false, aviso = false} = {}) {
     linhaDeEstado.replaceChildren();
     linhaDeEstado.hidden = !texto;
-    linhaDeEstado.dataset.tom = erro ? 'erro' : 'ok';
+    linhaDeEstado.dataset.tom = erro ? 'erro' : aviso ? 'aviso' : 'ok';
     linhaDeEstado.setAttribute('role', erro ? 'alert' : 'status');
-    if (texto) linhaDeEstado.append(...(erro ? [] : [no('span', 'conta-estado-marca', '✓'), ' ']), no('span', '', texto));
+    if (texto) linhaDeEstado.append(...(erro || aviso ? [] : [no('span', 'conta-estado-marca', '✓'), ' ']), no('span', '', texto));
   }
-  function titulo(texto, descricao = '', dadoDeFora = false) {
+  // `acao`: um botão que fica no título, à direita (Convidar pessoa, na Equipe); sem ela, qualquer ação do título anterior sai.
+  let acaoDoTitulo = null;
+  function colocarAcaoNoTitulo(acao) {
+    if (acaoDoTitulo && acaoDoTitulo !== acao) acaoDoTitulo.remove();
+    acaoDoTitulo = acao || null;
+    const apoio = document.getElementById('area-descricao');
+    if (acao && apoio && acao.parentNode !== apoio.parentNode) apoio.parentNode.insertBefore(acao, apoio);  // antes do apoio: ele segue sendo o último filho
+  }
+  function titulo(texto, descricao = '', dadoDeFora = false, acao = null) {
     const cabeca = document.getElementById('area-titulo'), apoio = document.getElementById('area-descricao');
     if (!cabeca) return;
+    colocarAcaoNoTitulo(acao);
     cabeca.textContent = texto;
     if (dadoDeFora) cabeca.setAttribute('translate', 'no'); else cabeca.removeAttribute('translate');
     if (apoio) { apoio.removeAttribute('translate'); apoio.textContent = descricao; apoio.hidden = !descricao; }
@@ -143,7 +168,7 @@
     if (!perfil) return;
     if (aberta) perfil.setAttribute('aria-current', 'page'); else perfil.removeAttribute('aria-current');
   }
-  registrarGanchoArea({depois: nome => { if (nome === 'configuracoes') abrir(abaAtual); else marcarPerfil(false); }});
+  registrarGanchoArea({depois: nome => { if (nome === 'configuracoes') abrir(abaAtual); else { marcarPerfil(false); colocarAcaoNoTitulo(null); } }});
   window.addEventListener('mesa-contexto-alterado', () => { if (!area.hidden) tituloDaAba(); });
   window.addEventListener('catalogo-carregado', () => { if (!area.hidden) tituloDaAba(); });
   window.addEventListener('vlado-idioma', () => { if (!area.hidden) tituloDaAba(); });
@@ -427,7 +452,7 @@
       : 'Exportar seus dados e excluir sua conta ainda não estão na Mesa. Para pedir, fale com o dono da redação.')));
   }
 
-  window.Conta = {abrir, registrarAba, estado, titulo, sensivel, recusaDaSenha, no, botao, dado, apoio, cartao, carregar, linha, data, reais, rotuloPapel,
+  window.Conta = {abrir, registrarAba, estado, titulo, dia, textoDoServidor, sensivel, recusaDaSenha, no, botao, dado, apoio, cartao, carregar, linha, data, reais, rotuloPapel,
     capacidade, sessao, atualizarAbas};
 
   // O perfil da barra aparece para qualquer conta (não só para o dono) e leva a Minha conta.

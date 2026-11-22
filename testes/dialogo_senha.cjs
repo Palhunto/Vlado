@@ -235,3 +235,55 @@ test('R3: qualquer recusa que não é da senha limpa os campos de senha (a senha
   assert.deepEqual(entradas(mesa).map(c => c.value), ['', 'dois'], 'recusa de um campo: só o dele é limpo');
   botoes(mesa)[0].click(); await confirmacao;
 });
+
+test('campo oculto: não é exigido nem vai em valores() até campoVisivel(id, true); esconder de novo limpa o que foi digitado', async () => {
+  const {mesa, D} = await abrir();
+  let visto = null;
+  const confirmacao = D.confirmar({variante: 'simples', titulo: 'T', acao: 'Fazer', campos: [{id: 's', rotulo: 'Sua senha', exigido: true, oculto: true}],
+    preparar: ctx => { visto = ctx; }, executar: async ctx => { visto.enviado = ctx.valores(); }});
+  await mesa.esperar(4);
+  const [campo] = entradas(mesa);
+  assert.equal(campo.closest('.dialogo-campo-senha').hidden, true); assert.ok(!botaoAcao(mesa).disabled, 'oculto não é exigido: a ação segue habilitada');
+  visto.campoVisivel('s', true);
+  assert.equal(campo.closest('.dialogo-campo-senha').hidden, false); assert.ok(botaoAcao(mesa).disabled, 'visível e exigido: a ação espera a senha');
+  digitar(campo, 'segredo'); assert.ok(!botaoAcao(mesa).disabled);
+  visto.campoVisivel('s', false);
+  assert.equal(campo.value, '', 'esconder limpa'); assert.deepEqual(dados(visto.valores()), {s: ''}, 'um campo oculto nunca leva valor');
+  botaoAcao(mesa).click(); await mesa.esperar(4);
+  assert.deepEqual(dados(visto.enviado), {s: ''}); assert.equal(await confirmacao, true);
+});
+
+test('validar(...) devolvendo false não envia nem limpa nada; falha silenciosa não mostra mensagem do diálogo nem limpa a senha', async () => {
+  const {mesa, D} = await abrir();
+  let falhar = false, chamadas = 0;
+  const confirmacao = D.confirmar({variante: 'simples', titulo: 'T', acao: 'Fazer', campos: [{id: 's', rotulo: 'Sua senha'}],
+    validar: () => (falhar ? false : {}), executar: async () => { chamadas += 1; throw Object.assign(new Error('já mostrei junto ao meu campo'), {silencioso: true}); }});
+  await mesa.esperar(3);
+  digitar(entradas(mesa)[0], 'guardada');
+  falhar = true; botaoAcao(mesa).click(); await mesa.esperar(3);
+  assert.equal(chamadas, 0); assert.equal(entradas(mesa)[0].value, 'guardada', 'validar=false não limpa a senha');
+  falhar = false; botaoAcao(mesa).click(); await mesa.esperar(4);
+  assert.equal(chamadas, 1); assert.ok(erroDoDialogo(mesa).hidden, 'silencioso: sem mensagem do diálogo');
+  assert.equal(entradas(mesa)[0].value, 'guardada', 'silencioso: quem lançou cuida da senha');
+  assert.ok(!botaoAcao(mesa).disabled, 'o diálogo volta a ficar disponível');
+  botoes(mesa)[0].click(); await confirmacao;
+});
+
+test('trocarPor: executar troca o formulário por outra vista sem fechar; a ação e o Esc fecham (true); semCancelar tira o botão; o que a vista mostrou sai da página', async () => {
+  const {mesa, D} = await abrir();
+  const confirmacao = D.confirmar({variante: 'simples', titulo: 'Titulo antigo', acao: 'Fazer', campos: [{id: 's', rotulo: 'Sua senha'}],
+    executar: async ctx => { ctx.trocarPor({titulo: 'Envie o link a {item}', item: 'ana@redacao.org', itemAspas: false, texto: 'Texto novo.', acao: 'Já enviei', semCancelar: true,
+      montar: vista => { const valor = mesa.doc.createElement('input'); valor.value = 'SEGREDO-DO-LINK'; valor.className = 'o-link'; vista.append(valor); }}); }});
+  await mesa.esperar(3);
+  digitar(entradas(mesa)[0], 'x'); botaoAcao(mesa).click(); await mesa.esperar(4);
+  const caixa = dialogo(mesa);
+  assert.ok(caixa, 'o diálogo não fechou');
+  assert.equal(caixa.querySelector('.dialogo-titulo').textContent, 'Envie o link a ana@redacao.org');
+  assert.ok(caixa.textContent.includes('Texto novo.')); assert.ok(caixa.querySelector('.o-link'));
+  assert.equal(caixa.querySelector('.dialogo-campo-senha').hidden, true, 'o formulário saiu de cena');
+  assert.deepEqual(botoes(mesa).filter(b => !b.hidden).map(b => b.textContent), ['Já enviei']);
+  assert.ok(!botaoAcao(mesa).disabled);
+  tecla(caixa, 'Escape'); await mesa.esperar(3);
+  assert.equal(await confirmacao, true, 'Esc fecha como a ação');
+  assert.equal(mesa.doc.querySelector('dialog.dialogo'), null); assert.ok(!mesa.doc.body.textContent.includes('SEGREDO-DO-LINK'), 'o link não fica na página');
+});

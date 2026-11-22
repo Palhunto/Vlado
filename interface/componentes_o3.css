@@ -275,3 +275,34 @@ button[aria-disabled="true"]{cursor:progress}
   .conta-linha{min-height:44px}
   .equipe-atividade-item{flex-direction:column}  /* a data sempre abaixo da frase no celular */
 }
+
+/* === Convites na Equipe (componentes.md#convites; equipe.js) === */
+.equipe-acao-titulo{order:2;margin-left:auto;min-height:44px}
+.equipe-acao-titulo[hidden]{display:none}
+@media (max-width:719px) {
+  .equipe-acao-titulo{order:3;flex:1 0 100%;min-height:48px;margin:var(--espaco-2) 0 0}
+}
+.conta-estado[data-tom="aviso"]{color:var(--theme-warning)}
+.convite-form{display:flex;flex-direction:column;gap:var(--espaco-4)}
+.convite-form :is(input[type="email"],select){width:100%;box-sizing:border-box}
+.convite-form p{margin:0}
+.convite-apuracoes{display:flex;flex-direction:column;gap:var(--espaco-2);min-width:0;margin:0;padding:0;border:0}
+.convite-apuracoes legend{padding:0;margin-bottom:var(--espaco-1)}
+.convite-apuracoes[hidden]{display:none}
+.convite-casos{display:flex;flex-direction:column;gap:var(--espaco-1)}
+.convite-casos[data-rolagem="true"]{max-height:calc(6 * 44px);overflow-y:auto}
+.convite-caso{display:flex;flex-direction:row;gap:var(--espaco-2);align-items:center;min-height:44px;font-size:var(--text-base);font-weight:400;overflow-wrap:anywhere}
+.convite-caso input{flex:none;width:auto;min-height:0}
+.dialogo-resultado{display:flex;flex-direction:column;gap:var(--espaco-3)}
+.dialogo-resultado p{margin:0}
+.convite-link-linha{display:flex;gap:var(--espaco-2);align-items:stretch}
+.convite-link{flex:1 1 auto;min-width:0;min-height:44px;box-sizing:border-box;font-size:var(--text-md)}
+.equipe-celula-acoes{min-width:calc(204px + 2 * var(--espaco-4))}
+.convite-link-linha button{white-space:nowrap}
+.equipe-convite-acoes{display:flex;flex-wrap:wrap;gap:0 var(--espaco-4)}
+.equipe-convite-acoes-celular{flex-direction:column;gap:var(--espaco-2)}
+.equipe-convite-acoes-celular>button{width:100%;min-height:48px}
+.equipe-convite-falha{font-weight:600;color:var(--theme-warning)}
+@media (max-width:719px) {
+  .convite-link-linha{flex-direction:column}
+}

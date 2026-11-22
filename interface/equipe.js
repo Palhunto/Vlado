@@ -3,10 +3,10 @@
 // 1024 px) com papel, apurações e uso do mês; "Gerenciar" abre apurações, teto mensal e acesso da pessoa; abaixo, o gasto da redação e a atividade.
 // Os dados vêm de equipe-listar, equipe-atividade, caso-* e /api/catalogo. A Mesa não decide pelo nome do papel e não aceita HTML: nomes e
 // e-mails entram como texto. A senha das operações sensíveis vai pelo diálogo com senha de conta.js (#dialogo-senha). "Convidar pessoa" não existe
-// ainda (exceção declarada, P30): o convite por e-mail vem com a E3 de Contas.
+// mais: com a E3 de Contas, "Convidar pessoa" e os convites pendentes (Reenviar, Cancelar) entram aqui (#convites). "Recuperar acesso" ainda não tem tela do Design.
 (() => {
   if (!window.Conta) return;
-  const {no, botao, dado, apoio, carregar, data, reais, rotuloPapel, estado, sensivel} = window.Conta;
+  const {no, botao, dado, apoio, carregar, data, dia, reais, rotuloPapel, estado, sensivel, textoDoServidor} = window.Conta;
   const t = (pt, vars) => (window.I18N ? window.I18N.t(pt, vars) : String(pt).replace(/\{(\w+)\}/g, (todo, nome) => vars?.[nome] ?? todo));
   const ID_CONTA = /^[0-9a-f]{16}$/;
   const PAPEIS_ESCOLHA = ['dono', 'editor', 'reporter', 'leitor'];
@@ -25,18 +25,15 @@
     raiz.aviso = no('div', 'equipe-aviso'); raiz.aviso.hidden = true;
     raiz.tabela = no('section', 'conta-cartao conta-cartao-tabela'); raiz.tabela.setAttribute('aria-label', t('Pessoas da redação'));
     raiz.corpoTabela = no('div', 'conta-cartao-corpo'); raiz.tabela.append(raiz.corpoTabela);
-    // Enquanto 'Contas de acesso' existir em Configurações (P30), é lá que o dono inclui alguém; o texto leva à aba. Com mais de uma redação o servidor
-    // recusa contas-criar, mas as capacidades não dizem isso: a Mesa não distingue e mostra sempre este texto (decisão do Design).
-    raiz.convite = no('p', 'conta-apoio equipe-convite');
-    const [antesDoLink, depoisDoLink] = t('Para incluir alguém, crie uma conta em Configurações, {link}.').split('{link}');
-    const irParaContas = botao('Contas de acesso', 'equipe-link equipe-link-texto', () => window.Conta.abrir('configuracoes'));
-    raiz.convite.append(antesDoLink, irParaContas, depoisDoLink ?? '');
+    // "Convidar pessoa" (botão principal no título, #convites): com o convite por e-mail a exceção do texto abaixo da tabela deixou de valer.
+    raiz.convidar = botao('Convidar pessoa', 'equipe-acao-titulo', evento => convidar(evento.currentTarget));
+    raiz.convidar.hidden = true;
     raiz.gasto = window.Conta.cartao('Gasto com IA neste mês');
     raiz.atividade = window.Conta.cartao('Atividade recente', 'equipe-atividade-cartao');
     raiz.gasto.raiz.dataset.cartao = 'gasto'; raiz.atividade.raiz.dataset.cartao = 'atividade';
     const abaixo = no('div', 'conta-grade equipe-abaixo');
     abaixo.append(raiz.gasto.raiz, raiz.atividade.raiz);
-    painel.append(raiz.aviso, raiz.tabela, raiz.convite, abaixo);
+    painel.append(raiz.aviso, raiz.tabela, abaixo);
     desktop.addEventListener?.('change', () => { if (lista) desenharLista(); });
   }
   async function abrir() {
@@ -44,9 +41,13 @@
     await recarregar();
     carregarAtividade();
   }
+  const convites = () => lista?.convites || [];
   function titulo() {
-    const n = pessoas().length;
-    window.Conta.titulo(lista?.redacao?.nome || t('Equipe'), n ? (n === 1 ? t('1 pessoa') : t('{n} pessoas', {n})) : '', !!lista?.redacao?.nome);
+    const n = pessoas().length, p = convites().length;
+    const contagem = n ? (n === 1 ? t('1 pessoa') : t('{n} pessoas', {n})) : '';
+    const pendentes = p ? (p === 1 ? t('1 convite pendente') : t('{n} convites pendentes', {n: p})) : '';
+    raiz.convidar.hidden = !window.Conta.capacidade('equipe-convidar');
+    window.Conta.titulo(lista?.redacao?.nome || t('Equipe'), [contagem, pendentes].filter(Boolean).join(' · '), !!lista?.redacao?.nome, raiz.convidar.hidden ? null : raiz.convidar);
   }
   async function buscarCatalogo() {
     try {
@@ -161,6 +162,18 @@
         const celula = document.createElement('td'); celula.colSpan = 5; celula.append(painelGerenciar(pessoa)); extra.append(celula); corpo.append(extra);
       }
     }
+    for (const convite of convites()) {
+      const tr = document.createElement('tr'); tr.dataset.convite = convite.id;
+      [celulaConvite(convite), no('span', 'conta-texto', rotuloPapel(convite.papel)), celulaApuracoes({papel: convite.papel, casos: convite.casos}), no('span', 'conta-texto', '—'), acoesDoConvite(convite)]
+        .forEach((conteudo, indice) => {
+          const td = document.createElement('td');
+          if (indice === 0) td.className = 'equipe-celula-pessoa';
+          if (indice === 1) td.className = 'equipe-celula-papel';
+          if (indice === 4) td.className = 'equipe-celula-acoes';  // Reenviar e Cancelar convite lado a lado, com intervalo de 16
+          td.append(conteudo); tr.append(td);
+        });
+      corpo.append(tr);
+    }
     quadro.append(corpo);
     const rolagem = no('div', 'equipe-rolagem'); rolagem.append(quadro);
     return rolagem;
@@ -179,7 +192,187 @@
       if (aberto.has(pessoa.id) && !ehEu(pessoa)) item.append(painelGerenciar(pessoa));
       itens.append(item);
     }
+    for (const convite of convites()) {
+      const item = no('li', 'equipe-cartao equipe-cartao-convite'); item.dataset.convite = convite.id;
+      const papel = no('p', 'conta-apoio'); papel.append(`${t('Papel')}: `, rotuloPapel(convite.papel));
+      const apuracoes = no('p', 'conta-apoio'); apuracoes.append(`${t('Apurações')}: `, celulaApuracoes({papel: convite.papel, casos: convite.casos}));
+      item.append(celulaConvite(convite), papel, apuracoes, acoesDoConvite(convite, true));
+      itens.append(item);
+    }
     return itens;
+  }
+
+  // --- convites pendentes (#convites) --------------------------------------------------------------------------------------------------------
+  // "há 2 dias", "há 3 h", "há 5 min"; e o prazo: "vence em 5 dias", "vence hoje" no último dia.
+  function haQuanto(iso, agora = new Date()) {
+    const ms = agora - new Date(iso);
+    if (!iso || Number.isNaN(ms) || ms < 60000) return t('agora há pouco');
+    const minutos = Math.floor(ms / 60000), horas = Math.floor(minutos / 60), dias = Math.floor(horas / 24);
+    if (dias >= 1) return dias === 1 ? t('há 1 dia') : t('há {n} dias', {n: dias});
+    if (horas >= 1) return t('há {n} h', {n: horas});
+    return t('há {n} min', {n: minutos});
+  }
+  function venceEm(iso, agora = new Date()) {
+    const restante = new Date(iso) - agora;
+    if (Number.isNaN(restante)) return '';
+    if (restante < 86400000) return t('vence hoje');
+    const dias = Math.ceil(restante / 86400000);
+    return dias === 1 ? t('vence em 1 dia') : t('vence em {n} dias', {n: dias});
+  }
+  function celulaConvite(convite) {
+    const bloco = no('div', 'equipe-pessoa');
+    const email = no('p', 'equipe-pessoa-nome'); email.append(dado(convite.email || '')); bloco.append(email);
+    const situacao = convite.envio === 'falha'
+      ? no('p', 'conta-apoio equipe-situacao equipe-convite-falha', t('! O e-mail não saiu · reenvie'))
+      : no('p', 'conta-apoio equipe-situacao', t(convite.envio === 'tela' ? '◐ Link criado {quando} · {vence}' : '◐ Convite enviado {quando} · {vence}',
+        {quando: haQuanto(convite.enviado_em), vence: venceEm(convite.expira_em)}));
+    bloco.append(situacao);
+    return bloco;
+  }
+  function acoesDoConvite(convite, celular = false) {
+    const grupo = no('div', celular ? 'equipe-convite-acoes equipe-convite-acoes-celular' : 'equipe-convite-acoes');
+    const classe = celular ? 'secondary' : 'equipe-link';
+    const reenviar = botao('Reenviar', classe, () => reenviarConvite(convite, reenviar));
+    reenviar.setAttribute('aria-label', `${t('Reenviar')}: ${convite.email}`);
+    const cancelar = botao('Cancelar convite', classe, () => cancelarConvite(convite, cancelar));
+    cancelar.setAttribute('aria-label', `${t('Cancelar convite')}: ${convite.email}`);
+    grupo.append(reenviar, cancelar);
+    return grupo;
+  }
+  const AVISO_DE_ENVIO = '! O e-mail para {email} não saiu. O convite está entre os pendentes; reenvie quando quiser.';
+  // A vista do link do convite com o transporte `tela`: mostrada uma vez, no diálogo, e não fica na página depois.
+  function vistaDoLink({titulo: tituloDoLink, email, link, expiraEm}) {
+    return {titulo: tituloDoLink, item: email, itemAspas: false, acao: 'Já enviei', semCancelar: true,
+      texto: t('Mande por um canal seguro, pessoalmente ou por mensageiro cifrado. O link vale até {dia}, uma única vez, e não será mostrado de novo.', {dia: dia(expiraEm)}),
+      montar(vista) {
+        const campoDoLink = document.createElement('input'); campoDoLink.type = 'text'; campoDoLink.readOnly = true; campoDoLink.value = link;
+        campoDoLink.className = 'convite-link'; campoDoLink.setAttribute('translate', 'no'); campoDoLink.setAttribute('aria-label', t('Link do convite'));
+        const aviso = no('p', 'conta-apoio'); aviso.setAttribute('role', 'status');
+        const copiar = botao('Copiar link', 'secondary', async () => {
+          try { await navigator.clipboard.writeText(campoDoLink.value); aviso.textContent = t('Link copiado.'); }
+          catch (_) { campoDoLink.select(); aviso.textContent = t('Selecione o link e copie manualmente.'); }
+        });
+        const linha = no('div', 'convite-link-linha'); linha.append(campoDoLink, copiar);
+        vista.append(linha, aviso);
+        Promise.resolve().then(() => { campoDoLink.focus(); campoDoLink.select?.(); });
+      }};
+  }
+  function mostrarLink({titulo: tituloDoLink, email, link, expiraEm, gatilho}) {
+    return window.Dialogo.confirmar({variante: 'simples', titulo: tituloDoLink, acao: 'Já enviei', gatilho,
+      preparar: ctx => ctx.trocarPor(vistaDoLink({titulo: tituloDoLink, email, link, expiraEm}))});
+  }
+  // Depois de convidar ou reenviar: o que a tela faz depende de como o convite saiu (`envio`).
+  async function resultadoDoEnvio(resposta, {reenvio, gatilho}) {
+    const convite = resposta.convite || {};
+    if (convite.envio === 'falha') estado(t(AVISO_DE_ENVIO, {email: convite.email}), {aviso: true});
+    else if (convite.envio === 'tela' && resposta.link) {
+      await mostrarLink({titulo: reenvio ? 'Novo link para {item}' : 'Envie o link a {item}', email: convite.email, link: resposta.link, expiraEm: convite.expira_em, gatilho});
+    } else estado(reenvio ? t('Convite reenviado para {email}. O link anterior deixou de valer.', {email: convite.email}) : t('Convite enviado para {email}.', {email: convite.email}));
+  }
+  async function reenviarConvite(convite, controle) {
+    const restaurar = window.Estados.ocupado(controle, 'Reenviando…');
+    try {
+      const resposta = await api('equipe-convite-reenviar', {convite: convite.id});
+      restaurar();
+      await resultadoDoEnvio(resposta, {reenvio: true, gatilho: controle});
+      await recarregar(); carregarAtividade();
+    } catch (falha) {
+      restaurar();
+      if (falha?.result?.erro === 'Convite não encontrado.') { await recarregar(); return; }  // já não existe: a lista recarrega, sem erro
+      estado(textoDoServidor(falha), {erro: true});  // inclusive o limite de uma hora (429 limite_de_convites)
+    }
+  }
+  async function cancelarConvite(convite, gatilho) {
+    let jaNaoExiste = false;
+    const ok = await window.Dialogo.confirmar({variante: 'destrutivo', titulo: 'Cancelar o convite de {item}?', item: convite.email, itemAspas: false, gatilho,
+      texto: 'O link deixa de valer. Dá para convidar o mesmo e-mail de novo, mas cada endereço recebe no máximo três convites da redação por hora, contando os cancelados.',
+      acao: 'Cancelar convite', cancelar: 'Manter convite', ocupado: 'Cancelando…',
+      async executar() {
+        try { await api('equipe-convite-cancelar', {convite: convite.id}); }
+        catch (falha) { if (falha?.result?.erro === 'Convite não encontrado.') { jaNaoExiste = true; return; } throw falha; }
+      }});
+    if (!ok) return;
+    if (!jaNaoExiste) estado(t('Convite de {email} cancelado.', {email: convite.email}));
+    await recarregar(); carregarAtividade();
+  }
+
+  // --- Convidar pessoa ------------------------------------------------------------------------------------------------------------------------
+  const PAPEIS_DO_CONVITE = ['leitor', 'reporter', 'editor', 'dono'];
+  const O_QUE_O_PAPEL_FAZ = {leitor: 'Lê e pergunta.', reporter: 'Cria apurações e envia documentos.', editor: 'Confere e revisa o texto.',
+    dono: 'Administra a redação e vê todas as apurações.'};
+  const FORMA_DE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  async function convidar(gatilho) {
+    let resposta = null;
+    const form = {};
+    const ok = await window.Dialogo.confirmar({
+      variante: 'simples', titulo: 'Convidar pessoa', acao: 'Convidar', ocupado: 'Convidando…', gatilho,
+      campos: [{id: 'senha', rotulo: 'Sua senha', apoio: 'A senha com que você entra na Mesa.', autocomplete: 'current-password', exigido: true, oculto: true}],
+      preparar(ctx) {
+        const corpo = ctx.corpo; corpo.classList.add('convite-form');
+        const email = document.createElement('input'); email.type = 'email'; email.autocomplete = 'off'; email.setAttribute('translate', 'no'); email.maxLength = 254;
+        email.setAttribute('spellcheck', 'false'); email.setAttribute('autocapitalize', 'none');
+        const rotuloEmail = no('label', 'conta-campo', t('E-mail')); rotuloEmail.append(email);
+        const papel = document.createElement('select');
+        for (const valor of PAPEIS_DO_CONVITE) papel.append(new Option(rotuloPapel(valor), valor));
+        papel.value = 'leitor';
+        const rotuloPapelCampo = no('label', 'conta-campo', t('Papel')); rotuloPapelCampo.append(papel);
+        const oQueFaz = no('p', 'conta-apoio', t(O_QUE_O_PAPEL_FAZ.leitor)); oQueFaz.setAttribute('aria-live', 'polite');
+        const conjunto = document.createElement('fieldset'); conjunto.className = 'convite-apuracoes';
+        conjunto.append(no('legend', 'conta-campo', t('Apurações')));
+        const grupo = no('div', 'convite-casos'); if (catalogo.length >= 6) grupo.dataset.rolagem = 'true';
+        const marcas = [];
+        for (const caso of catalogo) {
+          const marca = document.createElement('input'); marca.type = 'checkbox'; marca.value = caso.id; marcas.push(marca);
+          const rotulo = no('label', 'convite-caso'); rotulo.append(marca, ' ', dado(caso.titulo));
+          grupo.append(rotulo);
+        }
+        if (!catalogo.length) grupo.append(no('p', 'conta-apoio', t('A redação ainda não tem apurações.')));
+        conjunto.append(grupo);
+        const todasAsApuracoes = no('p', 'conta-apoio', t('Dono alcança todas as apurações da redação.')); todasAsApuracoes.hidden = true;
+        const idioma = document.createElement('select');
+        idioma.append(new Option('Português', 'pt'), new Option('English', 'en')); idioma.value = window.I18N?.idioma?.() === 'en' ? 'en' : 'pt';
+        const rotuloIdioma = no('label', 'conta-campo', t('Idioma do convite')); rotuloIdioma.append(idioma);
+        papel.addEventListener('change', () => {
+          const dono = papel.value === 'dono';
+          oQueFaz.textContent = t(O_QUE_O_PAPEL_FAZ[papel.value]);
+          conjunto.hidden = dono; todasAsApuracoes.hidden = !dono;
+          ctx.campoVisivel('senha', dono);  // só com o papel Dono pede a senha (contrato, 5.15)
+        });
+        corpo.append(rotuloEmail, rotuloPapelCampo, oQueFaz, conjunto, todasAsApuracoes, rotuloIdioma);
+        Object.assign(form, {email, papel, marcas, idioma});
+        email.focus();
+      },
+      validar() {
+        window.Estados.limparErroCampo(form.email);
+        const texto = form.email.value.trim();
+        if (!texto) { window.Estados.erroCampo(form.email, 'Falta o e-mail. Escreva o e-mail da pessoa.'); return false; }
+        if (!FORMA_DE_EMAIL.test(texto)) { window.Estados.erroCampo(form.email, 'E-mail inválido. Confira o endereço, por exemplo ana@redacao.org.'); return false; }
+        return {};
+      },
+      async executar(ctx) {
+        const dono = form.papel.value === 'dono';
+        const dados = {email: form.email.value.trim(), papel: form.papel.value, idioma: form.idioma.value, casos: dono ? [] : form.marcas.filter(m => m.checked).map(m => m.value)};
+        if (dono) dados.senha = ctx.valores().senha;
+        try { resposta = await api('equipe-convidar', dados); }
+        catch (falha) {
+          if (falha?.result?.codigo === 'convite_duplicado') {  // o texto do servidor, abaixo do campo E-mail
+            window.Estados.erroCampo(form.email, textoDoServidor(falha));
+            throw Object.assign(new Error(falha.message), {silencioso: true});
+          }
+          // limite_de_convites e as demais recusas: o texto do servidor no erro do diálogo; a senha, como na variante com senha
+          const recusa = window.Dialogo.recusaDaSenha(falha);
+          throw recusa === falha ? new Error(textoDoServidor(falha)) : recusa;
+        }
+        const convite = resposta.convite || {};
+        if (convite.envio === 'tela' && resposta.link) {
+          ctx.trocarPor(vistaDoLink({titulo: 'Envie o link a {item}', email: convite.email, link: resposta.link, expiraEm: convite.expira_em}));
+        }
+      },
+    });
+    if (!ok || !resposta) return;
+    const convite = resposta.convite || {};
+    if (convite.envio !== 'tela') await resultadoDoEnvio(resposta, {reenvio: false, gatilho});
+    await recarregar(); carregarAtividade();
   }
 
   // --- mudar o papel ----------------------------------------------------------------------------------------------------------------------
@@ -386,6 +579,13 @@
     sessao_encerrada_a_distancia: '{conta} encerrou sessões em outros aparelhos', conta_atualizada: '{conta} atualizou o perfil',
     recuperacao_emitida: '{por} gerou um novo link de ativação para {conta}',
     login_bloqueado: 'A entrada de {conta} foi bloqueada por muitas tentativas',
+    // Convites (E3): a atividade não leva o e-mail, que é dado de quem ainda não é da redação.
+    convite_enviado: '{por} convidou um e-mail', convite_reenviado: '{por} reenviou um convite', convite_cancelado: '{por} cancelou um convite',
+    convite_aceito: '{conta} aceitou o convite e entrou na redação', convite_expirado: 'Um convite venceu',
+    // O que a E3 também grava (frases a confirmar com o Design): recuperação do acesso, link de senha e troca do e-mail.
+    recuperacao_pedida: '{por} pediu a recuperação do acesso de {conta}', recuperacao_confirmada: '{por} confirmou a recuperação do acesso de {conta}',
+    senha_redefinida: '{conta} criou uma senha nova pelo link', redefinicao_pedida: '{conta} pediu um link para criar uma senha nova',
+    email_troca_pedida: '{conta} pediu para trocar o e-mail', email_trocado: '{conta} trocou o e-mail',
     // Os que o servidor também grava e o desenho não previa (ressalva D1 da Coruja): cada tipo com a sua frase.
     sessao_encerrada: '{conta} saiu da Mesa', acesso_alterado: '{por} mudou o acesso de {conta}',
     caso_atribuido: '{por} atribuiu uma apuração a uma pessoa', caso_criado: '{conta} criou uma apuração',
