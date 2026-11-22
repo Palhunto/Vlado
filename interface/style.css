@@ -1066,6 +1066,9 @@ main{padding:var(--espaco-8);max-width:1600px;min-height:calc(100dvh - var(--cab
 #mesa-retomada p{margin:8px 0;font-size:var(--text-md);color:var(--muted)}
 #mesa-retomada .eyebrow{font-size:var(--text-xs);color:var(--green);margin:0 0 8px}
 .mesa-resume-next{border-left:1px solid var(--line);padding-left:28px}
+/* O link longo do resumo (nome de arquivo sem espaço) não pode empurrar a página para o lado entre 720 e 900 px. */
+#mesa-retomada>*{min-width:0}
+.mesa-resume-list a{overflow-wrap:anywhere}
 .mesa-workflow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:25px;margin-top:18px}
 .mesa-workflow a{border-top:1px solid var(--line);padding:17px 0;text-decoration:none}
 .mesa-workflow span{font:italic var(--text-xl) var(--fonte-titulo);color:var(--theme-muted)}
