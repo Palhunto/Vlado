@@ -154,7 +154,10 @@
       recibo.hidden = !resumo;
       if (!resumo) return;
       const forte = no('strong', '', t('{n} de {total} cadastrados', {n: resumo.recebidos, total: resumo.total}));
-      const pendentes = resumo.pendentes ? `, ${resumo.pendentes === 1 ? t('1 pendente') : t('{n} pendentes', {n: resumo.pendentes})}` : '';
+      const partes = [];
+      if (resumo.naoCadastrados) partes.push(resumo.naoCadastrados === 1 ? t('1 não cadastrado') : t('{n} não cadastrados', {n: resumo.naoCadastrados}));
+      if (resumo.aConferir) partes.push(resumo.aConferir === 1 ? t('1 com leitura a conferir') : t('{n} com leitura a conferir', {n: resumo.aConferir}));
+      const pendentes = partes.length ? `, ${partes.join(', ')}` : '';
       const texto = no('span');
       texto.append(`${t('Recibo do lote')}: `, forte, `${pendentes}. ${t('É conferido antes da primeira pergunta.')}`);
       const ver = no('a', 'envio-link', t('Ver recibo')); ver.href = '#cadastro-recibo';
@@ -289,30 +292,26 @@
     await fazer(lotesPlanejados);
     ui.mostrarAcoes([]);
     resultado.cancelado = ctx.cancelado;
-    resultado.pendentes = ctx.linhas.filter(l => ['nao-enviado', 'cancelado', 'recusado', 'falha', 'sem-acompanhamento'].includes(l.estado)
-      || (l.estado === 'pronto' && ['erro', 'sem_texto', 'pendente'].includes(l.extracao))).length;
+    resultado.naoCadastrados = ctx.linhas.filter(l => ['nao-enviado', 'cancelado', 'recusado', 'falha', 'sem-acompanhamento'].includes(l.estado)).length;
+    resultado.aConferir = ctx.linhas.filter(l => l.estado === 'pronto' && (['erro', 'sem_texto', 'pendente', 'parcial'].includes(l.extracao) || l.passouPorOcr)).length;
+    resultado.pendentes = resultado.naoCadastrados + resultado.aConferir;
     resultado.arquivos = ctx.linhas;
-    ui.mostrarRecibo(resultado.enviados || resultado.recusados ? {recebidos: resultado.recebidos, total: ctx.linhas.length, pendentes: resultado.pendentes} : null);
+    ui.mostrarRecibo(resultado.enviados || resultado.recusados ? {recebidos: resultado.recebidos, total: ctx.linhas.length, naoCadastrados: resultado.naoCadastrados, aConferir: resultado.aConferir} : null);
     ctx.aoVerRecibo = () => { const detalhe = alvoRecibo || document.getElementById('cadastro-recibo'); if (detalhe && !detalhe.hidden) { detalhe.scrollIntoView({block: 'start'}); detalhe.focus?.(); } };
     ui.desenhar();
     return resultado;
   }
 
-  // Recibo do lote em detalhe (o "Ver recibo" do cartão): contagens, um resultado por arquivo e, em "Detalhes técnicos", o que não é para a lista
-  // (identificadores, W02 regra 7).
+  // Recibo do lote em detalhe (o "Ver recibo" do cartão): só o que o cartão de envio ainda não diz, a contagem do lote e, em "Detalhes técnicos",
+  // o que não é para a lista (apuração e versão, W02 regra 7). O resultado de cada arquivo já está no cartão.
+  const plural = (n, um, varios, nenhum) => (n === 0 ? nenhum : n === 1 ? `1 ${um}` : `${n} ${varios}`);
   function renderRecibo(destino, resultado) {
-    const lista = no('ul', 'document-list');
-    for (const linha of resultado.arquivos) {
-      const item = no('li');
-      const nome = no('span', '', linha.nome); nome.setAttribute('translate', 'no');
-      item.append(nome, ` · ${descrever(linha).texto}`);
-      lista.append(item);
-    }
     const tecnicos = no('details', 'estado-detalhes');
     const linhaTecnica = no('p', '', `${t('Apuração')}: ${resultado.caso_id} · ${t('Corpus')}: ${resultado.corpus_id || '—'}`); linhaTecnica.setAttribute('translate', 'no');
     tecnicos.append(no('summary', '', t('Detalhes técnicos')), linhaTecnica);
-    destino.replaceChildren(no('h3', '', t('Envio conferido: {n} de {total} arquivo(s)', {n: resultado.recebidos, total: resultado.arquivos.length})),
-      no('p', '', t('{novos} novo(s) · {duplicados} duplicado(s).', {novos: resultado.novos, duplicados: resultado.duplicados})), lista, tecnicos);
+    const contagem = [plural(resultado.novos, t('novo'), t('novos'), t('nenhum novo')), plural(resultado.duplicados, t('duplicado'), t('duplicados'), t('nenhum duplicado'))].join(' · ');
+    destino.replaceChildren(no('h3', 'docs-recibo-titulo', t('Recibo do lote: {n} de {total} arquivos', {n: resultado.recebidos, total: resultado.arquivos.length})),
+      no('p', '', contagem), tecnicos);
     destino.hidden = false;
   }
   // O que pede conferência antes da pergunta: leitura com erro, em parte ou sem texto.

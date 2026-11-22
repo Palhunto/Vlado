@@ -127,7 +127,7 @@ test('soltar arquivos envia para a apuração escolhida, sem natureza, e recarre
   mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', caso: 'alfa', estado: 'enfileirado', arquivos: []}});
   await mesa.esperar(30);
   assert.equal(mesa.$('documentos-recibo').hidden, false);
-  assert.match(mesa.$('documentos-recibo').textContent, /Envio conferido: 1 de 1 arquivo\(s\)/);
+  assert.match(mesa.$('documentos-recibo').textContent, /Recibo do lote: 1 de 1 arquivos/);
   assert.ok(mesa.chamadas.filter(c => c.operacao === 'inventario').length > antes, 'o acervo é lido de novo');
   assert.match(mesa.$('mesa-acervo-status').textContent, /Documentos registrados\. Aguardando sua pergunta\./);
 });
@@ -147,4 +147,13 @@ test('o convidado não vê a área de envio', async () => {
   const mesa = abrir({papel: 'convidado'});
   await mesa.esperar(12);
   assert.equal(mesa.$('documentos-zona').hidden, true);
+});
+
+test('a contagem aparece uma vez só, no topo; a nota do acervo e o pé da tabela não a repetem', async () => {
+  const mesa = abrir();
+  await mesa.esperar(12);
+  assert.match(mesa.$('docs-contagem').textContent, /^6 documentos$/);
+  assert.equal(mesa.$('mesa-acervo-status').textContent, 'Os originais estão preservados; a extração não substitui a conferência.');
+  assert.equal(mesa.$('mesa-acervo-lista').querySelector('.mesa-table-foot'), null);
+  assert.doesNotMatch(mesa.$('mesa-acervo').textContent.replace(mesa.$('docs-contagem').textContent, ''), /\d+ documentos? (cadastrado|nesta seleção)/);
 });

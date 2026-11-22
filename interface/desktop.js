@@ -299,7 +299,6 @@
     if(!inventory){const empty=element('div',undefined,'empty');empty.append(element('h2',current()?'O acervo ainda não está disponível.':'Escolha uma apuração para ver seus documentos.'),element('p',current()?'Use Atualizar acervo para tentar novamente.':'Você também pode começar uma nova apuração e cadastrar seu primeiro lote.'));target.append(empty);return;}
     const list=window.Documentos.lista(target,inventory,{consulta:$('mesa-filtrar-documento').value,limitacoes:$('mesa-filtrar-leitura').value==='limitacoes',abrir:openDocument});
     text('docs-contagem',Leitura.quantidade(inventory.documentos.length,'documento'));
-    if(list.length)target.append(element('p',`${Leitura.quantidade(list.length,'documento')} nesta seleção · ${inventory.corpus_id}`,'mesa-table-foot'));
   }
   async function openDocument(doc,button){
     const caseId=current(),ticket=sequence;button.disabled=true;$('mesa-acervo-erro').hidden=true;
@@ -323,7 +322,7 @@
     text('mesa-acervo-status','Conferindo os documentos cadastrados…');text('mesa-versao','Conferindo acervo…');
     try{
       const result=await api('inventario',{caso:caseId});if(ticket!==sequence||caseId!==current())return;
-      inventory=result;documentTable();home();window.barraMesa.definir('documentos',result.total_documentos?String(result.total_documentos):'');text('mesa-versao',`Versão dos documentos: ${result.corpus_id}`);text('mesa-acervo-status',`${Leitura.quantidade(result.total_documentos,'documento')} cadastrado(s). Os originais estão preservados; a extração não substitui a conferência.`);
+      inventory=result;documentTable();home();window.barraMesa.definir('documentos',result.total_documentos?String(result.total_documentos):'');text('mesa-versao',`Versão dos documentos: ${result.corpus_id}`);text('mesa-acervo-status','Os originais estão preservados; a extração não substitui a conferência.');
     }catch(error){if(ticket===sequence){$('mesa-acervo-erro').textContent=error.message;$('mesa-acervo-erro').hidden=false;text('mesa-acervo-status','A conferência do acervo falhou. Isso não equivale a um acervo vazio.');text('mesa-versao','Acervo indisponível');}}
     finally{if(ticket===sequence){loading=false;$('mesa-atualizar-acervo').disabled=false;}}
   }

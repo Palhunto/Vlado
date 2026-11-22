@@ -137,8 +137,18 @@ button[aria-disabled="true"]{cursor:progress}
   .docs-lista thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
   .docs-lista tr{display:flex;flex-direction:column;gap:var(--espaco-2);padding:var(--espaco-4);margin-bottom:var(--espaco-3);border:1px solid var(--theme-line);border-radius:var(--raio-cartao);background:var(--theme-surface)}
   .docs-lista td{padding:0;border:0}
-  .docs-nome .docs-titulo{font-weight:600}
+  .docs-lista td.docs-nome{display:contents}
+  .docs-nome .docs-titulo{order:0;font-weight:600}
+  .docs-paginas{order:1}
+  .docs-lista td:nth-child(3){order:2}
+  .docs-acao{order:3}
+  .docs-nome .docs-tecnicos{order:4;margin-top:0}
   .docs-paginas{font-size:var(--text-md);color:var(--theme-muted)}
   .docs-acao{text-align:left}
   .docs-abrir{padding:0}
 }
+/* "Leitura" vai até 420 px, como a busca, com "Atualizar acervo" ao lado (a faixa de baixo de 720 px empilha, no style.css). */
+@media (min-width:720px) {
+  .mesa-acervo-toolbar label:first-child{flex:0 1 420px}
+}
+.docs-recibo-titulo{font-size:var(--text-base);font-weight:600}

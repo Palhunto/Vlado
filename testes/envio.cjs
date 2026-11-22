@@ -61,9 +61,9 @@ test('recusa antes do envio: nome que a Mesa não aceita e arquivo acima de 50 M
   const final = await promessa;
   assert.equal(final.recusados, 2);
   assert.equal(final.recebidos, 1);
-  assert.equal(final.pendentes, 2);
+  assert.equal(final.pendentes, 2); assert.equal(final.naoCadastrados, 2); assert.equal(final.aConferir, 0);
   assert.match(resultado(bom), /Pronto, 3 pág\./);
-  assert.match(mesa.$('alvo').querySelector('.envio-recibo').textContent, /Recibo do lote: 1 de 3 cadastrados, 2 pendentes\. É conferido antes da primeira pergunta\./);
+  assert.match(mesa.$('alvo').querySelector('.envio-recibo').textContent, /Recibo do lote: 1 de 3 cadastrados, 2 não cadastrados\. É conferido antes da primeira pergunta\./);
 });
 
 test('formato em fluxo: tipo, token, manifesto de uma linha com nome e tamanho, assincrono, e os bytes depois', async () => {
@@ -112,7 +112,7 @@ test('barra por arquivo: bytes enviados repartidos na ordem; depois a etapa de l
   assert.equal(cartao.getAttribute('aria-busy'), 'false');
   assert.equal(final.recebidos, 2); assert.equal(final.corpus_id, 'c9');
   assert.match(mesa.$('alvo').querySelector('[role="status"]').textContent, /2 de 2 arquivos concluídos/);
-  assert.match(mesa.$('alvo').querySelector('.envio-recibo').textContent, /2 de 2 cadastrados\. É conferido/);
+  assert.match(mesa.$('alvo').querySelector('.envio-recibo').textContent, /2 de 2 cadastrados, 1 com leitura a conferir\. É conferido/);
 });
 
 test('a falha de um arquivo não derruba os outros: resultado com sinal e texto, o que foi preservado e "O que fazer" (regras 2, 5 e 6)', async () => {
@@ -145,7 +145,9 @@ test('a falha de um arquivo não derruba os outros: resultado com sinal e texto,
   assert.equal(mesa.$('alvo').querySelector('.envio-cabeca').children.length, 2, 'título e aviso na mesma linha');
   assert.match(resultado(parcial), /Lida em parte/);
   assert.equal(parcial.querySelector('.envio-resultado').dataset.tom, 'aviso', 'aviso nas cores de aviso, nunca de erro (regra 6)');
-  assert.equal(final.pendentes, 1, 'só o com erro é pendente no recibo do lote; o lido em parte é aviso, não pendência');
+  assert.equal(final.aConferir, 2, 'o com erro e o lido em parte têm leitura a conferir; os três estão cadastrados');
+  assert.equal(final.naoCadastrados, 0);
+  assert.match(mesa.$('alvo').querySelector('.envio-recibo').textContent, /3 de 3 cadastrados, 2 com leitura a conferir\./);
 });
 
 test('texto que passou pelo OCR vira "Lida por OCR: confira números", com sinal parcial e cor de aviso', async () => {
@@ -264,7 +266,7 @@ test('Cadastrar com o servidor em fluxo: o submit usa o envio por arquivo, mostr
   mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', caso: 'alfa', estado: 'enfileirado', arquivos: []}});
   await mesa.esperar(20);
   assert.equal(mesa.$('cadastro-recibo').hidden, false);
-  assert.match(mesa.$('cadastro-recibo').textContent, /Envio conferido: 2 de 2 arquivo\(s\)/);
+  assert.match(mesa.$('cadastro-recibo').textContent, /Recibo do lote: 2 de 2 arquivos/);
   assert.ok(mesa.chamadas.some(c => c.operacao === 'inventario'), 'o inventário é relido depois do envio');
   assert.match(mesa.$('cadastro-status').textContent, /Confira as limitações de extração no recibo antes da pergunta/, 'arquivo sem texto pede conferência');
   assert.equal(mesa.$('cadastro-perguntar').hidden, false);
@@ -280,4 +282,20 @@ test('Cadastrar com um servidor sem envio em fluxo não cria pedido em fluxo (o 
   await mesa.esperar(8);
   assert.equal(mesa.pedidos.length, 0);
   assert.equal(mesa.$('cadastro-envio').childNodes.length, 0);
+});
+
+test('recibo conferido: só a contagem do lote e Detalhes técnicos, plural concordado e sem repetir o resultado de cada arquivo', () => {
+  const mesa = abrir();
+  const destino = mesa.$('cadastro-recibo');
+  const lote = (novos, duplicados, nomes) => ({caso_id: 'alfa', corpus_id: 'c1', recebidos: novos + duplicados, novos, duplicados, arquivos: nomes.map(nome => ({nome, estado: 'pronto', extracao: 'extraido'}))});
+  mesa.janela.Envio.renderRecibo(destino, lote(3, 0, ['a.pdf', 'b.pdf', 'c.pdf']));
+  assert.equal(destino.hidden, false);
+  assert.equal(destino.querySelector('h3').textContent, 'Recibo do lote: 3 de 3 arquivos');
+  assert.equal(destino.querySelectorAll('p')[0].textContent, '3 novos · nenhum duplicado');
+  assert.equal(destino.querySelectorAll('li').length, 0, 'sem a lista de arquivos: o cartão de envio já a mostra');
+  assert.match(destino.querySelector('details').textContent, /Apuração: alfa · Corpus: c1/);
+  mesa.janela.Envio.renderRecibo(destino, lote(1, 1, ['a.pdf', 'b.pdf']));
+  assert.equal(destino.querySelectorAll('p')[0].textContent, '1 novo · 1 duplicado');
+  mesa.janela.Envio.renderRecibo(destino, lote(0, 2, ['a.pdf', 'b.pdf']));
+  assert.equal(destino.querySelectorAll('p')[0].textContent, 'nenhum novo · 2 duplicados');
 });
