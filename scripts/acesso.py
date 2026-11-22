@@ -5,6 +5,10 @@ Store `acesso/acesso.json` (gitignored) or the path in VLADO_ACESSO (e.g. a Dock
 (argon2-cffi). Activation tokens and session ids are random (secrets.token_urlsafe) and only
 their SHA-256 is stored. Events never carry passwords, tokens, links or hashes.
 
+Every event here also goes to the audit log (scripts/registro_acesso.py: JSON lines with UTC time, account, IP and result,
+rotated by day, 30 days by default). The 1000 newest events stay in `acesso.json` for the admin screen; an event pushed out
+of that window is first copied to the audit log as `evento_arquivado`, never dropped silently.
+
 A v1 store (invitations) migrates on first read: each invitation becomes an account with the
 SAME id (authorship in notes, reviews and conversations is kept), without password; v1 sessions
 are dropped and a copy of the v1 file is kept as acesso.v1.json.
@@ -41,6 +45,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cadastrar_documentos import _atomico  # noqa: E402
 from comum import trava_arquivo  # noqa: E402
+import registro_acesso  # noqa: E402
 
 PAPEIS = ('admin', 'convidado')
 CLIENTES = ('web', 'android')
@@ -142,6 +147,7 @@ def _ilegivel() -> ValueError:
 
 def _ler(root: Path) -> dict:
     """Read (and migrate a v1 store once). Callers hold _TRAVA and the file lock."""
+    registro_acesso.lembrar_raiz(root)  # the audit log follows the data root unless VLADO_REGISTRO says otherwise
     arquivo = caminho(root)
     if not arquivo.is_file():
         return _vazio()
@@ -167,6 +173,10 @@ def _ler(root: Path) -> dict:
 def _gravar(root: Path, dados: dict) -> None:
     arquivo = caminho(root)
     arquivo.parent.mkdir(parents=True, exist_ok=True)
+    if len(dados['eventos']) > MAX_EVENTOS:
+        for antigo in dados['eventos'][:-MAX_EVENTOS]:  # leaving the window is not silent: it goes to the audit log
+            if isinstance(antigo, dict):
+                registro_acesso.arquivar_evento(antigo)
     dados['eventos'] = dados['eventos'][-MAX_EVENTOS:]
     _atomico(arquivo, (json.dumps(dados, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
     try:
@@ -175,9 +185,12 @@ def _gravar(root: Path, dados: dict) -> None:
         pass
 
 
-def _evento(dados: dict, tipo: str, conta: str | None, por: str | None, momento: datetime | None = None) -> None:
-    """Audit trail: type, account, author and time only (never secrets)."""
+def _evento(dados: dict, tipo: str, conta: str | None, por: str | None, momento: datetime | None = None,
+            **detalhes) -> None:
+    """Audit trail: type, account, author and time only (never secrets). The audit log adds the client IP and
+    the few allowed details (`detalhes`: changed fields, role)."""
     dados['eventos'].append({'em': _iso(momento or agora()), 'tipo': tipo, 'conta': conta, 'por': por})
+    registro_acesso.do_acesso(tipo, conta, por, momento, **detalhes)
 
 
 def _login_de_nome(nome: str, usados: set[str]) -> str:
@@ -390,6 +403,7 @@ def atualizar(root: Path, cid, por='cli', *, nome=None, papel=None, casos=None, 
         if (conta['papel'] == 'admin' and novo_papel != 'admin' and conta.get('ativa')
                 and not _admins_ativos(dados, exceto=cid)):
             raise ValueError('Não é possível rebaixar o último administrador ativo.')
+        antes = dict(conta)
         if nome is not None:
             conta['nome'] = nome
         if novo_papel == 'admin':
@@ -398,7 +412,9 @@ def atualizar(root: Path, cid, por='cli', *, nome=None, papel=None, casos=None, 
             novos_casos = casos if casos is not None else conta.get('casos')
             nova_cota = cota_diaria if cota_diaria is not None else (conta.get('cota_diaria') or 20)
             conta.update(papel='convidado', casos=_validar_casos(novos_casos or []), cota_diaria=nova_cota)
-        _evento(dados, 'acesso_alterado', cid, por)
+        campos = [nome_campo for nome_campo, chave in (('nome', 'nome'), ('papel', 'papel'), ('casos', 'casos'),
+                                                       ('cota', 'cota_diaria')) if antes.get(chave) != conta.get(chave)]
+        _evento(dados, 'acesso_alterado', cid, por, campos=campos or None, papel=conta['papel'])
     return _alterar(root, cid, por, mudar)
 
 
@@ -472,7 +488,11 @@ def _por_ativacao(dados: dict, token, momento: datetime) -> tuple[str, dict]:
 def consultar_ativacao(root: Path, token) -> dict:
     """Login and name shown on the set-password form (read-only)."""
     with _TRAVA, trava_arquivo(caminho(root)):
-        _, conta = _por_ativacao(_ler(root), token, agora())
+        try:
+            _, conta = _por_ativacao(_ler(root), token, agora())
+        except AtivacaoInvalida:
+            registro_acesso.registrar('ativacao_falha', 'falha', motivo='link_invalido', acesso_operacao='consultar')
+            raise
         return {'login': conta['login'], 'nome': conta['nome']}
 
 
@@ -480,7 +500,11 @@ def ativar(root: Path, token, senha) -> dict:
     """Set the password from a single-use link. Does not open a session (the person signs in next)."""
     senha = _validar_senha(senha)
     with _TRAVA, trava_arquivo(caminho(root)):
-        _por_ativacao(_ler(root), token, agora())  # refuse before spending time on the hash
+        try:
+            _por_ativacao(_ler(root), token, agora())  # refuse before spending time on the hash
+        except AtivacaoInvalida:
+            registro_acesso.registrar('ativacao_falha', 'falha', motivo='link_invalido', acesso_operacao='ativar')
+            raise
     with _VezDoHash():
         senha_hash = _HASHER.hash(senha)
     with _TRAVA, trava_arquivo(caminho(root)):
@@ -504,9 +528,14 @@ def _hash_ficticio() -> str:
     return _FICTICIO[chave]
 
 
-def limitar_ip(ip: str | None) -> None:
-    """Per-address limit shared by sign-in and activation (20 per minute)."""
-    _limite_ip(ip, agora())
+def limitar_ip(ip: str | None, operacao: str | None = None) -> None:
+    """Per-address limit shared by sign-in and activation (20 per minute). `operacao` only labels the audit event."""
+    try:
+        _limite_ip(ip, agora())
+    except Bloqueado:
+        registro_acesso.registrar('ativacao_falha' if operacao in ('ativar', 'consultar') else 'login_falha', 'falha',
+                                  motivo='limite_ip', acesso_operacao=operacao, ip=ip)
+        raise
 
 
 def _rede(ip: str | None) -> str | None:
@@ -591,8 +620,20 @@ def _podar_tentativas(dados: dict, momento: datetime) -> None:
             dados['tentativas'].pop(chave, None)
 
 
+def _motivo_vencida(registro: dict, momento: datetime) -> str:
+    try:
+        return 'expirada' if _data(registro['expira_em']) <= momento else 'inatividade'
+    except (KeyError, TypeError, ValueError):
+        return 'expirada'
+
+
 def _limpar_sessoes(dados: dict, momento: datetime) -> None:
-    dados['sessoes'] = {k: s for k, s in dados['sessoes'].items() if not _sessao_vencida(s, momento)}
+    """Drop expired sessions; each one is audited (`sessao_expirada`), so an expiry never goes unrecorded."""
+    vencidas = {k: s for k, s in dados['sessoes'].items() if _sessao_vencida(s, momento)}
+    for chave, registro in vencidas.items():
+        dados['sessoes'].pop(chave, None)
+        registro_acesso.registrar('sessao_expirada', 'ok', registro.get('conta'), momento,
+                                  motivo=_motivo_vencida(registro, momento), cliente=registro.get('cliente'))
 
 
 def _sessao_vencida(registro: dict, momento: datetime) -> bool:
@@ -604,18 +645,24 @@ def _sessao_vencida(registro: dict, momento: datetime) -> bool:
 
 
 def entrar(root: Path, login, senha, ip: str | None = None, cliente='web') -> tuple[str, str, dict]:
-    """Return (session id, csrf token, public account). One generic refusal for every bad credential."""
+    """Return (session id, csrf token, public account). One generic refusal for every bad credential.
+    Every outcome goes to the audit log: success, wrong credentials, lockout and per-address limit (never the text typed)."""
     momento = agora()
-    _limite_ip(ip, momento)
+    try:
+        _limite_ip(ip, momento)
+    except Bloqueado:
+        registro_acesso.registrar('login_falha', 'falha', motivo='limite_ip', cliente=_cliente(cliente), ip=ip)
+        raise
     login = login.strip().lower() if isinstance(login, str) else ''
     senha = senha if isinstance(senha, str) and len(senha) <= SENHA_MAX else ''
     valido = bool(LOGIN.fullmatch(login))
     chave = _chave_tentativa(login, ip)
     with _TRAVA, trava_arquivo(caminho(root)):
         dados = _ler(root)
-        if valido and _bloqueado(dados, chave, momento):
-            raise Bloqueado(BLOQUEADO)
         cid, conta = next(((k, c) for k, c in dados['contas'].items() if c['login'] == login), (None, None))
+        if valido and _bloqueado(dados, chave, momento):
+            _auditar_falha('bloqueado', cid, login, cliente, ip)
+            raise Bloqueado(BLOQUEADO)
         guardado = conta.get('senha_hash') if conta and conta.get('ativa') else None
     # The hash is checked even for unknown logins (similar timing), outside the store lock.
     try:
@@ -629,6 +676,7 @@ def entrar(root: Path, login, senha, ip: str | None = None, cliente='web') -> tu
         conta = dados['contas'].get(cid) if cid else None
         if certo and conta and conta.get('ativa') and conta.get('senha_hash') == guardado:
             if _bloqueado(dados, chave, momento):
+                _auditar_falha('bloqueado', cid, login, cliente, ip)
                 raise Bloqueado(BLOQUEADO)
             if _HASHER.check_needs_rehash(guardado):
                 conta['senha_hash'] = _HASHER.hash(senha)
@@ -638,12 +686,26 @@ def entrar(root: Path, login, senha, ip: str | None = None, cliente='web') -> tu
             dados['sessoes'][_hash(sid)] = {
                 'conta': cid, 'csrf': csrf, 'criada_em': _iso(momento),
                 'expira_em': _iso(momento + timedelta(hours=SESSAO_HORAS)), 'ultimo_uso': _iso(momento),
-                'cliente': cliente if cliente in CLIENTES else 'web'}
+                'cliente': _cliente(cliente)}
             _gravar(root, dados)
+            registro_acesso.registrar('login_ok', 'ok', cid, momento, cliente=_cliente(cliente), ip=ip)
             return sid, csrf, _publico(cid, conta, momento)
         bloqueou = _registrar_falha(dados, chave, cid if conta else None, momento) if valido else False
         _gravar(root, dados)
+    _auditar_falha('bloqueado' if bloqueou else 'credenciais', cid if conta else None, login, cliente, ip)
     raise (Bloqueado(BLOQUEADO) if bloqueou else CredenciaisInvalidas(CREDENCIAIS))
+
+
+def _cliente(cliente) -> str:
+    return cliente if cliente in CLIENTES else 'web'
+
+
+def _auditar_falha(motivo: str, cid: str | None, login: str, cliente, ip: str | None) -> None:
+    """A failed sign-in: the account id when it exists, otherwise a keyed reference of the typed login (never the
+    text, which may be a password typed in the wrong field)."""
+    registro_acesso.registrar('login_falha', 'falha', cid, motivo=motivo,
+                              login_ref=None if cid else registro_acesso.referencia_do_login(login),
+                              cliente=_cliente(cliente), ip=ip)
 
 
 def sessao(root: Path, sid) -> dict | None:
@@ -655,7 +717,11 @@ def sessao(root: Path, sid) -> dict | None:
         dados = _ler(root)
         chave = _hash(sid)
         registro = dados['sessoes'].get(chave)
-        if not registro or _sessao_vencida(registro, momento):
+        if registro and _sessao_vencida(registro, momento):
+            _limpar_sessoes(dados, momento)  # audited once (`sessao_expirada`) and forgotten: no event per later request
+            _gravar(root, dados)
+            return None
+        if not registro:
             return None
         conta = dados['contas'].get(registro.get('conta'))
         if not conta or not conta.get('ativa') or not conta.get('senha_hash'):

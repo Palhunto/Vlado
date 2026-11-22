@@ -108,7 +108,9 @@ COPY scripts/acesso.py \
      scripts/ocr.py \
      scripts/provedor_anthropic.py \
      scripts/provedor_openai.py \
+     scripts/proxies_confiaveis.py \
      scripts/rascunhos.py \
+     scripts/registro_acesso.py \
      scripts/registros_achados.py \
      scripts/revisao_humana.py \
      scripts/rotas_achados.py \
@@ -137,8 +139,8 @@ COPY entrada/README.md ./entrada/
 
 # Data folders are Docker volumes (see docker-compose.yml). Only they are writable by the
 # app user; the code stays read-only for it (and the whole root filesystem is read-only in Compose).
-RUN mkdir -p conversas execucoes lixeira segredos ajustes acesso /var/tmp/vlado \
-    && chown -R vlado:vlado casos conversas execucoes lixeira entrada segredos ajustes acesso /var/tmp/vlado
+RUN mkdir -p conversas execucoes lixeira segredos ajustes acesso registro /var/tmp/vlado \
+    && chown -R vlado:vlado casos conversas execucoes lixeira entrada segredos ajustes acesso registro /var/tmp/vlado
 USER vlado
 
 EXPOSE 8765

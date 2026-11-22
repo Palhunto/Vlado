@@ -60,6 +60,15 @@ services:
       VLADO_AMBIENTE: ${VLADO_AMBIENTE:?defina VLADO_AMBIENTE (homologacao, editorial ou demonstracao)}
       # The app sits behind this Caddy only: trust the last X-Forwarded-For hop for login rate limits.
       VLADO_CONFIAR_PROXY: "1"
+      # SEG-05: lista de proxies confiáveis (IPs ou redes, separados por vírgula). Vazia: comportamento acima (último salto
+      # do X-Forwarded-For). Com a lista, o IP do cliente é o primeiro salto NÃO confiável, da direita para a esquerda, e o
+      # X-Forwarded-For só vale se o par TCP (o Caddy) estiver nela: inclua a rede do Compose e, atrás de CDN, as faixas dela.
+      VLADO_PROXIES_CONFIAVEIS: ${VLADO_PROXIES_CONFIAVEIS:-}
+      # SEG-02: registro de auditoria (autenticação, administração, downloads), uma linha JSON por evento, sem conteúdo, no
+      # volume `registro` (o serviço de backup NÃO o monta: fora do backup, de propósito; ver deploy/BACKUP.md).
+      VLADO_REGISTRO: /app/registro
+      VLADO_REGISTRO_RETENCAO_DIAS: ${VLADO_REGISTRO_RETENCAO_DIAS:-30}
+      VLADO_REGISTRO_DIA_MAX_MB: ${VLADO_REGISTRO_DIA_MAX_MB:-50}
       # Optional: a key in the environment takes precedence over the key pasted in the Mesa.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -72,6 +81,7 @@ services:
       - segredos:/app/segredos
       - ajustes:/app/ajustes
       - acesso:/app/acesso
+      - registro:/app/registro
       - tmp_vlado:/var/tmp/vlado
     expose:
       - "8765"
@@ -237,6 +247,7 @@ volumes:
   segredos:
   ajustes:
   acesso:
+  registro:
   caddy_data:
   caddy_config:
   caddy_logs:
