@@ -1269,7 +1269,26 @@ window.VLADO_I18N_EN = {
     "Desativar conta": "Deactivate account",
     "Gerar novo link de ativação?": "Generate a new activation link?",
     "A senha atual deixa de valer e as sessões abertas são encerradas.": "The current password stops working and open sessions end.",
-    "Gerar novo link": "Generate new link"
+    "Gerar novo link": "Generate new link",
+    "Não deu para concluir.": "Could not finish.",
+    "Detalhes": "Details",
+    "Fazer uma pergunta": "Ask a question",
+    "Não deu para abrir este quadro.": "Could not open this board.",
+    "Nenhuma apuração escolhida": "No investigation chosen",
+    "Escolher apuração": "Choose an investigation",
+    "Nenhuma hipótese ainda": "No hypotheses yet",
+    "Uma hipótese é uma afirmação que os documentos podem sustentar ou contrariar.": "A hypothesis is a claim the documents can support or contradict.",
+    "Nenhum acontecimento com esses tipos de data": "No events with these date types",
+    "A linha do tempo reúne os acontecimentos datados que os documentos registram.": "The timeline gathers the dated events the documents record.",
+    "Nenhum acontecimento com data ainda": "No dated events yet",
+    "Nada para comparar ainda": "Nothing to compare yet",
+    "Nenhuma tabela ainda": "No tables yet",
+    "Uma tabela conferível reúne números tirados dos documentos, cada um com a sua fonte.": "A checkable table gathers figures taken from the documents, each with its source.",
+    "Nenhuma ligação ainda": "No links yet",
+    "O mapa mostra pessoas, empresas e órgãos e como se ligam nos documentos.": "The map shows people, companies and agencies and how the documents link them.",
+    "Nenhum texto desta apuração foi enviado para conferência.": "No text from this investigation has been sent for checking.",
+    "Nenhum texto em conferência": "No text under review",
+    "Abrir o caderno": "Open the notebook"
   },
   padroes: [
     // Cota do mês na barra lateral
