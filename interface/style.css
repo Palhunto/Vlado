@@ -78,7 +78,6 @@ main{padding:30px 32px;min-width:0}
 .index-selection p{margin:0}
 .query-label{font-size:var(--text-base);margin-top:22px}
 .query-row{display:flex;gap:12px;margin:10px 0 18px}
-.query-row input{min-height:50px}
 .query-row button{min-width:130px}
 .actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:18px 0}
 .actions:empty{display:none}
@@ -546,19 +545,7 @@ h2{font-family:var(--fonte-titulo);font-size:var(--text-2xl);font-weight:500}
   border-radius:0 0 8px 8px;
   background:var(--paper);
 }
-.finding-choice .human-review-actions button{
-  display:inline-flex;
-  flex-direction:row;
-  width:auto;
-  min-height:40px;
-  padding:7px 12px;
-  margin:0;
-  background:transparent;
-  color:var(--green);
-  border-color:var(--theme-input-line);
-  font-weight:600;
-}
-.finding-choice .human-review-actions button:hover{background:var(--soft)}
+.finding-choice .human-review-actions button{flex-direction:row;width:auto;margin:0}
 .human-review-note{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--soft);padding:12px 14px;border-radius:5px}
 .human-review-dialog{width:min(1120px,calc(100% - 32px));padding:28px;max-height:calc(100% - 40px)}
 .human-review-dialog .section-heading{align-items:start}
@@ -664,7 +651,6 @@ h2{font-family:var(--fonte-titulo);font-size:var(--text-2xl);font-weight:500}
   font:inherit;
   width:100%;
   max-width:100%;
-  padding:10px;
   border:1px solid var(--theme-input-line);
   background:var(--paper);
   color:var(--theme-text);
@@ -694,7 +680,6 @@ h2{font-family:var(--fonte-titulo);font-size:var(--text-2xl);font-weight:500}
 #diligencias-form textarea,#diligencias-resposta-form textarea{
   font:inherit;
   width:100%;
-  padding:10px;
   resize:vertical;
   border:1px solid var(--theme-input-line);
   background:var(--paper);
@@ -887,6 +872,8 @@ button:active:not(:disabled){transform:translateY(1px)}
 .secondary:hover{background:var(--soft)}
 .danger{background:var(--white);border-color:var(--theme-danger-line);color:var(--theme-danger);font-weight:400}
 .danger:hover{background:var(--soft);color:var(--theme-danger)}
+.recusa{background:var(--white);border-color:var(--theme-input-line);color:var(--theme-danger);font-weight:400}
+.recusa:hover{background:var(--soft)}
 button:disabled,button:disabled:hover{background:var(--theme-sidebar);border-color:var(--line);color:var(--muted);font-weight:400;cursor:not-allowed}
 /* Campo de texto (docs/design/componentes.md#campo): borda de controle, fundo da superfície, 16 px. */
 input,select,textarea{font-size:var(--text-base);border-color:var(--theme-input-line);background:var(--white);color:var(--ink)}
@@ -1132,7 +1119,6 @@ main{padding:38px 40px 26px;max-width:1600px;min-height:calc(100dvh - 86px);marg
 .mesa-acervo-toolbar label{font-size:var(--text-xs)}
 .mesa-acervo-toolbar label:first-child{flex:1;min-width:160px}
 .mesa-acervo-toolbar label:nth-child(2){max-width:260px}
-.mesa-acervo-toolbar input{min-height:42px}
 .mesa-table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--white)}
 .mesa-file-table{width:100%;border-collapse:collapse;font-size:var(--text-md)}
 .mesa-file-table th{
@@ -1256,7 +1242,6 @@ main{padding:38px 40px 26px;max-width:1600px;min-height:calc(100dvh - 86px);marg
 .human-review-toolbar{padding:17px 20px;background:var(--theme-soft);border:1px solid var(--line);border-radius:8px;margin:18px 0;gap:24px}
 #achados-progresso-texto{font-size:var(--text-sm);margin-bottom:8px}
 .human-review-filter label{font-size:var(--text-xs)}
-.human-review-filter select{font-size:var(--text-sm)}
 .findings-workspace{grid-template-columns:310px minmax(0,1fr);gap:25px}
 .findings-list{display:flex;flex-direction:column;gap:12px}
 .finding-choice{border:1px solid var(--line);border-radius:9px;background:var(--white);overflow:hidden}
@@ -1363,7 +1348,6 @@ main{padding:38px 40px 26px;max-width:1600px;min-height:calc(100dvh - 86px);marg
 .manage-list li{padding:18px 0;border-color:var(--line)}
 .manage-list h4{font-size:var(--text-base)}
 .manage-list .manage-empty{padding:25px;font-size:var(--text-md)}
-.manage-list .danger{font-size:var(--text-xs)}
 .manage-list .small{font-size:var(--text-sm)}
 dialog{background:var(--white);color:var(--ink);border-color:var(--line);box-shadow:0 25px 80px var(--theme-shadow)}
 dialog::backdrop{background:var(--theme-backdrop);backdrop-filter:blur(3px)}
@@ -1929,7 +1913,6 @@ main:has(#area-achados:not([hidden])) .intro{margin-bottom:16px}
 .notebook-toolbar{display:flex;align-items:end;justify-content:space-between;flex-wrap:wrap;gap:8px 20px;margin:0 0 6px}
 .notebook-toolbar>.actions{margin:0;align-items:end}
 .notebook-toolbar label{font-size:var(--text-xs);min-width:150px}
-.notebook-toolbar select{min-height:42px;padding-block:8px}
 .save-state{display:inline-flex;align-items:center;gap:8px;margin:0 0 8px;min-height:24px;font-size:var(--text-sm);color:var(--muted)}
 .save-state:empty{visibility:hidden}
 .save-state::before{content:'';width:8px;height:8px;border-radius:50%;border:1.5px solid currentColor;flex-shrink:0}
