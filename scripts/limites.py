@@ -96,20 +96,22 @@ def somar_dia(root: Path, tokens: int, organizacao: str | None = None) -> int:
         return atual['tokens']
 
 
-# No answer carries a number that adds up several newsrooms (accounts contract, 4.5): the installation's
-# refusal has none; a newsroom's carries only its own limit.
+# No number in either (accounts contract, 4.5): the installation's adds up every newsroom, and a newsroom's
+# usage and ceiling go only to its owner, which these checks cannot tell yet (P1 brings that signal).
 DIA_INSTALACAO = 'Limite diário de uso da instalação atingido. Novas perguntas voltam amanhã (UTC).'
+DIA_REDACAO = 'Limite diário de uso da redação atingido. Novas perguntas voltam amanhã (UTC).'
 
 
 def conferir_dia(root: Path, organizacao: str | None = None) -> None:
-    """Before a question: the installation's daily total, then the organization's (when it has a limit)."""
+    """Before a question: the organization's daily total (when it has a limit), then the installation's.
+    The newsroom first, so one at its own limit learns nothing of the others."""
     valores = ler(root)
     atual = _hoje(root)
-    if valores['tokens_por_dia'] is not None and atual['tokens'] >= valores['tokens_por_dia']:
-        raise ValueError(DIA_INSTALACAO)
     limite = valores['tokens_por_dia_por_organizacao']
     if limite is not None and organizacao and atual['organizacoes'].get(organizacao, 0) >= limite:
-        raise ValueError(f'Limite diário de tokens da redação atingido ({limite}). Novas perguntas voltam amanhã (UTC).')
+        raise ValueError(DIA_REDACAO)
+    if valores['tokens_por_dia'] is not None and atual['tokens'] >= valores['tokens_por_dia']:
+        raise ValueError(DIA_INSTALACAO)
 
 
 def conferir_tamanho(tamanho: int, limite: int, rotulo: str) -> None:

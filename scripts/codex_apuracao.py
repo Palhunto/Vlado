@@ -205,10 +205,12 @@ class Conversas:
         custo.conferir_antes(self.root, conta, estado.get('modelo'), convidado=convidado)
         return estado
 
-    def _conferir_simultaneas(self, conta):
-        """Ceiling of executions at the same time: per account (administrators too), in all (the installation)
-        and per organization (the newsroom, when it has a ceiling of its own). The installation's refusal
-        carries no number: it adds up every newsroom (accounts contract, 4.5). Caller holds ``self.lock``."""
+    def _conferir_simultaneas(self, conta, restrito=False):
+        """Ceiling of executions at the same time: per account (administrators too), per organization (the
+        newsroom, when it has a ceiling of its own) and in all (the installation). The newsroom is checked
+        before the installation, so a newsroom at its own ceiling learns nothing of the others. No number
+        that adds up newsrooms (accounts contract, 4.5): the installation's refusal has none, and a restricted
+        author (``dono``: guest or reader) gets that same sentence for its newsroom. Caller holds ``self.lock``."""
         orcamento = custo.ler_orcamento(self.root)
         chaves = custo.chaves_orcamento(conta)
         ativas = [custo.chaves_orcamento(c['meta'].get('conta')) for c in self.contexts.values() if c.get('busy')]
@@ -216,15 +218,18 @@ class Conversas:
         if da_conta >= orcamento['execucoes_simultaneas_por_conta']:
             raise ValueError(f'Já há {da_conta} pergunta{"s" if da_conta != 1 else ""} em andamento nesta conta. '
                              'As conversas e os documentos seguem disponíveis; envie esta quando uma delas terminar.')
-        if len(ativas) >= orcamento['execucoes_simultaneas']:
-            raise ValueError('A Mesa está no limite de perguntas em andamento. As conversas e os documentos '
-                             'seguem disponíveis; envie esta pergunta em alguns minutos.')
+        mesa = ('A Mesa está no limite de perguntas em andamento. As conversas e os documentos '
+                'seguem disponíveis; envie esta pergunta em alguns minutos.')
         teto = orcamento['execucoes_simultaneas_por_organizacao']
         da_organizacao = sum(1 for c in ativas if c['organizacao'] == chaves['organizacao'])
         if teto is not None and da_organizacao >= teto:
+            if restrito:
+                raise ValueError(mesa)
             raise ValueError(f'Já há {da_organizacao} pergunta{"s" if da_organizacao != 1 else ""} em andamento nesta '
                              'redação. As conversas e os documentos seguem disponíveis; envie esta quando uma delas '
                              'terminar.')
+        if len(ativas) >= orcamento['execucoes_simultaneas']:
+            raise ValueError(mesa)
 
     def _path(self, identifier):
         if not isinstance(identifier, str) or not re.fullmatch(ID, identifier):
@@ -523,7 +528,7 @@ class Conversas:
             if dono is not None and any(c['meta'].get('dono') == dono and c.get('busy')
                                         for c in self.contexts.values()):
                 raise ValueError('Já há uma pergunta em andamento para este convite. Aguarde a resposta ou cancele.')
-            self._conferir_simultaneas(conta)
+            self._conferir_simultaneas(conta, restrito=dono is not None)
             if identifier:
                 ctx = self._conferir_dono(identifier, dono)
                 if ctx['meta']['caso'] != case:
@@ -1068,15 +1073,13 @@ class Conversas:
         elif valores['tokens_por_consulta'] is not None and consulta > valores['tokens_por_consulta']:
             motivo = f'Limite de tokens por consulta atingido ({consulta} de {valores["tokens_por_consulta"]}).'
             causa = 'limite_consulta'
+        elif teto_organizacao is not None and dia_organizacao > teto_organizacao:
+            # The newsroom first (it then learns nothing of the others). No number: the newsroom's usage
+            # and ceiling go only to its owner (accounts contract 4.5), which this cannot tell yet (P1).
+            causa, motivo = 'limite_dia', 'Limite diário de uso da redação atingido. Tente novamente amanhã (UTC).'
         elif valores['tokens_por_dia'] is not None and dia > valores['tokens_por_dia']:
             # Nobody learns the installation-wide usage: it adds up every newsroom (accounts contract, 4.5).
             causa, motivo = 'limite_dia', 'Limite diário de uso da instalação atingido. Tente novamente amanhã (UTC).'
-        elif teto_organizacao is not None and dia_organizacao > teto_organizacao:
-            causa = 'limite_dia'
-            # A guest must not learn the newsroom's usage either (it includes the other accounts).
-            motivo = ('Limite diário de uso da redação atingido. Tente novamente amanhã (UTC).'
-                      if meta.get('dono') is not None
-                      else f'Limite diário de tokens da redação atingido ({dia_organizacao} de {teto_organizacao}).')
         elif totais is not None:
             try:
                 estourou = custo.estouro(self.root, totais, convidado=meta.get('dono') is not None)
@@ -1281,7 +1284,7 @@ class Conversas:
             if dono is not None and any(c['meta'].get('dono') == dono and c.get('busy')
                                         for c in self.contexts.values()):
                 raise ValueError('Já há uma pergunta em andamento para este convite. Aguarde a resposta ou cancele.')
-            self._conferir_simultaneas(conta)
+            self._conferir_simultaneas(conta, restrito=dono is not None)
             meta['conta'] = conta
             ctx['modelo_cobrado'] = estado.get('modelo')
             run, question, pipeline = self._reconstruir(identifier)

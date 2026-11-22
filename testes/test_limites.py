@@ -12,9 +12,9 @@ from comum import escrever_json
 import custo
 import erros
 import limites
-from codex_apuracao import limitar_texto, limitar_argumentos
+from codex_apuracao import ACTIVE, limitar_texto, limitar_argumentos
 import test_codex_integracao as integracao  # module import: its TestCase is not re-collected here
-from agente_fluxo_fixture import aguardar_fim
+from agente_fluxo_fixture import aguardar_fim, esperar
 
 
 class LimitesTest(unittest.TestCase):
@@ -64,11 +64,20 @@ class LimitesTest(unittest.TestCase):
                          [60, 30, 0])
         with self.assertRaises(ValueError) as recusa:
             limites.conferir_dia(self.root, 'redacao-1')
-        self.assertEqual(str(recusa.exception),
-                         'Limite diário de tokens da redação atingido (50). Novas perguntas voltam amanhã (UTC).')
+        # The Coruja's B1: no number, for anyone (the newsroom's ceiling goes only to its owner, contract 4.5).
+        self.assertEqual(str(recusa.exception), limites.DIA_REDACAO)
+        self.assertNotRegex(str(recusa.exception), r'\d')
         self.assertEqual(erros.codigo_de(str(recusa.exception)), ('limite_tokens_dia_redacao', {}))
         limites.conferir_dia(self.root, 'redacao-2')  # the other newsroom goes on
         limites.conferir_dia(self.root)
+        # Both full: the newsroom's own refusal, not the installation's (it learns nothing of the others).
+        self.configurar({'tokens_por_dia': 100, 'tokens_por_dia_por_organizacao': 50})
+        with self.assertRaises(ValueError) as recusa:
+            limites.conferir_dia(self.root, 'redacao-1')
+        self.assertEqual(str(recusa.exception), limites.DIA_REDACAO)
+        with self.assertRaises(ValueError) as recusa:
+            limites.conferir_dia(self.root, 'redacao-2')  # within its own limit: the installation's, no number
+        self.assertEqual(str(recusa.exception), limites.DIA_INSTALACAO)
         self.configurar({'tokens_por_dia': 1000, 'tokens_por_dia_por_organizacao': None})
         limites.conferir_dia(self.root, 'redacao-1')  # null: only the total
         with patch('limites.hoje', return_value='2099-01-01'):
@@ -128,22 +137,41 @@ class LimitesConversaTest(unittest.TestCase):
         # Until the Onda 2, every account is in the one organization (custo.ORGANIZACAO): its counter is the newsroom's.
         self.configurar_dia(tokens_por_dia=1000, tokens_por_dia_por_organizacao=50)
         limites.somar_dia(self.root, 50, custo.chaves_orcamento(None)['organizacao'])
-        with self.assertRaisesRegex(ValueError, r'^Limite diário de tokens da redação atingido \(50\)'):
-            self.manager.perguntar({'caso': 'alpha', 'pergunta': 'Pergunta sintética.'})
+        # The Coruja's proof (B1): a guest got "Limite diário de tokens da redação atingido (50)".
+        for quem in ({}, {'dono': 'convite-sintetico', 'conta': 'convidado-sintetico'}):
+            with self.subTest(quem=quem), self.assertRaises(ValueError) as recusa:
+                self.manager.perguntar({'caso': 'alpha', 'pergunta': 'Pergunta sintética.'}, **quem)
+            self.assertEqual(str(recusa.exception), limites.DIA_REDACAO)
 
-    def interrompida_por(self, esperado):
-        identifier = self.start()
+    def interrompida_por(self, esperado, dono=None):
+        dados = {'caso': 'alpha', 'pergunta': 'Pergunta técnica sintética.'}
+        identifier = self.manager.perguntar(dados, dono=dono, conta=dono and 'convidado-sintetico')['conversa']
+        meta = self.manager.contexts[identifier]['meta']
+        esperar(lambda: meta.get('turn_id') or meta['estado'] not in ACTIVE)
         self.manager.rpc.emit('item/usage', {'turnId': 'turn-1', 'modelo': 'm', 'uso': {'entrada': 80, 'saida': 30}})
         aguardar_fim(self.manager, identifier)
         mensagens = [e['dados']['mensagem'] for e in self.manager.eventos(identifier)['eventos'] if e['tipo'] == 'erro']
         self.assertTrue(any(m.startswith(esperado) for m in mensagens), mensagens)
         self.assertTrue(any(method == 'turn/interrupt' for method, _ in self.manager.rpc.calls))
         self.assertEqual(limites.dia_da_organizacao(self.root, custo.ORGANIZACAO), 110)
+        self.assertFalse([m for m in mensagens if '110' in m], mensagens)  # the newsroom's usage: never shown
         return mensagens
 
-    def test_dia_da_redacao_interrompe_a_pergunta(self):
+    REDACAO = 'Limite diário de uso da redação atingido. Tente novamente amanhã (UTC).'
+
+    def test_dia_da_redacao_interrompe_a_pergunta_sem_numero(self):
         self.configurar_dia(tokens_por_dia=1000, tokens_por_dia_por_organizacao=50)
-        self.interrompida_por('Limite diário de tokens da redação atingido (110 de 50).')
+        mensagens = self.interrompida_por(self.REDACAO)
+        self.assertFalse([m for m in mensagens if re.search(r'\d', m)], mensagens)
+
+    def test_dia_da_redacao_interrompe_a_do_convidado_sem_numero(self):
+        self.configurar_dia(tokens_por_dia=1000, tokens_por_dia_por_organizacao=50)
+        mensagens = self.interrompida_por(self.REDACAO, dono='convite-sintetico')
+        self.assertFalse([m for m in mensagens if re.search(r'\d', m)], mensagens)
+
+    def test_dia_da_redacao_vem_antes_do_da_instalacao(self):
+        self.configurar_dia(tokens_por_dia=50, tokens_por_dia_por_organizacao=50)
+        self.interrompida_por(self.REDACAO)
 
     def test_dia_da_instalacao_interrompe_sem_mostrar_numero(self):
         self.configurar_dia(tokens_por_dia=50)

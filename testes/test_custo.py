@@ -537,7 +537,30 @@ class PerguntaTest(unittest.TestCase):
                 self.manager.perguntar(self.pergunta(), conta='b')
             self.assertTrue(str(recusa.exception).startswith('Já há 2 perguntas em andamento nesta redação.'))
             self.assertEqual(erros.codigo_de(str(recusa.exception)), ('execucoes_simultaneas_redacao', {'limite': 2}))
+            # The Coruja's proof (B1): a guest of the newsroom got that sentence, with the number. Now the
+            # installation's, which says neither the count nor whether it is the newsroom's or the others'.
+            redacoes['convidado-b'] = 'redacao-1'
+            with self.assertRaises(ValueError) as recusa:
+                self.manager.perguntar(self.pergunta(), dono='convite-b', conta='convidado-b')
+            self.assertNotRegex(str(recusa.exception), r'\d')
+            self.assertEqual(erros.codigo_de(str(recusa.exception)), ('execucoes_simultaneas_mesa', {}))
             self.assertTrue(self.manager.perguntar(self.pergunta(), conta='c')['conversa'])  # the other newsroom
+
+    def test_redacao_no_teto_recebe_a_recusa_dela_e_nao_a_da_instalacao(self):
+        # Both full: a newsroom at its own ceiling learns nothing of the others (checked before the total).
+        redacoes = {'a': 'redacao-1', 'b': 'redacao-1', 'c': 'redacao-2'}
+        original = custo.chaves_orcamento
+        por_redacao = lambda conta: {**original(conta), 'organizacao': redacoes.get(conta, custo.ORGANIZACAO)}
+        self.orcamento(execucoes_simultaneas_por_conta=2, execucoes_simultaneas_por_organizacao=1,
+                       execucoes_simultaneas=1)
+        self.ocupada('a')
+        with mock.patch.object(custo, 'chaves_orcamento', por_redacao):
+            with self.assertRaises(ValueError) as recusa:
+                self.manager.perguntar(self.pergunta(), conta='b')
+            self.assertEqual(erros.codigo_de(str(recusa.exception))[0], 'execucoes_simultaneas_redacao')
+            with self.assertRaises(ValueError) as recusa:
+                self.manager.perguntar(self.pergunta(), conta='c')  # within its own: the installation's
+            self.assertEqual(erros.codigo_de(str(recusa.exception)), ('execucoes_simultaneas_mesa', {}))
 
     def test_modelo_fora_da_lista_recusado_antes_da_pergunta(self):
         self.manager.factory, self.manager.rpc = ServidorRecusando, None  # the next status() asks the new one
