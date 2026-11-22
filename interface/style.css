@@ -2485,12 +2485,29 @@ ins.comparar-incluido,p.comparar-incluido{
 .tabela-calculo h5{font-size:var(--text-base);margin:0}
 .tabela-expressao{font-variant-numeric:tabular-nums;font-weight:600}
 .tabela-usadas{margin:var(--espaco-1) 0 var(--espaco-2);padding-left:var(--espaco-5)}
-.mapa-layout{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(260px,1fr);gap:var(--espaco-5);align-items:start}
-.mapa-svg{width:100%;height:auto;background:var(--quadro-coluna-fundo);border-radius:var(--raio-cartao)}
-.mapa-forma{stroke:var(--mapa-rotulo-fundo);stroke-width:2}
-.mapa-no.pessoa .mapa-forma{fill:var(--mapa-pessoa)}
-.mapa-no.organizacao .mapa-forma{fill:var(--mapa-organizacao)}
-.mapa-rotulo{fill:var(--ink);font-size:var(--text-sm);paint-order:stroke;stroke:var(--mapa-rotulo-fundo);stroke-width:4px}
+.mapa-layout{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(260px,1fr);gap:var(--espaco-5);align-items:start}
+.mapa-svg{display:block;width:100%;max-width:720px;margin-inline:auto;height:auto;background:var(--quadro-coluna-fundo);border-radius:var(--raio-cartao)}
+@media (max-width:1279px) {
+  .mapa-layout{grid-template-columns:minmax(0,1fr)}
+}
+/* Nó do mapa (componentes.md#mapa): caixa com o ícone do tipo (círculo para pessoa, quadrado de canto arredondado para organização), nome e tipo. */
+.mapa-cartao{box-sizing:border-box;display:flex;align-items:center;gap:var(--espaco-3);width:100%;height:100%;padding:var(--espaco-2) var(--espaco-3);background:var(--theme-surface);border:1px solid var(--theme-input-line);border-radius:var(--raio-cartao);color:var(--ink);font-size:var(--text-md);line-height:1.25;overflow:hidden}
+.mapa-ico{display:inline-grid;place-items:center;flex:none;width:36px;height:36px;color:var(--theme-on-primary)}
+.mapa-no.pessoa .mapa-ico{border-radius:50%;background:var(--mapa-pessoa)}
+.mapa-no.organizacao .mapa-ico{border-radius:var(--raio-controle);background:var(--mapa-organizacao)}
+.mapa-ico-svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.mapa-cartao-texto{display:flex;flex-direction:column;min-width:0}
+.mapa-nome{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-weight:700;overflow-wrap:anywhere}
+.mapa-sub{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Rótulo da ligação: pílula com o ícone do tipo e o texto do tipo; a ligação aberta ganha o fundo de acento. */
+.mapa-pilula{cursor:pointer}
+.mapa-pilula-fundo{fill:var(--mapa-rotulo-fundo);stroke:var(--theme-input-line);stroke-width:1}
+.mapa-pilula-icone{fill:none;stroke:var(--ink);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.mapa-pilula-texto{fill:var(--ink);font-size:var(--text-md);font-weight:600}
+.mapa-pilula.is-ativa .mapa-pilula-fundo{fill:var(--theme-accent);stroke:var(--theme-accent)}
+.mapa-pilula.is-ativa .mapa-pilula-icone{stroke:var(--theme-on-primary)}
+.mapa-pilula.is-ativa .mapa-pilula-texto{fill:var(--theme-on-primary)}
+.mapa-pilula.traco-tracejado .mapa-pilula-fundo{stroke:var(--theme-warning);stroke-dasharray:4 3}
 .mapa-linha{stroke:var(--mapa-ligacao);stroke-width:2}
 .mapa-alvo{stroke:transparent;stroke-width:16;cursor:pointer}
 .mapa-ligacao.traco-tracejado .mapa-linha{stroke-dasharray:8 5}
