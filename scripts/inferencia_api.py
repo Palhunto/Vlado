@@ -137,10 +137,15 @@ def resumo_inferencia(root: Path) -> dict:
     """What the settings panel may show: never a key, only presence and its last four characters."""
     inferencia = ler_inferencia(root)
     ajustes = ler_json(_ajustes(root)) if _ajustes(root).is_file() else {}
+    import custo
+    try:
+        permitidos = custo.modelos_permitidos(root)
+    except ValueError:
+        permitidos = []  # the question says why; the panel still shows the rest
     return {'provedor': inferencia.provedor, 'modelo': inferencia.modelo,
             'modelo_preferido': ajustes.get('modelo_preferido') if 'modelo_preferido' in ajustes else None,
             'max_tokens_saida': inferencia.max_tokens, 'modelos_padrao': dict(MODELOS_PADRAO),
-            'chaves': segredos.resumo(root)}
+            'modelos_permitidos': permitidos, 'chaves': segredos.resumo(root)}
 
 
 def salvar_inferencia(root: Path, dados: dict) -> dict:
@@ -158,6 +163,9 @@ def salvar_inferencia(root: Path, dados: dict) -> dict:
         raise ValueError('Chave de API em formato inválido: cole somente a chave, sem espaços (20 a 300 caracteres).')
     if type(dados.get('remover_chave', False)) is not bool:
         raise ValueError('Indicação de remoção da chave inválida.')
+    import custo
+    # Only a model of the installation's list, which always has a price (CUS-03); nothing saved otherwise.
+    custo.conferir_modelo(root, provedor, modelo.strip() if modelo else MODELOS_PADRAO[provedor])
     if chave:
         segredos.salvar_chave(root, provedor, chave)
     elif dados.get('remover_chave'):
@@ -261,7 +269,13 @@ class ServidorAPI:
         inferencia = ler_inferencia(self.root)
         if not self._chave(inferencia.provedor):
             return {'account': None}
-        return {'account': {'type': 'api', 'provedor': inferencia.provedor, 'modelo': inferencia.modelo}}
+        conta = {'type': 'api', 'provedor': inferencia.provedor, 'modelo': inferencia.modelo}
+        import custo
+        try:  # a model outside the installation's list is refused before any question (CUS-03)
+            custo.conferir_modelo(self.root, inferencia.provedor, inferencia.modelo)
+        except ValueError as exc:
+            conta['recusa_modelo'] = str(exc)
+        return {'account': conta}
 
     def _catalogo(self, params):
         modelo = ler_inferencia(self.root).modelo

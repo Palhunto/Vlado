@@ -768,7 +768,7 @@ class FilaProcessosTest(Base):
         resposta = self.fila.aguardar(lote, 120)
         arquivo = self.publico(lote)['arquivos'][0]
         self.assertEqual((arquivo['estado'], arquivo['extracao'], arquivo['tentativas']), ('falha', 'erro', 2))
-        self.assertIn('terminou sem resposta', arquivo['motivo'])
+        self.assertRegex(arquivo['motivo'], 'terminou sem resposta|morto pelo sistema')  # Linux: signal 9
         self.assertEqual((resposta['novos'], resposta['corpus_id']), (1, 'alpha_v2'))
         doc = next(d for d in self.documentos() if d['id'] == 'D002')
         self.assertEqual((doc['extracao_pdf']['estado'], doc['derivados']), ('erro', []))

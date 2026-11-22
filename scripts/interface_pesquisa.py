@@ -216,6 +216,7 @@ class Servidor(ThreadingHTTPServer):
         # Extraction and OCR of uploads (CONF-02): 'processos' runs them in separate processes
         # (main); 'local' in threads of this process (tests, the frozen Windows desk).
         self.fila = fila_extracao.Fila(self.root, modo=extracao or 'local')
+        self.conversas.renderizar_pagina = self.fila.renderizar_pagina  # page images too (SEG-01)
         super().__init__(address, Handler)
 
     def serve_forever(self, poll_interval=0.5):
@@ -380,7 +381,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 # Static page without case data; the token stays in the path, read by entrar.js.
                 self._send(200, (ASSETS / 'entrar.html').read_bytes(), 'text/html; charset=utf-8')
                 return
-            if path in ('/', '/api/catalogo', '/api/integracao', '/api/fila') and self._principal() is None:
+            if path in ('/', '/api/catalogo', '/api/integracao', '/api/fila', '/api/cota') and self._principal() is None:
                 self._sem_principal(api=path != '/')
                 return
         if path == '/api/integracao':
@@ -393,6 +394,9 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             return
         if path == '/api/fila':
             self._estado_da_fila()
+            return
+        if path == '/api/cota':
+            self._cota()
             return
         if path == '/api/catalogo':
             try:
@@ -505,7 +509,8 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             elif operation in rotas_gestao.OPERACOES:
                 result = self._gestao(operation, data, principal)
             elif operation in rotas_conversa.OPERACOES:
-                result = self._conversa(operation, data, dono, casos_liberados, consulta_contada)
+                result = self._conversa(operation, data, dono, casos_liberados, consulta_contada,
+                                        conta=principal['conta'])
                 if result is RESPONDIDO:
                     return
             else:

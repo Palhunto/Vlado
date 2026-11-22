@@ -425,6 +425,9 @@ def _sidecar_ocrmypdf(pdf: Path, paginas: list, total: int, config: dict) -> dic
                 '--rotate-pages-threshold', str(CONFIANCA_OSD_MINIMA),
                 '-l', config['idiomas'], '--pages', ','.join(str(p) for p in paginas),
                 '--output-type', 'none', '--sidecar', str(lado), str(pdf), '-']
+        # OCRmyPDF's own decompression-bomb cap, at the extraction's pixel cap (SEG-01).
+        import tetos_extracao
+        args[3:3] = ['--max-image-mpixels', str(tetos_extracao.configuracao()['megapixels'])]
         if _paralelo():
             # Inside the extraction queue: the pages this file may use; outside it, OCRmyPDF's default.
             args[3:3] = ['--jobs', str(_paralelo())]
@@ -756,6 +759,10 @@ def ocr_imagem(source: Path, identifier: str, target: Path) -> dict:
     result = {'estado': 'erro', 'origem': 'ocr', 'motor': None, 'versoes': {}, 'idiomas': None,
               'linhas': 0, 'metodo': None, 'mensagem': None, 'avisos': [],
               'aviso_conferencia': AVISO_OCR_IMAGEM, 'conferencia_humana': 'nao_realizada'}
+    import tetos_extracao
+    teto = tetos_extracao.teto_imagem_arquivo(source)
+    if teto:  # a decompression bomb is never handed to Tesseract (SEG-01)
+        return {**result, 'mensagem': teto + ' O original esta preservado.', 'teto': teto}
     try:
         lido = reconhecer_imagem(source)
     except (OcrIndisponivel, ValueError) as exc:
