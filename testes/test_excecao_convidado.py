@@ -184,6 +184,143 @@ class ErroDeConsultaDaFerramentaTest(Base):
         self.manager.cancelar(identifier)
 
 
+class AvisosComTextoDeExcecaoTest(Base):
+    """B1 da revisão: três avisos (falha na publicação, registro de uso que não grava, falha da ferramenta) e outros pontos gravavam o
+    texto da exceção sem `publica`; o convidado lia caminho, caso e documento. Agora todos passam por registrar_falha, e o que ficar
+    sem `publica` é tratado como falha interna na leitura."""
+
+    def conversa_em_curso(self):
+        identifier = self.manager.perguntar({'caso': 'alpha', 'pergunta': 'Pergunta técnica sintética.'}, dono=CONVIDADO)['conversa']
+        meta = lambda: self.manager.contexts[identifier]['meta']
+        esperar(lambda: meta().get('turn_id') or meta()['estado'] not in ca.ACTIVE)
+        return identifier
+
+    def avisos(self, identifier, dono):
+        return [e for e in self.manager.eventos(identifier, dono=dono)['eventos'] if e['tipo'] == 'aviso']
+
+    def assertAvisoSeguro(self, identifier, comeco):
+        convidado = [e for e in self.avisos(identifier, CONVIDADO) if e['dados']['mensagem'].startswith(comeco)]
+        self.assertEqual(len(convidado), 1, [e['dados'] for e in self.avisos(identifier, CONVIDADO)])
+        self.assertSemVazamento(convidado, comeco)
+        self.assertRegex(convidado[0]['dados']['mensagem'], REF)
+        admin = [e for e in self.avisos(identifier, None) if CAMINHO in e['dados']['mensagem'] or 'vila_serena' in e['dados']['mensagem']]
+        self.assertTrue(admin, 'o administrador vê o detalhe completo')
+        return convidado[0]['dados']['mensagem']
+
+    def test_falha_ao_executar_a_ferramenta(self):
+        identifier = self.conversa_em_curso()
+        original = self.manager.ferramenta
+
+        def quebra(ident, args):
+            raise OSError(2, 'No such file or directory', CAMINHO)
+        self.manager.ferramenta = quebra
+        self.addCleanup(setattr, self.manager, 'ferramenta', original)
+        self.manager.rpc.emit('item/tool/call', {'tool': 'consultar_acervo', 'arguments': {'acao': 'cobertura'},
+                                                 'callId': 'c1', 'turnId': 'turn-1'}, request=321)
+        self.manager.rpc.answer(321)
+        mensagem = self.assertAvisoSeguro(identifier, 'Falha ao executar a ferramenta de consulta.')
+        self.assertIn('(ref. ', mensagem)
+        self.manager.cancelar(identifier)
+
+    def test_registro_de_uso_que_nao_grava(self):
+        identifier = self.conversa_em_curso()
+        gravar = ca.escrever_json
+
+        def sem_disco(caminho, *args, **kwargs):
+            if 'api_uso_' in str(caminho):
+                raise OSError(28, 'No space left on device', CAMINHO)
+            return gravar(caminho, *args, **kwargs)
+        ca.escrever_json = sem_disco
+        self.addCleanup(setattr, ca, 'escrever_json', gravar)
+        self.manager.rpc.emit('item/usage', {'turnId': 'turn-1', 'modelo': 'm', 'uso': {'entrada': 7}})
+        esperar(lambda: any(e['tipo'] == 'aviso' and 'Registro de uso' in e['dados']['mensagem']
+                            for e in self.manager.eventos(identifier)['eventos']))
+        mensagem = self.assertAvisoSeguro(identifier, 'Registro de uso da API 0001 não gravado.')
+        self.assertNotIn('No space left', mensagem)
+        self.manager.cancelar(identifier)
+
+    def test_falha_na_verificacao_ou_publicacao(self):
+        import fluxo_codex
+        original = fluxo_codex.Fluxo.finalize
+
+        def falha(self_):
+            raise OSError(5, 'Input/output error', CAMINHO)
+        fluxo_codex.Fluxo.finalize = falha
+        self.addCleanup(setattr, fluxo_codex.Fluxo, 'finalize', original)
+        identifier = self.manager.perguntar({'caso': 'alpha', 'pergunta': 'Pergunta técnica sintética.'}, dono=CONVIDADO)['conversa']
+        from agente_fluxo_fixture import completar
+        completar(self.manager, identifier)
+        aguardar_fim(self.manager, identifier)
+        avisos = [e for e in self.avisos(identifier, CONVIDADO) if e['dados']['mensagem'].startswith('Falha na verificação ou na publicação')]
+        self.assertEqual(len(avisos), 2, 'duas tentativas')
+        self.assertSemVazamento(self.manager.eventos(identifier, dono=CONVIDADO), 'publicação')
+        self.assertTrue(any(CAMINHO in e['dados']['mensagem'] for e in self.avisos(identifier, None)), 'o administrador vê o detalhe')
+
+    def test_custo_nao_calculado_e_limites_nao_conferidos_e_aviso_do_provedor(self):
+        import custo
+        import limites
+        identifier = self.conversa_em_curso()
+        calcular, ler = custo.custo_da_chamada, limites.ler
+        custo.custo_da_chamada = lambda *a, **k: (_ for _ in ()).throw(ValueError('tabela ilegível em ' + CAMINHO))
+        limites.ler = lambda *a, **k: (_ for _ in ()).throw(OSError(13, 'Permission denied', CAMINHO))
+        self.addCleanup(setattr, custo, 'custo_da_chamada', calcular)
+        self.addCleanup(setattr, limites, 'ler', ler)
+        self.manager.rpc.emit('item/usage', {'turnId': 'turn-1', 'modelo': 'm', 'uso': {'entrada': 7}})
+        self.manager.rpc.emit('warning', {'message': 'proxy interno ' + CAMINHO + ' recusou'})
+        esperar(lambda: len([e for e in self.avisos(identifier, None) if CAMINHO in e['dados']['mensagem']]) >= 3)
+        textos = [e['dados']['mensagem'] for e in self.avisos(identifier, CONVIDADO)]
+        for comeco in ('Custo da chamada não calculado.', 'Limites de tokens não conferidos.', 'Aviso do provedor recebido'):
+            self.assertTrue(any(t.startswith(comeco) for t in textos), (comeco, textos))
+        self.assertSemVazamento(self.avisos(identifier, CONVIDADO), 'custo, limites e provedor')
+        # O começo que o teste de custo espera continua no que o administrador lê.
+        self.assertTrue(any(e['dados']['mensagem'].startswith('Limites de tokens não conferidos') for e in self.avisos(identifier, None)))
+        self.manager.cancelar(identifier)
+
+
+class EventoDeErroSemPublicaTest(Base):
+    def conversa_com_eventos(self):
+        identifier = self.manager.perguntar({'caso': 'alpha', 'pergunta': 'Pergunta técnica sintética.'}, dono=CONVIDADO)['conversa']
+        meta = lambda: self.manager.contexts[identifier]['meta']
+        esperar(lambda: meta().get('turn_id') or meta()['estado'] not in ca.ACTIVE)
+        return identifier
+
+    def test_evento_de_erro_antigo_sem_publica_vira_falha_interna(self):
+        identifier = self.conversa_com_eventos()
+        self.manager._event(identifier, 'erro', {'mensagem': f'[Errno 2] No such file or directory: {CAMINHO}'})  # como se fosse antigo
+        self.manager._event(identifier, 'erro', {'mensagem': 'texto cru', 'codigo': 'qualquer', 'detalhe': CAMINHO, 'ref': '0123abcd'})
+        resposta = self.manager.eventos(identifier, dono=CONVIDADO)
+        self.assertSemVazamento(resposta, 'erro antigo')
+        erros = [e['dados'] for e in resposta['eventos'] if e['tipo'] == 'erro']
+        self.assertEqual(erros[0], {'mensagem': ca.FALHA_INTERNA + ' (sem referência)'})
+        self.assertEqual(erros[1], {'mensagem': ca.FALHA_INTERNA + ' (ref. 0123abcd)'}, 'com ref, a mesma referência')
+        self.assertIn(CAMINHO, self.texto_de_tudo(self.manager.eventos(identifier)), 'o administrador vê o que foi gravado')
+        self.manager.cancelar(identifier)
+
+    def test_erro_com_texto_fixo_declarado_continua_legivel_para_o_convidado(self):
+        identifier = self.conversa_com_eventos()
+        self.manager._event(identifier, 'erro', ca.evento_curado('Conexão com a API perdida. Saídas parciais preservadas.'))
+        erros = [e['dados'] for e in self.manager.eventos(identifier, dono=CONVIDADO)['eventos'] if e['tipo'] == 'erro']
+        self.assertEqual(erros, [{'mensagem': 'Conexão com a API perdida. Saídas parciais preservadas.'}])
+        self.manager.cancelar(identifier)
+
+    def test_aviso_antigo_com_caminho_ou_arquivo_e_omitido_e_aviso_comum_passa(self):
+        identifier = self.conversa_com_eventos()
+        for texto in (f'Falhou em {CAMINHO}', r'Erro em C:\dados\caso\x', '[Errno 13] Permission denied', 'Abriu relatorio_final.pdf sem texto'):
+            self.manager._event(identifier, 'aviso', {'mensagem': texto})
+        self.manager._event(identifier, 'aviso', {'mensagem': 'Aguardando o fim de um cadastro em andamento.'})
+        avisos = [e['dados']['mensagem'] for e in self.manager.eventos(identifier, dono=CONVIDADO)['eventos'] if e['tipo'] == 'aviso']
+        self.assertEqual(avisos[-5:], [ca.AVISO_OMITIDO] * 4 + ['Aguardando o fim de um cadastro em andamento.'])
+        self.manager.cancelar(identifier)
+
+    def test_todos_os_eventos_de_erro_do_codigo_declaram_a_publica(self):
+        """Ninguém grava um evento de erro com dicionário literal só com `mensagem`: use registrar_falha ou evento_curado."""
+        fonte = (Path(ca.__file__)).read_text(encoding='utf-8')
+        sem_publica = re.findall(r"_event\(identifier, '(?:erro|aviso)', \{'mensagem': (?:seguro|str)\(", fonte)
+        self.assertEqual(sem_publica, [], 'evento com texto de exceção sem passar por registrar_falha')
+        literais = re.findall(r"_event\(identifier, 'erro', \{'mensagem'", fonte)
+        self.assertEqual(literais, [], "evento de erro com dicionário literal: use evento_curado(...)")
+
+
 class AjudantesTest(unittest.TestCase):
     def test_sanear_texto_corta_o_detalhe_e_deixa_so_a_referencia(self):
         cru = 'A execução falhou. O que já foi concluído foi preservado. Detalhe: [Errno 2] /app/x/y.pdf [ref 0123abcd]'

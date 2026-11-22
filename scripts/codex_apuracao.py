@@ -117,6 +117,17 @@ def registrar_falha(erro, codigo=None, publica=None) -> dict:
     return {'mensagem': bruto, 'publica': f'{publica or mensagem_publica(erro, codigo)} (ref. {ref})', 'ref': ref}
 
 
+def evento_curado(texto):
+    """Dados de um evento de erro cujo texto fixo, escrito aqui, já é seguro para qualquer leitor (declara a `publica`)."""
+    return {'mensagem': texto, 'publica': texto}
+
+
+# Aviso sem `publica` que parece conter caminho, nome de arquivo ou erro de sistema: para o convidado vira texto fixo.
+AVISO_OMITIDO = 'Aviso interno omitido; o detalhe está no registro do servidor.'
+SUSPEITO = re.compile(r"(?:[A-Za-z]:[\\/]|(?<![\w.])/(?:app|home|var|usr|tmp|etc|opt|srv|mnt|root|casos|execucoes|conversas|"
+                      r"entrada|lixeira|ajustes|segredos|acesso)\b|Errno|Traceback|\.(?:pdf|docx?|xlsx?|csv|json|sqlite)\b)")
+
+
 def sanear_texto(texto):
     """Texto de situação ou de evento para convidado: corta o ' Detalhe: ...' e deixa só a referência."""
     if not isinstance(texto, str):
@@ -136,13 +147,20 @@ def evento_para_convidado(evento):
     dados = evento.get('dados') if isinstance(evento, dict) else None
     if not isinstance(dados, dict):
         return evento
-    dados = dict(dados)
-    publica = dados.pop('publica', None)
-    dados.pop('ref', None)
+    ref = dados.get('ref')
+    publica = dados.get('publica')
     if publica:
-        dados['mensagem'] = publica
-    elif 'mensagem' in dados:
+        return {**evento, 'dados': {**{k: v for k, v in dados.items() if k not in ('publica', 'ref', 'detalhe')}, 'mensagem': publica}}
+    if evento.get('tipo') == 'erro':
+        # Todo evento de erro sem `publica` é falha interna para o convidado: cobre eventos gravados antes desta regra e qualquer
+        # ponto que um dia esqueça de declará-la. O texto cru nunca sai.
+        sufixo = f' (ref. {ref})' if isinstance(ref, str) and re.fullmatch(r'[0-9a-f]{8}', ref) else ' (sem referência)'
+        return {**evento, 'dados': {'mensagem': FALHA_INTERNA + sufixo}}
+    dados = {k: v for k, v in dados.items() if k not in ('ref', 'detalhe')}
+    if isinstance(dados.get('mensagem'), str):
         dados['mensagem'] = sanear_texto(dados['mensagem'])
+        if evento.get('tipo') == 'aviso' and SUSPEITO.search(dados['mensagem']):
+            dados['mensagem'] = AVISO_OMITIDO
     return {**evento, 'dados': dados}
 
 
@@ -297,7 +315,7 @@ class Conversas:
                     metadata['estado'] = 'interrompido'
                     metadata['situacao'] = montar_situacao('interrompido', 'O backend foi reiniciado durante a execução. '
                         'O que já foi concluído foi preservado; você pode tentar novamente.', 'reinicio')
-                    self._event(identifier, 'erro', {'mensagem': 'Backend reiniciado durante a execução; saída parcial preservada.'})
+                    self._event(identifier, 'erro', evento_curado('Backend reiniciado durante a execução; saída parcial preservada.'))
                     self._save(identifier)
             ctx = self.contexts[identifier]
             lixeira.conferir_disponivel(self.root, ctx['meta']['caso'], conversa=identifier)
@@ -857,7 +875,7 @@ class Conversas:
             self._execute_stages(identifier, question, rpc)
         except trava_cadastro.TravaInterrompida as exc:
             # Cancelled, or the Mesa is shutting down, while waiting to freeze: nothing was frozen.
-            self._event(identifier, 'aviso', {'mensagem': seguro(exc)})
+            self._event(identifier, 'aviso', evento_curado(seguro(exc)))  # fixed texts of TravaInterrompida
             self._finish(identifier, 'interrompido')
         except Exception as exc:
             falha = registrar_falha(exc)
@@ -933,7 +951,7 @@ class Conversas:
                     if rpc.closed or self.stopping or not ctx['busy']:
                         return
                     if time.monotonic() >= deadline:
-                        self._event(identifier, 'erro', {'mensagem': 'Tempo máximo de 10 minutos para esta etapa excedido; saídas parciais preservadas.'})
+                        self._event(identifier, 'erro', evento_curado('Tempo máximo de 10 minutos para esta etapa excedido; saídas parciais preservadas.'))
                         self._registrar_causa(ctx, 'tempo_etapa')
                         ctx['cancel'] = True
                         self._interrupt(identifier)
@@ -960,7 +978,8 @@ class Conversas:
                 publication = pipeline.finalize()
                 break
             except (ValueError, OSError, KeyError) as exc:
-                self._event(identifier, 'aviso', {'mensagem': 'Falha na verificação/publicação: ' + seguro(exc)})
+                self._event(identifier, 'aviso', registrar_falha('Falha na verificação/publicação: ' + str(exc),
+                                                 publica='Falha na verificação ou na publicação da resposta.'))
                 if attempt == 2:
                     raise
         if ctx.get('cancel'):
@@ -987,7 +1006,7 @@ class Conversas:
                     if ctx.get('turn_done'):
                         ctx['turn_result'] = {'status': 'failed'}
                         ctx['turn_done'].set()
-                    self._event(identifier, 'erro', {'mensagem': 'Conexão com a API perdida. Saídas parciais preservadas.'})
+                    self._event(identifier, 'erro', evento_curado('Conexão com a API perdida. Saídas parciais preservadas.'))
                     self._registrar_causa(ctx, 'conexao')
                     self._finish(identifier, 'erro')
             return
@@ -1035,7 +1054,8 @@ class Conversas:
         elif method == 'item/usage':
             self._uso(identifier, params)
         elif method in ('error', 'warning'):
-            self._event(identifier, 'aviso', {'mensagem': seguro(params.get('message', params.get('reason', method)))})
+            self._event(identifier, 'aviso', registrar_falha(params.get('message', params.get('reason', method)),
+                                                 publica='Aviso do provedor recebido; o detalhe está no registro do servidor.'))
 
     def _uso(self, identifier, params):
         """Token usage per provider call: one new file per call and running totals for the round."""
@@ -1046,7 +1066,8 @@ class Conversas:
             gasto = custo.custo_da_chamada(self.root, modelo, uso, ctx.get('modelo_cobrado'))
         except (ValueError, OSError) as exc:
             gasto = None
-            self._event(identifier, 'aviso', {'mensagem': 'Custo da chamada não calculado: ' + seguro(exc)})
+            self._event(identifier, 'aviso', registrar_falha('Custo da chamada não calculado: ' + str(exc),
+                                                 publica='Custo da chamada não calculado.'))
         with self.lock:
             ctx['uso_numero'] = ctx.get('uso_numero', 0) + 1
             numero = ctx['uso_numero']
@@ -1070,7 +1091,8 @@ class Conversas:
                     falha = seguro(exc)
             self._save(identifier)
         if falha:
-            self._event(identifier, 'aviso', {'mensagem': f'Registro de uso da API {numero:04} não gravado: {falha}'})
+            self._event(identifier, 'aviso', registrar_falha(f'Registro de uso da API {numero:04} não gravado: {falha}',
+                                                 publica=f'Registro de uso da API {numero:04} não gravado.'))
         self._event(identifier, 'uso', {'etapa': registro['etapa'], 'modelo': modelo, 'uso': uso, 'total': total,
                                         **({'custo_brl': gasto['brl']} if gasto else {})})
         self._aplicar_limites(identifier, uso, total, gasto)
@@ -1091,7 +1113,8 @@ class Conversas:
             valores = limites.ler(self.root)
             dia = limites.somar_dia(self.root, custo.tokens_totais(uso))
         except (ValueError, OSError) as exc:
-            self._event(identifier, 'aviso', {'mensagem': 'Limites de tokens não conferidos: ' + seguro(exc)})
+            self._event(identifier, 'aviso', registrar_falha('Limites de tokens não conferidos: ' + str(exc),
+                                                 publica='Limites de tokens não conferidos.'))
             valores, dia = {'tokens_por_consulta': None, 'tokens_por_dia': None}, 0
         consulta = custo.tokens_totais(total)
         motivo = causa = None
@@ -1117,7 +1140,7 @@ class Conversas:
         if not motivo or ctx.get('cancel'):
             return
         self._registrar_causa(ctx, causa, motivo + ' O que já foi concluído foi preservado.')
-        self._event(identifier, 'erro', {'mensagem': motivo + ' A execução foi interrompida; saídas parciais preservadas.'})
+        self._event(identifier, 'erro', evento_curado(motivo + ' A execução foi interrompida; saídas parciais preservadas.'))
         ctx['cancel'] = True
         # Interrupt outside the provider worker that delivered this usage notification.
         threading.Thread(target=self._interrupt, args=(identifier,), daemon=True).start()
@@ -1202,7 +1225,7 @@ class Conversas:
                 content = [{'type': 'inputText', 'text': limitar_texto(json.dumps(result, ensure_ascii=False))}] + images
                 answer = {'success': result.get('estado') != 'erro_consulta', 'contentItems': content}
             except Exception as exc:
-                self._event(identifier, 'aviso', {'mensagem': seguro(exc)})
+                self._event(identifier, 'aviso', registrar_falha(exc, publica='Falha ao executar a ferramenta de consulta.'))
                 answer = {'success': False, 'contentItems': [{'type': 'inputText', 'text': seguro(exc)}]}
             try:
                 self.rpc.send({'id': message['id'], 'result': answer})
