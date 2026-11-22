@@ -21,7 +21,7 @@ import socket
 import sys
 import threading
 import time
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 import webbrowser
 
 from comum import ROOT, dentro, ler_json, sha256
@@ -40,6 +40,7 @@ import rotas_redacao
 import rotas_tabelas
 import rascunhos
 import erros
+import fila_extracao
 from codex_apuracao import Conversas
 import acesso
 import lixeira
@@ -63,8 +64,11 @@ MAXIMO_SESSOES_ORIGINAIS = 5000
 # After SIGTERM (docker stop sends SIGKILL 10 s later), Ctrl+C or "Encerrar Mesa": seconds for
 # executions to stop and for operations holding the cadastro lock to finish.
 PRAZO_ENCERRAMENTO = 8.0
+PRAZO_FECHAR_FILA = 5.0  # server_close without encerrar(): the extraction queue's coordinator stops
 # Case data answered by ``executar`` (frozen analyses, intake, search index).
 CONSULTA_OPERACOES = ('analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario', 'preparar-pdfs')
+# Answered by the extraction queue in do_POST, outside cadastro_lock (executar still serves direct calls).
+CADASTRO_NA_FILA = ('cadastrar', 'preparar-pdfs')
 # Every POST operation behind a session; anything else is 404 before the body is parsed.
 OPERACOES_API = (*rotas_conversa.OPERACOES, *apuracao.OPERACOES, *apuracao.OPERACOES_NOTAS, *CADERNO_OPERACOES,
                  *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, *rotas_redacao.OPERACOES,
@@ -191,7 +195,7 @@ class Servidor(ThreadingHTTPServer):
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         super().server_bind()
 
-    def __init__(self, address, root=ROOT, modo='local', origem=None):
+    def __init__(self, address, root=ROOT, modo='local', origem=None, extracao=None):
         if modo not in MODOS:
             raise ValueError('Modo inválido: use local, local-contas ou piloto.')
         if modo == 'piloto':
@@ -209,7 +213,17 @@ class Servidor(ThreadingHTTPServer):
         self._originais = OrderedDict()
         self._originais_lock = threading.Lock()
         self.requisicoes = _EmCurso()
+        # Extraction and OCR of uploads (CONF-02): 'processos' runs them in separate processes
+        # (main); 'local' in threads of this process (tests, the frozen Windows desk).
+        self.fila = fila_extracao.Fila(self.root, modo=extracao or 'local')
         super().__init__(address, Handler)
+
+    def serve_forever(self, poll_interval=0.5):
+        # Batches left by a stop or a crash are finished once serving starts: after servir()'s
+        # start-up cleanup of the cadastro lock, which the publication would otherwise hold.
+        if fila_extracao.pendentes(self.root):
+            self.fila.iniciar()
+        super().serve_forever(poll_interval)
 
     def registrar_original(self, chave, evidencia_id):
         with self._originais_lock:
@@ -223,8 +237,11 @@ class Servidor(ThreadingHTTPServer):
             return frozenset(self._originais.get(chave, ()))
 
     def server_close(self):
-        # After encerrar() the threads already had their time: do not wait again.
-        self.conversas.close(prazo=0 if getattr(self, '_encerrado', False) else None)
+        # After encerrar() the threads already had their time: do not wait again. Otherwise the
+        # queue's coordinator gets a few seconds, so nothing writes in casos/.fila after the close.
+        encerrado = getattr(self, '_encerrado', False)
+        self.fila.encerrar(0 if encerrado else PRAZO_FECHAR_FILA)
+        self.conversas.close(prazo=0 if encerrado else None)
         super().server_close()
 
     def pedir_encerramento(self):
@@ -248,6 +265,8 @@ class Servidor(ThreadingHTTPServer):
             self.socket.close()
         except OSError:
             pass
+        # Files being read go back to the queue (no attempt counted); a publication in course ends.
+        self.fila.encerrar(prazo=max(0.0, limite - time.monotonic()))
         self.conversas.close(prazo=max(0.0, limite - time.monotonic()))
         livre = trava_cadastro.aguardar_livre(self.root, max(0.0, limite - time.monotonic()))
         # Then the answers of the requests that were running (a finished cadastro reaches the browser).
@@ -361,7 +380,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 # Static page without case data; the token stays in the path, read by entrar.js.
                 self._send(200, (ASSETS / 'entrar.html').read_bytes(), 'text/html; charset=utf-8')
                 return
-            if path in ('/', '/api/catalogo', '/api/integracao') and self._principal() is None:
+            if path in ('/', '/api/catalogo', '/api/integracao', '/api/fila') and self._principal() is None:
                 self._sem_principal(api=path != '/')
                 return
         if path == '/api/integracao':
@@ -371,6 +390,9 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                              'tabelas_apuracao': True, 'continuidade_resumo': True, 'conferencia_redacao': True, 'entrevistas': True,
                              'fontes_web': True,
                              'extracao_pdf': self.server.ambiente['extracao_pdf']})
+            return
+        if path == '/api/fila':
+            self._estado_da_fila()
             return
         if path == '/api/catalogo':
             try:
@@ -477,6 +499,9 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             elif operation == fontes_web.CAPTURAR:
                 # The fetch runs outside the cadastro lock; checking and publishing take it.
                 result = fontes_web.rota(self.server.root, operation, data, trava=self.server.cadastro_lock)
+            elif operation in CADASTRO_NA_FILA:
+                # Through the extraction queue: no lock is held while files are read (CONF-02).
+                result = self._cadastro_na_fila(operation, data)
             elif operation in rotas_gestao.OPERACOES:
                 result = self._gestao(operation, data, principal)
             elif operation in rotas_conversa.OPERACOES:
@@ -509,6 +534,35 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             mensagem = ('Falha ao processar a requisição no servidor.'
                         if convidado and not isinstance(exc, ValueError) else str(exc))
             self._json(400, {'estado': 'erro', 'erro': mensagem}, exc)
+
+    def _cadastro_na_fila(self, operation, data):
+        """Upload or PDF preparation through `server.fila`: the receipt, or the queue state if asynchronous."""
+        if operation == 'cadastrar':
+            return receber_documentos(self.server.root, data, fila=self.server.fila)
+        if not diagnostico()['extracao_pdf']['disponivel']:
+            raise ValueError('O extrator de PDF não está disponível nesta instância. Encerre a Mesa e abra pelo iniciador atualizado.')
+        if type(data.get('assincrono', False)) is not bool:
+            raise ValueError('Indicação de envio assíncrono inválida.')
+        lote = self.server.fila.preparar_pdfs(data.get('caso'))
+        if data.get('assincrono'):
+            return {'estado': 'enfileirado', **self.server.fila.consultar(lote=lote)}
+        return self.server.fila.aguardar(lote)
+
+    def _estado_da_fila(self):
+        """`GET /api/fila?lote=<id>` or `?caso=<id>`: state of the extraction queue (administrators).
+
+        Read only, no case content; the contract of each batch is in `fila_extracao`.
+        """
+        principal = self._principal()
+        if principal is None or principal['papel'] != 'admin':
+            self._proibido()
+            return
+        consulta = parse_qs(urlsplit(self.path).query)
+        lote, caso = (consulta.get(k, [None])[0] for k in ('lote', 'caso'))
+        try:
+            self._json(200, self.server.fila.consultar(lote=lote, caso=caso))
+        except ValueError as exc:
+            self._json(400, {'erro': str(exc)})
 
     def log_message(self, format, *args):
         # Do not print queries, source content or token to the terminal.
@@ -560,8 +614,10 @@ def main():
     args = parser.parse_args()
     if args.modo != 'piloto' and args.host != '127.0.0.1':
         raise SystemExit('Nos modos locais o servidor escuta somente em 127.0.0.1.')
+    # Extraction and OCR in separate processes; VLADO_EXTRACAO=local keeps them in threads.
     with Servidor((args.host, args.porta), root=Path(args.dados) if args.dados else ROOT,
-                  modo=args.modo, origem=args.origem) as server:
+                  modo=args.modo, origem=args.origem,
+                  extracao=os.environ.get('VLADO_EXTRACAO') or 'processos') as server:
         print(f'Mesa de apuração ({args.modo}): {server.origin}', flush=True)
         print('Encerre com Ctrl+C.', flush=True)
         if args.modo != 'piloto' and not args.sem_abrir:

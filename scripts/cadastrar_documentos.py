@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 from copy import deepcopy
 from datetime import datetime, timezone
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -88,11 +89,8 @@ def inventario(root, caso):
             'estado': 'cadastrado_aguardando_pergunta'}
 
 
-def cadastrar(root, caso, sources, *, titulo=None, natureza='nao_informada', novo=False, ocr_imagens=False,
-              modo_fontes=None, dominio_permitido=None):
-    """Register a batch. `ocr_imagens=True` explicitly asks for local OCR of standalone images.
-
-    `modo_fontes`/`dominio_permitido` are accepted only with `novo=True` (source mode is chosen at creation)."""
+def validar_pedido(caso, natureza, sources, novo, modo_fontes, dominio_permitido):
+    """Checks of a cadastro request that need neither files nor the case; returns the web mode."""
     if not isinstance(caso, str) or not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}', caso):
         raise ValueError('ID do caso: letras minúsculas, números, hífen ou underscore; até 64 caracteres.')
     if natureza not in ('publicos', 'sinteticos', 'nao_informada'):
@@ -101,25 +99,52 @@ def cadastrar(root, caso, sources, *, titulo=None, natureza='nao_informada', nov
         raise ValueError('Envie pelo menos um arquivo.')
     if not novo and (modo_fontes or dominio_permitido):
         raise ValueError('O modo de fontes (somente documentos ou documentos + web) só é escolhido na criação do caso.')
-    fontes_web = fontes_web_mod.definir_modo(modo_fontes, dominio_permitido) if novo else None
-    with _trava(root, operacao='cadastro'):
-        return _cadastrar(root, caso, sources, titulo, natureza, novo, ocr_imagens=bool(ocr_imagens),
-                          fontes_web=fontes_web)
+    return fontes_web_mod.definir_modo(modo_fontes, dominio_permitido) if novo else None
+
+
+def cadastrar(root, caso, sources, *, titulo=None, natureza='nao_informada', novo=False, ocr_imagens=False,
+              modo_fontes=None, dominio_permitido=None):
+    """Register a batch. `ocr_imagens=True` explicitly asks for local OCR of standalone images.
+
+    `modo_fontes`/`dominio_permitido` are accepted only with `novo=True` (source mode is chosen at creation).
+    Extraction and OCR run in this process before the cadastro lock is taken; only the publication
+    holds it. The Mesa sends its uploads through ``fila_extracao`` instead (separate processes)."""
+    fontes_web = validar_pedido(caso, natureza, sources, novo, modo_fontes, dominio_permitido)
+    plano = planejar(root, caso, sources, titulo=titulo, natureza=natureza, novo=novo,
+                     ocr_imagens=bool(ocr_imagens), fontes_web=fontes_web)
+    return executar_plano(root, plano)
+
+
+def plano_preparar_pdfs(root, caso):
+    """Plan to enrich this case's preserved PDFs; never inspect inactive cases or old rounds."""
+    if not isinstance(caso, str) or not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}', caso):
+        raise ValueError('Identificador de caso inválido.')
+    conferir_disponivel(root, caso)
+    manifest = ler_json(dentro(root, f'casos/{caso}/manifesto.json'))
+    sources = [dentro(root, d['arquivo']) for d in manifest['documentos']
+               if Path(d['arquivo']).suffix.lower() == '.pdf']
+    if not sources:
+        raise ValueError('Este caso não tem PDFs cadastrados para preparar.')
+    return planejar(root, caso, sources, natureza=manifest['natureza_informada'],
+                    operacao='preparacao_pdfs_cadastrados')
 
 
 def preparar_pdfs(root, caso):
-    """Enrich this case's preserved PDFs; never inspect inactive cases or old rounds."""
-    if not isinstance(caso, str) or not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}', caso):
-        raise ValueError('Identificador de caso inválido.')
-    with _trava(root, operacao='preparacao_pdfs'):
-        conferir_disponivel(root, caso)
-        manifest = ler_json(dentro(root, f'casos/{caso}/manifesto.json'))
-        sources = [dentro(root, d['arquivo']) for d in manifest['documentos']
-                   if Path(d['arquivo']).suffix.lower() == '.pdf']
-        if not sources:
-            raise ValueError('Este caso não tem PDFs cadastrados para preparar.')
-        return _cadastrar(root, caso, sources, None, manifest['natureza_informada'], False,
-                          operacao='preparacao_pdfs_cadastrados')
+    """Enrich this case's preserved PDFs (OCR included) with a new corpus version."""
+    return executar_plano(root, plano_preparar_pdfs(root, caso))
+
+
+def executar_plano(root, plano):
+    """Copy, extract (in this process, outside the lock) and publish (under the lock) a plan."""
+    with tempfile.TemporaryDirectory(prefix='vlado_cadastro_') as pasta:
+        trabalho = Path(pasta)
+        preparar_copias(plano, trabalho)
+        resultados = {item['indice']: extrair_item(tarefa(root, plano, item, trabalho), base=trabalho)
+                      for item in plano['itens'] if item['extrair']}
+        operacao = 'preparacao_pdfs' if plano['operacao'] == 'preparacao_pdfs_cadastrados' else 'cadastro'
+        with _trava(root, operacao=operacao):
+            # Copies, not hard links: a temporary folder carries a private ACL on Windows.
+            return publicar(root, plano, trabalho, resultados, ligar=False)
 
 
 def _precisa_reprocessar_ocr(info):
@@ -179,8 +204,60 @@ def _substituir_derivado(doc, entry):
     doc['derivados'].append(entry)
 
 
-def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_documentos', ocr_imagens=False,
-               fontes_web=None):
+def _tipo(sufixo):
+    sufixo = sufixo.lower()
+    if sufixo == '.pdf':
+        return 'pdf'
+    if sufixo in OFFICE:
+        return 'office'
+    if sufixo in ocr.EXTENSOES_IMAGEM:
+        return 'imagem'
+    return 'texto'
+
+
+def _radical(stem):
+    return ''.join(c if c.isalnum() or c in '-_' else '_' for c in stem)[:80] or 'documento'
+
+
+def _precisa_extrair(tipo, doc, operacao, ocr_imagens):
+    """Whether the working copy of a file is (re)made: the rules ``publicar`` applies again."""
+    if tipo == 'pdf':
+        # A repeated successful/empty/partial extraction is not silently replaced.
+        # Re-sending an errored PDF explicitly permits another attempt in a new batch.
+        existing = doc.get('extracao_pdf') if doc else None
+        reprocess = operacao == 'preparacao_pdfs_cadastrados' and _precisa_reprocessar_ocr(existing)
+        return not (existing and existing['estado'] != 'erro' and not reprocess)
+    if tipo == 'office':
+        # Same rule as PDF: a readable result is kept; re-sending a refused/failed file retries it.
+        existing = doc.get('extracao_office') if doc else None
+        return not (existing and existing['estado'] != 'erro')
+    if tipo == 'imagem' and ocr_imagens:
+        # OCR of standalone images only on explicit request; pending/failed attempts may be retried.
+        existing = doc.get('ocr_imagem') if doc else None
+        return not (existing and existing['estado'] not in ('pendente', 'erro'))
+    return False
+
+
+def _caso_vazio(destination, *, remover=False):
+    """No case there: the folder is absent, or only the empty ``cadastros/`` that an interrupted
+    publication of a new case leaves behind (it has no manifest and is in no catalog)."""
+    if not destination.exists():
+        return True
+    try:
+        itens = list(destination.iterdir())
+    except OSError:
+        return False
+    sobra = itens == [] or (len(itens) == 1 and itens[0].name == 'cadastros' and itens[0].is_dir()
+                            and not itens[0].is_symlink() and not any(itens[0].iterdir()))
+    if sobra and remover:
+        for item in itens:
+            item.rmdir()
+        destination.rmdir()
+    return sobra
+
+
+def _contexto(root, caso, new, title, *, remover_sobra=False):
+    """Catalog, catalog entry and manifest of the case, with the checks of every batch."""
     conferir_disponivel(root, caso)
     destination = dentro(root, f'casos/{caso}')
     catalog_path = dentro(root, 'casos/catalogo.json')
@@ -188,18 +265,12 @@ def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_do
     catalog = ler_json(catalog_path) if catalog_before else {'casos': []}
     entry = next((c for c in catalog['casos'] if c['id'] == caso), None)
     manifest_path = dentro(root, f'casos/{caso}/manifesto.json')
+    manifest_before = manifest = None
     if new:
-        if destination.exists() or entry:
+        if entry or not _caso_vazio(destination, remover=remover_sobra):
             raise ValueError('Caso já existe; selecione-o para acrescentar um lote.')
         if not isinstance(title, str) or not title.strip():
             raise ValueError('Informe o título do novo caso.')
-        manifest_before = None
-        manifest = {'versao': '1.0.0', 'caso_id': caso, 'titulo': title.strip(),
-                    'natureza_informada': nature, 'corpus_id': f'{caso}_v1',
-                    'fontes_web': fontes_web or fontes_web_mod.definir_modo(),
-                    'estado': 'preparado_sem_piloto_de_apuracao',
-                    'protocolo': {'piloto_estabilizado': False, 'teste_principal_autorizado': False},
-                    'documentos': [], 'registros_cadastro': []}
     else:
         if not entry or not destination.is_dir():
             raise ValueError('Caso inexistente; não cadastrar em outro caso automaticamente.')
@@ -207,43 +278,216 @@ def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_do
         manifest = ler_json(manifest_path)
         if manifest.get('caso_id') != caso or entry['manifesto'] != f'casos/{caso}/manifesto.json':
             raise ValueError('Catálogo e manifesto não correspondem ao caso.')
+    return {'destination': destination, 'catalog_path': catalog_path, 'catalog_before': catalog_before,
+            'catalog': catalog, 'entry': entry, 'manifest_path': manifest_path,
+            'manifest_before': manifest_before, 'manifest': manifest}
+
+
+def planejar(root, caso, sources, *, titulo=None, natureza='nao_informada', novo=False,
+             operacao='recepcao_documentos', ocr_imagens=False, fontes_web=None):
+    """Check a batch and decide what to extract, without the cadastro lock. JSON-serializable.
+
+    Same checks and messages as before (formats, limit, case); ``publicar`` repeats them under
+    the lock against the manifest of that moment, so a plan never publishes a stale decision.
+    Each file gets a provisional identifier for its working copy, replaced by the final one
+    (D001, D002...) when it is published.
+    """
+    ctx = _contexto(root, caso, novo, titulo)
+    manifest = ctx['manifest']
+    if manifest is not None:
         list(arquivos_do_corpus(root, manifest))
-    previous = deepcopy(manifest)
-    known = {d['sha256']: d for d in manifest['documentos']}
-    used = {d['id'] for d in manifest['documentos']}
-    batch = uuid.uuid4().hex
-    prefix = f'casos/{caso}/cadastros/{batch}'
-    incoming, receipts = [], []
-    pdfs, offices, images = {}, {}, {}
-    for item in sources:
+    known = {d['sha256']: d for d in manifest['documentos']} if manifest else {}
+    vistos, itens = set(), []
+    for indice, item in enumerate(sources):
         source = Path(item).resolve()
         if not source.is_file() or source.suffix.lower() not in ACEITOS:
             raise ValueError(f'Lote não cadastrado: arquivo ausente ou formato não aceito: {source.name}. Nenhum arquivo deste lote foi confirmado.')
         digest = sha256(source)
+        doc, primeira = known.get(digest), digest not in vistos
+        vistos.add(digest)
+        tipo = _tipo(source.suffix)
+        itens.append({'indice': indice, 'nome': source.name, 'origem': str(source), 'sha256': digest,
+                      'bytes': source.stat().st_size, 'sufixo': source.suffix.lower(),
+                      'radical': _radical(source.stem), 'tipo': tipo,
+                      'novo': doc is None and primeira,
+                      'extrair': primeira and _precisa_extrair(tipo, doc, operacao, ocr_imagens),
+                      'leitura': doc['arquivo'] if doc else None, 'copia': None,
+                      'provisorio': 'PROVISORIO' + uuid.uuid4().hex.upper()})
+    maximum = ler_json(root / 'configuracao.json')['maximo_documentos_inicial']
+    if len(known) + sum(item['novo'] for item in itens) > maximum:
+        raise ValueError(f'Lote não cadastrado: ultrapassaria o limite de {maximum} documentos. Nenhum arquivo deste lote foi confirmado.')
+    return {'esquema': 1, 'lote': uuid.uuid4().hex, 'caso': caso, 'novo': bool(novo),
+            'titulo': titulo, 'natureza': natureza, 'operacao': operacao, 'ocr_imagens': bool(ocr_imagens),
+            'fontes_web': fontes_web, 'recebido_em_utc': datetime.now(timezone.utc).isoformat(),
+            'manifesto_sha256': hashlib.sha256(ctx['manifest_before']).hexdigest() if ctx['manifest_before'] else None,
+            'itens': itens}
+
+
+def preparar_copias(plano, trabalho, *, mover=False):
+    """Stage each new original in ``trabalho`` (named with its provisional identifier) and check it.
+
+    ``mover``: the source already lives in ``trabalho`` (a Mesa upload in the queue): rename it.
+    """
+    trabalho = Path(trabalho)
+    for item in plano['itens']:
+        if not item['novo']:
+            continue
+        relativo = f'originais/{item["indice"]}/{item["provisorio"]}_{item["radical"]}{item["sufixo"]}'
+        target = trabalho / relativo
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if mover:
+            os.replace(item['origem'], target)
+        else:
+            shutil.copyfile(item['origem'], target)
+        if sha256(target) != item['sha256']:
+            raise ValueError('Lote não cadastrado: cópia divergente; nenhum arquivo confirmado.')
+        item['copia'] = relativo
+
+
+def tarefa(root, plano, item, trabalho):
+    """What the extraction of one file needs (paths only; it never reads the manifest)."""
+    origem = Path(trabalho) / item['copia'] if item['copia'] else dentro(root, item['leitura'])
+    tipo = item['tipo']
+    sufixo = Path(item['leitura']).suffix if item['leitura'] else item['sufixo']
+    nome = {'pdf': 'texto_pdf', 'imagem': 'texto_ocr'}.get(tipo) or f'texto_{formato_office(sufixo)}'
+    destino = Path(trabalho) / f'derivados/{item["indice"]}/{item["provisorio"]}_{nome}.md'
+    return {'lote': plano['lote'], 'indice': item['indice'], 'tipo': tipo, 'origem': str(origem),
+            'destino': str(destino), 'identificador': item['provisorio']}
+
+
+def extrair_item(tarefa, *, base=None, paralelo=None, progresso=None):
+    """Make the working copy of one file: the only extraction step, in whatever process runs it.
+
+    Runs in the command line's own process, in a thread of the Mesa (local queue) or in
+    ``trabalhador_extracao`` (separate process). Never touches the manifest or the lock.
+    Returns ``{'resultado': outcome, 'derivado': path of the copy relative to base, or None}``.
+    """
+    origem, destino = Path(tarefa['origem']), Path(tarefa['destino'])
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    with ocr.execucao(paralelo=paralelo, progresso=progresso):
+        if tarefa['tipo'] == 'pdf':
+            resultado = extrair_pdf(origem, tarefa['identificador'], destino)
+        elif tarefa['tipo'] == 'office':
+            resultado = extrair_office(origem, tarefa['identificador'], destino)
+        elif tarefa['tipo'] == 'imagem':
+            resultado = ocr.ocr_imagem(origem, tarefa['identificador'], destino)
+        else:
+            raise ValueError('Tipo de extração desconhecido.')
+    derivado = None
+    if destino.is_file():
+        derivado = destino.relative_to(base).as_posix() if base else str(destino)
+    return {'resultado': resultado, 'derivado': derivado}
+
+
+def resultado_sem_extracao(tipo, sufixo, mensagem):
+    """Outcome recorded when a file's extraction could not run (the original stays preserved)."""
+    if tipo == 'pdf':
+        return {'estado': 'erro', 'paginas_pdf': None, 'paginas_com_texto': 0, 'paginas_texto_nativo': [],
+                'paginas_ocr': [], 'paginas_sem_texto': [], 'paginas_com_erro': [], 'ocr': False,
+                'ocr_tentado': False, 'ocr_motor': None, 'protegido': False, 'paginas_origem': {},
+                'conferencia_humana': 'nao_realizada', 'metodo': None, 'mensagem': mensagem}
+    if tipo == 'office':
+        from extrair_office import _resultado_base
+        return {**_resultado_base(formato_office(sufixo)), 'mensagem': mensagem}
+    return {'estado': 'erro', 'origem': 'ocr', 'motor': None, 'versoes': {}, 'idiomas': None, 'linhas': 0,
+            'metodo': None, 'mensagem': mensagem, 'avisos': [], 'aviso_conferencia': ocr.AVISO_OCR_IMAGEM,
+            'conferencia_humana': 'nao_realizada'}
+
+
+def _trazer(origem, destino, ligar):
+    """Put a staged file in the batch: hard link inside the same volume, else a copy."""
+    if ligar:
+        try:
+            os.link(origem, destino)
+            return
+        except OSError:
+            pass
+    shutil.copyfile(origem, destino)
+
+
+def _extracao(item, resultados, trabalho, tipo, sufixo, identifier):
+    """(outcome, derivative text) for a document; the provisional identifier becomes the final one."""
+    if item is None or item['indice'] not in resultados:
+        # The manifest changed during the processing (another batch, a reprocessing) in a way
+        # the plan did not foresee: register the original and say why its copy is missing.
+        return resultado_sem_extracao(tipo, sufixo, 'Extração não executada neste lote: o acervo mudou durante o '
+                                      'processamento. O original está preservado; envie o arquivo de novo.'), None
+    obtido = resultados[item['indice']]
+    resultado = json.loads(json.dumps(obtido['resultado'], ensure_ascii=False).replace(item['provisorio'], identifier))
+    texto = None
+    if obtido.get('derivado'):
+        # Bytes, not text: the copy keeps exactly the bytes the extractor wrote.
+        texto = (Path(trabalho) / obtido['derivado']).read_bytes().replace(item['provisorio'].encode('ascii'),
+                                                                           identifier.encode('ascii'))
+    return resultado, texto
+
+
+def _gravar_derivado(target, dados):
+    target.parent.mkdir(exist_ok=True)
+    with target.open('xb') as stream:
+        stream.write(dados)
+
+
+def publicar(root, plano, trabalho, resultados, *, ligar=False):
+    """Publish a planned batch; the caller holds the cadastro lock. All of it or none.
+
+    New or duplicate, final IDs and whether a document takes the working copy made for it are
+    decided here, against the manifest of this moment, with the same rules as always: a batch
+    planned while another one was published stays consistent. ``resultados[indice]`` are the
+    working copies made outside the lock (``extrair_item``); ``ligar`` hard-links the staged
+    files into the batch (queue, same volume) instead of copying them.
+    """
+    caso, new, nature, operacao = plano['caso'], plano['novo'], plano['natureza'], plano['operacao']
+    ctx = _contexto(root, caso, new, plano['titulo'], remover_sobra=True)
+    destination, catalog_path, catalog_before = ctx['destination'], ctx['catalog_path'], ctx['catalog_before']
+    catalog, entry, manifest_path, manifest_before = ctx['catalog'], ctx['entry'], ctx['manifest_path'], ctx['manifest_before']
+    if new:
+        manifest = {'versao': '1.0.0', 'caso_id': caso, 'titulo': plano['titulo'].strip(),
+                    'natureza_informada': nature, 'corpus_id': f'{caso}_v1',
+                    'fontes_web': plano.get('fontes_web') or fontes_web_mod.definir_modo(),
+                    'estado': 'preparado_sem_piloto_de_apuracao',
+                    'protocolo': {'piloto_estabilizado': False, 'teste_principal_autorizado': False},
+                    'documentos': [], 'registros_cadastro': []}
+    else:
+        manifest = ctx['manifest']
+        if hashlib.sha256(manifest_before).hexdigest() != plano.get('manifesto_sha256'):
+            list(arquivos_do_corpus(root, manifest))  # changed since the plan: check the corpus again
+    previous = deepcopy(manifest)
+    known = {d['sha256']: d for d in manifest['documentos']}
+    used = {d['id'] for d in manifest['documentos']}
+    batch = plano['lote']
+    prefix = f'casos/{caso}/cadastros/{batch}'
+    incoming, receipts, fontes = [], [], {}
+    pdfs, offices, images = {}, {}, {}
+    for item in plano['itens']:
+        digest = item['sha256']
         if digest in known:
             doc, status = known[digest], 'duplicado'
         else:
+            if not item.get('copia'):
+                raise ValueError('Lote não cadastrado: o acervo mudou durante o processamento; envie os arquivos de novo.')
             number = 1
             while f'D{number:03d}' in used:
                 number += 1
             identifier = f'D{number:03d}'
             used.add(identifier)
-            stem = ''.join(c if c.isalnum() or c in '-_' else '_' for c in source.stem)[:80] or 'documento'
-            doc = {'id': identifier, 'arquivo': f'{prefix}/originais/{identifier}_{stem}{source.suffix.lower()}',
-                   'sha256': digest, 'bytes': source.stat().st_size, 'nome_recebido': source.name,
+            doc = {'id': identifier, 'arquivo': f'{prefix}/originais/{identifier}_{item["radical"]}{item["sufixo"]}',
+                   'sha256': digest, 'bytes': item['bytes'], 'nome_recebido': item['nome'],
                    'origem_informada': None, 'natureza_informada': nature, 'paginas_pdf': None, 'derivados': []}
-            incoming.append((source, doc))
+            incoming.append((item, doc))
             manifest['documentos'].append(doc)
             known[digest] = doc
             status = 'cadastrado'
-        receipts.append({'nome_recebido': doc.get('nome_recebido', source.name) if operacao == 'preparacao_pdfs_cadastrados' else source.name,
+        receipts.append({'nome_recebido': doc.get('nome_recebido', item['nome']) if operacao == 'preparacao_pdfs_cadastrados' else item['nome'],
                          'documento_id': doc['id'], 'sha256': digest,
-                         'bytes': source.stat().st_size, 'estado': status})
-        if source.suffix.lower() == '.pdf':
+                         'bytes': item['bytes'], 'estado': status})
+        if item['indice'] in resultados:
+            fontes.setdefault(doc['id'], item)  # the item whose working copy this document may take
+        if item['tipo'] == 'pdf':
             pdfs[doc['id']] = doc
-        elif source.suffix.lower() in OFFICE:
+        elif item['tipo'] == 'office':
             offices[doc['id']] = doc
-        elif source.suffix.lower() in ocr.EXTENSOES_IMAGEM:
+        elif item['tipo'] == 'imagem':
             images[doc['id']] = doc
     maximum = ler_json(root / 'configuracao.json')['maximo_documentos_inicial']
     if len(manifest['documentos']) > maximum:
@@ -251,27 +495,23 @@ def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_do
     with pasta_preparacao(root / 'casos', '.lote_') as temp:
         work = Path(temp) / 'lote'
         work.mkdir()
-        for source, doc in incoming:
+        for item, doc in incoming:
             target = work / 'originais' / Path(doc['arquivo']).name
             target.parent.mkdir(exist_ok=True)
-            shutil.copyfile(source, target)
+            _trazer(Path(trabalho) / item['copia'], target, ligar)
             if sha256(target) != doc['sha256']:
                 raise ValueError('Lote não cadastrado: cópia divergente; nenhum arquivo confirmado.')
-        copied = {doc['id'] for _, doc in incoming}
         processed = 0
         for identifier, doc in pdfs.items():
-            # A repeated successful/empty/partial extraction is not silently replaced.
-            # Re-sending an errored PDF explicitly permits another attempt in a new batch.
             existing = doc.get('extracao_pdf')
             reprocess = operacao == 'preparacao_pdfs_cadastrados' and _precisa_reprocessar_ocr(existing)
             if existing and existing['estado'] != 'erro' and not reprocess:
                 continue
-            source = (work / 'originais' / Path(doc['arquivo']).name if identifier in copied
-                      else dentro(root, doc['arquivo']))
-            target = work / 'derivados' / f'{identifier}_texto_pdf.md'
-            doc['extracao_pdf'] = extrair_pdf(source, identifier, target)
+            doc['extracao_pdf'], texto = _extracao(fontes.get(identifier), resultados, trabalho, 'pdf', '.pdf', identifier)
             doc['paginas_pdf'] = doc['extracao_pdf']['paginas_pdf']
-            if target.is_file():
+            if texto is not None:
+                target = work / 'derivados' / f'{identifier}_texto_pdf.md'
+                _gravar_derivado(target, texto)
                 _substituir_derivado(doc, {'arquivo': f'{prefix}/derivados/{target.name}', 'sha256': sha256(target),
                                            'tipo': 'texto_extraido_pdf', 'origem_sha256': doc['sha256'],
                                            'metodo': doc['extracao_pdf']['metodo'],
@@ -279,16 +519,15 @@ def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_do
             processed += 1
         office_processed = 0
         for identifier, doc in offices.items():
-            # Same rule as PDF: a readable result is kept; re-sending a refused/failed file retries it.
             existing = doc.get('extracao_office')
             if existing and existing['estado'] != 'erro':
                 continue
-            source = (work / 'originais' / Path(doc['arquivo']).name if identifier in copied
-                      else dentro(root, doc['arquivo']))
-            kind = formato_office(Path(doc['arquivo']).suffix)
-            target = work / 'derivados' / f'{identifier}_texto_{kind}.md'
-            doc['extracao_office'] = extrair_office(source, identifier, target)
-            if target.is_file():
+            sufixo = Path(doc['arquivo']).suffix
+            kind = formato_office(sufixo)
+            doc['extracao_office'], texto = _extracao(fontes.get(identifier), resultados, trabalho, 'office', sufixo, identifier)
+            if texto is not None:
+                target = work / 'derivados' / f'{identifier}_texto_{kind}.md'
+                _gravar_derivado(target, texto)
                 info = doc['extracao_office']
                 _substituir_derivado(doc, {'arquivo': f'{prefix}/derivados/{target.name}', 'sha256': sha256(target),
                                            'tipo': f'texto_extraido_{kind}', 'origem': info['origem'],
@@ -296,16 +535,15 @@ def _cadastrar(root, caso, sources, title, nature, new, *, operacao='recepcao_do
                                            'origem_sha256': doc['sha256'], 'metodo': info['metodo']})
             office_processed += 1
         image_processed = 0
+        ocr_imagens = plano['ocr_imagens']
         for identifier, doc in (images.items() if ocr_imagens else ()):
-            # OCR of standalone images only on explicit request; pending/failed attempts may be retried.
             existing = doc.get('ocr_imagem')
             if existing and existing['estado'] not in ('pendente', 'erro'):
                 continue
-            source = (work / 'originais' / Path(doc['arquivo']).name if identifier in copied
-                      else dentro(root, doc['arquivo']))
-            target = work / 'derivados' / f'{identifier}_texto_ocr.md'
-            doc['ocr_imagem'] = ocr.ocr_imagem(source, identifier, target)
-            if target.is_file():
+            doc['ocr_imagem'], texto = _extracao(fontes.get(identifier), resultados, trabalho, 'imagem', '.png', identifier)
+            if texto is not None:
+                target = work / 'derivados' / f'{identifier}_texto_ocr.md'
+                _gravar_derivado(target, texto)
                 info = doc['ocr_imagem']
                 _substituir_derivado(doc, {'arquivo': f'{prefix}/derivados/{target.name}', 'sha256': sha256(target),
                                            'tipo': 'texto_ocr_imagem', 'origem': 'ocr',
