@@ -33,14 +33,15 @@ class ExemploDeAmbienteLocalTest(unittest.TestCase):
 
     def test_nao_colide_com_a_homologacao_que_ja_roda_no_computador(self):
         # A homologação do dono publica 127.0.0.1:443 e 127.0.0.1:8080 e usa a imagem vlado:local.
-        self.assertTrue(self.env['VLADO_PORTA_HTTPS'].startswith('127.0.0.1:'), 'só o próprio computador alcança')
-        self.assertNotIn(self.env['VLADO_PORTA_HTTPS'].split(':')[-1], ('80', '443', '8080', '8443'))
+        self.assertRegex(self.env['VLADO_LOCAL_PORTA'], r'^\d{4,5}$', 'só o número; o endereço 127.0.0.1 fica no compose.local.yml')
+        self.assertNotIn(self.env['VLADO_LOCAL_PORTA'], ('80', '443', '8080', '8443'))
         self.assertNotIn('VLADO_PORTA_HTTP', self.env, 'a porta HTTP fica fechada (compose.local.yml)')
-        self.assertNotEqual(self.env['VLADO_VERSAO'], 'local', 'não pode reaproveitar a imagem vlado:local')
+        self.assertNotIn('VLADO_PORTA_HTTPS', self.env, 'o formato antigo (host:porta) é recusado pelo script')
+        self.assertRegex(self.env['VLADO_VERSAO'], r'^local-[A-Za-z0-9_.-]+$', 'só etiqueta local-*: nunca vlado:local')
         # .localhost: separa os cookies do `localhost` da homologação (cookie não distingue porta).
         self.assertTrue(self.env['VLADO_DOMINIO'].endswith('.localhost'))
         self.assertEqual(self.env['VLADO_ORIGEM'],
-                         f"https://{self.env['VLADO_DOMINIO']}:{self.env['VLADO_PORTA_HTTPS'].split(':')[-1]}")
+                         f"https://{self.env['VLADO_DOMINIO']}:{self.env['VLADO_LOCAL_PORTA']}")
 
     def test_usa_a_ca_interna_e_ambiente_sintetico(self):
         self.assertEqual(self.env['VLADO_CADDYFILE'], 'deploy/Caddyfile.interno')
@@ -73,11 +74,12 @@ class CamadaDoComposeLocalTest(unittest.TestCase):
 
     def test_so_a_porta_https_e_publicada_e_so_em_loopback(self):
         self.assertIn('ports: !override', self.texto)
-        self.assertIn('${VLADO_PORTA_HTTPS:-127.0.0.1:9443}:443', self.texto)
+        self.assertIn('"127.0.0.1:${VLADO_LOCAL_PORTA:-9443}:443"', self.texto)
+        self.assertNotIn('VLADO_PORTA_HTTPS:-', self.texto.replace('nem na variável VLADO_PORTA_HTTPS', ''))
         self.assertNotIn(':80"', self.texto)
 
     def test_pasta_de_backup_montada_no_backup_e_so_para_leitura_na_restauracao(self):
-        self.assertRegex(self.texto, r'(?s)backup:\s+volumes:\s+- \$\{VLADO_LOCAL_BACKUP_PASTA:\?[^}]+\}:/destino-backup\n')
+        self.assertRegex(self.texto, r'(?s)backup:\s+labels: \*dono_local\s+volumes:\s+- \$\{VLADO_LOCAL_BACKUP_PASTA:\?[^}]+\}:/destino-backup\n')
         self.assertRegex(self.texto, r'(?s)restauracao:.*:/destino-backup:ro\n')
 
     def test_nao_monta_segredos_nem_afrouxa_o_endurecimento(self):
@@ -118,7 +120,7 @@ class ScriptDoPowerShellTest(unittest.TestCase):
         self.assertIn("'deploy/ambientes/local.env'", self.texto)
         self.assertRegex(ler('.gitignore'), r'(?m)^/deploy/ambientes/\*\.env$')
         codigo = self.texto[self.texto.index('#>'):]  # o cabeçalho de ajuda diz que não toca nos vlado-homologacao-*
-        self.assertNotIn('homologacao', codigo)
+        self.assertNotIn('vlado-homologacao', codigo)  # a validação do nome vive em testes/test_ambiente_local_validacao.py
 
     def test_tem_todos_os_comandos_do_roteiro(self):
         for comando in ('subir', 'parar', 'status', 'registros', 'seguir', 'acessos', 'semear', 'backup', 'backups',

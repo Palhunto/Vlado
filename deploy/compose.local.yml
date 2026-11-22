@@ -6,16 +6,25 @@
 # ensaiar o backup e a restauração, não protege contra perda do computador (ver deploy/LOCAL.md).
 services:
   caddy:
-    # Só a porta HTTPS é publicada (e só em 127.0.0.1). A 80 fica fechada: o redirecionamento HTTP->HTTPS do Caddy
-    # aponta para a porta 443 padrão, que aqui é a da homologação, e não para a 9443 deste ambiente.
+    labels: &dono_local
+      # Marca de quem criou: o script deploy/vlado-local.ps1 só age em projeto cujos contêineres levam este rótulo.
+      com.vlado.ambiente-local: "1"
+    # Só a porta HTTPS é publicada, e SEMPRE em 127.0.0.1: o endereço está escrito aqui, não vem do ambiente, então
+    # nenhum valor em local.env (ou na variável VLADO_PORTA_HTTPS da sua sessão) expõe o Caddy a outras máquinas. A 80
+    # fica fechada: o redirecionamento HTTP->HTTPS do Caddy iria para a porta 443 padrão, que aqui é a da homologação.
     ports: !override
-      - "${VLADO_PORTA_HTTPS:-127.0.0.1:9443}:443"
+      - "127.0.0.1:${VLADO_LOCAL_PORTA:-9443}:443"
+
+  vlado:
+    labels: *dono_local
 
   backup:
+    labels: *dono_local
     volumes:
       - ${VLADO_LOCAL_BACKUP_PASTA:?defina VLADO_LOCAL_BACKUP_PASTA (pasta do computador para os backups de teste)}:/destino-backup
 
   restauracao:
+    labels: *dono_local
     volumes:
       # Só leitura: a restauração lê o backup, nunca o altera.
       - ${VLADO_LOCAL_BACKUP_PASTA:?defina VLADO_LOCAL_BACKUP_PASTA (pasta do computador para os backups de teste)}:/destino-backup:ro

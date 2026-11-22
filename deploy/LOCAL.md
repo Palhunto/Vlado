@@ -23,10 +23,10 @@ powershell -ExecutionPolicy Bypass -File deploy\vlado-local.ps1 <comando>
    impressa ou pen drive) e **nunca** no repositório, em e-mail ou em chat. Sem ela nenhum backup abre. Mais detalhes:
    `deploy/BACKUP.md`.
 3. **Rode `subir`** uma vez. Ele cria `deploy\ambientes\local.env` (fora do git) a partir do exemplo e para. Abra o
-   arquivo e preencha só duas linhas: `VLADO_LOCAL_BACKUP_PASTA` (uma pasta fora do repositório, com barras normais:
+   arquivo e preencha só duas linhas (o resto já vem validado): `VLADO_LOCAL_BACKUP_PASTA` (uma pasta fora do repositório, com barras normais:
    `C:/Users/voce/Vlado-backups-teste`) e `VLADO_BACKUP_DESTINATARIOS` (a chave **pública**, `age1...`).
 4. **Rode `subir` de novo.** Na primeira vez constrói a imagem (alguns minutos). No fim mostra o endereço:
-   **https://vlado.localhost:9443** (sempre `https://`, e com o `:9443`).
+   **https://vlado.localhost:9443** (sempre `https://`, e com a porta; a porta é a `VLADO_LOCAL_PORTA`).
 5. **Certificado:** rode `confiar-ca` (abaixo) e abra o endereço no Edge ou no Chrome.
 6. **Dados sintéticos:** `semear` cria dois casos e três contas fictícios e mostra, no seu terminal, os links de
    ativação (cada um vale uma vez; quem ativa define a senha). Pode repetir sem duplicar.
@@ -48,7 +48,21 @@ powershell -ExecutionPolicy Bypass -File deploy\vlado-local.ps1 <comando>
 | Restaurar o último backup | `restaurar` |
 | Apagar este ambiente inteiro (dados e CA) | `apagar-tudo` |
 
-Para mais de um ambiente local ou outro arquivo de ambiente: `-Projeto nome -ArquivoEnv caminho`.
+**Travas de segurança do script** (ele derruba, restaura e apaga volumes, então recusa antes de tocar no Docker):
+
+- só age em projeto cujo nome começa com `vlado-local`; qualquer outro (`vlado-homologacao`, por exemplo) é recusado, e
+  também um projeto que já tenha contêineres que este ambiente não criou (eles levam o rótulo `com.vlado.ambiente-local`).
+  Não existe parâmetro para apontar o script para a homologação. `-Projeto vlado-local-2 -ArquivoEnv outro.env` serve para
+  um segundo ambiente local, com outra porta e outra etiqueta de imagem no arquivo;
+- `VLADO_VERSAO` precisa começar com `local-`: vazia, `local` ou qualquer outra é recusada, para nunca regravar a imagem
+  `vlado:local` da homologação (o valor do arquivo vale mais que uma variável da sua sessão);
+- só o número da porta (`VLADO_LOCAL_PORTA`, de 1024 a 65535): o endereço `127.0.0.1` está escrito em
+  `deploy/compose.local.yml`, então nenhum valor no `local.env` publica a Mesa para a rede. `VLADO_PORTA_HTTPS` e
+  `VLADO_PORTA_HTTP` não valem aqui (recusadas);
+- `VLADO_ORIGEM` precisa ser `https://<domínio>:<porta>`, o Caddyfile precisa ser o da CA local e o ambiente precisa ser
+  `homologacao` ou `demonstracao` (dados sintéticos).
+
+Limite: a checagem de dono olha os contêineres do projeto, não os volumes; por isso o nome também é conferido.
 
 ## Certificado (a "CA local" do Caddy)
 
