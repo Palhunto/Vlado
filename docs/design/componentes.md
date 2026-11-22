@@ -1146,11 +1146,11 @@ Respostas:
 - **Título:** "Proteja a conta com um segundo passo" (W10, passo 2).
 - **Texto:** "Para quem é dono ou editor, o Vlado pede, além da senha, um código do aplicativo autenticador. Cadastre agora para abrir a Mesa."
 - **Os três passos:** os mesmos do cadastro, no próprio cartão em vez de diálogo, com a rubrica "PASSO 1 DE 3".
-- **Fim:** depois de "Já guardei", a página vai a `destino`, com a ação "Abrir a Mesa".
+- **Fim:** depois de "Já guardei", a ação "Abrir a Mesa" leva a `/`, que já abre a Mesa, porque a pendência acabou.
 - **Sair:** o link "Sair", no pé do cartão, encerra a sessão.
 - **Celular:** os passos são telas em sequência (W10, regra 8).
 
-Qualquer outra operação responde 403 `pendencia_de_conta` (contrato, 4.3). Se uma chegar, a Mesa volta a esta página. A rota da página e o `destino` com a pendência se combinam com Contas no commit da pendência.
+Qualquer outra operação responde 403 `pendencia_de_conta` (contrato, 4.3). Se uma chegar, a Mesa volta a esta página. Combinado com Contas em 22/11/2026: a página é `GET /conta/segundo-fator`. Ela serve o mesmo `entrar.html` de `/entrar`, sem dado de conta no HTML, e o script vê `pendencias: ["segundo_fator"]` em `GET /api/sessao`. Com a pendência, `GET /` responde 303 para ela. A sessão só alcança `GET /api/sessao`, `sessao-sair`, `conta-ver`, `conta-fator-iniciar` e `conta-fator-confirmar`. A página não precisa de mais nada: o texto não leva nome nem papel, e "Sair" usa `sessao-sair`. Não é uma seção da Mesa, e a Mesa (`index.html`) não abre com a pendência.
 
 Na atividade da Equipe: `fator_ativado` "Beltrano ativou o segundo fator"; `fator_removido` "Beltrano removeu o segundo fator"; `fator_codigos_gerados` "Beltrano gerou novos códigos de reserva".
 
