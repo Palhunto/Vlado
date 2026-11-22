@@ -59,6 +59,7 @@ tmp/
 /segredos/
 /ajustes/
 /acesso/
+/registro/
 
 # Pasta local com os artefatos de entrega (ZIP, APK, guias); fora do git
 /entrega_intercept/

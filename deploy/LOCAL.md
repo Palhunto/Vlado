@@ -41,6 +41,7 @@ powershell -ExecutionPolicy Bypass -File deploy\vlado-local.ps1 <comando>
 | Ler os registros (últimas 200 linhas) de tudo, ou de um serviço (`vlado`, `caddy`, `backup`) | `registros` ou `registros backup` |
 | Acompanhar ao vivo | `seguir` ou `seguir vlado` |
 | Ver quem acessou (IP, caminho sem o token, status) | `acessos` |
+| Ver quem entrou, administrou ou baixou (registro de auditoria, sem conteúdo) | `auditoria` |
 | Criar os casos e contas sintéticos (e rever os links de ativação) | `semear` |
 | Fazer um backup agora | `backup` |
 | Listar os backups | `backups` |
@@ -126,6 +127,14 @@ combinado, é uma decisão sua: crie `C:\Users\voce\.wslconfig` com `[wsl2]`, `m
 A vigia (`VLADO_VIGIA_PING_URL`) avisa um serviço de fora (healthchecks.io) que o app respondeu; sem esse endereço
 ela não roda, e aqui não faz sentido ter um: com o computador desligado nada avisaria. Vale então olhar `status`.
 Se quiser um receptor próprio no futuro, é só preencher a variável.
+
+## Registro de auditoria (quem entrou, administrou ou baixou)
+
+A Mesa grava um registro sem conteúdo (entradas, falhas, administração de contas e downloads, com horário, conta e IP) no volume
+`registro` deste ambiente, 30 dias por padrão; `deploy\vlado-local.ps1 auditoria` mostra as últimas 200 linhas e `apagar-tudo` o
+apaga junto com o resto. Ele **não entra no backup**. **Fora do Docker** (a Mesa instalada no Windows ou iniciada a partir do código,
+em modo local), o mesmo registro é criado em `registro/` dentro da pasta de dados (ao lado de `casos/`), com a chave das referências em
+`segredos/`; as duas pastas ficam fora do git. Detalhes: `deploy/MONITORAMENTO.md`.
 
 ## Portas e nomes
 
