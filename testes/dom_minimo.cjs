@@ -390,7 +390,7 @@ function criarMesa({url = 'http://127.0.0.1:8765/', papel = 'admin', modo = 'loc
     Option: function (texto = '', valor) { const op = doc.createElement('option'); op.textContent = texto; if (valor !== undefined) op.value = valor; return op; },
     MutationObserver: class { observe() {} disconnect() {} },
     ResizeObserver: class { observe() {} disconnect() {} },
-    matchMedia: consulta => ({matches: /min-width:\s*1051px/.test(consulta) ? desktop : /max-width/.test(consulta) ? !desktop : false,
+    matchMedia: consulta => ({matches: /min-width:\s*1024px/.test(consulta) ? desktop : /max-width/.test(consulta) ? !desktop : false,
       media: consulta, addEventListener() {}, removeEventListener() {}}),
     localStorage: {getItem: chave => guardado.get(chave) ?? null, setItem: (chave, valor) => guardado.set(chave, String(valor)), removeItem: chave => guardado.delete(chave)},
     history: {

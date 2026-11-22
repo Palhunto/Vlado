@@ -7,7 +7,6 @@ window.VLADO_I18N_EN = {
     "Pular para o conteúdo": "Skip to content",
     "Abrir navegação": "Open navigation",
     "Fechar navegação": "Close navigation",
-    "APURAÇÃO ATUAL": "CURRENT INVESTIGATION",
     "Escolha uma apuração": "Choose an investigation",
     "Documentos, achados e fontes": "Documents, findings and sources",
     "Modo claro": "Light mode",
@@ -16,6 +15,14 @@ window.VLADO_I18N_EN = {
     "Ativar modo escuro": "Switch to dark mode",
     "SUA MESA DE TRABALHO": "YOUR NEWSROOM DESK",
     "Nova apuração": "New investigation",
+    "Perguntar": "Ask",
+    "Quadros": "Boards",
+    "Pedidos e prazos": "Requests and deadlines",
+    "Trocar de apuração": "Switch investigation",
+    "Cota do mês": "Monthly quota",
+    "Cota esgotada": "Quota used up",
+    "Administrador": "Administrator",
+    "1 vence": "1 due",
     "Áreas de trabalho": "Work areas",
     "Visão geral": "Overview",
     "DA FONTE À HISTÓRIA": "FROM SOURCE TO STORY",
@@ -1237,6 +1244,12 @@ window.VLADO_I18N_EN = {
     "O que já foi feito e o que falta nesta apuração": "What is done and what is left in this investigation"
   },
   padroes: [
+    // Cota do mês na barra lateral
+    ["^R\\$ ([\\d.,]+) de R\\$ ([\\d.,]+)$", "R$ $1 of R$ $2"],
+    ["^(\\d+)% da cota usada$", "$1% of the quota used"],
+    ["^Cota do mês esgotada: R\\$ ([\\d.,]+) de R\\$ ([\\d.,]+)$", "Monthly quota used up: R$ $1 of R$ $2"],
+    // Contador de prazos na barra lateral
+    ["^(\\d+) vencem$", "$1 due"],
     // Frente C — Mesa móvel (visualizador de PDF)
     ["^de (\\d+)$", "of $1"],
     ["^Página (\\d+) de (\\d+)\\.$", "Page $1 of $2."],
@@ -1467,6 +1480,7 @@ window.VLADO_I18N_EN = {
     conflito: "Conflict: the note was changed in another tab.",
     ia_autenticacao: "The API refused the key, or no key is set. Fix the key under Connection and options.",
     ia_limite: "API usage or capacity limit reached. Wait and try again.",
+    ia_cobranca: "The AI provider account is out of credit or has reached its spending cap. Trying again will not help until billing is fixed on the provider's account; tell whoever administers the Mesa. What was already done was kept.",
     ia_conexao: "The connection to the API failed or timed out. Check the network and try again.",
     ia_servidor: "Temporary error on the provider's server. Try again.",
     fila_limite_envios: "Upload limit while files are being processed. {arquivos} file(s) are being read. The files already sent are saved; send the next ones when these finish. Documents, questions and the notebook keep working.",

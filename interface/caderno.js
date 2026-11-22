@@ -94,7 +94,7 @@
   async function catalog(){
     const selected=window.contextoCaso?.() ?? $('caderno-caso').value,request=++catalogVersion;
     loading=true;counts();
-    if(matchMedia('(min-width: 1051px)').matches){$('caderno-anterior').disabled=true;$('caderno-proximo').disabled=true;}
+    if(matchMedia('(min-width:1024px)').matches){$('caderno-anterior').disabled=true;$('caderno-proximo').disabled=true;}
     try{const response=await fetch('/api/catalogo'),data=await response.json();if(!response.ok)throw new Error(data.erro||'Falha ao listar apurações.');if(request!==catalogVersion||selected!==$('caderno-caso').value)return;$('caderno-caso').replaceChildren(new Option('Selecione uma apuração',''),...data.casos.map(c=>new Option(c.titulo,c.id)));if(data.casos.some(c=>c.id===selected))$('caderno-caso').value=selected;else if(selected){chosen.clear();$('caderno-resultados').replaceChildren();}await conversations();if($('caderno-caso').value)await search(0);counts();}catch(failure){if(request===catalogVersion)error(failure.message);}
     finally{if(request===catalogVersion){loading=false;counts();}}
   }

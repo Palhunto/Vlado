@@ -38,7 +38,16 @@ function networkFailure(message, cause) {
   failure.rede = true; failure.cause = cause;
   return failure;
 }
+// Operações que o servidor recusa ao papel convidado (fora de OPERACOES_CONVIDADO em scripts/rotas_contas.py). Pedi-las só gera uma linha
+// operacao_negada no registro de acessos; a recusa local tem a mesma forma da do servidor.
+const SO_ADMINISTRADOR = new Set(['ambiente', 'ia-config', 'analises', 'gerenciar-listar', 'inventario', 'apuracao-notas', 'diligencias-listar', 'caderno-listar']);
 async function api(operation, data, binary = false) {
+  if (document.body.dataset.papel === 'convidado' && SO_ADMINISTRADOR.has(operation)) {
+    const result = {estado: 'erro', erro: 'Operação não permitida para esta conta.', codigo: 'operacao_proibida'};
+    const failure = new Error(window.I18N?.erro ? window.I18N.erro(result) : result.erro);
+    failure.result = result;
+    throw failure;
+  }
   let response;
   try {
     response = await fetch(`/api/${operation}`, {method: 'POST',
@@ -559,12 +568,21 @@ const humanReviewStates = {
   sem_suporte_suficiente:['Sem suporte suficiente','Os documentos consultados não permitem sustentar a afirmação.']
 };
 // Human checks are solid marks; only a check against the original carries ✓ (text, not color).
+// Sinais dos selos como SVG embutido (a fonte da Mesa não tem ✕ ✎ ◐ e a CSP não aceita imagem data:); desenhos de docs/design/icones/.
+const SINAIS = {'sem-suporte': 'M7 7l10 10M17 7L7 17', parcial: 'M20 12a8 8 0 11-16 0 8 8 0 0116 0zM12 4v16M12 8h3M12 12h4M12 16h3', corrigido: 'M5 19l1-4L16 5l3 3L9 18zM14 7l3 3'};
+function sinalSvg(nome) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); svg.classList.add('mesa-sinal');
+  const caminho = document.createElementNS('http://www.w3.org/2000/svg', 'path'); caminho.setAttribute('d', SINAIS[nome]); svg.append(caminho);
+  return svg;
+}
 function humanReviewBadge(item) {
   const state = item.revisao_humana?.estado || 'pendente';
   const badge = element('span', undefined, `human-review-badge human-${state}`);
   if (state === 'conferida_no_original') {
     const mark = element('span', '✓'); mark.setAttribute('aria-hidden', 'true'); badge.append(mark, ' ');
   }
+  if (state === 'sem_suporte_suficiente') badge.append(sinalSvg('sem-suporte'), ' ');
   badge.append(humanReviewStates[state][0]);
   return badge;
 }
@@ -573,7 +591,7 @@ function findingsError(message = '') {
 }
 function clearFindings() {
   window.limparObservacoes?.();
-  findingEpoch++; findingSequence++; findingQuery = null; findingResult = null;
+  findingEpoch++; findingSequence++; findingQuery = null; findingResult = null; window.barraMesa?.definir('achados', '', 'pendencia');
   $('achados-resultados').replaceChildren(); $('achados-total').textContent = '';
   $('achados-inspecao').replaceChildren(); $('achados-inspecao').hidden = true;
   $('achados-briefings').replaceChildren(); selectedFindingId = null;
@@ -612,21 +630,25 @@ window.addEventListener('catalogo-carregado', areaHeading);
 // A única função de troca de área. Os módulos que precisam reagir a ela não a reatribuem: registram
 // ganchos, na ordem em que as camadas se empilhavam antes (o último a registrar fica por fora).
 //   antes(nome) -> nome: ajusta o nome pedido; o último registrado roda primeiro.
-//   forcar(nome) -> nome: troca só a tela que o núcleo mostra; os ganchos de depois seguem com o nome pedido.
+//   forcar(nome) -> nome: troca a tela que o núcleo mostra; todos rodam, na ordem de registro, e os ganchos de depois recebem o nome
+//   já forçado, para a rota, as abas e a tela nunca divergirem.
 //   depois(nome): roda depois do núcleo, na ordem de registro.
-const ganchosArea = {antes: [], forcar: null, depois: []};
+const ganchosArea = {antes: [], forcar: [], depois: []};
 function registrarGanchoArea({antes, forcar, depois}) {
   if (antes) ganchosArea.antes.unshift(antes);
-  if (forcar) ganchosArea.forcar = forcar;
+  if (forcar) ganchosArea.forcar.push(forcar);
   if (depois) ganchosArea.depois.push(depois);
 }
 function showArea(pedida) {
   let nome = pedida;
   for (const gancho of ganchosArea.antes) nome = gancho(nome);
-  mostrarAreaBase(ganchosArea.forcar ? ganchosArea.forcar(nome) : nome);
+  for (const gancho of ganchosArea.forcar) nome = gancho(nome);
+  mostrarAreaBase(nome);
   for (const gancho of ganchosArea.depois) gancho(nome);
 }
-// Núcleo: mostra a área, atualiza título e avisa o módulo dela. Quem não precisa dos ganchos pode chamá-lo direto.
+// Núcleo: mostra a área, atualiza título e avisa o módulo dela, sem os ganchos (rota, abas, foco). Só quem já tem a rota certa o chama
+// direto (piloto.js, na carga); quem muda de área de verdade chama showArea. O auxiliar é global por ser função de script clássico;
+// código novo usa window.areaMesa.
 function mostrarAreaBase(area) {
   for (const name of Object.keys(areaNames)) {
     $('area-' + name).hidden = area !== name;
@@ -639,6 +661,7 @@ function mostrarAreaBase(area) {
     window.achadosDesatualizados = false;  // a human mark was saved elsewhere: reload badges and counter
     searchFindings({...findingQuery});
   }
+  if (area === 'cadastro') loadPdfEnvironment();  // reverifica o extrator de PDF e o aviso, por qualquer caminho até Cadastro
   if (area === 'gerenciar') window.dispatchEvent(new Event('gerenciar-abrir'));
   if (area === 'caderno') window.dispatchEvent(new Event('caderno-abrir'));
   if (area === 'apuracao') window.dispatchEvent(new Event('apuracao-abrir'));
@@ -653,6 +676,7 @@ function mostrarAreaBase(area) {
     }).catch(() => { $('codex-conta').textContent = 'Servidor desconectado. Inicie a Mesa novamente.'; });
   }
 }
+window.areaMesa = Object.freeze({ir: showArea, nucleo: mostrarAreaBase});
 for (const area of ['inicio','cadastro','documentos','achados','codex','gerenciar','configuracoes','caderno','apuracao','diligencias','quadros']) $('ver-' + area).addEventListener('click', () => showArea(area));
 window.addEventListener('acervo-alterado', () => {
   $('cadastro-recibo').hidden = true; $('cadastro-perguntar').hidden=true;
@@ -1018,7 +1042,7 @@ async function searchFindings(query) {
     if (progress) {
       $('achados-progresso-texto').textContent = `${progress.revisados} de ${progress.total} achados revisados`;
       $('achados-progresso').max = progress.total || 1; $('achados-progresso').value = progress.revisados;
-      $('achados-progresso-humano').hidden = false;
+      $('achados-progresso-humano').hidden = false; window.barraMesa?.definir('achados', progress.total > progress.revisados ? String(progress.total - progress.revisados) : '', 'pendencia');
     }
     $('achados-so-pendentes').setAttribute('aria-pressed', String($('achados-marcacao').value === 'pendente'));
     for (const artifact of result.artefatos.filter(a => a.tipo === 'briefing')) {
@@ -1066,4 +1090,3 @@ $('achados-exportar').addEventListener('click', async () => {
 });
 loadCatalog();
 loadPdfEnvironment();
-$('ver-cadastro').addEventListener('click', loadPdfEnvironment);

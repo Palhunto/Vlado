@@ -331,6 +331,8 @@
       if (list.conversas.some(c => c.id === conversation)) $('codex-conversa').value = conversation;
       else if (conversation && !active && !submitting) clear();
       destination();
+      // Guests have no access to the documents (the server refuses the inventory): ask nothing and show no document panel.
+      if (guest()) return;
       // A problem in the current inventory must not hide frozen conversations.
       const inventory = await api('inventario', {caso:caseId});
       if (version !== inventoryVersion || caseId !== $('codex-caso').value) return;
@@ -480,7 +482,7 @@
     else if (event.tipo === 'resposta') {
       agentMessage(data.item, data.texto, false, data.fase, data.rodada,
         {publicada:data.publicada, arquivo:data.arquivo, sha256:data.sha256, etapa:data.etapa});
-      $('codex-anuncio').textContent=matchMedia('(min-width: 1051px)').matches && !(data.publicada || data.fase === 'final_answer')
+      $('codex-anuncio').textContent=matchMedia('(min-width:1024px)').matches && !(data.publicada || data.fase === 'final_answer')
         ? 'Atualização de andamento disponível. A análise continua.'
         : 'Resposta disponível. Confira a análise e as fontes consultadas.';
     }

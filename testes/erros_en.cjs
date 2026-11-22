@@ -51,7 +51,7 @@ test('em português a mensagem do servidor aparece como veio', async () => {
 test('o dicionário cobre todos os códigos de scripts/erros.py e as falhas do provedor', () => {
   const fonte = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'erros.py'), 'utf8');
   const codigos = [...fonte.matchAll(/^\s+\('([a-z_]+)', r'/gm)].map(m => m[1]);
-  const ia = ['autenticacao', 'limite', 'conexao', 'servidor', 'max_tokens', 'contexto', 'recusa', 'filtro', 'incompleta',
+  const ia = ['autenticacao', 'limite', 'cobranca', 'conexao', 'servidor', 'max_tokens', 'contexto', 'recusa', 'filtro', 'incompleta',
     'passos', 'ocupado', 'historico', 'tempo_etapa'].map(c => 'ia_' + c);
   const mesa = criarMesa({scripts: ['i18n_en.js']});
   const erros = mesa.janela.VLADO_I18N_EN.erros;
