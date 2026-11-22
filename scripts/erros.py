@@ -151,6 +151,8 @@ PADROES: tuple[tuple[str, str], ...] = (
     # Month's quota in reais and execution ceilings (scripts/custo.py, codex_apuracao): W11 'limite' block.
     ('cota_mensal_conta', r'^Sua cota do mês acabou\. Você usou R\$ (?P<usado>[\d.]+,\d{2}) de R\$ (?P<teto>[\d.]+,\d{2})\.'),
     ('cota_mensal_organizacao', r'^A cota do mês da instalação acabou\.'),
+    ('cota_mensal_redacao', r'^A cota do mês da redação acabou\.'),
+    ('cota_mensal_instalacao', r'^A cota do mês da Mesa acabou\.'),
     ('gasto_ilegivel', r'^O registro do gasto do mês está ilegível'),
     ('gasto_nao_registrado', r'^O gasto do mês não pode ser registrado agora'),
     ('modelo_nao_permitido', r'^O modelo .+ não está entre os permitidos nesta instalação'),

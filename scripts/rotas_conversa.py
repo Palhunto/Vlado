@@ -54,9 +54,11 @@ class RotasConversa:
         except ValueError as exc:
             self._json(400, {'erro': str(exc)}, exc)
 
-    def _conversa(self, operation, data, dono, casos_liberados, consulta_contada, conta=None):
+    def _conversa(self, operation, data, dono, casos_liberados, consulta_contada, conta=None, ve_gasto_da_redacao=False):
         """Result to answer as JSON, or ``RESPONDIDO``. ``dono`` is the guest account (None for admins);
-        ``conta`` the account that asks, administrators included (it spends the month's quota)."""
+        ``conta`` the account that asks, administrators included (it spends the month's quota).
+        ``ve_gasto_da_redacao``: ``autorizacao.gasto_da_redacao`` for who asks; only then does a refusal carry the
+        newsroom's spend and ceilings (accounts contract, 4.5)."""
         manager = self.server.conversas
         if operation == 'codex-desligar':
             self._json(200, {'estado': 'encerrando'})
@@ -73,14 +75,15 @@ class RotasConversa:
             result = manager.listar(data.get('caso'), dono=dono)
         elif operation == 'codex-perguntar':
             try:
-                result = manager.perguntar(data, dono=dono, conta=conta)
+                result = manager.perguntar(data, dono=dono, conta=conta, ve_gasto_da_redacao=ve_gasto_da_redacao)
             except Exception:
                 if consulta_contada:
                     acesso.devolver_consulta(self.server.root, dono)
                 raise
         elif operation == 'codex-retomar':
             try:
-                result = manager.retomar(data.get('conversa'), dono=dono, casos=casos_liberados, conta=conta)
+                result = manager.retomar(data.get('conversa'), dono=dono, casos=casos_liberados, conta=conta,
+                                         ve_gasto_da_redacao=ve_gasto_da_redacao)
             except FileNotFoundError as exc:
                 if consulta_contada:
                     acesso.devolver_consulta(self.server.root, dono)

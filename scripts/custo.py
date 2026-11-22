@@ -13,11 +13,19 @@ aviso no log; nenhum gasto fica sem conta. O dono acrescenta o modelo da OpenAI 
 ``configuracao.json`` → ``"orcamento"`` → ``"modelos_permitidos"`` (a lista substitui a padrão:
 repita nela os modelos da Anthropic que quiser manter).
 
-**Cota.** Teto mensal em reais por conta (o administrador também tem a sua) e da organização,
-hoje a instalação inteira (``chaves_orcamento`` é o ponto único que a Onda 2 refina). O gasto de
-cada chamada é convertido pelo câmbio do momento e somado em ``ajustes/gasto_mensal.json``, em
-milionésimos de real; o mês é o do calendário em UTC. Uma pergunta é recusada antes de começar
-quando o saldo não cobre a estimativa mínima, e interrompida quando o gasto passa do teto.
+**Cota (contrato de contas, 8.5).** Três tetos mensais em reais, mais o do painel do provedor:
+da pessoa (o próprio, definido pelo dono; sem ele, o padrão de cada pessoa da redação; sem esse,
+``mensal_por_conta_brl``), da redação (``cota_mensal_brl``, definido pelo operador; sem ele,
+``mensal_organizacao_brl``) e da instalação (``mensal_instalacao_brl``, a soma que o serviço aceita
+pagar; ``null`` deixa só os outros dois). ``chaves_orcamento`` é o ponto único que diz de quem é o
+gasto: a conta e a redação dela, lida do armazenamento de contas (``acesso``); sem contas (modo
+local), conta desconhecida ou a redação inicial, ``instalacao`` (a redação inicial herdou o que era
+da instalação, e a chave do registro não muda). Os tetos vêm de ``acesso.tetos_de_custo``. O gasto
+de cada chamada é convertido pelo câmbio do momento e somado em ``ajustes/gasto_mensal.json``, em
+milionésimos de real, na conta e na redação; o da instalação é a soma das redações. O mês é o do
+calendário em UTC. Uma pergunta é recusada antes de começar quando o saldo não cobre a estimativa
+mínima, e interrompida quando o gasto passa de um teto. Quem vê número: a pessoa, o próprio gasto
+sempre; o da redação, só quem a rota diz que vê (``ve_redacao``, o dono); o da instalação, ninguém.
 
 **Registro.** Cada gravação do gasto também atualiza uma cópia anterior
 (``gasto_mensal.anterior.json``). Registro ilegível, ou com um mês danificado (campo ausente ou de
@@ -33,7 +41,7 @@ padrões do orçamento (``orcamento_padrao``): ``mensal_por_conta_brl``, ``mensa
 ``estimativa_minima_tokens`` (entrada e saída de uma pergunta curta, ao preço do modelo),
 ``execucoes_simultaneas_por_conta``, ``execucoes_simultaneas_por_organizacao`` (de cada redação nos
 modos com contas; ``null``, o padrão, deixa só o total), ``execucoes_simultaneas`` (o total da
-instalação) e ``modelos_permitidos``. Cada um
+instalação), ``mensal_instalacao_brl`` e ``modelos_permitidos``. Cada um
 pode ser sobreposto na instalação por ``configuracao.json`` → ``"orcamento"``, que aceita também
 ``cambio_brl_por_usd``.
 Nenhuma chamada de modelo nem de rede.
@@ -58,10 +66,11 @@ TABELA = 'precos_modelos.json'
 TIPOS = ('entrada_sem_cache', 'cache_leitura', 'saida')
 PRECO_DE = {'entrada_sem_cache': 'entrada', 'cache_leitura': 'cache_leitura', 'saida': 'saida'}
 ESCRITA = re.compile(r'cache_escrita_\d+[mh]')
-CHAVES_ORCAMENTO = ('mensal_por_conta_brl', 'mensal_organizacao_brl', 'estimativa_minima_tokens',
-                    'execucoes_simultaneas_por_conta', 'execucoes_simultaneas_por_organizacao',
-                    'execucoes_simultaneas', 'modelos_permitidos')
-ORGANIZACAO = 'instalacao'  # the one organization until Onda 2 (accounts and organizations)
+CHAVES_ORCAMENTO = ('mensal_por_conta_brl', 'mensal_organizacao_brl', 'mensal_instalacao_brl',
+                    'estimativa_minima_tokens', 'execucoes_simultaneas_por_conta',
+                    'execucoes_simultaneas_por_organizacao', 'execucoes_simultaneas', 'modelos_permitidos')
+# Ledger key of the local mode and of the installation's first newsroom (it inherited the installation's spend).
+ORGANIZACAO = 'instalacao'
 CONTA_LOCAL = 'local'  # the single operator of the local mode
 MICRO = Decimal(1_000_000)
 MESES_GUARDADOS = 12
@@ -150,6 +159,8 @@ def ler_orcamento(root) -> dict:
     resultado = {'cambio_brl_por_usd': None, **padrao, **valores}
     for nome in ('mensal_por_conta_brl', 'mensal_organizacao_brl'):
         _numero_positivo(resultado[nome], nome)
+    if resultado['mensal_instalacao_brl'] is not None:  # null: no ceiling of the installation above the newsrooms'
+        _numero_positivo(resultado['mensal_instalacao_brl'], 'mensal_instalacao_brl')
     if resultado['cambio_brl_por_usd'] is not None:
         _numero_positivo(resultado['cambio_brl_por_usd'], 'cambio_brl_por_usd')
     for nome in ('execucoes_simultaneas_por_conta', 'execucoes_simultaneas'):
@@ -318,9 +329,57 @@ def mes() -> str:
     return datetime.now(timezone.utc).strftime('%Y-%m')
 
 
-def chaves_orcamento(conta) -> dict:
-    """Ponto único: whose budgets a question spends. Today the account and the installation."""
-    return {'conta': conta if isinstance(conta, str) and conta else CONTA_LOCAL, 'organizacao': ORGANIZACAO}
+def chaves_orcamento(conta, root=None) -> dict:
+    """Ponto único: whose budgets a question spends, the account and its newsroom (accounts contract 8.5).
+
+    Without ``root`` (or without accounts) the newsroom is ``instalacao``. Raises ValueError when the
+    account store cannot be read: a spend is never put on a guessed newsroom."""
+    return {'conta': conta if isinstance(conta, str) and conta else CONTA_LOCAL,
+            'organizacao': organizacao(root, conta) if root is not None else ORGANIZACAO}
+
+
+def _com_contas(root) -> bool:
+    """The account store exists (modes with accounts). Never created here."""
+    import acesso
+    return acesso.caminho_bd(Path(root)).is_file()
+
+
+def organizacao(root, conta) -> str:
+    """The newsroom key of the ledger for ``conta``: its newsroom id, or ``instalacao`` (local mode, unknown
+    account, the installation's first newsroom)."""
+    if not isinstance(conta, str) or not conta or conta == CONTA_LOCAL or not _com_contas(root):
+        return ORGANIZACAO
+    import acesso
+    redacao = acesso.organizacao_da_conta(Path(root), conta)
+    if redacao is None or redacao == acesso.organizacao_inicial(Path(root)):
+        return ORGANIZACAO
+    return redacao
+
+
+def redacao_do_gasto(root, conta) -> str | None:
+    """The id of the newsroom whose budget ``conta`` spends (the first newsroom included, whose ledger key stays
+    ``instalacao``); None without accounts or for an unknown account. The ``organizacao`` block of ``situacao`` is
+    always this newsroom's, never the installation's total: ``autorizacao.gasto_da_redacao`` relies on it."""
+    if not isinstance(conta, str) or not conta or conta == CONTA_LOCAL or not _com_contas(root):
+        return None
+    import acesso
+    return acesso.organizacao_da_conta(Path(root), conta)
+
+
+def tetos(root, conta, orcamento=None) -> dict:
+    """This month's ceilings in reais (Decimal): ``conta`` (the person's, never above the newsroom's),
+    ``pessoa`` (the person's as set, which is all a person who does not see the newsroom is shown: the lower
+    of the two could be the newsroom's), ``organizacao`` (the newsroom's) and ``instalacao`` (None: none)."""
+    orcamento = orcamento or ler_orcamento(root)
+    proprios = {}
+    if isinstance(conta, str) and conta and conta != CONTA_LOCAL and _com_contas(root):
+        import acesso
+        proprios = acesso.tetos_de_custo(Path(root), conta) or {}
+    redacao = Decimal(proprios['redacao_brl']) if proprios.get('redacao_brl') else Decimal(str(orcamento['mensal_organizacao_brl']))
+    pessoa = Decimal(proprios['pessoa_brl']) if proprios.get('pessoa_brl') else Decimal(str(orcamento['mensal_por_conta_brl']))
+    instalacao = orcamento['mensal_instalacao_brl']
+    return {'conta': min(pessoa, redacao), 'pessoa': pessoa, 'organizacao': redacao,
+            'instalacao': Decimal(str(instalacao)) if instalacao is not None else None}
 
 
 def _arquivo(root) -> Path:
@@ -415,18 +474,23 @@ def _do_mes(dados, quando):
     return atual
 
 
-def gasto(root, conta) -> dict:
-    """{'conta': micro-reais, 'organizacao': micro-reais} spent this month."""
-    chaves = chaves_orcamento(conta)
-    atual = _do_mes(_ler_gasto(root), mes())
+def _totais(atual, chaves) -> dict:
     valor = lambda d, k: d.get(k) if type(d.get(k)) is int and d.get(k) >= 0 else 0  # noqa: E731
-    return {'conta': valor(atual['contas'], chaves['conta']), 'organizacao': valor(atual['organizacoes'], chaves['organizacao'])}
+    return {'conta': valor(atual['contas'], chaves['conta']),
+            'organizacao': valor(atual['organizacoes'], chaves['organizacao']),
+            'instalacao': sum(v for v in atual['organizacoes'].values() if type(v) is int and v >= 0)}
 
 
-def somar_gasto(root, conta, micro_brl) -> dict:
-    """Add one call's cost to this month's account and organization; returns the new totals."""
-    chaves, quando = chaves_orcamento(conta), mes()
-    pendente = (str(Path(root).resolve()), quando, chaves['conta'])
+def gasto(root, conta, chaves=None) -> dict:
+    """{'conta', 'organizacao', 'instalacao': micro-reais} spent this month (the installation: all newsrooms)."""
+    chaves = chaves or chaves_orcamento(conta, root)
+    return _totais(_do_mes(_ler_gasto(root), mes()), chaves)
+
+
+def somar_gasto(root, conta, micro_brl, chaves=None) -> dict:
+    """Add one call's cost to this month's account and newsroom; returns the new totals (``gasto``)."""
+    chaves, quando = chaves or chaves_orcamento(conta, root), mes()
+    pendente = (str(Path(root).resolve()), quando, chaves['conta'], chaves['organizacao'])
     try:
         return _somar(root, chaves, quando, micro_brl)
     except (OSError, GastoSemRegistro) as exc:  # no question goes on without its count (R1)
@@ -443,9 +507,9 @@ def _somar(root, chaves, quando, micro_brl):
         dados = _ler_gasto(root)
         raiz = str(Path(root).resolve())
         guardados = {k: v for k, v in _PENDENTES.items() if k[0] == raiz}
-        for (_, mes_pendente, conta_pendente), valor in guardados.items():
+        for (_, mes_pendente, conta_pendente, organizacao_pendente), valor in guardados.items():
             atrasado = _do_mes(dados, mes_pendente)
-            for grupo, chave in (('contas', conta_pendente), ('organizacoes', chaves['organizacao'])):
+            for grupo, chave in (('contas', conta_pendente), ('organizacoes', organizacao_pendente)):
                 atrasado[grupo][chave] = atrasado[grupo].get(chave, 0) + valor
             dados['meses'][mes_pendente] = atrasado
         atual = _do_mes(dados, quando)
@@ -471,7 +535,7 @@ def _somar(root, chaves, quando, micro_brl):
                 _marca(root).unlink(missing_ok=True)
             except OSError:
                 pass  # the copy is as new as the mark or newer: read all the same
-        return {'conta': atual['contas'][chaves['conta']], 'organizacao': atual['organizacoes'][chaves['organizacao']]}
+        return _totais(atual, chaves)
 
 
 def _copia_velha(root, geracao, exc):
@@ -510,19 +574,35 @@ def mensagem_cota_conta(usado, teto) -> str:
             'Documentos, conferência e caderno seguem funcionando.')
 
 
-def mensagem_cota_organizacao(usado=None, teto=None) -> str:
+def mensagem_cota_organizacao(usado=None, teto=None, *, redacao=False) -> str:
     valores = f' Foram usados R$ {reais(usado)} de R$ {reais(teto)}.' if usado is not None else ''
+    if redacao:
+        return (f'A cota do mês da redação acabou.{valores} Documentos, conferência e caderno seguem '
+                'funcionando; o dono da redação pode pedir ao operador uma cota maior.')
     return (f'A cota do mês da instalação acabou.{valores} Documentos, conferência e caderno seguem '
             'funcionando; o dono da instalação pode ampliar a cota.')
+
+
+def mensagem_cota_instalacao() -> str:
+    """Never with a number: it adds up every newsroom (accounts contract, 4.5)."""
+    return ('A cota do mês da Mesa acabou. Documentos, conferência e caderno seguem funcionando; '
+            'o operador pode ampliar a cota.')
+
+
+def _numeros_da_redacao(convidado, ve_redacao) -> bool:
+    return bool(ve_redacao) if ve_redacao is not None else not convidado
 
 
 def situacao(root, conta, *, administrador=False) -> dict:
     """This month's spend and balance in reais (the quota bar of the interface).
 
-    A guest sees only their own account; an administrator also sees the organization.
+    Each account sees its own; whoever sees the newsroom (``administrador``: the dono) also sees it.
+    The installation's total is never shown.
     """
-    orcamento, gastos = ler_orcamento(root), gasto(root, conta)
-    teto_conta, teto_org = Decimal(str(orcamento['mensal_por_conta_brl'])), Decimal(str(orcamento['mensal_organizacao_brl']))
+    orcamento, chaves = ler_orcamento(root), chaves_orcamento(conta, root)
+    gastos, limite = gasto(root, conta, chaves), tetos(root, conta, orcamento)
+    # Whoever does not see the newsroom is shown the own ceiling as set, never the lower newsroom's.
+    teto_conta, teto_org = limite['conta' if administrador else 'pessoa'], limite['organizacao']
     usado_conta, usado_org = Decimal(gastos['conta']) / MICRO, Decimal(gastos['organizacao']) / MICRO
     tabela = tabela_precos(root)
 
@@ -537,28 +617,39 @@ def situacao(root, conta, *, administrador=False) -> dict:
     return resposta
 
 
-def conferir_antes(root, conta, modelo, *, convidado=False):
-    """Refuse the question before it starts when a balance does not cover the minimum estimate, or
-    when the month's spend cannot be read or recorded (an unrecorded spend would have no ceiling)."""
-    somar_gasto(root, conta, 0)  # writes the ledger again: GastoSemRegistro when it cannot
-    orcamento, gastos = ler_orcamento(root), gasto(root, conta)
-    estimativa = estimativa_minima_brl(root, modelo)
-    teto_conta, teto_org = Decimal(str(orcamento['mensal_por_conta_brl'])), Decimal(str(orcamento['mensal_organizacao_brl']))
-    usado_conta, usado_org = Decimal(gastos['conta']) / MICRO, Decimal(gastos['organizacao']) / MICRO
-    if usado_conta >= teto_conta or usado_conta + estimativa > teto_conta:
-        raise CotaEsgotada(mensagem_cota_conta(usado_conta, teto_conta))
-    if usado_org >= teto_org or usado_org + estimativa > teto_org:
-        raise CotaEsgotada(mensagem_cota_organizacao(None if convidado else usado_org, None if convidado else teto_org))
-
-
-def estouro(root, totais, *, convidado=False):
-    """The message when this month's totals (``somar_gasto``) reached a ceiling, else None."""
-    orcamento = ler_orcamento(root)
-    teto_conta, teto_org = Decimal(str(orcamento['mensal_por_conta_brl'])), Decimal(str(orcamento['mensal_organizacao_brl']))
-    usado_conta, usado_org = Decimal(totais['conta']) / MICRO, Decimal(totais['organizacao']) / MICRO
-    if usado_conta >= teto_conta:
-        return 'limite_cota_conta', mensagem_cota_conta(usado_conta, teto_conta)
-    if usado_org >= teto_org:
-        return 'limite_cota_organizacao', mensagem_cota_organizacao(None if convidado else usado_org,
-                                                                   None if convidado else teto_org)
+def _teto_batido(root, conta, totais, estimativa, *, convidado, ve_redacao):
+    """(cause, message) of the first ceiling ``totais`` (+ ``estimativa``) reaches: person, newsroom, installation."""
+    limite, numeros = tetos(root, conta), _numeros_da_redacao(convidado, ve_redacao)
+    usado = {k: Decimal(totais[k]) / MICRO for k in ('conta', 'organizacao', 'instalacao')}
+    # The person's own number never carries the newsroom's ceiling to who does not see it: past the own
+    # ceiling as set, the newsroom's refusal (without number) follows.
+    teto_conta = limite['conta' if numeros else 'pessoa']
+    if usado['conta'] >= teto_conta or usado['conta'] + estimativa > teto_conta:
+        return 'limite_cota_conta', mensagem_cota_conta(usado['conta'], teto_conta)
+    if usado['organizacao'] >= limite['organizacao'] or usado['organizacao'] + estimativa > limite['organizacao']:
+        return 'limite_cota_organizacao', mensagem_cota_organizacao(
+            usado['organizacao'] if numeros else None, limite['organizacao'] if numeros else None,
+            redacao=_com_contas(root))
+    if limite['instalacao'] is not None and (usado['instalacao'] >= limite['instalacao']
+                                             or usado['instalacao'] + estimativa > limite['instalacao']):
+        return 'limite_cota_instalacao', mensagem_cota_instalacao()
     return None
+
+
+def conferir_antes(root, conta, modelo, *, convidado=False, ve_redacao=None):
+    """Refuse the question before it starts when a balance does not cover the minimum estimate, or
+    when the month's spend cannot be read or recorded (an unrecorded spend would have no ceiling).
+
+    ``ve_redacao``: whether the asker may see the newsroom's numbers (the route decides, by the gate);
+    None keeps the older rule (all but guests)."""
+    chaves = chaves_orcamento(conta, root)
+    somar_gasto(root, conta, 0, chaves)  # writes the ledger again: GastoSemRegistro when it cannot
+    batido = _teto_batido(root, conta, gasto(root, conta, chaves), estimativa_minima_brl(root, modelo),
+                          convidado=convidado, ve_redacao=ve_redacao)
+    if batido:
+        raise CotaEsgotada(batido[1])
+
+
+def estouro(root, totais, *, convidado=False, conta=None, ve_redacao=None):
+    """(cause, message) when this month's totals (``somar_gasto``) reached a ceiling, else None."""
+    return _teto_batido(root, conta, totais, Decimal(0), convidado=convidado, ve_redacao=ve_redacao)

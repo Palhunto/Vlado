@@ -864,7 +864,8 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 result = self._equipe(operation, data, principal)
             elif operation in rotas_conversa.OPERACOES:
                 result = self._conversa(operation, data, dono, casos_liberados, consulta_contada,
-                                        conta=principal['conta'])
+                                        conta=principal['conta'], ve_gasto_da_redacao=autorizacao.gasto_da_redacao(
+                                            self.server.root, self.server.modo, principal))
                 if result is RESPONDIDO:
                     return
             else:
