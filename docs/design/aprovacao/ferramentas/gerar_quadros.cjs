@@ -19,7 +19,7 @@ const BASE = rel(path.join(design, 'novas', 'fonte', 'base.css'));
 const icones = Object.fromEntries(JSON.parse(fs.readFileSync(path.join(design, 'icones', 'ferramentas', 'icones.json'), 'utf8')).icones.map(i => [i.nome, i.d]));
 const svg = (d, tam, traco = 2) => `<svg aria-hidden="true" width="${tam}" height="${tam}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${traco}" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="${d}"/></svg>`;
 const CHECK = 'M5 12l5 5L20 7', MENU = 'M4 7h16M4 12h16M4 17h16';
-const FAIXA_DERIVADO = '<div class="faixa-derivado">Derivado · aguarda aprovação do dono</div>';
+const FAIXA_DERIVADO = '<div class="faixa-derivado" style="background:#1e4d3e">Derivado · aprovado pelo dono em 21/11/2026</div>';
 const FAIXA_CANVAS = '<div class="faixa-derivado" style="background:#1e4d3e">Tela final do canvas, com as decisões do dono de 21/11/2026</div>';
 const VOLTA = `<a href="#" class="bt bt-s" style="gap:6px;padding:0 12px">${svg('M15 6l-6 6 6 6', 18)}Apuração</a>`;  // P11.7: caminho de volta visível
 const VOLTA_CANVAS = '<a href="#" style="display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 12px; border-radius: 8px; border: 1px solid #74837a; background: #fffefa; color: #202c29; text-decoration: none; font-size: 16px"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#202c29" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>Apuração</a>';

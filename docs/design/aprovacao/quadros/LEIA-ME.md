@@ -1,6 +1,6 @@
-# Quadros: o que o dono decide
+# Quadros: o que o dono decidiu
 
-**Propostas: derivado, aguarda aprovação do dono** (faixa roxa nas pranchas). O mapa de relações e a linha do tempo de 1440 px no claro são as telas finais do canvas, já aprovadas, com as decisões de 21/11/2026 aplicadas (faixa verde). Todas as pranchas seguem as decisões P11 e P12: caminho de volta "‹ Apuração" no cabeçalho, grade de 4 px, 12 px nos cartões, órgão público em ameixa, altura mínima.
+**Propostas: derivado, aprovado pelo dono em 21/11/2026** (P15.1 a P15.7, faixa verde nas pranchas). O mapa de relações e a linha do tempo de 1440 px no claro são as telas finais do canvas, com as decisões de 21/11/2026 aplicadas. Especificação em [`componentes.md`](../../componentes.md#quadros) (quadros) e [Pedidos e prazos](../../componentes.md#pedidos-e-prazos). Todas as pranchas seguem as decisões P11 e P12: caminho de volta "‹ Apuração" no cabeçalho, grade de 4 px, 12 px nos cartões, órgão público em ameixa, altura mínima.
 
 | Arquivo | O que é |
 |---|---|
@@ -24,6 +24,8 @@
 - **Celular dos quadros:** as abas viram pílulas que rolam para o lado, e o botão do topo volta à apuração no lugar do menu (P11.7).
 
 ## Decisões
+
+Todas respondidas pelo dono em 21/11/2026: 1 a 6 como desenhadas; 7 aprovada com uma condição: o nome do item e a pílula "1 vence" não podem quebrar linha. Medido com as fontes da Mesa, o item ativo precisava de 188 px e a barra de 232 px só tinha 175. O dono escolheu alargar a barra para 256 px em todas as telas, uma mudança no canvas que ele autorizou (`../../mudancas-de-token.md`, item 7). A outra saída, só o número na pílula, foi descartada. As pranchas foram regeneradas com a barra nova.
 
 1. **Cinco abas** (as quatro do canvas mais o Comparador), com "Conferência do texto" no caderno e "Entrevistas e pedidos" como a área "Pedidos e prazos"?
 2. **Hipóteses** como desenhado?

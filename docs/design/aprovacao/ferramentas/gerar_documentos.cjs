@@ -17,7 +17,7 @@ const BASE = rel(path.join(design, 'novas', 'fonte', 'base.css'));
 const icones = Object.fromEntries(JSON.parse(fs.readFileSync(path.join(design, 'icones', 'ferramentas', 'icones.json'), 'utf8')).icones.map(i => [i.nome, i.d]));
 const svg = (d, tam, traco = 2) => `<svg aria-hidden="true" width="${tam}" height="${tam}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${traco}" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="${d}"/></svg>`;
 const CHECK = 'M5 12l5 5L20 7', MENU = 'M4 7h16M4 12h16M4 17h16';
-const FAIXA = '<div class="faixa-derivado">Derivado · aguarda aprovação do dono</div>';
+const FAIXA = '<div class="faixa-derivado" style="background:#1e4d3e">Derivado · aprovado pelo dono em 21/11/2026</div>';
 const CSS = `.estado{display:inline-flex;align-items:center;gap:6px}
 table.dados{width:100%;border-collapse:collapse}table.dados th,table.dados td{padding:12px 16px;border-bottom:1px solid var(--theme-line);text-align:left;vertical-align:middle}
 table.dados th{font-size:14px;color:var(--theme-muted);font-weight:600;background:var(--theme-reading)}table.dados tr:last-child td{border-bottom:0}

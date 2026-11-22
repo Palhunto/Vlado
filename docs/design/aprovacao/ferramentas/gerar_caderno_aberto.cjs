@@ -16,7 +16,7 @@ const FD = rel(path.resolve(design, '..', '..', 'interface', 'fonts'));
 const BASE = rel(path.join(design, 'novas', 'fonte', 'base.css'));
 const svg = (d, tam, traco = 2) => `<svg aria-hidden="true" width="${tam}" height="${tam}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${traco}" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="${d}"/></svg>`;
 const CHECK = 'M5 12l5 5L20 7', MENU = 'M4 7h16M4 12h16M4 17h16';
-const FAIXA = '<div class="faixa-derivado">Derivado · aguarda aprovação do dono</div>';
+const FAIXA = '<div class="faixa-derivado" style="background:#1e4d3e">Derivado · aprovado pelo dono em 21/11/2026</div>';
 const CSS = `.af{text-decoration:none;color:inherit;padding:1px 0;text-underline-offset:6px;text-decoration-thickness:2px;text-decoration-line:underline}
 .af-ok{text-decoration-color:var(--theme-accent)}.af-ex{text-decoration-style:dashed;text-decoration-color:var(--theme-warning)}.af-sf{text-decoration-style:dotted;text-decoration-color:var(--theme-input-line)}
 .af-rev{text-decoration-style:double;text-decoration-color:var(--theme-accent);text-decoration-thickness:1.5px}

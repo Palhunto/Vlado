@@ -1,6 +1,6 @@
-# Documentos: o que o dono decide
+# Documentos: o que o dono decidiu
 
-**Proposta: derivado, aguarda aprovação do dono.** Segue o wireframe W02 ("Documentos e envio") na linguagem do canvas, com as decisões de 21/11/2026. Não há tela final de documentos no canvas. A mesma proposta substitui a área "Cadastrar arquivos" (ver `../cadastro/`).
+**Proposta: derivado, aprovado pelo dono em 21/11/2026** (P16.1 a P16.4, faixa verde). Especificação em [`componentes.md`](../../componentes.md#documentos). Segue o wireframe W02 ("Documentos e envio") na linguagem do canvas, com as decisões de 21/11/2026. Não há tela final de documentos no canvas. A mesma proposta substitui a área "Cadastrar arquivos" (ver `../cadastro/`).
 
 | Arquivo | O que é |
 |---|---|
@@ -19,6 +19,8 @@
 - **Hash, identificador e versão** saem da lista e ficam em "Detalhes técnicos" de cada documento (regra 7).
 
 ## Decisões
+
+Todas respondidas pelo dono em 21/11/2026, como desenhadas. A barra lateral das pranchas tem 256 px (P15.7).
 
 1. **Uma tela só** para acervo, envio e busca, sem a área "Cadastrar arquivos" na barra lateral?
 2. **Envio por arquivo** como desenhado, com o recibo do lote numa linha do cartão de envio?

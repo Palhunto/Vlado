@@ -1,6 +1,6 @@
 # Caderno: o que o dono decidiu
 
-**Proposta: derivado, aprovado pelo dono em 21/11/2026** (commit `adce9fc`). Aprovadas como desenhadas: a tela em três colunas do W04 com a barra lateral do canvas (P14.1) e, no celular, o seletor de nota no topo e o painel no pé (P14.5). Segue o wireframe W04 ("Caderno e conferência do texto") na linguagem do canvas. Não há tela final do caderno no canvas.
+**Proposta: derivado, aprovado pelo dono em 21/11/2026** (commit `adce9fc`; os pontos abertos, P14b, também aprovados em 21/11/2026). Especificação em [`componentes.md`](../../componentes.md#caderno). Aprovadas como desenhadas: a tela em três colunas do W04 com a barra lateral do canvas (P14.1) e, no celular, o seletor de nota no topo e o painel no pé (P14.5). Segue o wireframe W04 ("Caderno e conferência do texto") na linguagem do canvas. Não há tela final do caderno no canvas.
 
 | Arquivo | O que é |
 |---|---|
@@ -17,7 +17,7 @@
 
 ## Decisões
 
-Respondidas: 1 e 5, como desenhadas. Em aberto, com desenho novo a caminho: 2, 3 e 4.
+Respondidas: 1 e 5, como desenhadas; 2, 3 e 4 respondidas pelas decisões 6 a 8 abaixo.
 
 1. **Aprova a tela em três colunas do W04**, com a barra lateral do canvas?
 2. **"Trechos com fonte e contribuições"** não aparece no W04. Os trechos passam a entrar só por "Ligar outra evidência", ou a aba continua em outro lugar?
@@ -25,9 +25,9 @@ Respondidas: 1 e 5, como desenhadas. Em aberto, com desenho novo a caminho: 2, 3
 4. **Quarto sinal, "revisada".** O W04 o lista, mas o exemplo não o mostra. Proposta: "✓ revisada por você" em verde, ao lado do sinal da fonte. Desenho?
 5. **Celular:** seletor de nota no topo e afirmação selecionada num painel no pé. Concorda?
 
-## Pontos abertos, para nova aprovação (P14.2 a P14.4)
+## Pontos abertos, aprovados (P14b)
 
-**Derivado, aguarda aprovação do dono** (faixa roxa). Pranchas: `proposta-trechos-{claro,escuro}-{1440,390}.png` e `proposta-escrever-{claro,escuro}-{1440,390}.png`, já com as decisões de 21/11/2026.
+**Derivado, aprovado pelo dono em 21/11/2026** (faixa verde; decisões 6 a 8, como desenhadas). Pranchas: `proposta-trechos-{claro,escuro}-{1440,390}.png` e `proposta-escrever-{claro,escuro}-{1440,390}.png`, já com as decisões de 21/11/2026.
 
 ### Onde ficam "Trechos com fonte e contribuições" (P14.2)
 

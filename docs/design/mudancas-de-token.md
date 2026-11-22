@@ -24,7 +24,7 @@ Decisões do dono de 21/11/2026 (P11 e P12) já incorporadas; a lista completa e
 | 4 | Piso e degraus do texto | 7 degraus, 12 a 28 px (`--text-xs` 12, `--text-sm` 13) | 6 degraus: 14, 16, 18, 22, 28, 36 | "Tipografia · seis degraus, piso de 14 px" |
 | 5 | Raios | controle 6, cartão 8, painel 10, pílula 999 | controle 8, cartão 12, pílula | "Espaço e raio" |
 | 6 | Larguras de quebra | 19 larguras distintas nas regras | 720, 1024 e 1280 px | nota em "Espaço e raio" |
-| 7 | Largura da barra lateral | `--mesa-sidebar:224px`, 245 px a partir de 1550 px e 205 px até 1190 px (`style.css:139-140`) | 232 px | `nav` de `Main` e `Inicio` |
+| 7 | Largura da barra lateral | `--mesa-sidebar:224px`, 245 px a partir de 1550 px e 205 px até 1190 px (`style.css:139-140`) | 256 px (o canvas desenha 232; P15.7) | `nav` de `Main` e `Inicio` |
 | 8 | Contador no item da barra lateral | não existe | pílula com o número (ou "1 vence") à direita do rótulo | `Main` e `Inicio` |
 | 9 | Contorno do trecho citado no PDF | `--pdf-trecho-borda` `#c478008c` (55 % de opacidade) | `#c47800` opaco, 2 px | célula "Acumulado pago", `Main` |
 | 10 | Cor do órgão público no mapa | não existe | `#3d4a45` | ícone do órgão, `Mapa.dc.html` |
@@ -125,11 +125,17 @@ Variável CSS não funciona dentro de `@media`, então as três larguras não vi
 
 O canvas só desenha 390 e 1440 px. O comportamento nas faixas do meio está na lista do que o Design ainda desenha.
 
-## 7. Barra lateral com 232 px
+## 7. Barra lateral com 256 px
 
-**Decisões do dono:** sem ícones nos itens (P11.6); gaveta abaixo de 1280 px (P12.1).
+**Decisões do dono:** sem ícones nos itens (P11.6); gaveta abaixo de 1280 px (P12.1); **256 px no lugar dos 232 do canvas (P15.7, 21/11/2026)**, mudança no canvas aprovado autorizada pelo dono (regra 6 do contrato).
 
-`--mesa-sidebar` passa de 224 px para 232 px (largura do `nav` em `Main` e `Inicio`). As duas variações por largura de tela (245 px a partir de 1550 px e 205 px até 1190 px, `style.css:139-140`) saem: o canvas desenha uma largura só, e abaixo de 1024 px a barra vira gaveta (item 6).
+`--mesa-sidebar` passa de 224 px para 256 px. O canvas desenha o `nav` de `Main` e `Inicio` com 232 px. As duas variações por largura de tela (245 px a partir de 1550 px e 205 px até 1190 px, `style.css:139-140`) saem: há uma largura só, e abaixo de 1280 px a barra vira gaveta com a mesma largura (item 6, P12.1).
+
+**Por que 256 e não 232.** Medido com as fontes da Mesa (Source Sans 3) nas pranchas: com 232 px, o item tem 175 px úteis (232 − 2 × 16 da barra − 1 da borda − 2 × 12 do item). O item ativo "Pedidos e prazos" com a pílula "1 vence" precisa de 188 px: rótulo em 600 com 115, intervalo de 12 e pílula com 61 (45 de texto e 2 × 8 de preenchimento). O rótulo e a pílula quebravam em duas linhas, e o dono pôs como condição da P15.7 que não quebrem. Nenhum ajuste de espaçamento dentro da grade de 4 px fechava os 13 px que faltavam. Com 256 px sobram 199: o item cabe com 11 px de folga e, pelo mesmo motivo, "Cota do mês R$ 18,40 de R$ 50" (precisa de 218 px na caixa, com 199 disponíveis em 232) e "Repórter · Redação Serena" no perfil (213 px) deixam de quebrar linha. A P11.5 (altura mínima) continua valendo para nomes mais longos. O conteúdo perde 24 px: em 1280 px, a área ao lado da barra fica com 1024 px.
+
+Regra que acompanha: rótulo e contador do item não quebram linha (`white-space: nowrap`, contador `flex: none`). Ao gravar no `tokens.css`, o Frontend confere que nenhum item da barra transborda com os rótulos reais.
+
+**Quando entra no código:** fase 2 dos tokens, com os demais valores do canvas (ordem de aplicação, passo 2). Na fase 1, a do Lume (só adições com os valores de hoje), a largura não muda.
 
 ## 8. Contador no item da barra lateral
 
@@ -137,15 +143,18 @@ O canvas só desenha 390 e 1440 px. O comportamento nas faixas do meio está na 
 
 A cor do item ativo não muda no claro: `.areas>a[aria-current=page]` já tem fundo `--green` e peso 600 (`style.css:118`); o texto usa `--white` (`#fffefa`, 9,52:1), e o canvas usa branco puro (`#ffffff`, 9,61:1), diferença que não se vê. No escuro, hoje o item ativo tem fundo `--theme-active`, texto verde e uma barra interna de 3 px à esquerda (`style.css:174`); o canvas não desenha a barra lateral no escuro, então isso fica como está.
 
-O que o canvas acrescenta é o contador à direita do rótulo, em 14 px, com três formas:
+O que o canvas acrescenta é o contador à direita do rótulo, em 14 px, nestas formas:
 
 | Situação | Aparência | Onde |
 |---|---|---|
 | item comum com quantidade | texto secundário, sem fundo ("12") | Documentos |
+| item comum com quantidade, na página atual | pílula branca, texto verde 600 ("12"), como a de Conferir (P16.4) | Documentos ativo (prancha de documentos) |
 | item com pendência, fora da página atual | pílula verde cheia, texto branco 600 ("4") | Conferir em `Inicio` |
 | item com pendência, na página atual | pílula branca, texto verde 600 ("4") | Conferir em `Main` |
 | prazo vencendo | texto de aviso 600, sem fundo ("1 vence") | Pedidos e prazos |
-| prazo vencendo, na página atual | pílula clara com texto de aviso 600 (claro 6,59:1, C65; escuro `#e6bc7a` sobre `#172315`, 9,19:1, E58) | Pedidos e prazos ativo (prancha dos quadros) |
+| prazo vencendo, na página atual | pílula clara com texto de aviso 600 (claro 6,59:1, C65; escuro `#e6bc7a` sobre `#172315`, 9,19:1, E58), inteira e na mesma linha do rótulo (P15.7) | Pedidos e prazos ativo (prancha dos quadros) |
+
+Rótulo e contador não quebram linha (`white-space: nowrap`; contador com `flex: none`). O item mais longo, "Pedidos e prazos" ativo com "1 vence", ocupa 188 px e cabe nos 199 úteis da barra de 256 px (item 7).
 
 ```css
 /* proposta de tokens de componente */
