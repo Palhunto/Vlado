@@ -73,6 +73,10 @@ test('selos mantêm contraste nos dois temas', () => {
     ['texto IA sobre cartão', 'ink', 'white', 4.5], ['texto IA sobre item ativo', 'ink', 'theme-active', 4.5],
     ['contorno IA', 'muted', 'white', 3], ['texto IA com ressalva', 'warning', 'white', 4.5],
     ['texto pendente', 'theme-text', 'white', 4.5], ['borda pendente', 'theme-input-line', 'white', 3],
+    // Sem par de 3:1 para a borda do selo Conferido (theme-accent-line sobre theme-soft: 2,70 no claro, 4,31 no escuro; C62) nem para a
+    // borda de aviso (theme-warning-line sobre theme-warning-bg: 2,50 no claro; C61). É decisão do Design, não esquecimento: o selo não é
+    // controle e se identifica pelo sinal e pelo texto, então a borda é decorativa (docs/design/mudancas-de-token.md, "Os que não passam").
+    // Se alguém mudar --theme-accent-line ou --theme-warning-line, estes são os valores de partida.
     ['texto conferida', 'theme-accent', 'theme-soft', 4.5],
     ['precisa de ajuste', 'warning', 'warning-bg', 4.5], ['sem suporte', 'theme-danger', 'theme-danger-bg', 4.5],
   ];
