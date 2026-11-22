@@ -205,6 +205,42 @@ class ArmazenamentoTest(test_acesso.DuasRedacoes):
             acesso.cancelar_convite(self.root, self.a, self.dono_a, acesso.equipe(self.root, self.a)['convites'][0]['id'])
             self.assertEqual(self.convidar('demais@exemplo.test')[0]['estado'], 'pendente')
 
+    def test_cancelar_e_convidar_de_novo_nao_passa_do_teto_por_endereco(self):
+        # "Once an hour" for each invitation is not enough if cancelling and inviting again starts another one.
+        for _ in range(acesso.CONVITES_POR_ENDERECO):
+            convite, _, _ = self.convidar()
+            acesso.cancelar_convite(self.root, self.a, self.dono_a, convite['id'])
+        with self.assertRaisesRegex(acesso.LimiteDeConvites, 'última hora'):
+            self.convidar()
+        self.assertEqual(self.convidar('outra@exemplo.test')[0]['estado'], 'pendente')  # another address is not held back
+        self.assertEqual(self.convidar(casos=['caso_b'], redacao=self.b)[0]['estado'], 'pendente')  # nor another newsroom
+        with self.depois(minutes=acesso.REENVIO_MINUTOS + 1):
+            self.assertEqual(self.convidar()[0]['estado'], 'pendente')
+
+    def test_convite_pendente_nao_sobrevive_a_quem_convidou(self):
+        # An invitation is an act of a dono: it stays good only while who made it could still make it.
+        outra = self.pessoa('Outra Dona', 'outra.dona', 'dono', self.a)
+        tokens = {}
+        for acao in ('rebaixar', 'desativar', 'remover'):
+            _, tokens[acao], _ = self.convidar(f'{acao}@exemplo.test', por=outra)
+            _, da_dona, _ = self.convidar(f'fica.{acao}@exemplo.test')
+            if acao == 'rebaixar':
+                acesso.mudar_papel(self.root, outra, 'editor', self.dono_a, self.a, SENHA)
+            elif acao == 'desativar':
+                acesso.desativar(self.root, outra, por=self.dono_a, organizacao=self.a)
+            else:
+                acesso.remover(self.root, outra, self.dono_a, self.a, SENHA)
+            with self.assertRaises(acesso.ConviteInvalido, msg=acao):
+                acesso.consultar_convite(self.root, tokens[acao])
+            self.assertEqual(acesso.consultar_convite(self.root, da_dona)['papel'], 'reporter')  # the others' go on
+            if acao == 'rebaixar':
+                acesso.mudar_papel(self.root, outra, 'dono', self.dono_a, self.a, SENHA)
+            elif acao == 'desativar':
+                acesso.reativar(self.root, outra, por=self.dono_a, organizacao=self.a)
+                self.assertEqual(len(self.linhas("SELECT 1 FROM convites WHERE criado_por = ? AND estado = 'pendente'", outra)), 0)
+        self.assertEqual(len(self.linhas("SELECT 1 FROM convites WHERE criado_por = ? AND estado = 'cancelado'", outra)), 3)
+        self.assertGreaterEqual(self.tipos().count('convite_cancelado'), 3)
+
     def test_convite_vence_em_sete_dias_e_a_varredura_o_encerra(self):
         convite, token, _ = self.convidar()
         with self.depois(days=acesso.CONVITE_DIAS, minutes=1):

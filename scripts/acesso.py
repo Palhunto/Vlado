@@ -86,6 +86,7 @@ MAX_TENTATIVAS_GUARDADAS = 2000
 CONVITE_DIAS = 7  # an invitation is valid for a week, once (decision 15)
 CONVITES_PENDENTES = 50  # per newsroom: an invitation must not become a way to fill somebody's mailbox
 REENVIO_MINUTOS = 60  # each invitation is sent again at most once an hour
+CONVITES_POR_ENDERECO = 3  # messages a newsroom sends to the same address in that hour, cancelled ones included
 ATIVIDADE_DIAS = 90  # the newsroom's activity is kept for 90 days (decision 15)
 ESQUEMA = 3  # PRAGMA user_version of the store; `_ATUALIZACOES` takes an older store up to it
 ESPERA_BD_S = 10
@@ -793,6 +794,16 @@ def _donos_ativos(tx: _Tx, organizacao: str, exceto: str | None = None) -> int:
                  organizacao, exceto)['total']
 
 
+def _cancelar_convites_de(tx: _Tx, cid: str, momento: datetime | None = None) -> None:
+    """The pending invitations of who stops being a dono, is deactivated or is removed do not outlive it: an
+    invitation is an act of a dono, and stays good only while the one who made it could still make it."""
+    momento = momento or agora()
+    for convite in tx.todos("SELECT id, organizacao FROM convites WHERE criado_por = ? AND estado = 'pendente'", cid):
+        tx.ex("UPDATE convites SET estado = 'cancelado', token_sha256 = NULL, encerrado_em = ? WHERE id = ?",
+              _iso(momento), convite['id'])
+        _evento(tx, 'convite_cancelado', None, cid, momento, organizacao=convite['organizacao'])
+
+
 def _derrubar_sessoes(tx: _Tx, cid: str) -> None:
     tx.ex('DELETE FROM sessoes WHERE conta = ?', cid)
 
@@ -1148,6 +1159,7 @@ def desativar(root: Path, cid, por='cli', organizacao: str | None = None, *, con
               ' WHERE id = ?', cid)
         _derrubar_sessoes(tx, cid)
         _sem_responsabilidade(tx, cid)
+        _cancelar_convites_de(tx, cid)
         _evento(tx, 'conta_desativada', cid, por)
         return _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid))
 
@@ -1208,6 +1220,8 @@ def atualizar(root: Path, cid, por='cli', *, nome=None, papel=None, casos=None, 
                 _definir_participacoes(tx, conta, casos, por, momento)
         if novo_papel not in RESPONSAVEIS:
             _sem_responsabilidade(tx, cid)
+        if novo_papel != 'dono':
+            _cancelar_convites_de(tx, cid, momento)
         depois = _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), momento)
         campos = [nome_campo for nome_campo, chave in (('nome', 'nome'), ('papel', 'papel'), ('casos', 'casos'),
                                                        ('cota', 'cota_diaria')) if antes[chave] != depois[chave]]
@@ -1279,6 +1293,8 @@ def mudar_papel(root: Path, cid, papel, por: str, organizacao: str, senha=None, 
             tx.ex('UPDATE contas SET papel = ?, cota_diaria = NULL WHERE id = ?', papel, cid)
             if papel not in RESPONSAVEIS:
                 _sem_responsabilidade(tx, cid)
+            if papel != 'dono':
+                _cancelar_convites_de(tx, cid, momento)
             _evento(tx, 'papel_alterado', cid, por, momento, papel=papel)
         return _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), momento)
 
@@ -1298,6 +1314,7 @@ def remover(root: Path, cid, por: str, organizacao: str, senha=None, ip=None) ->
         if conta['papel'] == 'dono' and conta['ativa'] and not _donos_ativos(tx, organizacao, exceto=cid):
             raise UltimoDono(ULTIMO_DONO)
         _derrubar_sessoes(tx, cid)
+        _cancelar_convites_de(tx, cid, momento)
         tx.ex('DELETE FROM participacoes WHERE conta = ?', cid)
         _sem_responsabilidade(tx, cid)
         tx.ex('DELETE FROM uso_diario WHERE conta = ?', cid)
@@ -1457,6 +1474,11 @@ def convidar(root: Path, organizacao: str, por: str, email, papel, casos=(), idi
             raise ConviteDuplicado('Já há um convite pendente para esse e-mail: reenvie ou cancele o que existe.')
         if len(pendentes) >= CONVITES_PENDENTES:
             raise LimiteDeConvites(f'A redação já tem {CONVITES_PENDENTES} convites pendentes. Cancele algum ou espere vencer.')
+        # Cancelling and inviting again is not a way around "once an hour": each message to the address counts.
+        recentes = [c for c in tx.todos('SELECT enviado_em FROM convites WHERE organizacao = ? AND email = ?', organizacao, email)
+                    if _data(c['enviado_em']) + timedelta(minutes=REENVIO_MINUTOS) > momento]
+        if len(recentes) >= CONVITES_POR_ENDERECO:
+            raise LimiteDeConvites('Esse e-mail já recebeu convites demais desta redação na última hora. Espere para convidar de novo.')
         for caso in casos:
             _caso_da_redacao(tx, caso, organizacao)
     with _bd(root) as tx:

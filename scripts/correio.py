@@ -11,7 +11,8 @@ O código de contas chama ``enviar(tipo, para, idioma, dados)``. O transporte ve
   ``VLADO_SMTP_PORTA``, ``VLADO_SMTP_USUARIO``, ``VLADO_SMTP_SENHA``, ``VLADO_SMTP_REMETENTE``), sempre com TLS.
 
 As mensagens são só texto, em português e inglês, com modelos versionados (``VERSAO_MODELOS``). Todo valor
-que entra num modelo perde quebras de linha e caracteres de controle, e o único link é o da própria
+que entra num modelo é tratado como digitado por alguém: fica numa linha só e perde ponto, barra, dois-pontos
+e arroba, de modo que nenhum nome de pessoa ou de redação vire endereço. O único link é o da própria
 instalação. O token só existe no link: este módulo não grava nada em disco, e o registro de auditoria
 recebe o tipo da mensagem, nunca o endereço nem o texto. Trocar de provedor é escrever outro transporte.
 """
@@ -125,8 +126,17 @@ def _configuracao_smtp() -> dict:
 
 
 def _linha(valor, maximo: int = 200) -> str:
-    """One value of a template: a single line, without control characters (names come from people)."""
+    """A single line, without control characters."""
     texto = ''.join(c if c.isprintable() else ' ' for c in str(valor if valor is not None else ''))
+    return ' '.join(texto.split())[:maximo]
+
+
+def _livre(valor, maximo: int = 120) -> str:
+    """One value of a template that somebody typed (the name of a person, of a newsroom): letters, digits, spaces
+    and a little punctuation, on one line. No dot, slash, colon nor at sign is left, so nothing in it reads as an
+    address, to a person or to the mail program that turns addresses into links: the only link of a message is the
+    installation's. "Veja https://golpe.example" becomes "Veja https golpe example"."""
+    texto = ''.join(c if c.isalnum() or c in " '-,()" else ' ' for c in str(valor if valor is not None else ''))
     return ' '.join(texto.split())[:maximo]
 
 
@@ -136,7 +146,8 @@ def montar(tipo: str, idioma, dados: dict) -> tuple[str, str]:
     if tipo not in MODELOS or not isinstance(dados, dict):
         raise ValueError('Tipo de mensagem desconhecido.')
     idioma = idioma if idioma in IDIOMAS else IDIOMAS[0]
-    campos = {chave: _linha(valor) for chave, valor in dados.items()}
+    # Every field is treated as typed by somebody; the link, checked below, is the only exception.
+    campos = {chave: _livre(valor) for chave, valor in dados.items()}
     if 'link' in dados:
         link, origem = str(dados['link']), str(dados.get('origem') or '')
         if not _LINK.fullmatch(link) or (origem and not link.startswith(origem.rstrip('/') + '/')):

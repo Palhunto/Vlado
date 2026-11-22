@@ -5,6 +5,7 @@ Nenhum teste abre conexão: o transporte ``smtp`` roda contra um servidor de men
 """
 import os
 from pathlib import Path
+import re
 import smtplib
 import sys
 import unittest
@@ -93,9 +94,32 @@ class ModelosTest(Base):
         self.assertNotIn('\n', assunto)
         self.assertNotIn('\r', assunto + corpo)
         self.assertNotIn('\x00', corpo)
-        self.assertIn('Alfa Bcc: alvo@exemplo.test', assunto)  # one line: it cannot become a header
+        self.assertIn('Alfa Bcc alvo exemplo test', assunto)  # one line, and no address: it cannot become a header
         self.assertLessEqual(len(assunto), 150)
         self.assertLess(len(corpo), 1200)
+
+    def test_nome_digitado_por_alguem_nunca_vira_endereco_em_tipo_nenhum_de_mensagem(self):
+        # A dono renames herself "Veja https://golpe.example" and invites any address: the message would leave from
+        # the Vlado's sender with the other address clickable before the invitation's link.
+        endereco = re.compile(r'\S+\.\S+|\S*://\S*|\S+@\S+|\S+/\S+|\bwww\b\S*\.')
+        nomes = ('Veja https://golpe.example', 'www.golpe.example', 'golpe.example/entrar', 'fale com golpe@golpe.example',
+                 'mailto:golpe@golpe.example', 'HTTPS://GOLPE.EXAMPLE', 'golpe。example', 'golpe．example', 'tel:+5511999999999',
+                 'h​ttps://golpe.example', 'golpe . example', 'https:\\\\golpe.example', '//golpe.example')
+        for tipo in correio.MODELOS:
+            for idioma in correio.IDIOMAS:
+                for campo in ('convidado_por', 'redacao', 'papel', 'validade'):
+                    for nome in nomes:
+                        with self.subTest(tipo=tipo, idioma=idioma, campo=campo, nome=nome):
+                            assunto, corpo = correio.montar(tipo, idioma, {**DADOS, campo: nome})
+                            permitidos = [LINK] if '{link}' in correio.MODELOS[tipo][1][idioma][1] else []
+                            data = ['29/11/2026'] if idioma == 'pt' and campo != 'validade' else []
+                            self.assertEqual([a for a in endereco.findall(corpo) if a not in data], permitidos)
+                            self.assertEqual(endereco.findall(assunto), [])
+                            for sinal in ('://', '@', 'golpe.', '.example', '。', '．'):
+                                self.assertNotIn(sinal, (assunto + corpo).replace(LINK, ''))
+        assunto, corpo = correio.montar('convite', 'pt', {**DADOS, 'convidado_por': 'Veja https://golpe.example'})
+        self.assertIn('Veja https golpe example convidou você', corpo)  # the name is still there, as words
+        self.assertIn("Maria d'Ávila-Souza (editora), Jr", correio.montar('convite', 'pt', {**DADOS, 'convidado_por': "Maria d'Ávila-Souza (editora), Jr."})[1])
 
     def test_link_de_fora_da_instalacao_tipo_desconhecido_e_campo_faltando_sao_recusados(self):
         for link in ('https://outro.test/aceitar/abc', 'javascript:alert(1)', LINK + '\nhttps://outro.test/', LINK + '?x=1', ''):
