@@ -1,13 +1,40 @@
 /* Phase 08 screens (redacao.js). Colours come only from theme variables (tokens.css / style.css). */
 .redacao-grade{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:24px;align-items:start}
-.redacao-texto{white-space:pre-wrap;line-height:1.9;font-size:var(--text-base);padding:16px;border:1px solid var(--theme-line);border-radius:6px;background:var(--theme-reading);overflow-wrap:anywhere}
-.redacao-afirmacao{display:inline;min-height:0;padding:1px 2px;margin:0;border:0;border-bottom:3px solid var(--theme-line);border-radius:2px;background:transparent;color:var(--theme-text);font:inherit;font-weight:400;text-align:left;white-space:pre-wrap;cursor:pointer}
+.redacao-texto{
+  white-space:pre-wrap;
+  line-height:1.9;
+  font-size:var(--text-base);
+  padding:16px;
+  border:1px solid var(--theme-line);
+  border-radius:6px;
+  background:var(--theme-reading);
+  overflow-wrap:anywhere;
+}
+.redacao-afirmacao{
+  display:inline;
+  min-height:0;
+  padding:1px 2px;
+  margin:0;
+  border:0;
+  border-bottom:3px solid var(--theme-line);
+  border-radius:2px;
+  background:transparent;
+  color:var(--theme-text);
+  font:inherit;
+  font-weight:400;
+  text-align:left;
+  white-space:pre-wrap;
+  cursor:pointer;
+}
 .redacao-afirmacao:hover,.redacao-afirmacao[aria-pressed="true"]{background:var(--theme-active)}
 .redacao-afirmacao:focus-visible{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:2px}
 .estado-sem_suporte.redacao-afirmacao,.redacao-legenda .estado-sem_suporte span{border-bottom-color:var(--theme-danger-line)}
 .estado-suporte_parcial.redacao-afirmacao,.redacao-legenda .estado-suporte_parcial span{border-bottom-color:var(--theme-warning-line)}
 .estado-suportada.redacao-afirmacao,.redacao-legenda .estado-suportada span{border-bottom-color:var(--theme-accent-line)}
-.estado-revisada_por_humano.redacao-afirmacao,.redacao-legenda .estado-revisada_por_humano span{border-bottom-style:double;border-bottom-color:var(--theme-accent)}
+.estado-revisada_por_humano.redacao-afirmacao,.redacao-legenda .estado-revisada_por_humano span{
+  border-bottom-style:double;
+  border-bottom-color:var(--theme-accent);
+}
 .redacao-legenda{display:flex;flex-wrap:wrap;gap:12px 20px;list-style:none;padding:0;margin:8px 0 16px}
 .redacao-legenda span{border-bottom:3px solid var(--theme-line);padding-bottom:1px}
 .redacao-painel{padding:16px;border:1px solid var(--theme-line);border-radius:6px;background:var(--theme-surface)}
@@ -15,10 +42,27 @@
 .redacao-sinal{border-left:3px solid var(--theme-warning-line);padding-left:10px}
 .redacao-revisada{font-weight:600;color:var(--theme-accent)}
 .redacao-form{display:flex;flex-direction:column;gap:12px;margin:12px 0;max-width:640px}
-.redacao-form textarea{width:100%;border:1px solid var(--theme-input-line);border-radius:6px;padding:10px 12px;background:var(--theme-surface);color:var(--theme-text);font:inherit}
+.redacao-form textarea{
+  width:100%;
+  border:1px solid var(--theme-input-line);
+  border-radius:6px;
+  padding:10px 12px;
+  background:var(--theme-surface);
+  color:var(--theme-text);
+  font:inherit;
+}
 .redacao-fonte{display:flex;flex-direction:column;gap:12px;border:1px solid var(--theme-line);border-radius:6px;padding:12px}
 .redacao-pergunta,.redacao-resposta{border-top:1px solid var(--theme-line);padding-top:12px}
-.redacao-markdown{white-space:pre-wrap;overflow-wrap:anywhere;max-height:420px;overflow:auto;padding:12px;border:1px solid var(--theme-line);border-radius:6px;background:var(--theme-reading)}
+.redacao-markdown{
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  max-height:420px;
+  overflow:auto;
+  padding:12px;
+  border:1px solid var(--theme-line);
+  border-radius:6px;
+  background:var(--theme-reading);
+}
 .redacao-opcao{flex-direction:row;align-items:center;gap:10px;font-weight:400}
 .redacao-opcao input{width:24px;height:24px;min-height:0;flex:none;margin:0}
 .redacao-lacunas p.quadro-selo,.redacao-pergunta p.quadro-selo{display:inline-block}
@@ -26,7 +70,7 @@
 .redacao-exportar h4{margin-bottom:var(--espaco-3)}
 .redacao-exportar button{margin:0 var(--espaco-2) var(--espaco-2) 0}
 .redacao-cabeca{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline}
-@media (max-width:1023px){
+@media (max-width:1023px) {
   .redacao-grade{grid-template-columns:minmax(0,1fr)}
   .redacao-form{max-width:none}
   .redacao-texto{padding:12px}
