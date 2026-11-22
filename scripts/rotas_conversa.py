@@ -1,23 +1,26 @@
 """Operações da conversa com os documentos (``POST /api/codex-*``).
 
-Separado de ``interface_pesquisa`` sem mudar comportamento. Os nomes mantêm o prefixo
-histórico ``codex-``; a inferência passa por ``codex_apuracao.Conversas`` e pelo adaptador
-da API. O servidor já conferiu sessão, CSRF, origem e papel (``rotas_contas._negado``) e já
-descontou a cota do convidado; aqui a cota é devolvida quando a pergunta é recusada, e o
-convidado nunca recebe o dono nem os identificadores internos do provedor.
+Separado de ``interface_pesquisa``. Os nomes mantêm o prefixo histórico ``codex-``; a
+inferência passa por ``codex_apuracao.Conversas`` e pelo adaptador da API. O servidor já
+conferiu sessão, CSRF, origem e papel (``rotas_contas._negado``) e já descontou a cota do
+convidado; aqui a cota é devolvida quando a pergunta é recusada, e o convidado nunca recebe o
+dono nem os identificadores internos do provedor. ``codex-documentos-cadastrar`` envia o lote
+pela fila de extração (``fila_extracao``), sem trava presa durante a leitura; ``Conversas.lock``
+fica preso apenas na conferência da conversa. Nada daqui passa por ``cadastro_lock``.
 """
 from __future__ import annotations
 
 import threading
 
 import acesso
+import custo
 import diligencias
 from rotas_documentos import receber_documentos
 
 OPERACOES = ('codex-status', 'codex-listar',
              'codex-perguntar', 'codex-retomar', 'codex-eventos', 'codex-cancelar', 'codex-original',
              'codex-desligar', 'codex-observacoes', 'codex-corpus-previa', 'codex-documentos-cadastrar', 'codex-caderno-previa', 'codex-diligencias-previa')
-CAMPOS_INTERNOS_CONVERSA = frozenset({'dono', 'thread_id', 'turn_id', 'politica'})
+CAMPOS_INTERNOS_CONVERSA = frozenset({'dono', 'conta', 'thread_id', 'turn_id', 'politica'})
 # Returned by ``_conversa`` when the response (a file or the shutdown notice) was already sent.
 RESPONDIDO = object()
 
@@ -33,8 +36,22 @@ def _sem_internos(result):
 class RotasConversa:
     """Mixin of the request handler: uses its ``_send``, ``_json`` and ``server``."""
 
-    def _conversa(self, operation, data, dono, casos_liberados, consulta_contada):
-        """Result to answer as JSON, or ``RESPONDIDO``. ``dono`` is the guest account (None for admins)."""
+    def _cota(self):
+        """`GET /api/cota`: this month's spend and balance in reais (the quota bar). A guest sees only
+        its own account; an administrator also sees the organization's. No case content."""
+        principal = self._principal()
+        if principal is None:
+            self._proibido()
+            return
+        try:
+            self._json(200, custo.situacao(self.server.root, principal['conta'],
+                                           administrador=principal['papel'] == 'admin'))
+        except ValueError as exc:
+            self._json(400, {'erro': str(exc)}, exc)
+
+    def _conversa(self, operation, data, dono, casos_liberados, consulta_contada, conta=None):
+        """Result to answer as JSON, or ``RESPONDIDO``. ``dono`` is the guest account (None for admins);
+        ``conta`` the account that asks, administrators included (it spends the month's quota)."""
         manager = self.server.conversas
         if operation == 'codex-desligar':
             self._json(200, {'estado': 'encerrando'})
@@ -51,14 +68,14 @@ class RotasConversa:
             result = manager.listar(data.get('caso'), dono=dono)
         elif operation == 'codex-perguntar':
             try:
-                result = manager.perguntar(data, dono=dono)
+                result = manager.perguntar(data, dono=dono, conta=conta)
             except Exception:
                 if consulta_contada:
                     acesso.devolver_consulta(self.server.root, dono)
                 raise
         elif operation == 'codex-retomar':
             try:
-                result = manager.retomar(data.get('conversa'), dono=dono, casos=casos_liberados)
+                result = manager.retomar(data.get('conversa'), dono=dono, casos=casos_liberados, conta=conta)
             except FileNotFoundError as exc:
                 if consulta_contada:
                     acesso.devolver_consulta(self.server.root, dono)
@@ -76,10 +93,12 @@ class RotasConversa:
         elif operation == 'codex-diligencias-previa':
             result = manager.caderno_previa(data, diligencias)
         elif operation == 'codex-documentos-cadastrar':
-            with self.server.cadastro_lock, manager.lock:
-                manager.conferir_para_documentos(data.get('caso'), data.get('conversa'))
+            # Conversas.lock only for the check (reservar_para_documentos); the batch goes through the
+            # extraction queue, with no lock held while it is read; new questions on this one wait.
+            with manager.reservar_para_documentos(data.get('caso'), data.get('conversa')):
                 result = receber_documentos(self.server.root, {'caso': data.get('caso'),
-                    'arquivos': data.get('arquivos'), 'natureza': data.get('natureza', 'nao_informada')})
+                    'arquivos': data.get('arquivos'), 'natureza': data.get('natureza', 'nao_informada')},
+                    fila=self.server.fila)
         elif operation == 'codex-eventos':
             result = manager.eventos(data.get('conversa'), data.get('cursor', 0), data.get('espera', 0), dono=dono,
                                      casos=casos_liberados)

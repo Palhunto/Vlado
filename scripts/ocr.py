@@ -13,9 +13,19 @@ Configuracao por variaveis de ambiente: VLADO_OCR=0 desliga; VLADO_OCR_IDIOMAS (
 VLADO_TESSERACT (executavel); VLADO_TESSDATA (pasta de idiomas); VLADO_OCR_MOTOR
 (auto|ocrmypdf|tesseract); VLADO_OCR_TIMEOUT (segundos por pagina). Subprocessos nao abrem janelas.
 Nao chama modelos de linguagem nem rede.
+
+Paralelismo e progresso (fila de extracao, CONF-02): dentro de ``execucao(paralelo=N, progresso=f)``
+a conferencia de orientacao e o motor Tesseract direto leem ate N paginas ao mesmo tempo, o
+OCRmyPDF recebe ``--jobs N`` e ``f(fase, feitas, total)`` recebe o andamento. Fora desse bloco
+tudo continua como antes: uma pagina por vez, sem ``--jobs``. O PyMuPDF nao aceita duas threads
+ao mesmo tempo: renderizar e girar paginas passam por ``_PYMUPDF``; so o Tesseract roda em
+paralelo.
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+import contextvars
 from functools import lru_cache
 import importlib.util
 import importlib.metadata
@@ -26,6 +36,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 
 from comum import sha256
 
@@ -53,6 +64,63 @@ MARGEM_LEITURA_DUPLA = 10.0
 MEDIDA_MINIMA_GIRADA = 50.0
 _DESLIGADO = {'0', 'false', 'nao', 'não', 'no', 'off'}
 _SALTO = re.compile(r'^\[OCR skipped on page\(s\) (\d+)(?:-(\d+))?\]$')
+# PyMuPDF is not thread-safe: every render and page turn goes through this lock.
+_PYMUPDF = threading.RLock()
+_EXECUCAO = contextvars.ContextVar('vlado_ocr_execucao', default=None)
+
+
+@contextmanager
+def execucao(paralelo=None, progresso=None):
+    """Pages read at the same time (None: one, as before) and a progress callback for this block.
+
+    ``progresso(fase, feitas, total)``: ``fase`` is ``orientacao`` (pages checked before the
+    OCRmyPDF), ``reconhecimento`` (OCRmyPDF over the pages, reported at start and end) or
+    ``paginas`` (pages read by the direct Tesseract engine). Errors in the callback are ignored.
+    """
+    marca = _EXECUCAO.set({'paralelo': max(1, int(paralelo)) if paralelo else None, 'progresso': progresso})
+    try:
+        yield
+    finally:
+        _EXECUCAO.reset(marca)
+
+
+def _paralelo() -> int | None:
+    opcoes = _EXECUCAO.get()
+    return opcoes['paralelo'] if opcoes else None
+
+
+def _avisar(fase, feitas, total, opcoes=None):
+    opcoes = opcoes or _EXECUCAO.get()
+    if opcoes and opcoes['progresso']:
+        try:
+            opcoes['progresso'](fase, feitas, total)
+        except Exception:  # noqa: BLE001 - progress never breaks the reading
+            pass
+
+
+def _por_pagina(paginas, ler, fase):
+    """``[ler(n) for n in paginas]``, up to ``_paralelo()`` pages at a time, in page order.
+
+    The context of ``execucao`` is read here, in the caller's thread (worker threads do not
+    inherit it); ``ler`` must not raise (each caller turns a page's error into its result).
+    """
+    opcoes = _EXECUCAO.get()
+    largura = min(_paralelo() or 1, len(paginas)) if paginas else 1
+    feitas, trava = [0], threading.Lock()
+
+    def uma(numero):
+        try:
+            return ler(numero)
+        finally:
+            with trava:
+                feitas[0] += 1
+                contagem = feitas[0]
+            _avisar(fase, contagem, len(paginas), opcoes)
+
+    if largura <= 1:
+        return [uma(n) for n in paginas]
+    with ThreadPoolExecutor(max_workers=largura, thread_name_prefix='vlado_ocr') as grupo:
+        return list(grupo.map(uma, paginas))
 
 
 class OcrIndisponivel(RuntimeError):
@@ -357,7 +425,14 @@ def _sidecar_ocrmypdf(pdf: Path, paginas: list, total: int, config: dict) -> dic
                 '--rotate-pages-threshold', str(CONFIANCA_OSD_MINIMA),
                 '-l', config['idiomas'], '--pages', ','.join(str(p) for p in paginas),
                 '--output-type', 'none', '--sidecar', str(lado), str(pdf), '-']
+        # OCRmyPDF's own decompression-bomb cap, at the extraction's pixel cap (SEG-01).
+        import tetos_extracao
+        args[3:3] = ['--max-image-mpixels', str(tetos_extracao.configuracao()['megapixels'])]
+        if _paralelo():
+            # Inside the extraction queue: the pages this file may use; outside it, OCRmyPDF's default.
+            args[3:3] = ['--jobs', str(_paralelo())]
         timeout = config['timeout_pagina'] * len(paginas) + 60
+        _avisar('reconhecimento', 0, len(paginas))
         try:
             processo = _executar(args, timeout=timeout, env=_ambiente(config))
         except subprocess.TimeoutExpired as exc:
@@ -368,6 +443,7 @@ def _sidecar_ocrmypdf(pdf: Path, paginas: list, total: int, config: dict) -> dic
             raise OcrFalha(f'OCRmyPDF falhou: {_erro_curto(processo)}')
         if not lado.is_file():
             raise OcrFalha('OCRmyPDF nao gerou o texto lateral (sidecar).')
+        _avisar('reconhecimento', len(paginas), len(paginas))
         return _paginas_do_sidecar(lado.read_text(encoding='utf-8', errors='replace'), total)
 
 
@@ -390,21 +466,31 @@ def _orientar_antes(pdf: Path, paginas: list, config: dict) -> tuple:
             return diretas, registros, avisos
     except Exception:  # noqa: BLE001 - OCRmyPDF reads it on its own
         return diretas, registros, avisos
+    total = len(documento)
+
+    def ler(numero):
+        if not 1 <= numero <= total:
+            return numero, None, None, None
+        try:
+            with _PYMUPDF:
+                pagina = documento[numero - 1]
+            texto, registro = _pagina_orientada(pagina, numero, config, motor_direto=False)
+        except Exception as exc:  # noqa: BLE001 - OCRmyPDF reads the page, say why
+            return numero, None, None, f'Orientacao nao conferida: {type(exc).__name__}: {str(exc)[:200]}'
+        return numero, texto, registro, None
+
     try:
-        for numero in paginas:
-            if not 1 <= numero <= len(documento):
-                continue
-            try:
-                texto, registro = _pagina_orientada(documento[numero - 1], numero, config, motor_direto=False)
-            except Exception as exc:  # noqa: BLE001 - OCRmyPDF reads the page, say why
-                avisos[numero] = f'Orientacao nao conferida: {type(exc).__name__}: {str(exc)[:200]}'
-                continue
-            if texto is not None:
+        # Up to the queue's page budget at a time (ressalva 27: this check used to run one page at a time).
+        for numero, texto, registro, aviso in _por_pagina(paginas, ler, 'orientacao'):
+            if aviso:
+                avisos[numero] = aviso
+            elif texto is not None:
                 diretas[numero] = {'texto': texto, 'orientacao': {**registro, 'texto_de': 'tesseract'}}
             elif registro:
                 registros[numero] = registro
     finally:
-        documento.close()
+        with _PYMUPDF:
+            documento.close()
     return diretas, registros, avisos
 
 
@@ -418,12 +504,14 @@ def _pagina_orientada(pagina, numero: int, config, *, motor_direto: bool) -> tup
 
 def _renderizar(pagina, destino: Path):
     import pymupdf
-    zoom = DPI_RENDERIZACAO / 72
-    maior = max(pagina.rect.width, pagina.rect.height)
-    if maior * zoom > LADO_MAXIMO_PX:
-        zoom = LADO_MAXIMO_PX / maior
-    pixmap = pagina.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), colorspace=pymupdf.csGRAY, alpha=False)
-    pixmap.save(str(destino))
+    with _PYMUPDF:
+        zoom = DPI_RENDERIZACAO / 72
+        maior = max(pagina.rect.width, pagina.rect.height)
+        if maior * zoom > LADO_MAXIMO_PX:
+            zoom = LADO_MAXIMO_PX / maior
+        pixmap = pagina.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), colorspace=pymupdf.csGRAY, alpha=False)
+        pixmap.save(str(destino))
+        del pixmap
 
 
 def _opcoes_tessdata(config):
@@ -546,12 +634,13 @@ def _orientar_pagina(pagina, imagem: Path, config, *, motor_direto=True):
 def _girar(pagina, imagem: Path, giro: int) -> Path:
     """Render the page turned `giro` degrees next to `imagem`; the page itself is put back."""
     girada = imagem.with_name(imagem.stem + f'_g{giro}.png')
-    original = pagina.rotation
-    pagina.set_rotation((original + giro) % 360)
-    try:
-        _renderizar(pagina, girada)
-    finally:
-        pagina.set_rotation(original)
+    with _PYMUPDF:
+        original = pagina.rotation
+        pagina.set_rotation((original + giro) % 360)
+        try:
+            _renderizar(pagina, girada)
+        finally:
+            pagina.set_rotation(original)
     return girada
 
 
@@ -565,19 +654,25 @@ def _motor_tesseract(pdf: Path, paginas: list, config: dict) -> dict:
         raise
     except Exception as exc:
         raise OcrFalha(f'PyMuPDF nao abriu o PDF: {type(exc).__name__}: {str(exc)[:300]}') from exc
-    resultado = {}
+    total = len(documento)
+
+    def ler(numero):
+        try:
+            if numero < 1 or numero > total:
+                raise OcrFalha('Pagina inexistente no PDF.')
+            with _PYMUPDF:
+                pagina = documento[numero - 1]
+            texto, orientacao = _pagina_orientada(pagina, numero, config, motor_direto=True)
+            return numero, {'texto': texto, **({'orientacao': {**orientacao, 'texto_de': 'tesseract'}}
+                                               if orientacao else {})}
+        except Exception as exc:
+            return numero, {'erro': f'{type(exc).__name__}: {str(exc)[:500]}'}
+
     try:
-        for numero in paginas:
-            try:
-                if numero < 1 or numero > len(documento):
-                    raise OcrFalha('Pagina inexistente no PDF.')
-                texto, orientacao = _pagina_orientada(documento[numero - 1], numero, config, motor_direto=True)
-                resultado[numero] = {'texto': texto, **({'orientacao': {**orientacao, 'texto_de': 'tesseract'}}
-                                                        if orientacao else {})}
-            except Exception as exc:
-                resultado[numero] = {'erro': f'{type(exc).__name__}: {str(exc)[:500]}'}
+        resultado = dict(_por_pagina(paginas, ler, 'paginas'))
     finally:
-        documento.close()
+        with _PYMUPDF:
+            documento.close()
     return {'motor': 'tesseract', 'versoes': _versoes(config, 'tesseract'), 'idiomas': config['idiomas'],
             'paginas': resultado, 'avisos': []}
 
@@ -664,6 +759,10 @@ def ocr_imagem(source: Path, identifier: str, target: Path) -> dict:
     result = {'estado': 'erro', 'origem': 'ocr', 'motor': None, 'versoes': {}, 'idiomas': None,
               'linhas': 0, 'metodo': None, 'mensagem': None, 'avisos': [],
               'aviso_conferencia': AVISO_OCR_IMAGEM, 'conferencia_humana': 'nao_realizada'}
+    import tetos_extracao
+    teto = tetos_extracao.teto_imagem_arquivo(source)
+    if teto:  # a decompression bomb is never handed to Tesseract (SEG-01)
+        return {**result, 'mensagem': teto + ' O original esta preservado.', 'teto': teto}
     try:
         lido = reconhecer_imagem(source)
     except (OcrIndisponivel, ValueError) as exc:

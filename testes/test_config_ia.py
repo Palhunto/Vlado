@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from comum import escrever_json
+from comum import ROOT, escrever_json
 import segredos
 from inferencia_api import ErroIA, ServidorAPI, ler_inferencia, resumo_inferencia, salvar_inferencia, seguro
 
@@ -78,6 +78,18 @@ class SegredosTest(Base):
 
 
 class InferenciaAjustadaTest(Base):
+    def setUp(self):
+        super().setUp()
+        # CUS-03: only models of the installation's list, each with a price, can be saved. These tests
+        # switch to OpenAI and to Opus, so this test installation allows them (synthetic OpenAI price).
+        config = json.loads((self.root / 'configuracao.json').read_text(encoding='utf-8'))
+        config['orcamento'] = {'modelos_permitidos': ['claude-sonnet-5-5', 'claude-opus-5-5', 'gpt-6.1-sol']}
+        escrever_json(self.root / 'configuracao.json', config)
+        tabela = json.loads((ROOT / 'precos_modelos.json').read_text(encoding='utf-8'))
+        tabela['modelos'].setdefault('openai', {})['gpt-6.1-sol'] = {
+            'entrada': 1.0, 'cache_leitura': 0.1, 'cache_escrita_5m': 0.0, 'cache_escrita_1h': 0.0, 'saida': 8.0}
+        escrever_json(self.root / 'precos_modelos.json', tabela)
+
     def test_ajuste_pela_interface_sobrepoe_configuracao_sem_alterar_arquivo_versionado(self):
         antes = (self.root / 'configuracao.json').read_bytes()
         salvar_inferencia(self.root, {'provedor': 'openai', 'modelo_preferido': None})

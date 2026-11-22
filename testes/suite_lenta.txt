@@ -10,3 +10,8 @@ test_tabelas_apuracao
 test_autoria_conta
 test_caderno
 # Medido em 2026-11-20 (módulos >= 40 s; suíte completa 15 min, rápida cerca de 9).
+# Teste de build das imagens (I7): só roda com Docker e VLADO_TESTE_IMAGEM=1; sem isso os testes de build saem pulados.
+test_imagem_build
+# Filas de extracao e do portao (CONF-02), medidas pela Viga: cerca de 60 s e 20 s.
+test_fila_extracao
+test_fila_portao

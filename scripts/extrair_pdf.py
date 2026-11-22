@@ -3,6 +3,7 @@ import argparse
 from pathlib import Path
 from comum import sha256
 import ocr
+import tetos_extracao as tetos
 
 SEM_TEXTO = '[SEM TEXTO EXTRAIVEL NESTA PAGINA]'
 ERRO_TEXTO = '[ERRO DE EXTRACAO NESTA PAGINA]'
@@ -16,7 +17,21 @@ def _alfanumericos(texto: str) -> int:
 
 
 def _tentar_ocr(source: Path, candidatas: list, result: dict) -> dict:
-    """Run OCR on candidate pages; never raises. Returns {pagina: {'texto'|'erro'}}."""
+    """Run OCR on candidate pages; never raises. Returns {pagina: {'texto'|'erro'}}.
+
+    Pages over the pixel caps (``tetos_extracao``: the page at 300 dpi, or an image it declares)
+    are never rendered nor sent to the engine: they get an error with the reason.
+    """
+    recusadas = tetos.paginas_acima_do_teto(source, candidatas)
+    if recusadas:
+        result['paginas_acima_do_teto'] = sorted(recusadas)
+    lidas = _ocr_das_paginas(source, [n for n in candidatas if n not in recusadas], result)
+    return {**lidas, **{numero: {'erro': mensagem} for numero, mensagem in recusadas.items()}}
+
+
+def _ocr_das_paginas(source: Path, candidatas: list, result: dict) -> dict:
+    if not candidatas:
+        return {}
     try:
         disponibilidade = ocr.diagnostico()
         if not disponibilidade['disponivel']:
@@ -93,7 +108,14 @@ def extrair_pdf(source: Path, identifier: str, target: Path, *, ocr_ativo: bool 
         if reader.is_encrypted and not reader.decrypt(''):
             result['protegido'] = True
             raise ValueError('PDF protegido por senha; texto nao extraido.')
-        count = len(reader.pages)
+        # The declared count first: a page tree with millions of entries is never walked.
+        declaradas = tetos.paginas_declaradas(reader)
+        teto = tetos.teto_paginas(declaradas)
+        count = None if teto else len(reader.pages)
+        teto = teto or tetos.teto_paginas(count)
+        if teto:
+            result.update(paginas_pdf=count if count is not None else declaradas, mensagem=teto, teto=teto)
+            return result
         if count == 0:
             raise ValueError('PDF sem paginas; texto nao extraido.')
         result['paginas_pdf'] = count
@@ -111,6 +133,7 @@ def extrair_pdf(source: Path, identifier: str, target: Path, *, ocr_ativo: bool 
         except Exception as exc:
             native[number] = ''
             native_errors[number] = f'{type(exc).__name__}: {str(exc)[:1000]}'
+        ocr._avisar('texto', number, count)  # progress for the extraction queue (ocr.execucao); no-op outside it
     candidates = [n for n in range(1, count + 1)
                   if _alfanumericos(native[n]) < MINIMO_ALFANUMERICOS_NATIVO]
     recognized = _tentar_ocr(source, candidates, result) if candidates and ocr_ativo else {}

@@ -1,9 +1,51 @@
 # HTTPS reverse proxy for the VLADO pilot. Caddy obtains and renews the certificate
 # for {$VLADO_DOMINIO} automatically (ports 80 and 443 must reach this host).
+{
+	# Log padrão do Caddy (stdout/stderr do contêiner, o que `docker logs` mostra): com a Mesa fora do ar o
+	# Caddy registra aqui o erro 502 com a URI inteira (token de /ativar, query) e todos os cabeçalhos
+	# (Cookie, X-Session-Token). Mesmo filtro do registro de acesso, sem o campo "rota" (que é do `log_append`
+	# do site): nada de URI, cabeçalhos de requisição nem de resposta. Fica horário, nível, IP e o erro.
+	log {
+		format filter {
+			wrap json
+			fields {
+				request>uri delete
+				request>headers delete
+				resp_headers delete
+			}
+		}
+	}
+}
+
 {$VLADO_DOMINIO} {
 	encode gzip
 	request_body {
 		max_size 80MB
+	}
+	# Registro de acesso (uma linha JSON por requisição) em /var/log/caddy/acesso.log, volume caddy_logs.
+	# Conteúdo mínimo e sem segredo: o Caddy nunca registra o corpo da requisição; aqui também saem a URI
+	# inteira (a query pode levar nome de caso ou de documento), TODOS os cabeçalhos da requisição (Cookie,
+	# Authorization, X-Forwarded-*, User-Agent) e TODOS os da resposta (Set-Cookie). Fica o caminho no campo
+	# "rota", com o token de /ativar/<token> e /convite/<token> mascarado, e qualquer segmento de 24 ou mais
+	# caracteres [A-Za-z0-9_-] também (token, identificador longo, hash). Fica o IP de origem, para investigar
+	# incidente. Rotação: 20 MiB por arquivo, 20 arquivos, no máximo 30 dias. Guia: deploy/INCIDENTE.md.
+	# O log padrão do contêiner (opções globais, acima) leva o mesmo filtro: também sem URI e sem cabeçalhos.
+	log_append rota {http.request.uri.path}
+	log {
+		output file /var/log/caddy/acesso.log {
+			roll_size 20MiB
+			roll_keep 20
+			roll_keep_for 720h
+		}
+		format filter {
+			wrap json
+			fields {
+				request>uri delete
+				request>headers delete
+				resp_headers delete
+				rota regexp "(?P<p>/(?:ativar|convite)/)[^/?#]+|(?P<q>/)[A-Za-z0-9_-]{24,}" "${p}${q}***"
+			}
+		}
 	}
 	# The original Host header is forwarded; the app checks it against https://{$VLADO_DOMINIO}.
 	reverse_proxy vlado:8765

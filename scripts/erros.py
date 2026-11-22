@@ -143,6 +143,17 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('fontes_web_limite', r'^Limite de (?P<limite>\d+) capturas web por caso'),
     ('fontes_web_captura_inexistente', r'^Captura web inexistente'),
     ('fontes_web_campos_invalidos', r'^Campos não permitidos na operação de fontes web'),
+    # Extraction queue (scripts/fila_extracao.py): W11 'limite' block; onde = 'desta apuração' or 'na Mesa'.
+    ('fila_limite_envios', r'^Limite de envios em processamento\. Há (?P<arquivos>\d+) arquivos? '
+                           r'(?P<onde>desta apuração|na Mesa) sendo lidos?\.'),
+    # Month's quota in reais and execution ceilings (scripts/custo.py, codex_apuracao): W11 'limite' block.
+    ('cota_mensal_conta', r'^Sua cota do mês acabou\. Você usou R\$ (?P<usado>[\d.]+,\d{2}) de R\$ (?P<teto>[\d.]+,\d{2})\.'),
+    ('cota_mensal_organizacao', r'^A cota do mês da instalação acabou\.'),
+    ('gasto_ilegivel', r'^O registro do gasto do mês está ilegível'),
+    ('gasto_nao_registrado', r'^O gasto do mês não pode ser registrado agora'),
+    ('modelo_nao_permitido', r'^O modelo .+ não está entre os permitidos nesta instalação'),
+    ('execucoes_simultaneas_conta', r'^Já há (?P<limite>\d+) perguntas? em andamento nesta conta'),
+    ('execucoes_simultaneas_mesa', r'^A Mesa já está com (?P<limite>\d+) perguntas em andamento'),
     # Drafts (rascunhos): one per account, case and screen, with a growing version.
     ('rascunho_conflito', r'^O rascunho mudou em outra aba'),
     ('rascunho_sem_caso', r'^Selecione uma apuração para o rascunho'),
