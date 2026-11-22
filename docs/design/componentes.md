@@ -716,7 +716,7 @@ Pranchas: `aprovacao/quadros/proposta-{hipoteses,tabelas,comparador,mapa,linha-d
 |---|---|
 | Hipótese aberta | cartão aberto, preenchimento 20 24, intervalo 16; título serifa 18/600; à direita, a contagem em 14 `--theme-muted` ("2 sustentam · 1 contraria · 1 falta") e "Editar" |
 | Três colunas | grade de três colunas iguais, intervalo 16 (celular: uma coluna, intervalo 12). Coluna: fundo `--theme-reading`, raio 12, preenchimento 16, intervalo 12, traço de 3 px no topo. Sustenta: contínuo `--theme-accent`, ✓; contraria: contínuo `--theme-danger`, ícone `sinal-sem-suporte`; falta: tracejado `--theme-warning`, ícone `lacuna`. Título da coluna 600 na cor do traço, com o ícone de 16 px |
-| Evidência | `<a>` com fundo `--theme-surface`, borda 1 px `--theme-line`, raio 8, preenchimento 12, intervalo 4; o que diz e, em 14 `--theme-muted`, "fonte · abrir o original" (W05, regra 4). "+ Ligar evidência" é link 600 |
+| Evidência | `<a>` com fundo `--theme-surface`, borda 1 px `--theme-line`, raio 8, preenchimento 12, intervalo 4, sem sublinhado; o que diz em `--theme-text` (o cartão inteiro é o alvo, não um link verde) e, em 14 `--theme-muted`, "fonte · abrir o original" (W05, regra 4). "+ Ligar evidência" é link 600 |
 | Item de "falta" | item a resolver com "sem documento" em 14/600 `--theme-warning`; abaixo, a ação de lacuna (W05, regra 5) |
 | Hipóteses fechadas | cartão-botão de largura cheia, preenchimento 16 20: título em serifa 18 e a contagem à direita |
 | Nova hipótese | formulário no pé: rótulo "Escreva como afirmação que os documentos possam sustentar ou contrariar", "Cancelar" e "Criar"; no celular, "Nova hipótese" sobe para o topo, principal de 48 px |

@@ -25,11 +25,12 @@ const VOLTA = `<a href="#" class="bt bt-s" style="gap:6px;padding:0 12px">${svg(
 const VOLTA_CANVAS = '<a href="#" style="display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 12px; border-radius: 8px; border: 1px solid #74837a; background: #fffefa; color: #202c29; text-decoration: none; font-size: 16px"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#202c29" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>Apuração</a>';
 const CSS = `.col{background:var(--theme-reading);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
 .ev{background:var(--theme-surface);border:1px solid var(--theme-line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;color:var(--theme-text);text-decoration:none}
-.abas{display:flex;gap:4px}.pr .abas a{height:44px;padding:0 14px;border-radius:8px;display:flex;align-items:center;text-decoration:none;color:var(--theme-text);white-space:nowrap}
-.pr .abas a[aria-current]{background:var(--theme-soft);color:var(--theme-accent);font-weight:600}
+.pr a.ev:not(.bt){color:var(--theme-text)}
+.abas{display:flex;gap:4px}.pr .abas a:not(.bt){height:44px;padding:0 14px;border-radius:8px;display:flex;align-items:center;text-decoration:none;color:var(--theme-text);white-space:nowrap}
+.pr .abas a[aria-current]:not(.bt){background:var(--theme-soft);color:var(--theme-accent);font-weight:600}
 .abas-cel{display:flex;gap:8px;overflow:hidden;padding:12px 16px;border-bottom:1px solid var(--theme-line);background:var(--theme-surface)}
-.pr .abas-cel a{flex:none;height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--theme-input-line);display:flex;align-items:center;text-decoration:none;color:var(--theme-text);white-space:nowrap}
-.pr .abas-cel a[aria-current]{background:var(--theme-accent);border-color:var(--theme-accent);color:var(--theme-on-primary);font-weight:600}
+.pr .abas-cel a:not(.bt){flex:none;height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--theme-input-line);display:flex;align-items:center;text-decoration:none;color:var(--theme-text);white-space:nowrap}
+.pr .abas-cel a[aria-current]:not(.bt){background:var(--theme-accent);border-color:var(--theme-accent);color:var(--theme-on-primary);font-weight:600}
 table.dados{width:100%;border-collapse:collapse}table.dados th,table.dados td{padding:12px 14px;border-bottom:1px solid var(--theme-line);text-align:left;vertical-align:top}
 table.dados th{font-size:14px;color:var(--theme-muted);font-weight:600;background:var(--theme-reading)}table.dados td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .rem{background:var(--theme-danger-bg);color:var(--theme-danger);text-decoration:line-through;border-radius:4px;padding:0 4px}
