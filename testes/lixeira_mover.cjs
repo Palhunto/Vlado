@@ -119,3 +119,23 @@ test('excluir a apuração inteira também passa pelo diálogo, com o efeito da 
   botoes(mesa)[0].click();
   assert.equal(mesa.chamadas.some(c => c.operacao === 'excluir'), false);
 });
+
+test('depois de uma recusa, ao fechar o diálogo a lista é relida (ressalva da Coruja)', async () => {
+  const {mesa, liberar} = await abrirDialogo({excluir: () => { throw new Error('Recusado pelo servidor.'); }});
+  botoes(mesa)[1].click();
+  await mesa.esperar(4);
+  await liberar();
+  assert.equal(erro(mesa).textContent, 'Recusado pelo servidor.');
+  const listagens = mesa.chamadas.filter(c => c.operacao === 'gerenciar-listar').length;
+  botoes(mesa)[0].click();
+  await mesa.esperar(8);
+  assert.ok(mesa.chamadas.filter(c => c.operacao === 'gerenciar-listar').length > listagens, 'a lista é relida depois da recusa');
+});
+
+test('cancelar sem ter pedido nada não relê a lista', async () => {
+  const {mesa} = await abrirDialogo();
+  const listagens = mesa.chamadas.filter(c => c.operacao === 'gerenciar-listar').length;
+  botoes(mesa)[0].click();
+  await mesa.esperar(8);
+  assert.equal(mesa.chamadas.filter(c => c.operacao === 'gerenciar-listar').length, listagens);
+});

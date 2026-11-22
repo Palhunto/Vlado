@@ -194,16 +194,22 @@
   window.excluirItem = async (scope, title, opener) => {
     if (busy || moving) return false;
     moving = true;
+    let failed = false;
     const effect = scope.tipo === 'caso' ? 'A apuração, suas conversas e rodadas sairão das listas.'
       : scope.tipo === 'conversa' ? 'A conversa, suas perguntas complementares e rodadas sairão das listas.'
       : 'Esta rodada e seus achados sairão das consultas.';
     try {
-      return await window.Dialogo.confirmar({
+      const moved = await window.Dialogo.confirmar({
         variante:'destrutivo', rubrica:'Mover para a lixeira', titulo:'Mover {item} para a lixeira?', item:title, texto:effect,
         nota:'Você poderá restaurar em Apurações e lixeira. Documentos e registros serão preservados.',
         acao:'Mover para a lixeira', ocupado:'Movendo…', gatilho:opener,
-        executar:async () => { if (!await mutate('excluir', scope)) throw new Error('Há outra operação em andamento. Aguarde e tente de novo.'); },
+        executar:async () => {
+          try { if (!await mutate('excluir', scope)) throw new Error('Há outra operação em andamento. Aguarde e tente de novo.'); }
+          catch (error) { failed = true; throw error; }
+        },
       });
+      if (!moved && failed) await load();   // a refusal may have changed what is on the lists
+      return moved;
     } finally { moving = false; }
   };
   $('gerenciar-excluir-caso').addEventListener('click', async () => {
