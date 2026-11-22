@@ -113,10 +113,14 @@ class ProvedorOpenAI:
             raise ErroIA('A resposta foi interrompida pelo filtro de conteúdo do provedor.', codigo='filtro')
         if motivo:
             raise ErroIA(f'A API devolveu uma resposta incompleta ({seguro(motivo)}).', codigo='incompleta')
-        uso = final.usage
-        detalhes_entrada = getattr(uso, 'input_tokens_details', None)
-        detalhes_saida = getattr(uso, 'output_tokens_details', None)
-        return Resposta(''.join(textos), tuple(chamadas), {
-            'entrada': uso.input_tokens or 0, 'saida': uso.output_tokens or 0,
-            'cache_leitura': getattr(detalhes_entrada, 'cached_tokens', 0) or 0,
-            'raciocinio': getattr(detalhes_saida, 'reasoning_tokens', 0) or 0}, final.model, tuple(opaco))
+        return Resposta(''.join(textos), tuple(chamadas), uso_da_resposta(final.usage), final.model, tuple(opaco))
+
+
+def uso_da_resposta(uso) -> dict:
+    """Usage in the priced kinds (custo.TIPOS). Here ``input_tokens`` already includes the cached
+    tokens (no write is billed): the uncached part is the difference. Reasoning is part of the output."""
+    entrada = getattr(uso, 'input_tokens', None) or 0
+    lidos = getattr(getattr(uso, 'input_tokens_details', None), 'cached_tokens', 0) or 0
+    return {'entrada': entrada, 'saida': getattr(uso, 'output_tokens', None) or 0, 'cache_leitura': lidos,
+            'raciocinio': getattr(getattr(uso, 'output_tokens_details', None), 'reasoning_tokens', 0) or 0,
+            'entrada_sem_cache': max(0, entrada - lidos), 'cache_escrita_5m': 0, 'cache_escrita_1h': 0}
