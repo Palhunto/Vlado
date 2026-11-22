@@ -6,8 +6,10 @@ from contextlib import contextmanager
 import hashlib
 from datetime import datetime, timezone
 import json
+import logging
 from pathlib import Path
 import re
+import secrets
 import shutil
 import threading
 import time
@@ -79,6 +81,69 @@ CAUSAS_ERRO = {
 def montar_situacao(codigo, mensagem=None, causa=None):
     return {'codigo': codigo, 'mensagem': mensagem or MENSAGENS_SITUACAO[codigo],
             'causa': causa, 'em_utc': datetime.now(timezone.utc).isoformat()}
+
+
+# SEG-06: o texto cru de uma exceção (caminho do servidor, nome de arquivo, corpo do provedor) nunca chega a um convidado, nem pelos
+# eventos nem pela situação da conversa. Fica gravado como está (o administrador vê o detalhe) e no log do servidor, ligados por uma
+# referência curta ("ref. 1a2b3c4d") que o convidado pode passar ao administrador. Para o convidado, na leitura:
+#   - ErroIA com código conhecido: o texto em português de CAUSAS_ERRO (ou, nos códigos sem texto, a mensagem curada do próprio
+#     módulo de custo, cortada em " Detalhe:");
+#   - qualquer outra exceção, e ErroIA sem código: um texto fixo.
+# Dados gravados antes desta versão não são reescritos.
+log = logging.getLogger('vlado.conversas')
+FALHA_INTERNA = 'A execução falhou por um erro interno. O que já foi concluído foi preservado.'
+ERRO_DE_CONSULTA = 'Erro ao consultar o índice desta rodada.'
+DETALHE = ' Detalhe:'
+REFERENCIA = re.compile(r' ?\[ref ([0-9a-f]{8})\]')
+
+
+def mensagem_publica(erro, codigo=None) -> str:
+    """O texto de falha que um convidado pode ler (sem o detalhe da exceção)."""
+    if codigo is None and isinstance(erro, ErroIA):
+        codigo = erro.codigo
+    if codigo in CAUSAS_ERRO and CAUSAS_ERRO[codigo][2]:
+        return CAUSAS_ERRO[codigo][2]
+    if isinstance(erro, ErroIA) and codigo in CAUSAS_ERRO:
+        return str(erro).split(DETALHE)[0].strip() or FALHA_INTERNA  # o módulo de custo escreve estas mensagens
+    return FALHA_INTERNA
+
+
+def registrar_falha(erro, codigo=None, publica=None) -> dict:
+    """Dados do evento de falha: `mensagem` (o texto completo, para o administrador), `publica` (o que o convidado lê) e `ref`.
+    O detalhe vai também para o log do servidor, com a mesma referência."""
+    ref = secrets.token_hex(4)
+    bruto = seguro(erro)
+    log.warning('falha da conversa (ref %s): %s', ref, bruto)
+    return {'mensagem': bruto, 'publica': f'{publica or mensagem_publica(erro, codigo)} (ref. {ref})', 'ref': ref}
+
+
+def sanear_texto(texto):
+    """Texto de situação ou de evento para convidado: corta o ' Detalhe: ...' e deixa só a referência."""
+    if not isinstance(texto, str):
+        return texto
+    achado = REFERENCIA.search(texto)
+    limpo = REFERENCIA.sub('', texto.split(DETALHE)[0]).rstrip()
+    return limpo + (f' (ref. {achado.group(1)})' if achado and '(ref. ' not in limpo else '')
+
+
+def situacao_para_convidado(situacao):
+    if not isinstance(situacao, dict):
+        return situacao
+    return {**situacao, 'mensagem': sanear_texto(situacao.get('mensagem'))}
+
+
+def evento_para_convidado(evento):
+    dados = evento.get('dados') if isinstance(evento, dict) else None
+    if not isinstance(dados, dict):
+        return evento
+    dados = dict(dados)
+    publica = dados.pop('publica', None)
+    dados.pop('ref', None)
+    if publica:
+        dados['mensagem'] = publica
+    elif 'mensagem' in dados:
+        dados['mensagem'] = sanear_texto(dados['mensagem'])
+    return {**evento, 'dados': dados}
 
 
 def classificar_erro(codigo, detalhe=None):
@@ -270,6 +335,8 @@ class Conversas:
                         'você pode tentar novamente.', 'reinicio')}
                 item.update(situacao=situacao_de(meta), retomavel=retomavel(meta),
                             pergunta=meta.get('pergunta_atual'), rodada=meta.get('rodada'))
+                if dono is not None:  # SEG-06: guests never read the raw exception text
+                    item['situacao'] = situacao_para_convidado(item['situacao'])
                 result.append(item)
         return {'conversas': result}
 
@@ -331,6 +398,9 @@ class Conversas:
             batch = ctx['events'][after:after + 100]
             conversa = {**ctx['meta'], 'situacao': situacao_de(ctx['meta']), 'retomavel': retomavel(ctx['meta']),
                         'progresso': self._progresso(ctx['meta'])}
+            if dono is not None:  # SEG-06: guests never read the raw exception text
+                conversa['situacao'] = situacao_para_convidado(conversa['situacao'])
+                batch = [evento_para_convidado(evento) for evento in batch]
             return {'conversa': conversa, 'eventos': batch,
                     'acervos': self._acervos(ctx),
                     'cursor': batch[-1]['seq'] if batch else after}
@@ -790,8 +860,9 @@ class Conversas:
             self._event(identifier, 'aviso', {'mensagem': seguro(exc)})
             self._finish(identifier, 'interrompido')
         except Exception as exc:
-            self._event(identifier, 'erro', {'mensagem': seguro(exc)})
-            self._registrar_causa(ctx, getattr(exc, 'codigo', None), seguro(exc))
+            falha = registrar_falha(exc)
+            self._event(identifier, 'erro', falha)
+            self._registrar_causa(ctx, getattr(exc, 'codigo', None), f"{falha['mensagem']} [ref {falha['ref']}]")
             if ctx['meta'].get('turn_id') and self.rpc and not self.rpc.closed:
                 try:
                     self.rpc.call('turn/interrupt', {'threadId': ctx['meta']['thread_id'], 'turnId': ctx['meta']['turn_id']})
@@ -952,10 +1023,10 @@ class Conversas:
                 return  # completion of an earlier, already abandoned turn must not end the current stage
             status = {'completed': 'concluido', 'interrupted': 'interrompido', 'failed': 'erro'}.get(turn['status'], 'erro')
             if turn.get('error'):
-                self._registrar_causa(ctx, seguro(turn['error'].get('codexErrorInfo')) if turn['error'].get('codexErrorInfo') else None,
-                                      seguro(turn['error'].get('message', turn['error'])))
-                self._event(identifier, 'erro', {'mensagem': seguro(turn['error'].get('message', turn['error'])),
-                            'codigo': seguro(turn['error'].get('codexErrorInfo'))})
+                codigo_erro = seguro(turn['error'].get('codexErrorInfo')) if turn['error'].get('codexErrorInfo') else None
+                falha = registrar_falha(turn['error'].get('message', turn['error']), codigo_erro)
+                self._registrar_causa(ctx, codigo_erro, f"{falha['mensagem']} [ref {falha['ref']}]")
+                self._event(identifier, 'erro', {**falha, 'codigo': codigo_erro})
             if ctx.get('turn_done'):
                 ctx['turn_result'] = turn
                 ctx['turn_done'].set()
@@ -1292,7 +1363,7 @@ class Conversas:
             try:
                 self._start().call('turn/interrupt', {'threadId': ctx['meta']['thread_id'], 'turnId': ctx['meta']['turn_id']})
             except ErroIA as exc:
-                self._event(identifier, 'erro', {'mensagem': seguro(exc)})
+                self._event(identifier, 'erro', registrar_falha(exc))
                 self._finish(identifier, 'erro')
 
     def ferramenta(self, identifier, args):
@@ -1396,7 +1467,8 @@ class Conversas:
             if action != 'guardar' and result.get('estado') != 'erro_consulta':
                 ctx['pipeline'].observed(action)
             if result.get('estado') == 'erro_consulta':
-                self._event(identifier, 'aviso', {'mensagem': 'Erro de consulta: ' + seguro(result.get('erro'))})
+                falha = registrar_falha('Erro de consulta: ' + str(result.get('erro')), publica=ERRO_DE_CONSULTA)
+                self._event(identifier, 'aviso', falha)
             self._event(identifier, 'ferramenta', {'acao': action, 'arquivo': str(path.relative_to(self.root)),
                         'retornados': result.get('retornados'), 'etapa': result.get('etapa')})
         return result, images
