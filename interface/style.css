@@ -7,17 +7,15 @@ body{margin:0}
 button,input,select{font:inherit}
 button,summary{cursor:pointer}
 input,select,textarea{min-height:44px;border-radius:var(--raio-controle)}
-select:disabled,input:disabled{cursor:default;opacity:.55}
 input,select{
   width:100%;
   min-width:0;
   border:1px solid var(--theme-input-line);
-  padding:10px 12px;
-  background:var(--paper);
+  padding:0 var(--espaco-3);
   color:var(--theme-text);
   font-size:var(--text-base);
 }
-label{display:flex;flex-direction:column;gap:8px;font-size:var(--text-md);font-weight:600}
+label{display:flex;flex-direction:column;gap:var(--espaco-2);font-size:var(--text-base);font-weight:600}
 label .small{font-weight:400}
 a{color:var(--green)}
 [hidden]{display:none!important}
@@ -892,7 +890,11 @@ button:active:not(:disabled){transform:translateY(1px)}
 .danger{background:var(--white);border-color:var(--theme-danger-line);color:var(--theme-danger);font-weight:400}
 .danger:hover{background:var(--soft);color:var(--theme-danger)}
 button:disabled,button:disabled:hover{background:var(--theme-sidebar);border-color:var(--line);color:var(--muted);font-weight:400;cursor:not-allowed}
+/* Campo de texto (docs/design/componentes.md#campo): borda de controle, fundo da superfície, 16 px. */
 input,select,textarea{font-size:var(--text-base);border-color:var(--theme-input-line);background:var(--white);color:var(--ink)}
+::placeholder{color:var(--muted);opacity:1}
+[aria-invalid=true]{border:2px solid var(--theme-danger)}
+input:disabled,select:disabled,textarea:disabled{background:var(--theme-sidebar);border-color:var(--line);color:var(--muted);cursor:not-allowed}
 textarea{font:inherit;line-height:1.65;padding:12px;resize:vertical;max-width:100%}
 a,button,summary,input,textarea,select{scroll-margin-top:110px}
 :focus-visible{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:var(--foco-afastamento)}
@@ -1701,7 +1703,6 @@ body>svg:has(>defs>symbol[id^="vditor-icon-"]){position:absolute;width:0;height:
   padding:6px 10px;
 }
 :root[data-theme=dark] input[type=checkbox],:root[data-theme=dark] progress{accent-color:var(--green)}
-:root[data-theme=dark] input::placeholder,:root[data-theme=dark] textarea::placeholder{color:var(--muted);opacity:1}
 :root[data-theme=dark] #apuracao-vditor,:root[data-theme=dark] #apuracao-vditor .vditor-reset{
   --textarea-background-color:var(--white);
   --textarea-text-color:var(--ink);
