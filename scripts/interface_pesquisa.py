@@ -46,6 +46,8 @@ import erros
 import fila_extracao
 from codex_apuracao import Conversas
 import acesso
+import proxies_confiaveis
+import registro_acesso
 import lixeira
 import trava_cadastro
 from indice_sqlite import ID_CASO, caminho_rodada, cobertura, ler_passagem, pesquisar
@@ -91,6 +93,7 @@ OPERACOES_API = (*rotas_conversa.OPERACOES, *apuracao.OPERACOES, *apuracao.OPERA
                  *DILIGENCIAS_OPERACOES, *rotas_evidencia.OPERACOES, *rotas_tabelas.OPERACOES, *rotas_redacao.OPERACOES,
                  *rascunhos.OPERACOES, *fontes_web.OPERACOES, *rotas_gestao.OPERACOES, *CONTAS_OPERACOES, 'sessao-sair',
                  *rotas_achados.OPERACOES, *CONSULTA_OPERACOES)
+registro_acesso.permitir_operacoes((*OPERACOES_API, *OPERACOES_PUBLICAS))  # SEG-02: o registro só aceita nomes que existem
 
 
 def executar(root, operation, data, conta=None, originais_abertos=None, casos=None):
@@ -397,6 +400,13 @@ class Servidor(ThreadingHTTPServer):
         return 'HttpOnly; ' + ('Secure; ' if self.modo == 'piloto' else '') + 'SameSite=Strict; Path=/'
 
 
+# SEG-02: operations that hand a file to the caller. Those that answer with an attachment are recorded in ``_send``;
+# the three below answer JSON that the browser turns into a file.
+EXPORTACOES_EM_JSON = ('achados-exportar', 'caderno-exportar', 'entrevistas-exportar')
+DOWNLOADS = frozenset({*rotas_downloads.OPERACOES, *rotas_downloads.ORIGINAIS_PASSAGEM, 'codex-original',
+                       *EXPORTACOES_EM_JSON})
+
+
 class _LeituraComPrazo(socket.SocketIO):
     """The reading side of a connection. While ``prazo`` is set (request line and headers), each read
     waits only for what is left of it, so the deadline holds in all, however slowly the bytes come;
@@ -467,6 +477,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             self.send_header('Strict-Transport-Security', 'max-age=31536000')
         for key, value in (extra or {}).items():
             self.send_header(key, value)
+        baixando = status == 200 and str((extra or {}).get('Content-Disposition', '')).startswith('attachment')
         try:
             self.end_headers()
             self.wfile.write(content)
@@ -474,6 +485,20 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             # Reloading/closing a tab may abandon an in-flight poll. Do not try
             # to send a second error response over the already closed socket.
             self.close_connection = True
+            if baixando:
+                self._auditar_download('interrompido', len(content))
+            return
+        if baixando:
+            self._auditar_download('ok', len(content))
+
+    def _auditar_download(self, resultado, tamanho=None):
+        """SEG-02: who downloaded what kind of file, when and from where; never the name, the case or the content."""
+        if getattr(self, '_download_registrado', False):
+            return
+        self._download_registrado = True
+        operacao = registro_acesso.valor_do_contexto('operacao') or ''
+        registro_acesso.registrar('download', resultado, registro_acesso.valor_do_contexto('conta'),
+                                  tipo='original' if operacao.endswith('original') else 'exportacao', bytes=tamanho)
 
     def _json(self, status, value, exc=None):
         if status >= 400 and isinstance(value, dict) and 'erro' in value and 'codigo' not in value:
@@ -514,6 +539,13 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 pass
 
     def do_GET(self):
+        registro_acesso.iniciar_requisicao(self._ip, raiz=self.server.root)
+        try:
+            self._atender_get()
+        finally:
+            registro_acesso.encerrar_requisicao()
+
+    def _atender_get(self):
         self.__dict__.pop('_principal_requisicao', None)  # one account lookup per request, even with keep-alive
         if not self._allowed():
             return
@@ -578,14 +610,17 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         contar = urlsplit(self.path).path != '/api/codex-eventos'
         if contar:
             self.server.requisicoes.entrar()
+        registro_acesso.iniciar_requisicao(self._ip, raiz=self.server.root)
         try:
             self._atender_post()
         finally:
+            registro_acesso.encerrar_requisicao()
             if contar:
                 self.server.requisicoes.sair()
 
     def _atender_post(self):
         self.__dict__.pop('_principal_requisicao', None)
+        self.__dict__.pop('_download_registrado', None)
         if self.server.com_contas:
             # Never read (up to 72 MB of) a body for anonymous or foreign-host requests.
             if not self._allowed(descartar=True):
@@ -626,6 +661,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         if principal is None:
             self._sem_principal(api=True)
             return
+        registro_acesso.definir(conta=principal.get('conta'))
         # Pilot mode requires an explicit Origin; local mode keeps accepting same-origin requests without it.
         origem = self.headers.get('Origin', None if self.server.com_contas else self.server.origin)
         if (origem != self.server.origin
@@ -642,8 +678,11 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             data = json.loads(body)
             if not isinstance(data, dict):
                 raise ValueError('Requisição deve ser um objeto JSON.')
+            registro_acesso.definir(operacao=operation)
+            registro_acesso.referenciar_caso(data.get('caso'))  # só uma referência com chave: o nome do caso não vai ao registro
             negado = self._negado(operation, data, principal)
             if negado:
+                registro_acesso.registrar('operacao_negada', 'negado', principal.get('conta'), codigo=negado[1])
                 self._proibido(*negado)
                 return
             convidado = principal['papel'] != 'admin'
@@ -689,7 +728,10 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             if operation in rotas_downloads.ORIGINAIS_PASSAGEM:
                 self._enviar_original(operation, data, conteudo, principal)
             else:
-                self._json(400 if result.get('estado') == 'erro_consulta' else 200, result)
+                estado = 400 if result.get('estado') == 'erro_consulta' else 200
+                if operation in EXPORTACOES_EM_JSON and estado == 200:
+                    self._auditar_download('ok')  # recorded before answering: the answer is the delivery
+                self._json(estado, result)
         except revisao_humana.OriginalNaoConferido as exc:
             self._json(400, {'estado': 'erro', 'codigo': 'conferencia_sem_original', 'erro': str(exc), 'faltam': exc.faltam})
         except apuracao.ConflitoNota as exc:
@@ -697,6 +739,8 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         except rascunhos.ConflitoRascunho as exc:
             self._json(409, {'estado': 'erro', 'codigo': 'rascunho_conflito', 'erro': str(exc), 'atual': exc.atual})
         except (ValueError, OSError, KeyError, TypeError, sqlite3.Error) as exc:
+            if operation in DOWNLOADS:
+                self._auditar_download('falha')
             convidado = principal['papel'] != 'admin'
             # Guests get user-facing ValueError messages only; internal errors stay generic.
             mensagem = ('Falha ao processar a requisição no servidor.'
@@ -733,7 +777,8 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             self._json(400, {'erro': str(exc)})
 
     def log_message(self, format, *args):
-        # Do not print queries, source content or token to the terminal.
+        # Do not print queries, source content or token to the terminal. The audit trail (scripts/registro_acesso.py)
+        # is separate: events without content, never the request line.
         return
 
 
@@ -782,6 +827,10 @@ def main():
     args = parser.parse_args()
     if args.modo != 'piloto' and args.host != '127.0.0.1':
         raise SystemExit('Nos modos locais o servidor escuta somente em 127.0.0.1.')
+    try:
+        proxies_confiaveis.validar_ambiente()  # lista de proxies inválida: não sobe, com a mensagem
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
     # Extraction and OCR in separate processes; VLADO_EXTRACAO=local keeps them in threads.
     with Servidor((args.host, args.porta), root=Path(args.dados) if args.dados else ROOT,
                   modo=args.modo, origem=args.origem,

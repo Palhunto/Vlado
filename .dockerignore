@@ -38,6 +38,7 @@ lixeira
 **/segredos
 **/ajustes
 **/acesso
+registro
 entrada/*
 !entrada/README.md
 casos/*
@@ -45,3 +46,48 @@ casos/*
 !casos/catalogo.json
 *.vbs
 *.cmd
+
+# Exclusão ampla (SEG-04). O que entra na imagem é decidido pelos COPY do Dockerfile, que listam só o
+# necessário em execução; estas regras reduzem o contexto enviado ao Docker e são a segunda barreira.
+# Repositório e ambientes virtuais em qualquer nível.
+**/.git
+**/.venv
+**/.env
+**/.env.*
+# Credenciais e certificados em qualquer nível.
+**/*.pfx
+**/*.p12
+**/*.jks
+**/id_rsa*
+**/id_ed25519*
+# Bancos e dumps locais, backups e variantes de segredos.
+**/*.sqlite
+**/*.sqlite3
+**/*.sqlite-wal
+**/*.sqlite-shm
+**/*.db
+**/*.sql
+**/*.tar
+**/*.tar.gz
+**/*.tgz
+**/*.zip
+**/*.age
+**/*.gpg
+backups
+**/chaves.json
+# Não executados em produção: documentação, CI, instalador, Android, capturas e arquivos soltos da raiz.
+docs
+.github
+instalador
+android
+*.png
+*.jpg
+*.pdf
+*.docx
+*.xlsx
+*.ps1
+*.bat
+*.sh
+Dockerfile
+.dockerignore
+docker-compose*.yml

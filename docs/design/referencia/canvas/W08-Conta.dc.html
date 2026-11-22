@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Minha conta</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+body{margin:0}
+a{color:#333}a:hover{color:#000}
+</style>
+</helmet>
+<div style="width: 1200px; height: 760px; box-sizing: border-box; display: flex; background: #ffffff; color: #2b2b2b; font-family: 'Source Sans 3', system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+<div style="flex: 1; min-width: 0; box-sizing: border-box; padding: 28px 32px; display: flex; flex-direction: column; gap: 14px">
+<div style="font-size: 22px; font-weight: 600">Minha conta</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; flex: 1; min-height: 0">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px"><b>Perfil</b><div>Ana Lima · ana@redacaoserena.org</div><div style="color: #6b6b6b">Repórter na Redação Serena</div><div style="display: flex; gap: 8px"><span style="border: 1.5px solid #6b6b6b; border-radius: 6px; padding: 6px 10px">Idioma: Português ▾</span><span style="border: 1.5px solid #6b6b6b; border-radius: 6px; padding: 6px 10px">Tema: do sistema ▾</span></div></div>
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px"><b>Entrada e segurança</b><div style="display: flex; align-items: center"><span style="flex: 1">Senha · trocada há 12 dias</span><button type="button" style="height: 40px; padding: 0 12px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Trocar senha</button></div><div style="display: flex; align-items: center"><span style="flex: 1">✓ Código do autenticador ativo</span><button type="button" style="height: 40px; padding: 0 12px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Códigos de reserva</button></div><div style="display: flex; align-items: center"><span style="flex: 1">○ Chave de acesso não cadastrada</span><button type="button" style="height: 40px; padding: 0 12px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Cadastrar</button></div></div>
+<div style="border: 1.5px dashed #6b6b6b; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px"><b>Seus dados</b><div style="display: flex; gap: 8px"><button type="button" style="height: 40px; padding: 0 12px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Exportar meus dados</button><button type="button" style="height: 40px; padding: 0 12px; border: 1.5px solid #2b2b2b; border-radius: 6px; background: #fff; font: inherit; font-weight: 600">Excluir minha conta</button></div><span style="color: #6b6b6b">Excluir pede a senha e o nome digitado. Suas notas e revisões ficam com a redação, sem seu nome.</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px"><b>Onde você está conectada</b><div style="display: flex; align-items: center; border-bottom: 1px solid #cfcfcf; padding-bottom: 8px"><span style="flex: 1">Este navegador · São Paulo<br><span style="color: #6b6b6b">agora</span></span><span>atual</span></div><div style="display: flex; align-items: center; border-bottom: 1px solid #cfcfcf; padding-bottom: 8px"><span style="flex: 1">Celular Android · São Paulo<br><span style="color: #6b6b6b">ontem, 21h10</span></span><button type="button" style="height: 40px; padding: 0 12px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Encerrar</button></div><button type="button" style="align-self: flex-start; height: 40px; padding: 0 12px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Encerrar todas as outras</button></div>
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px"><b>Seu uso neste mês</b><div style="display: flex"><span style="flex: 1">14 perguntas</span><b>R$ 18,40 de R$ 50,00</b></div><div style="height: 8px; background: #cfcfcf; border-radius: 999px"><div style="width: 37%; height: 8px; background: #2b2b2b; border-radius: 999px"></div></div><span style="color: #6b6b6b">A cota é definida pela sua redação.</span></div>
+</div>
+</div>
+</div>
+<div style="width: 320px; flex: none; box-sizing: border-box; background: #f4f4f2; border-left: 1.5px solid #cfcfcf; padding: 28px 22px; display: flex; flex-direction: column; gap: 10px; font-size: 14px">
+<div style="font-weight: 600; font-size: 15px">Regras desta tela</div>
+<div>1. Página própria, aberta pelo nome no rodapé da barra lateral. Sai de "Apurações e lixeira".</div>
+<div>2. Trocar senha pede a atual e encerra as outras sessões.</div>
+<div>3. Segundo fator obrigatório para dono e editor; códigos de reserva mostrados uma única vez.</div>
+<div>4. Campos de senha aceitam colar e gerenciador de senhas.</div>
+<div>5. Lista de sessões com aparelho, cidade aproximada e último uso; encerrar é imediato.</div>
+<div>6. Novo acesso gera e-mail de aviso.</div>
+<div>7. Uso em reais, nunca em tokens.</div>
+<div>8. Excluir conta e exportar dados existem e explicam o que acontece com o trabalho feito.</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

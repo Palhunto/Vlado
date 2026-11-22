@@ -1,0 +1,79 @@
+[
+ {
+  "nome": "pessoa",
+  "pixelsDiferentes": 0,
+  "pixelsForaDaForma": 0,
+  "maiorDiferencaAlfa": 0,
+  "pixelsComTinta": 1685
+ },
+ {
+  "nome": "empresa",
+  "pixelsDiferentes": 0,
+  "pixelsForaDaForma": 0,
+  "maiorDiferencaAlfa": 0,
+  "pixelsComTinta": 2700
+ },
+ {
+  "nome": "orgao-publico",
+  "pixelsDiferentes": 0,
+  "pixelsForaDaForma": 0,
+  "maiorDiferencaAlfa": 0,
+  "pixelsComTinta": 2579
+ },
+ {
+  "nome": "contrato",
+  "pixelsDiferentes": 0,
+  "pixelsForaDaForma": 0,
+  "maiorDiferencaAlfa": 0,
+  "pixelsComTinta": 2373
+ },
+ {
+  "nome": "pagamento",
+  "pixelsDiferentes": 344,
+  "pixelsForaDaForma": 0,
+  "maiorDiferencaAlfa": 83,
+  "pixelsComTinta": 2582
+ },
+ {
+  "nome": "relacao-socio",
+  "pixelsDiferentes": 0,
+  "pixelsForaDaForma": 0,
+  "maiorDiferencaAlfa": 0,
+  "pixelsComTinta": 1598
+ },
+ {
+  "nome": "relacao-parentesco",
+  "pixelsDiferentes": 0,
+  "pixelsForaDaForma": 0,
+  "maiorDiferencaAlfa": 0,
+  "pixelsComTinta": 2293
+ },
+ {
+  "nome": "relacao-cargo",
+  "pixelsDiferentes": 0,
+  "pixelsForaDaForma": 0,
+  "maiorDiferencaAlfa": 0,
+  "pixelsComTinta": 2478
+ },
+ {
+  "nome": "relacao-vinculo",
+  "pixelsDiferentes": 0,
+  "pixelsForaDaForma": 0,
+  "maiorDiferencaAlfa": 0,
+  "pixelsComTinta": 1099
+ },
+ {
+  "nome": "evento-aditivo",
+  "pixelsDiferentes": 0,
+  "pixelsForaDaForma": 0,
+  "maiorDiferencaAlfa": 0,
+  "pixelsComTinta": 2373
+ },
+ {
+  "nome": "evento-pedido",
+  "pixelsDiferentes": 0,
+  "pixelsForaDaForma": 0,
+  "maiorDiferencaAlfa": 0,
+  "pixelsComTinta": 2385
+ }
+]

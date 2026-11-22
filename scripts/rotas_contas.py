@@ -15,7 +15,9 @@ import os
 from urllib.parse import quote
 
 import acesso
+import proxies_confiaveis
 import rascunhos
+import registro_acesso
 from rotas_documentos import catalogo
 
 # Hosted mode: account management (admin only) and what a guest account may call.
@@ -115,7 +117,16 @@ class RotasContas:
         return valor if valor in AMBIENTES else 'homologacao'
 
     def _ip(self):
-        """Socket address; behind a trusted proxy (VLADO_CONFIAR_PROXY=1) the last X-Forwarded-For hop."""
+        """The client address for rate limits and the audit log (SEG-02, SEG-05).
+
+        With VLADO_PROXIES_CONFIAVEIS (IPs or networks): X-Forwarded-For counts only when the TCP peer is in the list,
+        and the client is the first hop from the right that is NOT in the list (see scripts/proxies_confiaveis.py).
+        Without the list: the TCP peer, or with VLADO_CONFIAR_PROXY=1 the last X-Forwarded-For hop (previous behaviour)."""
+        if self.server.modo == 'piloto':
+            redes = proxies_confiaveis.do_ambiente()
+            if redes is not None:
+                return proxies_confiaveis.ip_do_cliente(self.client_address[0],
+                                                        ','.join(self.headers.get_all('X-Forwarded-For') or []), redes)
         if self.server.modo == 'piloto' and os.environ.get('VLADO_CONFIAR_PROXY', '').strip() == '1':
             saltos = [s.strip() for s in self.headers.get('X-Forwarded-For', '').split(',') if s.strip()]
             try:
@@ -158,6 +169,15 @@ class RotasContas:
         return None
 
     def _contas(self, operation, data, principal):
+        """Account management (admin only, hosted mode). A refused operation is audited (`admin_recusada`)."""
+        try:
+            return self._contas_executar(operation, data, principal)
+        except (ValueError, OSError):
+            registro_acesso.registrar('admin_recusada', 'falha', principal.get('conta'), motivo='validacao',
+                                      alvo=data.get('id') if isinstance(data.get('id'), str) else None)
+            raise
+
+    def _contas_executar(self, operation, data, principal):
         """Account management (admin only, hosted mode). Activation links are returned once, never stored."""
         root, por = self.server.root, principal['conta'] or 'cli'
         if operation == 'contas-listar':
@@ -214,6 +234,7 @@ class RotasContas:
             self._json(400, {'erro': 'Requisição vazia ou muito grande.'})
             return
         body = self.rfile.read(length)
+        registro_acesso.definir(operacao=operation)
         if (self.headers.get('Origin') != self.server.origin
                 or self.headers.get_content_type() != 'application/json'):
             self._json(403, {'erro': 'Origem ou sessão não autorizada. Recarregue a página.'})
@@ -241,10 +262,10 @@ class RotasContas:
                                            ensure_ascii=False).encode('utf-8'),
                            extra={'Set-Cookie': f'{COOKIE_PILOTO}={sid}; {self.server.atributos_cookie()}'})
             elif operation == 'ativacao-consultar':
-                acesso.limitar_ip(self._ip())
+                acesso.limitar_ip(self._ip(), 'consultar')
                 self._json(200, acesso.consultar_ativacao(root, data.get('token')))
             else:
-                acesso.limitar_ip(self._ip())
+                acesso.limitar_ip(self._ip(), 'ativar')
                 conta = acesso.ativar(root, data.get('token'), data.get('senha'))
                 self._json(200, {'estado': 'senha_definida', 'login': conta['login']})
         except acesso.RegistroIlegivel:
@@ -256,6 +277,8 @@ class RotasContas:
         except acesso.AtivacaoInvalida as exc:
             self._json(400, {'estado': 'erro', 'codigo': 'ativacao_invalida', 'erro': str(exc)})
         except (ValueError, OSError) as exc:
+            if operation == 'ativar':  # a refused password (too short...) is not a bad link: audited as validation
+                registro_acesso.registrar('ativacao_falha', 'falha', motivo='validacao', acesso_operacao='ativar')
             self._json(400, {'estado': 'erro', 'codigo': 'senha_invalida' if operation == 'ativar' else 'requisicao_invalida',
                              'erro': str(exc) if isinstance(exc, ValueError) else 'Falha ao ler arquivos do servidor.'})
 
@@ -265,7 +288,7 @@ class RotasContas:
             self._json(403, {'erro': 'Origem ou sessão não autorizada. Recarregue a página.'})
             return
         try:
-            acesso.limitar_ip(self._endereco_socket())
+            acesso.limitar_ip(self._endereco_socket(), 'primeiro_admin')
             senha = data.get('senha')
             if not isinstance(senha, str) or not acesso.SENHA_MIN <= len(senha) <= acesso.SENHA_MAX:
                 self._json(400, {'estado': 'erro', 'codigo': 'senha_invalida',
