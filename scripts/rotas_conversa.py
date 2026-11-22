@@ -1,10 +1,11 @@
 """Operações da conversa com os documentos (``POST /api/codex-*``).
 
-Separado de ``interface_pesquisa`` sem mudar comportamento. Os nomes mantêm o prefixo
-histórico ``codex-``; a inferência passa por ``codex_apuracao.Conversas`` e pelo adaptador
-da API. O servidor já conferiu sessão, CSRF, origem e papel (``rotas_contas._negado``) e já
-descontou a cota do convidado; aqui a cota é devolvida quando a pergunta é recusada, e o
-convidado nunca recebe o dono nem os identificadores internos do provedor.
+Separado de ``interface_pesquisa``. Os nomes mantêm o prefixo histórico ``codex-``; a
+inferência passa por ``codex_apuracao.Conversas`` e pelo adaptador da API. O servidor já
+conferiu sessão, CSRF, origem e papel (``rotas_contas._negado``) e já descontou a cota do
+convidado; aqui a cota é devolvida quando a pergunta é recusada, e o convidado nunca recebe o
+dono nem os identificadores internos do provedor. Só ``codex-documentos-cadastrar`` passa pela
+trava de cadastro da Mesa; ``Conversas.lock`` fica preso apenas na conferência da conversa.
 """
 from __future__ import annotations
 
@@ -76,8 +77,9 @@ class RotasConversa:
         elif operation == 'codex-diligencias-previa':
             result = manager.caderno_previa(data, diligencias)
         elif operation == 'codex-documentos-cadastrar':
-            with self.server.cadastro_lock, manager.lock:
-                manager.conferir_para_documentos(data.get('caso'), data.get('conversa'))
+            # Conversas.lock only for the check (reservar_para_documentos): the cadastro may take
+            # minutes and must not freeze the other conversations; new questions on this one wait.
+            with self.server.cadastro_lock, manager.reservar_para_documentos(data.get('caso'), data.get('conversa')):
                 result = receber_documentos(self.server.root, {'caso': data.get('caso'),
                     'arquivos': data.get('arquivos'), 'natureza': data.get('natureza', 'nao_informada')})
         elif operation == 'codex-eventos':

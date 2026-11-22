@@ -15,10 +15,12 @@ import os
 from pathlib import Path
 import re
 import secrets
+import signal
 import sqlite3
 import socket
 import sys
 import threading
+import time
 from urllib.parse import urlsplit
 import webbrowser
 
@@ -41,6 +43,7 @@ import erros
 from codex_apuracao import Conversas
 import acesso
 import lixeira
+import trava_cadastro
 from indice_sqlite import ID_CASO, caminho_rodada, cobertura, ler_passagem, pesquisar
 # Names also imported from here by the launcher, the tests and older callers.
 from rotas_caderno import CADERNO_OPERACOES, DILIGENCIAS_OPERACOES
@@ -57,6 +60,9 @@ from rotas_gestao import IA_OPERACOES, RotasGestao
 # (installed Windows desk); piloto: accounts behind an HTTPS reverse proxy.
 MODOS = ('local', 'local-contas', 'piloto')
 MAXIMO_SESSOES_ORIGINAIS = 5000
+# After SIGTERM (docker stop sends SIGKILL 10 s later), Ctrl+C or "Encerrar Mesa": seconds for
+# executions to stop and for operations holding the cadastro lock to finish.
+PRAZO_ENCERRAMENTO = 8.0
 # Case data answered by ``executar`` (frozen analyses, intake, search index).
 CONSULTA_OPERACOES = ('analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario', 'preparar-pdfs')
 # Every POST operation behind a session; anything else is 404 before the body is parsed.
@@ -151,6 +157,27 @@ def executar(root, operation, data, conta=None, originais_abertos=None, casos=No
     raise ValueError('Operação desconhecida.')
 
 
+class _EmCurso:
+    """POST requests being answered, for the orderly shutdown to wait for."""
+
+    def __init__(self):
+        self.total = 0
+        self.mudou = threading.Condition()
+
+    def entrar(self):
+        with self.mudou:
+            self.total += 1
+
+    def sair(self):
+        with self.mudou:
+            self.total -= 1
+            self.mudou.notify_all()
+
+    def aguardar(self, prazo):
+        with self.mudou:
+            return self.mudou.wait_for(lambda: self.total == 0, timeout=prazo)
+
+
 class Servidor(ThreadingHTTPServer):
     daemon_threads = True
     # A page load opens many parallel requests; the default backlog (5) refuses some on Windows.
@@ -181,6 +208,7 @@ class Servidor(ThreadingHTTPServer):
         # Originals opened per page session and frozen revision (memory only; a restart asks to reopen).
         self._originais = OrderedDict()
         self._originais_lock = threading.Lock()
+        self.requisicoes = _EmCurso()
         super().__init__(address, Handler)
 
     def registrar_original(self, chave, evidencia_id):
@@ -195,8 +223,35 @@ class Servidor(ThreadingHTTPServer):
             return frozenset(self._originais.get(chave, ()))
 
     def server_close(self):
-        self.conversas.close()
+        # After encerrar() the threads already had their time: do not wait again.
+        self.conversas.close(prazo=0 if getattr(self, '_encerrado', False) else None)
         super().server_close()
+
+    def pedir_encerramento(self):
+        """Ask ``serve_forever`` to return; safe inside a signal handler (main thread)."""
+        if not getattr(self, '_encerramento_pedido', False):
+            self._encerramento_pedido = True
+            threading.Thread(target=self.shutdown, daemon=True).start()
+
+    def encerrar(self, prazo=PRAZO_ENCERRAMENTO):
+        """Orderly stop once ``serve_forever`` returned. True when no operation was cut short.
+
+        No new connections; waiting operations give up the cadastro lock; executions are told
+        to stop (``Conversas.close``); operations already holding the cadastro lock get the rest
+        of ``prazo`` to finish. Whatever is still running after that is cut when the process
+        exits: the system releases the lock and the next start cleans up (``trava_cadastro``).
+        """
+        limite = time.monotonic() + prazo
+        self._encerrado = True
+        trava_cadastro.encerrar(self.root)
+        try:
+            self.socket.close()
+        except OSError:
+            pass
+        self.conversas.close(prazo=max(0.0, limite - time.monotonic()))
+        livre = trava_cadastro.aguardar_livre(self.root, max(0.0, limite - time.monotonic()))
+        # Then the answers of the requests that were running (a finished cadastro reaches the browser).
+        return self.requisicoes.aguardar(max(0.0, limite - time.monotonic())) and livre
 
     @property
     def origin(self):
@@ -329,6 +384,18 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         self._estatico(path)
 
     def do_POST(self):
+        # Counted for the orderly shutdown, which waits for these answers; the events long poll
+        # (up to 20 s, nothing to lose) is not.
+        contar = urlsplit(self.path).path != '/api/codex-eventos'
+        if contar:
+            self.server.requisicoes.entrar()
+        try:
+            self._atender_post()
+        finally:
+            if contar:
+                self.server.requisicoes.sair()
+
+    def _atender_post(self):
         self.__dict__.pop('_principal_requisicao', None)
         if self.server.com_contas:
             # Never read (up to 72 MB of) a body for anonymous or foreign-host requests.
@@ -423,8 +490,11 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                            if operation == 'achados-revisao-salvar' else None)
                 with self.server.cadastro_lock:
                     result = executar(self.server.root, operation, data, conta, abertos, casos=principal['casos'])
+                    if operation in rotas_downloads.ORIGINAIS_PASSAGEM:
+                        # Read where it was validated; the slow part (sending) runs after the lock.
+                        conteudo = self._ler_original(operation, data, result)
             if operation in rotas_downloads.ORIGINAIS_PASSAGEM:
-                self._enviar_original(operation, data, result, principal)
+                self._enviar_original(operation, data, conteudo, principal)
             else:
                 self._json(400 if result.get('estado') == 'erro_consulta' else 200, result)
         except revisao_humana.OriginalNaoConferido as exc:
@@ -443,6 +513,37 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
     def log_message(self, format, *args):
         # Do not print queries, source content or token to the terminal.
         return
+
+
+def servir(server, prazo=PRAZO_ENCERRAMENTO):
+    """Run the Mesa: clean what a dead process left, serve, and stop in order.
+
+    Stops on SIGTERM (``docker stop``; the Compose ``init`` forwards it), SIGBREAK
+    (Ctrl+Break on Windows), Ctrl+C and "Encerrar Mesa" (``codex-desligar``).
+    """
+    try:
+        resumo = trava_cadastro.recuperar(server.root)
+    except OSError as exc:  # the Mesa still starts: an abandoned lock is also recovered on first use
+        print(f'Partida: limpeza da trava de cadastro não concluída ({exc.strerror or exc}).', file=sys.stderr, flush=True)
+        resumo = {}
+    if resumo.get('abandonada') or resumo.get('antiga_removida') or resumo.get('preparo_removido'):
+        print('Partida: trava de cadastro recuperada de uma execução interrompida.', flush=True)
+    anteriores = {}
+    if threading.current_thread() is threading.main_thread():
+        for nome in ('SIGTERM', 'SIGBREAK'):
+            numero = getattr(signal, nome, None)
+            if numero is not None:
+                anteriores[numero] = signal.signal(numero, lambda *_: server.pedir_encerramento())
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        for numero, anterior in anteriores.items():
+            signal.signal(numero, anterior)
+        completo = server.encerrar(prazo)
+        print('Mesa encerrada.' if completo else
+              'Mesa encerrada antes do fim de uma operação; a próxima partida limpa o que ficou.', flush=True)
 
 
 def main():
@@ -465,10 +566,7 @@ def main():
         print('Encerre com Ctrl+C.', flush=True)
         if args.modo != 'piloto' and not args.sem_abrir:
             webbrowser.open(server.origin)
-        try:
-            server.serve_forever()
-        except KeyboardInterrupt:
-            pass
+        servir(server)
 
 
 if __name__ == '__main__':

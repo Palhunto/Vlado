@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Equipe e convites</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+body{margin:0}
+a{color:#333}a:hover{color:#000}
+</style>
+</helmet>
+<div style="width: 1200px; height: 760px; box-sizing: border-box; display: flex; background: #ffffff; color: #2b2b2b; font-family: 'Source Sans 3', system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+<div style="flex: 1; min-width: 0; box-sizing: border-box; padding: 28px 32px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 12px"><span style="font-size: 22px; font-weight: 600">Redação Serena</span><span style="color: #6b6b6b">4 pessoas · redação convidada para o teste</span><button type="button" style="margin-left: auto; height: 44px; padding: 0 16px; border: 0; border-radius: 6px; background: #2b2b2b; color: #fff; font: inherit; font-weight: 600">Convidar pessoa</button></div>
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px">
+<div style="display: flex; gap: 10px; padding: 10px 14px; background: #f1f1ef; font-weight: 600; border-bottom: 1.5px solid #6b6b6b"><span style="flex: 1">Pessoa</span><span style="width: 130px">Papel</span><span style="width: 190px">Apurações</span><span style="width: 130px">Uso no mês</span><span style="width: 90px"></span></div>
+<div style="display: flex; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #cfcfcf; align-items: center"><span style="flex: 1">Rui Castro<br><span style="color: #6b6b6b">rui@redacaoserena.org</span></span><span style="width: 130px">Dono</span><span style="width: 190px">Todas</span><span style="width: 130px">R$ 6,10</span><span style="width: 90px"></span></div>
+<div style="display: flex; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #cfcfcf; align-items: center"><span style="flex: 1">Ana Lima<br><span style="color: #6b6b6b">ana@redacaoserena.org</span></span><span style="width: 130px">Repórter ▾</span><span style="width: 190px">Vila Serena, Campo Verde</span><span style="width: 130px">R$ 18,40</span><u style="width: 90px">Gerenciar</u></div>
+<div style="display: flex; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #cfcfcf; align-items: center"><span style="flex: 1">Bia Nunes<br><span style="color: #6b6b6b">bia@redacaoserena.org</span></span><span style="width: 130px">Editora ▾</span><span style="width: 190px">Vila Serena</span><span style="width: 130px">R$ 0,00</span><u style="width: 90px">Gerenciar</u></div>
+<div style="display: flex; gap: 10px; padding: 10px 14px; align-items: center"><span style="flex: 1">leo@redacaoserena.org<br><span style="color: #6b6b6b">◐ convite enviado há 2 dias, vence em 5</span></span><span style="width: 130px">Leitor</span><span style="width: 190px">Campo Verde</span><span style="width: 130px">—</span><u style="width: 90px">Reenviar</u></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px"><b>Gasto com IA neste mês</b><div style="display: flex"><span style="flex: 1">Cota do teste, paga pelo Vlado</span><b>R$ 24,50 de R$ 150</b></div><div style="height: 8px; background: #cfcfcf; border-radius: 999px"><div style="width: 16%; height: 8px; background: #2b2b2b; border-radius: 999px"></div></div><span style="color: #6b6b6b">Teto por pessoa: R$ 50 ▾ · aviso em 80%</span></div>
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px"><b>Chave de IA da redação (opcional)</b><span>○ Nenhuma chave própria. Com ela, o gasto sai da sua conta no provedor.</span><button type="button" style="align-self: flex-start; height: 40px; padding: 0 12px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Cadastrar chave</button></div>
+</div>
+<div style="border: 1.5px solid #9a9a9a; border-radius: 8px; padding: 12px 16px"><b>Atividade recente</b> · Ana entrou de novo aparelho (ontem) · Bia marcou 3 afirmações como revisadas (hoje) · <u>ver tudo</u></div>
+</div>
+<div style="width: 320px; flex: none; box-sizing: border-box; background: #f4f4f2; border-left: 1.5px solid #cfcfcf; padding: 28px 22px; display: flex; flex-direction: column; gap: 10px; font-size: 14px">
+<div style="font-weight: 600; font-size: 15px">Regras desta tela</div>
+<div>1. Quatro papéis: dono (administra), editor (confere e comenta), repórter (cria apurações e envia documentos), leitor (só lê e pergunta).</div>
+<div>2. Cada pessoa vê só as apurações que criou ou em que foi incluída. O dono vê todas da própria redação e nenhuma de outra.</div>
+<div>3. Convite por e-mail, com prazo; pode ser reenviado ou cancelado.</div>
+<div>4. No teste, só o Vlado cria redações. O dono convida pessoas dentro da sua.</div>
+<div>5. Gasto em reais, por pessoa e por redação, com teto e aviso.</div>
+<div>6. A chave de IA é da redação, não da pessoa, e só o dono a troca.</div>
+<div>7. Trocar papel de outro dono ou remover o último dono é bloqueado.</div>
+<div>8. A atividade mostra acessos e ações de administração, nunca conteúdo de documentos.</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

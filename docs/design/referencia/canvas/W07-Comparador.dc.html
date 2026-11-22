@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Comparador</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+body{margin:0}
+a{color:#333}a:hover{color:#000}
+</style>
+</helmet>
+<div style="width: 1200px; height: 760px; box-sizing: border-box; display: flex; background: #ffffff; color: #2b2b2b; font-family: 'Source Sans 3', system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+<div style="flex: 1; min-width: 0; box-sizing: border-box; padding: 28px 32px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 12px"><span style="font-size: 22px; font-weight: 600">Comparador</span><span style="margin-left: auto; color: #6b6b6b">3 diferenças: 2 de valor · 1 de data</span><button type="button" style="height: 44px; padding: 0 14px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Anterior</button><button type="button" style="height: 44px; padding: 0 14px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Próxima</button></div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+<label style="display: flex; flex-direction: column; gap: 4px; font-weight: 600">Lado A<span style="height: 44px; box-sizing: border-box; border: 1.5px solid #6b6b6b; border-radius: 6px; padding: 10px; font-weight: 400">Contrato 041/2025 · cláusula 3ª ▾</span></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-weight: 600">Lado B<span style="height: 44px; box-sizing: border-box; border: 1.5px solid #6b6b6b; border-radius: 6px; padding: 10px; font-weight: 400">Termo aditivo nº 1 · cláusula 1ª ▾</span></label>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; flex: 1; min-height: 0">
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 16px 18px; font-size: 16px; line-height: 1.8">O valor global do presente contrato é de <span style="text-decoration: line-through; border: 1.5px solid #2b2b2b; padding: 0 4px">− R$ 8.750.000,00</span>, a ser pago conforme medições mensais, com prazo de execução de <span style="text-decoration: line-through; border: 1.5px solid #2b2b2b; padding: 0 4px">− 12 meses</span> contados da ordem de serviço.<br><span style="font-size: 14px; color: #6b6b6b">Contrato, p. 1 · <u>abrir original</u></span></div>
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 16px 18px; font-size: 16px; line-height: 1.8">O valor global do presente contrato passa a ser de <span style="background: #e4e4e0; border: 1.5px solid #2b2b2b; padding: 0 4px; font-weight: 600">+ R$ 10.710.000,00</span>, a ser pago conforme medições mensais, com prazo de execução de <span style="background: #e4e4e0; border: 1.5px solid #2b2b2b; padding: 0 4px; font-weight: 600">+ 16 meses</span> contados da ordem de serviço.<br><span style="font-size: 14px; color: #6b6b6b">Aditivo 1, p. 2 · <u>abrir original</u></span></div>
+</div>
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 12px 16px; display: flex; align-items: center; gap: 14px"><b>Diferença de valor</b><span>10.710.000 − 8.750.000 = <b>R$ 1.960.000,00</b> (22,4%)</span><button type="button" style="margin-left: auto; height: 44px; padding: 0 14px; border: 1.5px solid #2b2b2b; border-radius: 6px; background: #fff; font: inherit; font-weight: 600">Guardar como achado a conferir</button></div>
+</div>
+<div style="width: 320px; flex: none; box-sizing: border-box; background: #f4f4f2; border-left: 1.5px solid #cfcfcf; padding: 28px 22px; display: flex; flex-direction: column; gap: 10px; font-size: 14px">
+<div style="font-weight: 600; font-size: 15px">Regras desta tela</div>
+<div>1. Dois lados, cada um escolhido entre documentos, versões, capturas de site ou declarações já cadastradas.</div>
+<div>2. Trecho retirado leva sinal "−" e risco; trecho novo leva "+" e fundo. Nunca só cor.</div>
+<div>3. Diferenças de valor e de data são contadas e navegáveis por teclado.</div>
+<div>4. A conta de cada diferença aparece por extenso.</div>
+<div>5. O resultado vira achado "a conferir", nunca conferido de saída.</div>
+<div>6. A comparação pesada roda na fila, fora da trava do servidor, com o padrão único de "ocupado".</div>
+<div>7. No celular, os lados se empilham e as diferenças viram lista.</div>
+<div>8. O comparador mostra o que mudou. Não diz se a mudança é irregular.</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

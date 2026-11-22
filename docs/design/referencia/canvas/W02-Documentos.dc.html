@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Documentos e envio</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+body{margin:0}
+a{color:#333}a:hover{color:#000}
+</style>
+</helmet>
+<div style="width: 1200px; height: 760px; box-sizing: border-box; display: flex; background: #ffffff; color: #2b2b2b; font-family: 'Source Sans 3', system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+<div style="flex: 1; min-width: 0; box-sizing: border-box; padding: 28px 32px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 12px"><span style="font-size: 22px; font-weight: 600">Documentos</span><span style="color: #6b6b6b">12 de 60</span><input type="search" placeholder="Buscar no texto dos documentos" style="margin-left: auto; width: 300px; height: 44px; box-sizing: border-box; border: 1.5px solid #6b6b6b; border-radius: 6px; padding: 0 10px; font: inherit"></div>
+<div style="border: 2px dashed #6b6b6b; border-radius: 8px; padding: 18px; text-align: center; background: #f7f7f5"><b>Arraste arquivos para cá</b> ou <u>escolha no computador</u><br><span style="color: #6b6b6b">PDF, DOCX, XLSX, CSV, TXT e imagens · até 50 MB por arquivo</span></div>
+<div style="border: 1.5px solid #6b6b6b; border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+<b>Enviando 3 arquivos</b>
+<div style="display: flex; align-items: center; gap: 10px"><span style="flex: 1">edital_2025.pdf</span><span style="width: 220px; height: 8px; background: #2b2b2b; border-radius: 999px"></span><span style="width: 130px">✓ Pronto, 14 pág.</span></div>
+<div style="display: flex; align-items: center; gap: 10px"><span style="flex: 1">medicao_04_digitalizada.pdf</span><span style="width: 220px; height: 8px; background: #cfcfcf; border-radius: 999px"><span style="display: block; width: 40%; height: 8px; background: #2b2b2b; border-radius: 999px"></span></span><span style="width: 130px">Lendo pág. 2 de 5</span></div>
+<div style="display: flex; align-items: center; gap: 10px"><span style="flex: 1">planilha.xlsm</span><span style="width: 220px">✕ Tem macro: não foi lida</span><button type="button" style="width: 130px; height: 36px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">O que fazer</button></div>
+</div>
+<div style="border: 1.5px solid #9a9a9a; border-radius: 8px; flex: 1; min-height: 0; display: flex; flex-direction: column">
+<div style="display: flex; gap: 10px; padding: 10px 14px; border-bottom: 1.5px solid #9a9a9a; font-weight: 600"><span style="flex: 1">Documento</span><span style="width: 90px">Páginas</span><span style="width: 220px">Leitura</span><span style="width: 120px"></span></div>
+<div style="display: flex; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #cfcfcf; align-items: center"><span style="flex: 1">Contrato 041/2025</span><span style="width: 90px">8</span><span style="width: 220px">✓ Texto do próprio arquivo</span><a href="#" style="width: 120px">Abrir original</a></div>
+<div style="display: flex; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #cfcfcf; align-items: center"><span style="flex: 1">Medição nº 3</span><span style="width: 90px">1</span><span style="width: 220px">◐ Lida por OCR: confira números</span><a href="#" style="width: 120px">Abrir original</a></div>
+<div style="display: flex; gap: 10px; padding: 10px 14px; align-items: center"><span style="flex: 1">Foto do canteiro.jpg</span><span style="width: 90px">1</span><span style="width: 220px">○ Imagem sem leitura</span><button type="button" style="width: 120px; height: 36px; border: 1.5px solid #6b6b6b; border-radius: 6px; background: #fff; font: inherit">Ler com OCR</button></div>
+</div>
+</div>
+<div style="width: 320px; flex: none; box-sizing: border-box; background: #f4f4f2; border-left: 1.5px solid #cfcfcf; padding: 28px 22px; display: flex; flex-direction: column; gap: 10px; font-size: 14px">
+<div style="font-weight: 600; font-size: 15px">Regras desta tela</div>
+<div>1. Uma só tela para acervo, envio e busca. Somem as abas "Acervo", "Pesquisar" e "Cadastro e recibo".</div>
+<div>2. Cada arquivo tem a própria barra e o próprio resultado; a falha de um não derruba os outros.</div>
+<div>3. O envio segue em segundo plano: a pessoa pode sair da tela.</div>
+<div>4. A busca no texto funciona antes da primeira pergunta à IA.</div>
+<div>5. Três estados de leitura, sempre com sinal e texto: do arquivo, por OCR, sem leitura.</div>
+<div>6. Erro explica o que houve e o que fazer; nada de "recibo incompleto".</div>
+<div>7. Hash, ID e versão ficam em "Detalhes técnicos" de cada documento, fora da lista.</div>
+<div>8. O recibo do lote continua existindo e é conferido antes da primeira pergunta.</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
