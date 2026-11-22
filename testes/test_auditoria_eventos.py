@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acesso
 import interface_pesquisa
 import registro_acesso as reg
+from relogio_fixo import fixar
 from test_acesso import SENHA
 from test_autorizacao import Http, ORIGEM
 
@@ -121,6 +122,7 @@ class AutenticacaoTest(Auditoria):
         self.assertEqual((ultima['motivo'], ultima['conta']), ('bloqueado', self.bia_id))
 
     def test_limite_de_tentativas_por_ip_vira_uma_linha_agregada_por_ip_e_minuto(self):
+        fixar(self)  # a linha é por minuto: nada de cruzar a virada no meio do teste
         acesso.limpar_limites()
         for numero in range(45):
             self.publico('entrar', {'login': f'ninguem{numero}', 'senha': SENHA})
@@ -205,15 +207,36 @@ class DiaCheioTest(Auditoria):
         self.assertEqual((criacao['por'], criacao['conta'], criacao['operacao']),
                          (self.admin_id, criada['conta']['id'], 'contas-criar'))
 
-    def test_inundar_com_pedidos_anonimos_nao_chega_perto_do_teto(self):
-        """Os 300 mil pedidos da prova da revisão: do mesmo IP, agora, são poucas linhas."""
+    def inundar(self, momento_do_pedido):
+        """400 pedidos anônimos do mesmo IP; `momento_do_pedido(n)` diz que horas o registro acha que são no pedido n. A agregação é por
+        minuto, e com o relógio de verdade um teste cruza a virada do minuto de vez em quando (o CI cruzou) e sai com duas linhas."""
+        atual = [momento_do_pedido(0)]
+
+        class Relogio(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return atual[0].astimezone(tz) if tz else atual[0]
         acesso.limpar_limites()
         antes = len(self.todas())
-        for numero in range(400):
-            self.publico('entrar', {'login': f'ninguem{numero}', 'senha': SENHA})
-        reg.descarregar(tudo=True)
-        novas = self.todas()[antes:]
+        with patch.object(reg, 'datetime', Relogio):
+            for numero in range(400):
+                atual[0] = momento_do_pedido(numero)
+                self.publico('entrar', {'login': f'ninguem{numero}', 'senha': SENHA})
+            reg.descarregar(tudo=True)
+        return self.todas()[antes:]
+
+    def test_inundar_com_pedidos_anonimos_nao_chega_perto_do_teto(self):
+        """Os 300 mil pedidos da prova da revisão: do mesmo IP, no mesmo minuto, são poucas linhas. Relógio fixo num minuto."""
+        novas = self.inundar(lambda n: datetime(2026, 11, 22, 12, 30, 20, tzinfo=timezone.utc))
         self.assertLessEqual(len(novas), 21, '400 pedidos do mesmo IP: 20 falhas e uma linha agregada')
+        self.assertEqual(sum(l.get('quantidade', 1) for l in novas), 400)
+
+    def test_a_virada_do_minuto_no_meio_da_inundacao_so_acrescenta_uma_linha_agregada(self):
+        """O que o CI mostrou: se os pedidos cruzam o minuto saem DUAS linhas agregadas (uma por minuto), nunca uma por pedido."""
+        novas = self.inundar(lambda n: datetime(2026, 11, 22, 12, 30 if n < 200 else 31, 30, tzinfo=timezone.utc))
+        agregadas = [l for l in novas if l.get('quantidade')]
+        self.assertEqual(len(agregadas), 2, 'uma linha agregada por minuto ocupado')
+        self.assertLessEqual(len(novas), 22)
         self.assertEqual(sum(l.get('quantidade', 1) for l in novas), 400)
 
 

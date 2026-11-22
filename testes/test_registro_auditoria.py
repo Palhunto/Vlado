@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acesso
 import registro_acesso as reg
+from relogio_fixo import fixar
 from test_acesso import SENHA, hasher_rapido
 
 
@@ -354,6 +355,7 @@ class DiaCheioDeFalhasTest(Base):
         self.assertEqual([l['classe'] for l in self.linhas() if l['evento'] == 'registro_cheio'], ['total'])
 
     def test_excesso_de_tentativas_do_mesmo_ip_vira_uma_linha_por_ip_e_por_minuto(self):
+        fixar(self)  # a linha é por minuto: nada de cruzar a virada no meio do teste
         reg.iniciar_requisicao(lambda: None)
         for _ in range(5000):
             reg.registrar_limite_ip('login_falha', '203.0.113.9', '203.0.113.9', cliente='web')
@@ -398,6 +400,7 @@ class DiaCheioDeFalhasTest(Base):
         self.assertTrue(all(l['evento'] == 'login_falha' and l['ip'] is None for l in self.linhas()))
 
     def test_acesso_entrar_agrega_o_que_passa_do_limite(self):
+        fixar(self)  # a linha é por minuto: nada de cruzar a virada no meio do teste
         hasher_rapido(self)
         acesso.limpar_limites()
         raiz = self.base / 'dados'
