@@ -54,6 +54,7 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('item_fora_da_lixeira', r'^Só é possível apagar definitivamente um item que está na lixeira'),
     ('lixeira_id_invalido', r'^Identificador da lixeira inválido'),
     ('apagamento_incompleto', r'^Não foi possível apagar tudo'),
+    ('apagamento_pendente', r'^Um apagamento definitivo desta apuração ficou pela metade'),
     ('conferencia_sem_original', r'^Para marcar “Conferida no original”'),
     ('falha_leitura', r'^Falha ao ler arquivos do servidor'),
     # Evidence boards (hipoteses, linha_tempo, comparador, mapa_relacoes via rotas_evidencia).

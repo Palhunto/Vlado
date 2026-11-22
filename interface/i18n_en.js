@@ -1367,6 +1367,7 @@ window.VLADO_I18N_EN = {
     item_fora_da_lixeira: "This item is no longer in the trash. Refresh the list.",
     lixeira_id_invalido: "Invalid trash item. Refresh the list.",
     apagamento_incompleto: "Some files could not be deleted (in use or no permission). Close them and try again.",
+    apagamento_pendente: "A permanent deletion in this investigation was left halfway and is only settled the next time the Mesa starts. Until then, this item cannot be restored or deleted; close the programs using those files and restart the Mesa.",
     conferencia_sem_original: "To mark “Checked against the original”, first open the original of each cited excerpt (missing: {faltam}).",
     falha_leitura: "Could not read files on the server.",
     quadro_sem_caso: "Select an investigation for the evidence boards.",

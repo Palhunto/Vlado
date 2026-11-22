@@ -46,6 +46,9 @@ ESPERA_S = 0.05
 ESTADOS_ATIVOS = ('preparando', 'executando', 'cancelando', 'publicando')
 AVISO_BACKUP = ('Cópias que já estejam em backups feitos com scripts/backup.py não são apagadas por esta ação. '
                 'Elas permanecem até expirar conforme a retenção de backups definida pelo operador.')
+PENDENTE = ('Um apagamento definitivo desta apuração ficou pela metade e só se resolve na próxima partida da Mesa. '
+            'Até lá, não é possível restaurar nem apagar este item; feche os programas que usem esses arquivos e '
+            'reinicie a Mesa.')
 
 
 def _eh_link(path: Path) -> bool:
@@ -186,6 +189,7 @@ def alcance(root, identificador: str) -> dict:
             'raizes': sorted(escopo['raizes']), 'conversas': escopo['conversas'],
             'rodadas': escopo['rodadas'], 'rodadas_preservadas': escopo['preservadas'],
             'registros': registros, 'aviso_backup': AVISO_BACKUP,
+            'apagamento_pendente': pendente(root, item),
             'confirmacao': _token(item, entradas, pastas),
             '_entradas': sorted(entradas), '_pastas': sorted(pastas)}
 
@@ -281,6 +285,41 @@ def nome_para_confirmar(root, identificador: str) -> str:
 
 def _manifesto(root: Path, item_id: str) -> Path:
     return dentro(root, f'{MANIFESTOS}/{item_id}.json')
+
+
+def _interrompidos(root: Path) -> dict[str, str | None]:
+    """Item id -> case of each deletion the next start still has to settle. A manifest in "renomeando"
+    outside `apagar` is a rename undone only in part: its case too (an item of the same case may hold roots
+    in that quarantine). Any other manifest, or one that cannot be read: by its id only."""
+    pasta = dentro(root, MANIFESTOS)
+    achados: dict[str, str | None] = {}
+    for caminho in pasta.glob('*.json') if pasta.is_dir() else []:
+        try:
+            manifesto = ler_json(caminho)
+            item = manifesto['item']
+            achados[item['id']] = item.get('caso') if manifesto['fase'] == 'renomeando' else None
+        except (OSError, ValueError, KeyError, TypeError):
+            achados[caminho.stem] = None
+    return achados
+
+
+def pendente(root, item: dict, interrompidos: dict | None = None) -> bool:
+    """True while a deletion of this item, or a half-undone one of its case, waits for the next start:
+    restoring or deleting it then would bring back or leave behind part of what was set aside."""
+    if interrompidos is None:
+        interrompidos = _interrompidos(Path(root).resolve())
+    return item['id'] in interrompidos or item.get('caso') in {c for c in interrompidos.values() if c}
+
+
+def marcar_pendentes(root, itens: list[dict]) -> list[dict]:
+    """The trash list with ``apagamento_pendente`` on each item (the interface disables its buttons)."""
+    interrompidos = _interrompidos(Path(root).resolve())
+    return [{**item, 'apagamento_pendente': pendente(root, item, interrompidos)} for item in itens]
+
+
+def conferir_sem_pendencia(root, item: dict) -> None:
+    if pendente(root, item):
+        raise ValueError(PENDENTE)
 
 
 def _gravar_manifesto(root: Path, manifesto: dict) -> None:
@@ -549,6 +588,8 @@ def apagar(root, identificador: str, confirmacao: str, *, quem: str, gerenciador
             pilha.enter_context(gerenciador.lock)
         pilha.enter_context(_trava(root))
         item = _item(root, identificador)
+        # A new manifest would overwrite the one the next start needs to put the set-aside roots back.
+        conferir_sem_pendencia(root, item)
         if _ativo(root, item, gerenciador, ativa):
             raise ValueError('Há uma execução em andamento. Cancele-a e aguarde o encerramento antes de apagar definitivamente.')
         atual = alcance(root, identificador)

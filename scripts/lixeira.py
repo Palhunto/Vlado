@@ -77,6 +77,8 @@ def restaurar(root, identifier):
     item = next((i for i in itens if i['id'] == identifier and not i.get('restaurado_em_utc')), None)
     if not item:
         raise ValueError('Item não encontrado na lixeira.')
+    from apagamento import conferir_sem_pendencia
+    conferir_sem_pendencia(root, item)  # a half-undone deletion: the next start puts its roots back first
     if item['tipo'] != 'caso' and excluido(root, item['caso']):
         raise ValueError('Restaure primeiro a apuração à qual este item pertence.')
     item['restaurado_em_utc'] = datetime.now(timezone.utc).isoformat()

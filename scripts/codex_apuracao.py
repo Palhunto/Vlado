@@ -330,7 +330,7 @@ class Conversas:
                 meta = ctx['meta']
                 related = meta['caso'] == case and (tipo != 'conversa' or meta['id'] == chat)
                 if related and (ctx.get('busy') or meta['estado'] in ACTIVE):
-                    raise ValueError('Há uma execução em andamento. Cancele-a e aguarde o encerramento antes de excluir.')
+                    raise ValueError('Há uma execução em andamento. Cancele-a e aguarde o encerramento antes de mover para a lixeira.')
             title = selected['titulo'] if tipo == 'conversa' else (run if tipo == 'rodada' else entry.get('titulo', case))
             item = lixeira.adicionar(self.root, tipo, case, title,
                                      conversa=chat if tipo == 'conversa' else None,
