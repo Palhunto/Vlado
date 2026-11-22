@@ -21,6 +21,8 @@ window.VLADO_I18N_EN = {
     "Trocar de apuração": "Switch investigation",
     "Cota do mês": "Monthly quota",
     "Cota esgotada": "Quota used up",
+    "Cota da instalação": "Installation quota",
+    "Cota da instalação esgotada": "Installation quota used up",
     "Administrador": "Administrator",
     "1 vence": "1 due",
     "Áreas de trabalho": "Work areas",
@@ -1248,6 +1250,8 @@ window.VLADO_I18N_EN = {
     ["^R\\$ ([\\d.,]+) de R\\$ ([\\d.,]+)$", "R$ $1 of R$ $2"],
     ["^(\\d+)% da cota usada$", "$1% of the quota used"],
     ["^Cota do mês esgotada: R\\$ ([\\d.,]+) de R\\$ ([\\d.,]+)$", "Monthly quota used up: R$ $1 of R$ $2"],
+    ["^Cota da instalação esgotada: R\\$ ([\\d.,]+) de R\\$ ([\\d.,]+)$", "Installation quota used up: R$ $1 of R$ $2"],
+    ["^(\\d+)% da cota da instalação usada$", "$1% of the installation quota used"],
     // Contador de prazos na barra lateral
     ["^(\\d+) vencem$", "$1 due"],
     // Frente C — Mesa móvel (visualizador de PDF)
