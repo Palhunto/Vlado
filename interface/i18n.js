@@ -8,9 +8,39 @@
   const DADOS = '[translate="no"], blockquote, pre, code, .markdown-body, .vditor, [contenteditable="true"], script, style';
   const IGNORAR = DADOS + ', textarea';
   const CHAVE = 'vlado-idioma';
-  const fonte = window.VLADO_I18N_EN || {textos: {}, padroes: []};
-  const textos = fonte.textos || {};
-  const padroes = (fonte.padroes || []).map(([re, en]) => [new RegExp(re), en]);
+  // O dicionário em inglês (i18n_en.js, ~120 KB) só é baixado quando o idioma é o inglês (Onda 3, parte C, UX-14). Quem já o carregou
+  // antes deste arquivo (os testes, ou uma página que o inclua) continua valendo, sem espera.
+  let fonte = window.VLADO_I18N_EN || {textos: {}, padroes: []};
+  let textos = fonte.textos || {};
+  let padroes = (fonte.padroes || []).map(([re, en]) => [new RegExp(re), en]);
+  function usarDicionario(dicionario) {
+    fonte = dicionario;
+    textos = fonte.textos || {};
+    padroes = (fonte.padroes || []).map(([re, en]) => [new RegExp(re), en]);
+  }
+  const temDicionario = () => Object.keys(textos).length > 0;
+  // O hash do arquivo vem do servidor em <meta name="vlado-versoes"> (JSON nome -> hash); sem ele, a URL simples revalida por ETag.
+  function urlDicionario() {
+    try {
+      const meta = document.querySelector('meta[name="vlado-versoes"]');
+      const hash = meta && JSON.parse(meta.getAttribute('content'))['i18n_en.js'];
+      if (hash) return `/i18n_en.js?v=${encodeURIComponent(hash)}`;
+    } catch (_) { /* Sem versões: URL simples. */ }
+    return '/i18n_en.js';
+  }
+  let carregando = null;
+  function carregarDicionario() {
+    if (temDicionario()) return Promise.resolve();
+    if (window.VLADO_I18N_EN) { usarDicionario(window.VLADO_I18N_EN); return Promise.resolve(); }
+    carregando ??= new Promise(pronto => {
+      const tag = document.createElement('script');
+      tag.src = urlDicionario();
+      tag.onload = () => { if (window.VLADO_I18N_EN) usarDicionario(window.VLADO_I18N_EN); pronto(); };
+      tag.onerror = () => { carregando = null; pronto(); };   // sem o dicionário a tela segue em português
+      document.head.append(tag);
+    });
+    return carregando;
+  }
   const nos = new WeakMap();        // Text node -> {orig, en}
   const atributos = new WeakMap();  // Element -> {attr: {orig, en}}
   let lingua = 'pt';
@@ -89,7 +119,7 @@
     return Object.entries(vars).reduce((texto, [nome, valor]) => texto.split(`{${nome}}`).join(String(valor)), modelo);
   }
   function idioma() { return lingua; }
-  function definir(nova) {
+  function aplicarLingua(nova) {
     lingua = nova === 'en' ? 'en' : 'pt';
     document.documentElement.lang = lingua === 'en' ? 'en' : 'pt-BR';
     try { localStorage.setItem(CHAVE, lingua); } catch (_) { /* Storage may be blocked; the switch still works. */ }
@@ -100,6 +130,10 @@
       botao.setAttribute('aria-label', lingua === 'en' ? 'Mudar para português' : 'Switch to English');
     }
     window.dispatchEvent(new CustomEvent('vlado-idioma', {detail: lingua}));
+  }
+  function definir(nova) {
+    if (nova === 'en' && !temDicionario()) return carregarDicionario().then(() => aplicarLingua(nova));
+    return aplicarLingua(nova);
   }
   let salvo = '';
   try { salvo = localStorage.getItem(CHAVE) || ''; } catch (_) { /* Default language below. */ }
@@ -120,7 +154,8 @@
   const iniciar = () => {
     const botao = document.getElementById('mesa-idioma');
     if (botao) botao.addEventListener('click', () => definir(lingua === 'en' ? 'pt' : 'en'));
-    definir(lingua);
+    // Em inglês a tela espera o dicionário (style.css esconde o corpo até aqui, com uma saída de segurança de 3 s).
+    Promise.resolve(definir(lingua)).finally(() => { try { document.body.setAttribute('data-i18n-pronto', ''); } catch (_) { /* Página já descartada (testes). */ } });
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);
   else iniciar();
