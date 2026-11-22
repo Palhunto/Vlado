@@ -41,3 +41,19 @@
 @media(prefers-reduced-motion:reduce) {
   *{transition:none!important;animation:none!important}
 }
+
+/* Convite, senha esquecida, redefinição e e-mail (docs/design/componentes.md#aceitar-convite). Só tokens. */
+.entrar-campo{position:relative}
+.entrar-link{position:absolute;top:0;right:0;min-height:var(--espaco-6);padding:0;border:0;background:none;color:var(--theme-accent);font-size:var(--text-md);font-weight:600;text-decoration:underline}
+.entrar-link:hover{background:none;color:var(--theme-primary-hover)}
+.entrar-link[hidden],.entrar-termos[hidden]{display:none}
+.entrar-rubrica{margin:0 0 var(--espaco-2);font-size:var(--text-md);font-weight:600;color:var(--theme-muted);text-transform:uppercase}
+.entrar-links{margin:var(--espaco-4) 0 0;font-size:var(--text-md);font-weight:600}
+.entrar-links a{text-decoration:underline}
+.entrar-aviso{display:flex;flex-direction:column;gap:var(--espaco-2);padding:var(--espaco-4);border-radius:var(--raio-cartao);background:var(--theme-soft)}
+.entrar-aviso p{margin:0}
+.entrar-aviso-titulo{font-size:var(--text-base);font-weight:600}
+.entrar-termos{flex-direction:row;align-items:flex-start;gap:var(--espaco-3);font-weight:400}
+.entrar-termos input{flex:none;width:var(--espaco-5);height:var(--espaco-5);min-height:0}
+#aceitar-dica,#redefinir-dica{margin:calc(var(--espaco-2) * -1) 0 0}
+#redefinir-pronto button{width:100%}
