@@ -30,8 +30,9 @@ limite, para dizer se o processo inteiro parou (a máquina) ou se só os pedidos
 
 **Pular só sem CPU, medida fora da Mesa.** Lentidão nunca pula por si: uma Mesa que regrida e fique
 lenta falha. ``T_ref`` acima de ``TETO_REF`` falha quando, nos mesmos segundos dos dez cadastros, a
-máquina deixou ociosos pelo menos 4 vezes o CPU que a Mesa gastou neles (mínimo de 1 s), e pula com os
-números quando não deixou: medido sem disputar com a Mesa (``apoio_cpu_baixa.decidir_por_ociosa``).
+máquina deixou ociosos pelo menos 4 vezes o CPU que a Mesa gastou neles, sem passar da duração da
+janela (um núcleo inteiro ocioso) e com mínimo de 1 s, e pula com os números quando não deixou: medido
+sem disputar com a Mesa (``apoio_cpu_baixa.decidir_por_ociosa``).
 Quando um pedido das sessões passa do seu limite, uma sonda à parte, de prioridade normal, pede
 ``SONDA_CPU`` s de CPU: se não os tem em
 ``SONDA_PRAZO`` s, a máquina está saturada e o teste pula com o motivo explícito ("máquina saturada
@@ -327,12 +328,12 @@ class PortaoFilaTest(unittest.TestCase):
         # The same ten uploads with no extraction in course: the reference of this machine, this minute.
         # In the same window: the machine's idle CPU and what this process (the Mesa runs in it) spent. A normal
         # probe would compete with the Mesa and change T_ref itself (apoio_cpu_baixa.decidir_por_ociosa).
-        ociosa_antes, gasto_antes = cpu_ociosa_s(), time.process_time()
+        ociosa_antes, gasto_antes, relogio_antes = cpu_ociosa_s(), time.process_time(), time.monotonic()
         referencia = self.cadastros_simultaneos('referencia')
-        ociosa_depois, gasto = cpu_ociosa_s(), time.process_time() - gasto_antes
+        ociosa_depois, gasto, janela = cpu_ociosa_s(), time.process_time() - gasto_antes, time.monotonic() - relogio_antes
         if referencia > TETO_REF:
             ociosa = None if ociosa_antes is None or ociosa_depois is None else ociosa_depois - ociosa_antes
-            decidir_por_ociosa(self, ociosa, gasto,
+            decidir_por_ociosa(self, ociosa, gasto, janela,
                                f'T_ref = {referencia:.2f} s, acima de {TETO_REF:.0f} s: a Mesa está lenta para cadastrar')
         limite_cadastros = max(LIMITE_CADASTROS, 2 * referencia)
         with tempfile.TemporaryDirectory() as pasta:

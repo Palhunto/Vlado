@@ -165,14 +165,15 @@ def pular(teste, motivo):
     teste.skipTest(motivo)
 
 
-def decidir_por_ociosa(teste, ociosa, gasto, mensagem):
-    """A time of the Mesa over its limit: FAIL when the machine left at least 4 times what the Mesa spent in the
-    same window idle (at least OCIOSA_MINIMA s), or when idle time cannot be read; SKIP otherwise, with the numbers."""
-    necessario = max(OCIOSA_MINIMA, 4 * gasto)
+def decidir_por_ociosa(teste, ociosa, gasto, janela, mensagem):
+    """A time of the Mesa over its limit: FAIL when the machine left idle, in the same window of ``janela`` clock
+    seconds, at least max(OCIOSA_MINIMA, min(4 x what the Mesa spent, janela)) CPU seconds (P38: never more than a
+    whole idle core for the window), or when idle time cannot be read; SKIP otherwise, with the numbers."""
+    necessario = max(OCIOSA_MINIMA, min(4 * gasto, janela))
     if ociosa is None:
         teste.fail(f'{mensagem} (CPU ociosa da máquina ilegível nesta plataforma; a Mesa gastou {gasto:.2f} s)')
-    numeros = (f'na mesma janela a máquina deixou {ociosa:.2f} s de CPU ociosa; a Mesa gastou {gasto:.2f} s '
-               f'(necessário {necessario:.2f} s ociosos)')
+    numeros = (f'na mesma janela de {janela:.2f} s a máquina deixou {ociosa:.2f} s de CPU ociosa; a Mesa gastou '
+               f'{gasto:.2f} s (necessário {necessario:.2f} s ociosos)')
     if ociosa >= necessario:
         teste.fail(f'{mensagem}, com CPU disponível: {numeros}')
     pular(teste, f'máquina saturada para prioridade normal: {numeros}; {mensagem}')
