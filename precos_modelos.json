@@ -13,6 +13,7 @@
     "provisorio": "Valores aceitos pelo dono em 2026-11-21 como padrão provisório (câmbio 5,50; R$ 50 por conta e R$ 500 da instalação por mês; 2 e 4 perguntas simultâneas; Sonnet 5.5 e GPT Sol 6.1). configuracao.json \"orcamento\" sobrepõe cada um; a lista \"modelos_permitidos\" escrita lá substitui a inteira (repita os modelos que quiser manter).",
     "mensal_por_conta_brl": 50.0,
     "mensal_organizacao_brl": 500.0,
+    "mensal_instalacao_brl": null,
     "estimativa_minima_tokens": {"entrada": 60000, "saida": 8000},
     "execucoes_simultaneas_por_conta": 2,
     "execucoes_simultaneas_por_organizacao": null,

@@ -38,6 +38,7 @@ import sys
 import threading
 from urllib.parse import urlsplit
 
+import acesso
 import autorizacao
 
 # Inside the PyInstaller bundle the interface lives next to the frozen modules (sys._MEIPASS).
@@ -214,8 +215,67 @@ def _gzip(nome, versao_atual, dados):
     return comprimido
 
 
+IDIOMAS_DA_PAGINA = acesso.IDIOMAS
+_QUALIDADE = re.compile(r'\s*q\s*=\s*(0(?:\.[0-9]{0,3})?|1(?:\.0{0,3})?)\s*')
+
+
+def idioma_do_cabecalho(valor) -> str | None:
+    """The language the browser prefers among the ones the Mesa speaks (``Accept-Language``, P42): ``pt`` or ``en``,
+    ``pt-BR`` and ``pt-PT`` count as ``pt``, the quality values are respected and a tag with ``q=0`` or a malformed
+    quality is left out. ``None`` when the header names neither (the server's default then decides)."""
+    melhor, melhor_q = None, 0.0
+    for parte in str(valor or '')[:1024].split(',')[:32]:
+        etiqueta, _, resto = parte.strip().partition(';')
+        base = etiqueta.strip().lower().split('-')[0]
+        if base not in IDIOMAS_DA_PAGINA:
+            continue
+        q = 1.0
+        if resto.strip():
+            achado = _QUALIDADE.fullmatch(resto)
+            if not achado:
+                continue
+            q = float(achado.group(1))
+        if q > melhor_q:
+            melhor, melhor_q = base, q
+    return melhor
+
+
+def idioma_inicial(*, da_conta=None, do_navegador=None, modo='local') -> str:
+    """The language a page opens in when the person has not chosen one in this browser (P42, same order in the
+    Entrar and in the Mesa): the account's, the browser's (``pt`` or ``en`` only), then the server's default
+    (``en`` hosted, ``pt`` elsewhere). The choice kept in the browser (``vlado-idioma``) wins over all of it, in the
+    page itself. Only a value of ``acesso.IDIOMAS`` is ever returned."""
+    for candidato in (da_conta, idioma_do_cabecalho(do_navegador)):
+        if candidato in IDIOMAS_DA_PAGINA:
+            return candidato
+    return 'en' if modo == 'piloto' else 'pt'
+
+
 class RotasEstaticas:
     """Mixin of the request handler: uses its ``_send``, ``_json``, ``_principal`` and ``server``."""
+
+    def _idioma_da_conta(self, principal) -> str | None:
+        """The language of the account of this session, read with Contas' approval (``acesso.ver_conta``, only this
+        field): ``None`` without session or account, or when the store cannot be read: the page never fails for it."""
+        conta = principal.get('conta') if isinstance(principal, dict) else None
+        if not isinstance(conta, str):
+            return None
+        try:
+            idioma = acesso.ver_conta(self.server.root, conta)['conta']['idioma']
+        except (ValueError, OSError):
+            return None
+        return idioma if idioma in IDIOMAS_DA_PAGINA else None
+
+    def _idioma_da_pagina(self, principal=None) -> str:
+        return idioma_inicial(da_conta=self._idioma_da_conta(principal), do_navegador=self.headers.get('Accept-Language'),
+                              modo=self.server.modo)
+
+    def _pagina_de_entrada(self):
+        """``entrar.html`` with the language it opens in. With a session (the pages of a pending item) the account's
+        language counts; without one, the browser's and the server's."""
+        principal = self._sessao_piloto()[0] if self.server.com_contas else None
+        idioma = self._idioma_da_pagina(principal).encode('ascii')
+        self._send(200, conteudo('entrar.html').replace(b'__IDIOMA_PADRAO__', idioma), 'text/html; charset=utf-8')
 
     def _estatico(self, path):
         if path not in ARQUIVOS:
@@ -231,7 +291,7 @@ class RotasEstaticas:
             principal = self._principal()
             piloto = self.server.modo == 'piloto'
             content = (content.replace(b'__SESSION_TOKEN__', principal['csrf'].encode('ascii'))
-                       .replace(b'__IDIOMA_PADRAO__', b'en' if piloto else b'pt')
+                       .replace(b'__IDIOMA_PADRAO__', self._idioma_da_pagina(principal).encode('ascii'))
                        .replace(b'__PAPEL__', autorizacao.papel_para_interface(principal).encode('ascii'))
                        .replace(b'__MODO__', self.server.modo.encode('ascii')))
             extra = ({} if self.server.com_contas

@@ -53,6 +53,7 @@ import proxies_confiaveis
 import apagamento
 import registro_acesso
 import lixeira
+import segredos
 import trava_cadastro
 from indice_sqlite import ID_CASO, caminho_rodada, cobertura, ler_passagem, pesquisar
 # Names also imported from here by the launcher, the tests and older callers.
@@ -359,6 +360,8 @@ class Servidor(ThreadingHTTPServer):
         # (main); 'local' in threads of this process (tests, the frozen Windows desk).
         self.fila = fila_extracao.Fila(self.root, modo=extracao or 'local')
         self.conversas.renderizar_pagina = self.fila.renderizar_pagina  # page images too (SEG-01)
+        # The newsroom's own AI key only in the piloto mode (P3c; Viga, with Tranca's consent for this line).
+        self.conversas.chave_da_redacao = modo == 'piloto'
         super().__init__(address, Handler)
 
     def serve_forever(self, poll_interval=0.5):
@@ -697,7 +700,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 return
             primeiro = path in ('/', '/entrar', '/primeiro-acesso') and self._primeiro_acesso()
             if path == '/primeiro-acesso' and primeiro:
-                self._send(200, rotas_estaticas.conteudo('entrar.html'), 'text/html; charset=utf-8')
+                self._pagina_de_entrada()
                 return
             if path == '/primeiro-acesso' or (primeiro and path in ('/', '/entrar')):
                 self._send(303, b'', 'text/plain; charset=utf-8',
@@ -716,7 +719,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 # Static page without case data; the token stays in the path, read by entrar.js. Like every answer,
                 # it goes with `Cache-Control: no-store` and `Referrer-Policy: no-referrer` (`_send`). The page that
                 # resolves a pending item of the account is of the same family: it reads the session by itself.
-                self._send(200, rotas_estaticas.conteudo('entrar.html'), 'text/html; charset=utf-8')
+                self._pagina_de_entrada()
                 return
             if path in ('/', '/api/catalogo', '/api/integracao', '/api/fila', '/api/cota') and self._principal() is None:
                 self._sem_principal(api=path != '/')
@@ -874,7 +877,8 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 result = self._equipe(operation, data, principal)
             elif operation in rotas_conversa.OPERACOES:
                 result = self._conversa(operation, data, dono, casos_liberados, consulta_contada,
-                                        conta=principal['conta'])
+                                        conta=principal['conta'], ve_gasto_da_redacao=autorizacao.gasto_da_redacao(
+                                            self.server.root, self.server.modo, principal))
                 if result is RESPONDIDO:
                     return
             else:
@@ -1035,6 +1039,8 @@ def main():
         ambiente = os.environ.get('VLADO_AMBIENTE', '').strip()
         try:  # with real data the hosted service does not start without real e-mail delivery (decision 12)
             correio.conferir_partida(args.modo, ambiente if ambiente in AMBIENTES else 'homologacao')
+            if args.modo == 'piloto':  # terms asked without a readable address: it does not start (4b-1)
+                acesso.termos_vigentes()
         except ValueError as exc:
             raise SystemExit(str(exc)) from None
     # Extraction and OCR in separate processes; VLADO_EXTRACAO=local keeps them in threads.
@@ -1049,6 +1055,13 @@ def main():
                     print(aviso, file=sys.stderr, flush=True)
             except (ValueError, OSError):
                 pass  # an unreadable store answers 503 to each request; it does not stop the start
+        if server.modo == 'piloto':  # the newsrooms' own AI keys unreadable: none is read nor saved until restored
+            try:
+                aviso = segredos.conferir_chaves_das_redacoes(server.root)
+                if aviso:
+                    print(aviso, file=sys.stderr, flush=True)
+            except OSError:
+                pass
         print(f'Mesa de apuração ({args.modo}): {server.origin}', flush=True)
         print('Encerre com Ctrl+C.', flush=True)
         if args.modo != 'piloto' and not args.sem_abrir:

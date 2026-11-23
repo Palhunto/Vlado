@@ -81,8 +81,11 @@ CAUSAS_ERRO = {
     'limite_dia': ('sem_cota', 'limite_dia', None),
     'limite_cota_conta': ('sem_cota', 'limite_cota_conta', None),
     'limite_cota_organizacao': ('sem_cota', 'limite_cota_organizacao', None),
+    'limite_cota_instalacao': ('sem_cota', 'limite_cota_instalacao', None),
     'gasto_nao_registrado': ('erro', 'gasto_nao_registrado', None),
     'modelo_nao_permitido': ('erro', 'modelo_nao_permitido', None),
+    # The newsrooms' keys file became unreadable during the question: no other key stood in (contract 8.5).
+    'chave_redacao_ilegivel': ('erro', 'chave_redacao_ilegivel', None),
 }
 
 
@@ -277,27 +280,41 @@ class Conversas:
                 self.rpc = self.factory(self.root, self._notification)
             return self.rpc
 
-    def status(self):
-        """API connection state. Keys stay in the server environment and are never returned."""
+    # P3c: the newsroom's own AI key is read only in the piloto mode (the server says so). In local-contas a keys file
+    # left from a pilot would count there, or, unreadable, refuse without warning: there the service's key pays.
+    chave_da_redacao = False
+
+    def _redacao_da_chave(self, conta):
+        """The newsroom whose own key the questions of ``conta`` may use, or None (not piloto, or no newsroom)."""
+        return custo.redacao_do_gasto(self.root, conta) if self.chave_da_redacao else None
+
+    def status(self, redacao=None):
+        """API connection state. Keys stay in the server environment and are never returned. ``redacao``: the
+        newsroom of who asks, whose own key counts (``chave_propria``: that key would pay)."""
         rpc = self._start()
-        account = rpc.call('account/read', {}).get('account') or {}
+        account = rpc.call('account/read', {'redacao': redacao} if redacao else {}).get('account') or {}
         return {'versao': rpc.version, 'autenticado': account.get('type') == 'api',
                 'tipo': account.get('type'), 'provedor': account.get('provedor'),
-                'modelo': account.get('modelo'), 'online': True,
+                'modelo': account.get('modelo'), 'online': True, 'chave_propria': bool(account.get('chave_propria')),
                 # The inference server says when the configured model is outside the list (CUS-03).
                 'recusa_modelo': account.get('recusa_modelo')}
 
-    def _antes_de_executar(self, conta, convidado):
+    def _antes_de_executar(self, conta, convidado, ve_redacao=False):
         """Checks before a question or a retry spends anything: key, model, daily tokens and the month's
-        quota of the account and of the organization (CUS-01, CUS-03). Returns the status."""
-        estado = self.status()
+        quota of the person, of the newsroom and of the installation (CUS-01, CUS-03, accounts 8.5).
+        ``ve_redacao``: the newsroom's numbers may go in a refusal (the route says, by the gate). Returns
+        the status."""
+        estado = self.status(self._redacao_da_chave(conta))
         if not estado['autenticado']:
             raise ErroIA('Chave de API ausente: cole a chave em Perguntar à IA › Conexão e opções, ou defina '
                          + ' ou '.join(CHAVES.values()) + ' no ambiente do servidor.', codigo='autenticacao')
         if estado.get('recusa_modelo'):
             raise ValueError(estado['recusa_modelo'])
-        limites.conferir_dia(self.root, custo.chaves_orcamento(conta)['organizacao'])
-        custo.conferir_antes(self.root, conta, estado.get('modelo'), convidado=convidado)
+        # P40: a question paid with the newsroom's own key counts in its newsroom's day, not in the installation's.
+        limites.conferir_dia(self.root, custo.chaves_orcamento(conta, self.root)['organizacao'],
+                             instalacao=not estado['chave_propria'])
+        custo.conferir_antes(self.root, conta, estado.get('modelo'), convidado=convidado, ve_redacao=ve_redacao,
+                             chave_propria=estado['chave_propria'])
         return estado
 
     def _conferir_simultaneas(self, conta, restrito=False):
@@ -307,8 +324,9 @@ class Conversas:
         that adds up newsrooms (accounts contract, 4.5): the installation's refusal has none, and a restricted
         author (``dono``: guest or reader) gets that same sentence for its newsroom. Caller holds ``self.lock``."""
         orcamento = custo.ler_orcamento(self.root)
-        chaves = custo.chaves_orcamento(conta)
-        ativas = [custo.chaves_orcamento(c['meta'].get('conta')) for c in self.contexts.values() if c.get('busy')]
+        chaves = custo.chaves_orcamento(conta, self.root)
+        ativas = [c.get('orcamento') or custo.chaves_orcamento(c['meta'].get('conta'), self.root)
+                  for c in self.contexts.values() if c.get('busy')]
         da_conta = sum(1 for c in ativas if c['conta'] == chaves['conta'])
         if da_conta >= orcamento['execucoes_simultaneas_por_conta']:
             raise ValueError(f'Já há {da_conta} pergunta{"s" if da_conta != 1 else ""} em andamento nesta conta. '
@@ -606,14 +624,18 @@ class Conversas:
             return {'caso': case, 'conversa': identifier,
                     'conteudo': self._caderno(case, data.get('selecoes'), ctx, evolution, module)}
 
-    def perguntar(self, data, dono=None, conta=None):
+    def perguntar(self, data, dono=None, conta=None, ve_gasto_da_redacao=False):
         """``dono``: the guest account (None for administrators); ``conta``: the account that asks,
-        administrators included (None in the local mode): it spends the month's quota."""
+        administrators included (None in the local mode): it spends the month's quota of the person and
+        of the newsroom. ``ve_gasto_da_redacao``: ``autorizacao.gasto_da_redacao`` from the route; only then does
+        the direct refusal carry the newsroom's numbers (accounts contract, 4.5). What a ceiling reached in the middle
+        says goes to the conversation and never carries a number."""
         question, case = data.get('pergunta'), data.get('caso')
         if not isinstance(question, str) or not 1 <= len(question.strip()) <= 16000:
             raise ValueError('Informe uma pergunta de até 16000 caracteres.')
         lixeira.conferir_disponivel(self.root, case, conversa=data.get('conversa'))
-        estado = self._antes_de_executar(conta, dono is not None)
+        estado = self._antes_de_executar(conta, dono is not None, ve_gasto_da_redacao)
+        chaves = custo.chaves_orcamento(conta, self.root)  # whose budgets, read once for this execution
         identifier = data.get('conversa')
         with self.lock:
             lixeira.conferir_disponivel(self.root, case, conversa=identifier)
@@ -687,6 +709,8 @@ class Conversas:
             ctx['busy'] = True
             ctx['cancel'] = False
             ctx['meta']['conta'] = conta  # whose quota this execution spends (CUS-01)
+            ctx['orcamento'] = chaves
+            ctx['redacao_da_chave'] = self._redacao_da_chave(conta)  # whose own key the turns may use (piloto)
             ctx['modelo_cobrado'] = estado.get('modelo')
             ctx['observacoes_humanas'] = feedback['conteudo'] if feedback else None
             ctx['meta']['observacoes_humanas'] = None
@@ -990,9 +1014,11 @@ class Conversas:
                         'Não herde suporte nem aprovação para os novos achados. Não leia outras rodadas '
                         'nem amplie o corpus. IDs abaixo pertencem à rodada de origem.\n'
                         + json.dumps(ctx['observacoes_humanas'], ensure_ascii=False))
-                result = rpc.call('turn/start', {'threadId': ctx['meta']['thread_id'],
-                    'input': [{'type': 'text', 'text': prompt}],
-                    'approvalPolicy': 'on-request'})
+                turno = {'threadId': ctx['meta']['thread_id'], 'input': [{'type': 'text', 'text': prompt}],
+                         'approvalPolicy': 'on-request'}
+                if ctx.get('redacao_da_chave'):
+                    turno['redacao'] = ctx['redacao_da_chave']  # the newsroom's own key, when it has one
+                result = rpc.call('turn/start', turno)
                 with self.lock:
                     if ctx['busy']:
                         ctx['meta']['turn_id'] = result['turn']['id']
@@ -1135,7 +1161,8 @@ class Conversas:
             if modelo and modelo not in modelos:
                 modelos.append(modelo)
             registro = {'numero': numero, 'etapa': ctx['meta'].get('etapa'), 'rodada': ctx['meta'].get('rodada'),
-                        'turno': params.get('turnId'), 'modelo': modelo, 'uso': uso, 'registrado_em_utc': agora()}
+                        'turno': params.get('turnId'), 'modelo': modelo, 'uso': uso, 'registrado_em_utc': agora(),
+                        'chave': 'redacao' if params.get('chavePropria') is True else 'servico'}
             if gasto:
                 registro['custo'] = gasto
                 ctx['meta']['custo_micro_brl'] = ctx['meta'].get('custo_micro_brl', 0) + gasto['micro_brl']
@@ -1152,24 +1179,31 @@ class Conversas:
                                                  publica=f'Registro de uso da API {numero:04} não gravado.'))
         self._event(identifier, 'uso', {'etapa': registro['etapa'], 'modelo': modelo, 'uso': uso, 'total': total,
                                         **({'custo_brl': gasto['brl']} if gasto else {})})
-        self._aplicar_limites(identifier, uso, total, gasto)
+        self._aplicar_limites(identifier, uso, total, gasto, chave_propria=params.get('chavePropria') is True)
 
-    def _aplicar_limites(self, identifier, uso, total, gasto=None):
+    def _aplicar_limites(self, identifier, uso, total, gasto=None, chave_propria=False):
         """Stop the round when it exceeds the per-question or daily token budget (cache included) or the
         month's quota in reais of its account or of the organization."""
-        meta = self.contexts[identifier]['meta']
+        ctx = self.contexts[identifier]
+        meta = ctx['meta']
         totais, sem_registro = None, None
+        try:
+            chaves = ctx.get('orcamento') or custo.chaves_orcamento(meta.get('conta'), self.root)
+        except ValueError as exc:  # the account store is unreadable: never go on without knowing whose spend
+            chaves, sem_registro = None, custo.MENSAGEM_SEM_GRAVAR
+            registrar_falha('Redação do gasto não lida: ' + str(exc), publica='')
         if gasto is None and custo.tokens_totais(uso):
             sem_registro = custo.MENSAGEM_SEM_CALCULO  # spent and not priced: never go on without a count (R1)
-        elif gasto:  # the month's spend first: it is added even when the token limits cannot be read
+        elif gasto and chaves:  # the month's spend first: it is added even when the token limits cannot be read
             try:
-                totais = custo.somar_gasto(self.root, meta.get('conta'), gasto['micro_brl'])
+                totais = custo.somar_gasto(self.root, meta.get('conta'), gasto['micro_brl'], chaves,
+                                           chave_propria=chave_propria)
             except custo.GastoSemRegistro as exc:
                 sem_registro = str(exc)  # stop before the next call (R1, R2)
-        organizacao, dia_organizacao = custo.chaves_orcamento(meta.get('conta'))['organizacao'], 0
+        organizacao, dia_organizacao = (chaves or {}).get('organizacao', custo.ORGANIZACAO), 0
         try:
             valores = limites.ler(self.root)
-            dia = limites.somar_dia(self.root, custo.tokens_totais(uso), organizacao)
+            dia = limites.somar_dia(self.root, custo.tokens_totais(uso), organizacao, instalacao=not chave_propria)
             dia_organizacao = limites.dia_da_organizacao(self.root, organizacao)
         except (ValueError, OSError) as exc:
             self._event(identifier, 'aviso', registrar_falha('Limites de tokens não conferidos: ' + str(exc),
@@ -1184,20 +1218,20 @@ class Conversas:
             motivo = f'Limite de tokens por consulta atingido ({consulta} de {valores["tokens_por_consulta"]}).'
             causa = 'limite_consulta'
         elif teto_organizacao is not None and dia_organizacao > teto_organizacao:
-            # The newsroom first (it then learns nothing of the others). No number: the newsroom's usage
-            # and ceiling go only to its owner (accounts contract 4.5), which this cannot tell yet (P1).
+            # The newsroom first (it then learns nothing of the others). What is said here goes to the conversation,
+            # which the colleagues of the case read: never the newsroom's usage or ceiling (accounts contract 4.5).
             causa, motivo = 'limite_dia', 'Limite diário de uso da redação atingido. Tente novamente amanhã (UTC).'
-        elif valores['tokens_por_dia'] is not None and dia > valores['tokens_por_dia']:
+        elif not chave_propria and valores['tokens_por_dia'] is not None and dia > valores['tokens_por_dia']:
             # Nobody learns the installation-wide usage: it adds up every newsroom (accounts contract, 4.5).
             causa, motivo = 'limite_dia', 'Limite diário de uso da instalação atingido. Tente novamente amanhã (UTC).'
         elif totais is not None:
             try:
-                estourou = custo.estouro(self.root, totais, convidado=meta.get('dono') is not None)
+                estourou = custo.estouro(self.root, totais, conta=meta.get('conta'),  # never a number (B1)
+                                         chave_propria=chave_propria)
             except ValueError:
                 estourou = None
             if estourou:
                 causa, motivo = estourou
-        ctx = self.contexts[identifier]
         if not motivo or ctx.get('cancel'):
             return
         self._registrar_causa(ctx, causa, motivo + ' O que já foi concluído foi preservado.')
@@ -1362,7 +1396,7 @@ class Conversas:
         ctx.setdefault('acervos', {})[run_id] = self._apresentacao(manifest)
         return run, question, pipeline
 
-    def retomar(self, identifier, dono=None, casos=None, conta=None):
+    def retomar(self, identifier, dono=None, casos=None, conta=None, ve_gasto_da_redacao=False):
         """Retry the SAME frozen round from the first stage not yet accepted (no new round, no duplicate findings).
 
         The HTTP layer must count this call like a question (acesso.registrar_consulta) and give it
@@ -1381,7 +1415,8 @@ class Conversas:
             raise ValueError(situacao['mensagem'])
         if not meta.get('rodada_pergunta') or meta.get('rodada_pergunta') != meta.get('rodada'):
             raise ValueError('A pergunta não chegou a ser congelada; envie-a novamente.')
-        estado = self._antes_de_executar(conta, dono is not None)
+        estado = self._antes_de_executar(conta, dono is not None, ve_gasto_da_redacao)
+        chaves = custo.chaves_orcamento(conta, self.root)
         limite = limites.ler(self.root)['tokens_por_consulta']
         usados = custo.tokens_totais(meta.get('uso_tokens'))
         if limite is not None and usados >= limite:
@@ -1396,6 +1431,8 @@ class Conversas:
                 raise ValueError('Já há uma pergunta em andamento para este convite. Aguarde a resposta ou cancele.')
             self._conferir_simultaneas(conta, restrito=dono is not None)
             meta['conta'] = conta
+            ctx['orcamento'] = chaves
+            ctx['redacao_da_chave'] = self._redacao_da_chave(conta)
             ctx['modelo_cobrado'] = estado.get('modelo')
             run, question, pipeline = self._reconstruir(identifier)
             pendentes = [e for e in pipeline.etapas if e not in pipeline.accepted]

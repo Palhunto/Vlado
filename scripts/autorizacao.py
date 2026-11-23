@@ -48,9 +48,14 @@ MENSAGEM_CAMPOS = {'codex-perguntar': 'Esta conta envia somente a pergunta e a c
                    'codex-retomar': 'Esta conta envia somente a conversa a retomar.'}
 # O que uma conta com pendência ainda alcança (seção 4.2): a própria sessão e o que resolve cada pendência.
 SEM_PENDENCIA = frozenset({'sessao-sair', 'GET:/api/sessao'})
-RESOLVE_PENDENCIA = {'segundo_fator': frozenset({'conta-ver', 'conta-fator-iniciar', 'conta-fator-confirmar'})}
+RESOLVE_PENDENCIA = {'segundo_fator': frozenset({'conta-ver', 'conta-fator-iniciar', 'conta-fator-confirmar'}),
+                     'termos': frozenset({'conta-ver', 'conta-termos-aceitar'})}
+# As saídas que uma pendência deixa abertas sem resolvê-la: quem não aceita os termos novos ainda leva os próprios
+# dados e sai do serviço (ressalva B2). Uma saída só passa se TODAS as pendências da conta a deixam: com o segundo
+# fator pendente, nenhuma (ressalva R1 da revisão da 4b-1: a liberação de uma pendência nunca abre o que outra fecha).
+SAIDAS_DA_PENDENCIA = {'termos': frozenset({'conta-exportar', 'conta-excluir'}), 'segundo_fator': frozenset()}
 # A página que resolve cada pendência: com ela, `GET /` responde 303 para cá (da família do Entrar, sem dado de conta).
-PAGINA_DA_PENDENCIA = {'segundo_fator': '/conta/segundo-fator'}
+PAGINA_DA_PENDENCIA = {'termos': '/conta/termos', 'segundo_fator': '/conta/segundo-fator'}
 FATOR_OBRIGATORIO = 'O segundo fator é obrigatório para o seu papel neste serviço e não pode ser removido.'
 ID_CONVERSA = re.compile(lixeira.ID_CONVERSA)
 
@@ -99,7 +104,8 @@ _linhas(MATRIZ, 'lote+caso+nenhum', 'L', TODOS, 'GET:/api/fila')
 # 5.4 A própria conta.
 _linhas(MATRIZ, 'nenhum', 'A', TODOS, 'sessao-sair conta-senha-trocar conta-sessao-encerrar conta-sessoes-encerrar-outras '
                                       'conta-email-trocar conta-fator-iniciar conta-fator-confirmar conta-fator-codigos '
-                                      'conta-fator-remover')  # remover: negado onde o fator é obrigatório (`_recusa_do_modo`)
+                                      'conta-fator-remover conta-termos-aceitar')  # remover: negado onde o fator é
+# obrigatório; aceitar os termos: só onde eles existem, o `piloto` (as duas em `_recusa_do_modo`)
 _linhas(MATRIZ, 'nenhum', 'L', TODOS, 'conta-ver conta-sessoes')
 _linhas(MATRIZ, 'nenhum', 'E', TODOS, 'conta-atualizar')
 # 5.5 A redação.
@@ -172,7 +178,7 @@ TRANSITORIAS: dict[str, Regra] = {}
 RETIRADAS = ('contas-listar', 'contas-criar', 'contas-atualizar', 'contas-desativar', 'contas-reativar', 'contas-recuperar')
 # Operações que o contrato já define e que entram nas próximas entregas (segundo fator, ciclo de vida).
 PENDENTES = frozenset((
-    'conta-termos-aceitar conta-exportar conta-excluir').split())
+    'conta-exportar conta-excluir').split())
 # Antes da sessão (seção 5.3): sem papel, conferidas em `rotas_contas._publico`.
 PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin', 'convite-consultar', 'convite-aceitar',
             'senha-esqueci', 'senha-redefinir', 'email-confirmar', 'entrar-segundo-fator')
@@ -212,15 +218,16 @@ def ve_redacao(principal: dict) -> bool:
 
 def gasto_da_redacao(root: Path, modo: str, principal: dict) -> bool:
     """Se o gasto "da organização" que o módulo de custo guarda para esta conta é o da redação dela, e só dela.
-    Nenhuma resposta leva número que some redações (seção 4.5): enquanto o custo contar a instalação inteira, o
-    bloco só vai ao dono quando a instalação tem uma redação só."""
+    Nenhuma resposta leva número que some redações (seção 4.5). O custo conta por redação (P1 da Plataforma): o bloco
+    ``organizacao`` de ``custo.situacao`` é sempre o da redação da conta, nunca o total da instalação; se um dia puder
+    trazer o total, esta função tem de voltar a barrar."""
     if modo == 'local':
         return True
     if not ve_redacao(principal):
         return False
     import custo
     redacao = (principal.get('organizacao') or {}).get('id')
-    return custo.chaves_orcamento(principal.get('conta'))['organizacao'] == redacao or acesso.total_redacoes(root) <= 1
+    return redacao is not None and custo.redacao_do_gasto(root, principal.get('conta')) == redacao
 
 
 def papel_para_interface(principal: dict) -> str:
@@ -246,10 +253,24 @@ def pagina_da_pendencia(recusa: 'Recusa') -> str | None:
     return next((PAGINA_DA_PENDENCIA[p] for p in recusa.corpo.get('pendencias', ()) if p in PAGINA_DA_PENDENCIA), None)
 
 
+def _barrada_pela_pendencia(principal: dict, operacao: str) -> bool:
+    """A conta com pendência só alcança a própria sessão e o que resolve a pendência (seção 4.2). Um lugar só,
+    lido pelo portão e pelo teto do corpo."""
+    pendencias = principal.get('pendencias') or ()
+    if not pendencias:
+        return False
+    if operacao in SEM_PENDENCIA.union(*(RESOLVE_PENDENCIA.get(p, ()) for p in pendencias)):
+        return False  # what resolves one of them, whatever the others
+    return not all(operacao in SAIDAS_DA_PENDENCIA.get(p, ()) for p in pendencias)
+
+
 def corpo_grande(modo: str, principal: dict, operacao: str) -> bool:
-    """Quem não alcança a operação nunca tem um corpo grande lido (seção 4.2, passo 3)."""
+    """Quem não alcança a operação nunca tem um corpo grande lido (seção 4.2, passo 3): nem pelo papel, nem pela
+    pendência da conta (ressalva R1 da revisão da obrigação)."""
     if modo == 'local':
         return True
+    if _barrada_pela_pendencia(principal, operacao):
+        return False
     return any(regra.celulas.get(principal.get('papel'), NEGADO) != NEGADO for regra in _variantes(operacao))
 
 
@@ -325,13 +346,11 @@ def _recusa_do_modo(root: Path, modo: str, papel, operacao: str) -> Recusa | Non
     if modo == 'local':
         return _proibida('Contas só existem nos modos com login.') if operacao.startswith(('caso-', 'conta-', 'equipe-')) else None
     if modo != 'piloto':
+        if operacao == 'conta-termos-aceitar':  # a Mesa instalada não tem termos de serviço (seção 12, entrega 4b-1)
+            return _proibida('Esta instalação não tem termos de uso a aceitar.')
         return None
     if operacao == 'codex-desligar':
         return _proibida('O serviço hospedado não pode ser encerrado pela interface.', 'servico_nao_encerravel')
-    if operacao == 'ia-config-salvar' and acesso.total_redacoes(root) > 1:
-        # Enquanto a chave própria de cada redação não existe, a do serviço não se troca pela Mesa numa instalação
-        # com mais de uma redação: seria uma redação mudando a conexão de todas.
-        return _proibida('A conexão com a IA deste serviço é definida por quem o administra.')
     if operacao == 'conta-fator-remover' and papel in acesso.FATOR_OBRIGATORIO:
         return _proibida(FATOR_OBRIGATORIO)  # onde o fator é obrigatório, quem é obrigado não o remove (seção 8.2)
     return None
@@ -359,7 +378,7 @@ def conferir(root: Path, modo: str, principal: dict, operacao: str, dados: dict)
         raise _proibida('A redação desta conta está suspensa. Fale com quem administra o serviço.', 'redacao_suspensa',
                         'redacao_suspensa')
     pendencias = principal.get('pendencias') or ()
-    if pendencias and operacao not in SEM_PENDENCIA.union(*(RESOLVE_PENDENCIA.get(p, ()) for p in pendencias)):
+    if _barrada_pela_pendencia(principal, operacao):
         raise Recusa(403, {'estado': 'proibido', 'codigo': 'pendencia_de_conta', 'pendencias': list(pendencias),
                            'erro': 'Conclua o que falta na sua conta antes de continuar.'}, 'pendencia_de_conta', 'papel')
     regra = _REGRAS.get(_variante(operacao, dados))
@@ -470,10 +489,12 @@ def filtrar(root: Path, modo: str, principal: dict, operacao: str, resposta):
         return {**resposta, 'lotes': lotes}
     if operacao == 'ambiente' and modo == 'piloto':
         return {k: v for k, v in resposta.items() if k != 'python'}
-    if operacao == 'ia-config' and modo == 'piloto' and acesso.total_redacoes(root) > 1:
-        # Da chave do serviço, uma redação sabe só que existe.
-        chaves = {provedor: {'configurada': bool(chave.get('configurada')), 'final': None,
-                             'origem': 'servico' if chave.get('configurada') else None}
+    if operacao in ('ia-config', 'ia-config-salvar') and modo == 'piloto':
+        # A rota já devolve só a chave da própria redação (`rotas_gestao.resumo_da_redacao`). Aqui fica a segunda
+        # trava: nada que tenha origem na chave do serviço sai com os quatro últimos caracteres.
+        chaves = {provedor: chave if chave.get('origem') == 'redacao' else
+                  {'configurada': bool(chave.get('configurada')), 'final': None,
+                   'origem': 'servico' if chave.get('configurada') else None}
                   for provedor, chave in (resposta.get('chaves') or {}).items() if isinstance(chave, dict)}
         return {**resposta, 'chaves': chaves}
     if principal.get('papel') == 'leitor' and operacao in ('codex-listar', 'codex-eventos'):

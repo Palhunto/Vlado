@@ -57,12 +57,14 @@
       rotulo_seu_nome: 'Seu nome',
       rotulo_crie_senha: 'Crie uma senha',
       dica_senha_convite: 'De 12 a 256 caracteres. Pode colar ou usar o gerenciador de senhas.',
-      termos_antes: 'Li e aceito os ', termos_uso: 'termos de uso', termos_e: ' e a ', termos_priv: 'política de privacidade', termos_fim: ' do teste.',
+      termos_antes: 'Li e aceito os ', termos_link: 'termos de uso e a política de privacidade', termos_fim: ' do teste.',
       botao_aceitar: 'Criar conta e entrar',
       criando_conta: 'Criando a conta…',
       aviso_titulo: 'Antes de começar',
       aviso_teste: 'O Vlado está em teste. Use só documentos públicos: trechos são enviados ao provedor de IA.',
       erro_termos: 'Falta aceitar os termos. Marque a caixa para continuar.',
+      termos_mudaram: 'Os termos mudaram enquanto você lia. Confira a versão nova e marque de novo.',
+      aviso_conta_excluida: 'A sua conta foi excluída.',
       erro_registro: 'Registro de acesso indisponível. Avise a administração.',
       convite_sem_efeito: 'Este convite não vale mais',
       convite_sem_efeito_texto: 'Convite inválido, cancelado ou vencido. Peça um novo a quem convidou.',
@@ -161,12 +163,14 @@
       rotulo_seu_nome: 'Your name',
       rotulo_crie_senha: 'Create a password',
       dica_senha_convite: '12 to 256 characters. You can paste or use a password manager.',
-      termos_antes: 'I have read and accept the ', termos_uso: 'terms of use', termos_e: ' and the ', termos_priv: 'privacy policy', termos_fim: ' of the trial.',
+      termos_antes: 'I have read and accept the ', termos_link: 'terms of use and the privacy policy', termos_fim: ' of the trial.',
       botao_aceitar: 'Create account and sign in',
       criando_conta: 'Creating the account…',
       aviso_titulo: 'Before you start',
       aviso_teste: 'Vlado is in trial. Use public documents only: excerpts are sent to the AI provider.',
       erro_termos: 'The terms are not accepted. Tick the box to continue.',
+      termos_mudaram: 'The terms changed while you were reading. Check the new version and tick the box again.',
+      aviso_conta_excluida: 'Your account was deleted.',
       erro_registro: 'The access record is unavailable. Tell the administrators.',
       convite_sem_efeito: 'This invitation is no longer valid',
       convite_sem_efeito_texto: 'Invalid, cancelled or expired invitation. Ask whoever invited you for a new one.',
@@ -217,7 +221,9 @@
   const CHAVE_TEMA = 'apuracao:tema';   // shared with desktop.js
   const ler = chave => { try { return localStorage.getItem(chave) || ''; } catch (_) { return ''; } };
   const gravar = (chave, valor) => { try { localStorage.setItem(chave, valor); } catch (_) { /* Still switches. */ } };
-  let lingua = ler(CHAVE_IDIOMA) === 'en' ? 'en' : 'pt';
+  // A escolha guardada neste navegador vence; sem ela vale o idioma que o servidor pôs na página (P42: conta, Accept-Language, padrão do servidor), o mesmo da Mesa.
+  const guardado = ler(CHAVE_IDIOMA);
+  let lingua = guardado === 'en' || guardado === 'pt' ? guardado : (document.body.dataset.idiomaPadrao === 'en' ? 'en' : 'pt');
   let ultimaMensagem = null;
   let redesenhar = null;   // o texto montado em JS da seção aberta (convite, estados); refeito ao trocar o idioma
   const t = chave => TEXTOS[lingua][chave] || TEXTOS.pt[chave] || chave;
@@ -308,7 +314,13 @@
       document.head.append(script);
     });
   }
-  async function iniciarPendencia() {
+  // Cada pendência tem a sua página: o módulo que a desenha e o que ele traz (a de termos vem primeiro, contrato 4.3 e 12).
+  const PENDENCIAS = {
+    segundo_fator: {modulos: ['/fator.js'], objeto: 'Fator'},
+    termos: {modulos: ['/dialogo.js', '/dados_conta.js', '/termos.js'], objeto: 'Termos'},   // o diálogo de excluir a conta e a leitura de conta-ver vêm antes
+  };
+  async function iniciarPendencia(pendencia) {
+    const {modulos, objeto} = PENDENCIAS[pendencia];
     let sessao = null;
     try {
       const resposta = await fetch('/api/sessao', {headers: {Accept: 'application/json'}, credentials: 'same-origin'});
@@ -316,18 +328,19 @@
       sessao = resposta.ok ? await resposta.json() : null;
     } catch (_) { /* sem rede: o aviso abaixo */ }
     if (!sessao) { $('entrar-secao').hidden = true; mostrar('erro_rede', false, false); return; }
-    if (!(sessao.pendencias || []).includes('segundo_fator')) { window.location.replace('/'); return; }   // nada pendente (ou já cadastrado): a Mesa
+    if (!(sessao.pendencias || []).includes(pendencia)) { window.location.replace('/'); return; }   // nada pendente (ou já resolvido): o servidor leva à pendência seguinte ou à Mesa
     try {
       await carregarScript('/i18n.js');
       if (lingua === 'en') await carregarScript('/i18n_en.js');
-      await carregarScript('/fator.js');
+      for (const modulo of modulos) await carregarScript(modulo);
     } catch (_) { mostrar('erro_rede', false, false); return; }
     const secao = $('pendencia-secao');
     secao.hidden = false;
-    window.Fator.pagina(secao, {abrirMesa: () => window.location.replace('/'), sair: () => window.location.replace('/entrar')});
+    // `pendencias` diz à página de termos se o segundo fator ainda está por cadastrar (então baixar os dados e excluir a conta esperam por ele).
+    window[objeto].pagina(secao, {abrirMesa: () => window.location.replace('/'), sair: () => window.location.replace('/entrar'), pendencias: sessao.pendencias || []});
     const titulo = secao.querySelector('h1');
     if (titulo) { titulo.id = 'pendencia-titulo'; secao.setAttribute('aria-labelledby', titulo.id); titulo.tabIndex = -1; titulo.focus(); }
-    redesenhar = () => window.I18N?.definir(lingua);   // o idioma do botão do topo vale também para o conteúdo do fator.js
+    redesenhar = () => window.I18N?.definir(lingua);   // o idioma do botão do topo vale também para o conteúdo do módulo da pendência
   }
 
   async function iniciarEntrar() {
@@ -341,6 +354,10 @@
       const ligado = entrada.ok && (await entrada.json()).esqueci_senha === true;
       $('entrar-esqueci').hidden = !ligado; $('entrar-esqueci-texto').hidden = ligado;
     } catch (_) { /* O texto continua. */ }
+    if (new URLSearchParams(window.location.search).get('aviso') === 'conta_excluida') {   // a exclusão da conta leva aqui (termos.js, conta.js)
+      mostrar('aviso_conta_excluida', true, false);
+      esconderToken('/entrar');
+    }
     $('entrar-login').focus();
     $('entrar-form').addEventListener('submit', async evento => {
       evento.preventDefault();
@@ -537,6 +554,13 @@
     };
     redesenhar(); $('aceitar-titulo').tabIndex = -1; $('aceitar-titulo').focus();
   }
+  // A caixa dos termos só existe onde o convite traz a versão vigente; o texto fica no endereço https que o servidor manda (nunca outro).
+  function mostrarTermos(convite) {
+    const sem = convite.termos_versao === null || convite.termos_versao === undefined;
+    const ligacao = $('aceitar-termos-link'), endereco = String(convite.termos_endereco ?? '');
+    if (!sem && /^https:\/\//.test(endereco)) ligacao.setAttribute('href', endereco); else ligacao.removeAttribute('href');
+    $('aceitar-termos-rotulo').hidden = sem;
+  }
   async function iniciarAceitar(token) {
     secao('aceitar-secao');
     if (!token) { semEfeitoConvite(); return; }   // recarregada depois de o token sair do endereço
@@ -562,7 +586,7 @@
       $('aceitar-validade').hidden = !convite.expira_em;
     };
     $('aceitar-email').value = convite.email;
-    $('aceitar-termos-rotulo').hidden = convite.termos_versao === null || convite.termos_versao === undefined;
+    mostrarTermos(convite);
     $('aceitar-cartao').hidden = false;
     aplicarIdioma();
     $('aceitar-nome').focus();
@@ -581,7 +605,16 @@
         const {status, corpo} = await enviar('convite-aceitar', dados);
         if (status === 200) { window.location.replace(destinoSeguro(corpo.destino)); return; }
         if (corpo.codigo === 'convite_invalido') { semEfeitoConvite(); return; }
-        if (corpo.codigo === 'senha_invalida') mostrarNoCampo('erro_senha_tamanho', $('aceitar-senha'));
+        if (corpo.codigo === 'termos_desatualizados') {   // os termos mudaram enquanto a pessoa lia: relê o convite e pede o aceite de novo
+          const nova = await enviar('convite-consultar', {token});
+          if (nova.status === 200) {
+            Object.assign(convite, nova.corpo); mostrarTermos(convite);
+            $('aceitar-termos').checked = false;
+            mostrar('termos_mudaram');
+          } else if (nova.corpo.codigo === 'convite_invalido') { semEfeitoConvite(); return; }
+          else mostrar(nova.status === 503 ? 'erro_registro' : erroPara(nova.status, nova.corpo));
+        }
+        else if (corpo.codigo === 'senha_invalida') mostrarNoCampo('erro_senha_tamanho', $('aceitar-senha'));
         else if (status === 400 && /nome/i.test(String(corpo.erro || ''))) mostrarNoCampo('erro_nome_vazio', $('aceitar-nome'));
         else mostrar(status === 503 ? 'erro_registro' : erroPara(status, corpo));
       } catch (_) {
@@ -686,7 +719,9 @@
   } else if (window.location.pathname === '/primeiro-acesso') {
     iniciarPrimeiro();
   } else if (window.location.pathname === '/conta/segundo-fator') {
-    iniciarPendencia();
+    iniciarPendencia('segundo_fator');
+  } else if (window.location.pathname === '/conta/termos') {
+    iniciarPendencia('termos');
   } else if (rotaConvite) {
     const [, rota, token] = rotaConvite;
     if (rota === 'aceitar') iniciarAceitar(token);
