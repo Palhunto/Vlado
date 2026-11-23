@@ -39,8 +39,8 @@ class EntrarComFatorNoNavegadorTest(cenario.DuasRedacoes):
         fator._CHAVES.clear()
         cls.addClassCleanup(fator._CHAVES.clear)
 
-    def nova_conta(self, email, nome):
-        _, token, _ = acesso.convidar(self.root, self.a, self.ids['dono'], email, 'leitor', [])
+    def nova_conta(self, email, nome, papel='leitor', casos=()):
+        _, token, _ = acesso.convidar(self.root, self.a, self.ids['dono'], email, papel, list(casos))
         _, _, conta = acesso.aceitar_convite(self.root, token, nome, SENHA)
         return conta['id']
 
@@ -54,7 +54,7 @@ class EntrarComFatorNoNavegadorTest(cenario.DuasRedacoes):
         a_redefinir = self.nova_conta('redefine@exemplo.test', 'Pessoa Que Redefine')
         segredo_redefinir, _ = cadastrar(self.root, a_redefinir)
         token, _ = acesso.pedir_redefinicao(self.root, 'redefine@exemplo.test')
-        self.nova_conta('pendente@exemplo.test', 'Pessoa Pendente')
+        self.nova_conta('pendente@exemplo.test', 'Pessoa Pendente', 'editor', ['alpha'])
         entrada = {'porta': self.server.server_port, 'origem': cenario.ORIGEM, 'senha': SENHA,
                    'app': {'email': 'com.app@exemplo.test', 'segredo': segredo_app},
                    'reserva': {'email': 'com.reserva@exemplo.test', 'codigo': reservas[0]},
@@ -72,7 +72,7 @@ class EntrarComFatorNoNavegadorTest(cenario.DuasRedacoes):
                 entrada['redefinires'].append(acesso.pedir_redefinicao(self.root, email)[0])
             entrada['pendentes'] = []
             for i in range(4):
-                self.nova_conta(f'pendente{i}@exemplo.test', f'Pessoa Pendente {i}')
+                self.nova_conta(f'pendente{i}@exemplo.test', f'Pessoa Pendente {i}', 'editor', ['alpha'])
                 entrada['pendentes'].append({'email': f'pendente{i}@exemplo.test'})
         with patch.object(acesso, 'TENTATIVAS_IP_MINUTO', 10000), correio.usar('simulado'):
             processo = subprocess.run(['node', str(Path(__file__).with_name('qa_entrar_fator.cjs')), json.dumps(entrada)],

@@ -511,3 +511,26 @@ test('N3: depois de o primeiro lote falhar, o reenvio ao caso responde "inexiste
   for (const linha of linhas(mesa)) assert.match(resultado(linha), /Esta apuração não chegou a ser criada: o primeiro envio falhou\. Recomece a Nova apuração\./);
   assert.equal(final.recebidos, 0); assert.ok(final.erro);
 });
+
+test('Envio.disponivel não guarda uma consulta FALHA a /api/integracao: a falha vale só para aquele envio, e a próxima consulta tenta de novo (só a resposta boa fica guardada)', async () => {
+  const mesa = abrir();
+  const original = mesa.janela.fetch;
+  let chamadas = 0, modo = 'rede';
+  mesa.janela.fetch = async (endereco, opcoes) => {
+    if (String(endereco) !== '/api/integracao') return original(endereco, opcoes);
+    chamadas += 1;
+    if (modo === 'rede') throw new Error('sem rede');
+    if (modo === '502') return {ok: false, status: 502, json: async () => ({})};
+    return {ok: true, json: async () => ({envio_fluxo: true})};
+  };
+  const {Envio} = mesa.janela;
+  assert.equal(await Envio.disponivel(), false, 'rede caída: sem envio em fluxo desta vez');
+  modo = '502';
+  assert.equal(await Envio.disponivel(), false, 'resposta 502: também não');
+  modo = 'boa';
+  assert.equal(await Envio.disponivel(), true, 'a consulta foi refeita e a resposta boa vale');
+  assert.equal(chamadas, 3);
+  modo = 'rede';
+  assert.equal(await Envio.disponivel(), true, 'a resposta boa fica guardada: sem nova consulta');
+  assert.equal(chamadas, 3);
+});

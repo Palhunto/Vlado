@@ -10,7 +10,7 @@ const {criarMesa, Evento} = require('./dom_minimo.cjs');
 const ALFA = {id: 'alfa', titulo: 'Pauta Alfa', rodadas: []};
 const CASO_NOVO = 'apuracao_' + 'a'.repeat(32);
 
-function abrir({idioma = 'pt', casos = [ALFA], url = 'http://127.0.0.1:8765/', fluxo = true, lote = null, api = () => undefined} = {}) {
+function abrir({idioma = 'pt', casos = [ALFA], url = 'http://127.0.0.1:8765/', fluxo = true, lote = null, api = () => undefined, postar = null} = {}) {
   const pedidos = [];
   class XHR {
     constructor() { this.ouvintes = {}; this.upload = {addEventListener() {}}; pedidos.push(this); }
@@ -26,6 +26,7 @@ function abrir({idioma = 'pt', casos = [ALFA], url = 'http://127.0.0.1:8765/', f
       const original = janela.fetch;
       janela.fetch = async (endereco, opcoes) => {
         if (String(endereco) === '/api/integracao') return {ok: true, json: async () => (fluxo ? {envio_fluxo: true} : {})};
+        if (postar && String(endereco) === '/api/cadastrar') return postar();   // a resposta HTTP (status) ou a queda de rede do envio em JSON
         if (String(endereco) === '/api/catalogo') return {ok: true, json: async () => ({casos: catalogo})};
         if (String(endereco).startsWith('/api/fila?lote=')) {
           if (lote) return {ok: true, json: async () => ({lote})};
@@ -350,3 +351,67 @@ test('N4: com o envio no ar, sair pela barra diz a verdade (a apuração está s
   assert.ok([...mesa.$('contexto-caso').options].some(o => o.value === CASO_NOVO), 'a apuração está no seletor (e na Visão geral)');
   assert.equal(mesa.pedidos.length, 1, 'uma apuração só');
 });
+
+// --- B1 da Coruja (d25b20d..db4124d): o envio em JSON não cria a apuração duas vezes ----------------------------------------------------------------
+test('B1 (a): com o lote em JSON ainda no ar, um segundo arquivo não manda outro cadastrar, Voltar fica desativado e a trava só solta no fim', async () => {
+  let soltar = null, cadastros = 0;
+  const mesa = abrir({fluxo: false, api: operacao => {
+    if (operacao !== 'cadastrar') return undefined;
+    cadastros += 1;
+    return new Promise(resolver => { soltar = () => resolver({caso_id: CASO_NOVO, corpus_id: 'c1', recebidos: 1, novos: 1, duplicados: 0, total_documentos: 1, arquivos: [{nome: 'primeiro.pdf', estado: 'pronto'}], inventario: {}}); });
+  }});
+  await mesa.esperar(10);
+  mesa.janela.FileReader = class { readAsDataURL() { this.result = 'data:;base64,AAAA'; this.onload(); } };
+  await passo2(mesa, {nome: 'Obra da escola'});
+  await soltar_arquivo(mesa, 'primeiro.pdf');
+  await mesa.esperar(10);
+  assert.equal(cadastros, 1, 'o primeiro lote está no ar');
+  assert.equal(mesa.$('nova-voltar').disabled, true, 'Voltar fica desativado');
+  assert.equal(mesa.janela.NovaApuracao.ocupado(), true); assert.equal(mesa.janela.Documentos.ocupado(), true, 'as duas travas seguem ativas');
+  await soltar_arquivo(mesa, 'segundo.pdf');
+  await mesa.esperar(10);
+  assert.equal(cadastros, 1, 'o segundo arquivo não manda outro cadastrar com novo:true');
+  soltar(); await mesa.esperar(30);
+  assert.equal(mesa.janela.NovaApuracao.ocupado(), false); assert.equal(mesa.janela.Documentos.ocupado(), false);
+  assert.equal(mesa.janela.contextoCaso(), CASO_NOVO);
+});
+
+test('B1 (b): o primeiro lote em JSON que termina em rede, 500, 502 ou 504 é incerto: aviso, e o reenvio pede confirmação antes de poder criar outra apuração', async () => {
+  const respostas = {rede: () => { throw new TypeError('Failed to fetch'); }, 500: () => ({ok: false, status: 500, json: async () => ({estado: 'erro', erro: 'Falha interna.'})}),
+    502: () => ({ok: false, status: 502, json: async () => { throw new SyntaxError('html'); }}), 504: () => ({ok: false, status: 504, json: async () => ({estado: 'erro', erro: 'Tempo esgotado.'})})};
+  for (const [nome, resposta] of Object.entries(respostas)) {
+    let cadastros = 0;
+    const mesa = abrir({fluxo: false, postar: () => { cadastros += 1; return resposta(); }});
+    await mesa.esperar(10);
+    mesa.janela.FileReader = class { readAsDataURL() { this.result = 'data:;base64,AAAA'; this.onload(); } };
+    await passo2(mesa, {nome: 'Obra da escola'});
+    await soltar_arquivo(mesa, 'primeiro.pdf'); await mesa.esperar(20);
+    assert.equal(cadastros, 1, nome);
+    assert.equal(mesa.$('nova-incerto').hidden, false, nome);
+    assert.equal(mesa.$('nova-incerto').textContent, 'Não sabemos se a apuração foi criada: a resposta do servidor não chegou. Confira a apuração na Visão geral antes de enviar de novo.', nome);
+    assert.equal(mesa.$('nova-voltar').disabled, false, nome);
+    await soltar_arquivo(mesa, 'primeiro.pdf'); await mesa.esperar(10);
+    const d = dialogo(mesa);
+    assert.ok(d, `${nome}: o reenvio pede confirmação`);
+    assert.equal(d.querySelector('.dialogo-titulo').textContent, 'Enviar de novo pode criar outra apuração', nome);
+    assert.equal(cadastros, 1, `${nome}: nada saiu antes da confirmação`);
+    botoes(mesa)[0].click(); await mesa.esperar(8);   // Cancelar
+    assert.equal(cadastros, 1, `${nome}: cancelar não envia`);
+    await soltar_arquivo(mesa, 'primeiro.pdf'); await mesa.esperar(10);
+    botoes(mesa)[1].click(); await mesa.esperar(20);   // Enviar mesmo assim
+    assert.equal(cadastros, 2, `${nome}: confirmado, o reenvio sai`);
+  }
+  // uma recusa clara (400) não é incerta
+  const claro = abrir({fluxo: false, postar: () => ({ok: false, status: 400, json: async () => ({estado: 'erro', erro: 'Nome inválido.'})})});
+  await claro.esperar(10);
+  claro.janela.FileReader = class { readAsDataURL() { this.result = 'data:;base64,AAAA'; this.onload(); } };
+  await passo2(claro); await soltar_arquivo(claro, 'primeiro.pdf'); await claro.esperar(20);
+  assert.equal(claro.$('nova-incerto').hidden, true); assert.match(claro.$('mesa-acervo-status').textContent, /Nome inválido\./);
+});
+
+function soltar_arquivo(mesa, nome) {
+  const evento = new Evento('drop', {bubbles: true, cancelable: true});
+  evento.dataTransfer = {files: [{name: nome, size: 500}]};
+  mesa.$('documentos-zona').dispatchEvent(evento);
+  return Promise.resolve();
+}
