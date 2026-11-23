@@ -4,12 +4,13 @@ segunda ressalva de P28), no armazenamento.
 Todo contador é do identificador digitado, exista a conta ou não. Dez falhas de um identificador em uma hora, de
 quaisquer endereços, o põem em modo protegido por uma hora: toda tentativa recebe a mesma recusa, sem conta de
 senha para ninguém, salvo a que traz a marca de um aparelho que aquela conta já usou. A marca atravessa o modo
-protegido, mas não desliga a contagem. Identificador sem conta conta numa tabela de tamanho fixo. As regras no
+protegido, mas não desliga a contagem. Todo identificador, com conta ou sem, conta numa tabela de tamanho fixo. As regras no
 armazenamento; o cookie da marca, pelo servidor (``ServidorTest``). Sem modelo e sem rede.
 """
 import http.client
 import json
 from pathlib import Path
+import re
 import secrets
 import sys
 import unittest
@@ -62,17 +63,18 @@ class ModoProtegidoTest(Base):
         hasher.verify.assert_not_called()
         self.assertEqual(self.tentar('dona.a', SENHA), 'entrou')  # another identifier is not touched
         chaves = {l['chave'] for l in self.linhas("SELECT chave FROM tentativas WHERE bloqueado_ate IS NOT NULL")}
-        self.assertIn(acesso.CHAVE_IDENTIFICADOR + 'rep.a', chaves)  # an account: its own counter
-        self.assertEqual(len([c for c in chaves if c.startswith(acesso.CHAVE_BALDE)]), 1)  # none: one of the fixed table
-        self.assertNotIn('ninguem.aqui', ' '.join(chaves))  # and the identifier typed is not kept in it
+        # The two of them in the same fixed table, and the identifier typed is not kept in it.
+        self.assertTrue(chaves and all(re.fullmatch(r'#balde\|\d+', c) for c in chaves), chaves)
+        for texto in ('ninguem.aqui', 'rep.a', self.rep_a):
+            self.assertNotIn(texto, ' '.join(chaves))
         self.assertIn('login_protegido', self.tipos())
 
     def test_tentativa_durante_o_modo_protegido_nao_conta_nem_estende_e_a_protecao_acaba_em_uma_hora(self):
         self.falhar('rep.a', acesso.PROTECAO_FALHAS)
-        ate = self.linhas('SELECT bloqueado_ate FROM tentativas WHERE chave = ?', acesso.CHAVE_IDENTIFICADOR + 'rep.a')[0]
+        ate, = self.linhas("SELECT bloqueado_ate FROM tentativas WHERE chave LIKE '#balde|%'")
         with self.depois(minutes=30):
             self.assertEqual(self.falhar('rep.a', 6), ['Bloqueado'] * 6)
-        self.assertEqual(self.linhas('SELECT bloqueado_ate FROM tentativas WHERE chave = ?', acesso.CHAVE_IDENTIFICADOR + 'rep.a')[0], ate)
+        self.assertEqual(self.linhas("SELECT bloqueado_ate FROM tentativas WHERE chave LIKE '#balde|%'"), [ate])
         with self.depois(minutes=acesso.PROTECAO_MINUTOS, seconds=1):
             self.assertEqual(self.tentar('rep.a'), 'CredenciaisInvalidas')  # an ordinary refusal again
             self.assertEqual(self.tentar('rep.a', SENHA), 'entrou')
@@ -92,7 +94,24 @@ class ModoProtegidoTest(Base):
         self.assertEqual(self.linhas('SELECT chave FROM tentativas'), [])
         self.assertEqual(self.tentar(None), 'CredenciaisInvalidas')
 
-    def test_identificadores_sem_conta_contam_numa_tabela_de_tamanho_fixo(self):
+    def test_identificador_com_conta_leva_o_vizinho_de_balde_igual_a_um_sem_conta(self):
+        # B1 of the review: with an exact counter for the identifiers that have an account, their protected mode
+        # never spread to a neighbour of bucket, and the ones without an account did: enough requests told that one
+        # person has an account. Every identifier counts in the bucket of its HMAC.
+        vistos = {}
+        for atacado, horas in (('rep.a', 0), ('ninguem.aqui', 3)):  # the second one after the first protection ended
+            with patch.object(acesso, 'BALDES', 1), self.depois(hours=horas):  # one bucket: everybody is a neighbour
+                sequencia = self.falhar(atacado, acesso.PROTECAO_FALHAS)
+                vizinhos = [self.tentar('rep.b', SENHA), self.tentar('outro.ninguem'), self.tentar('rep.b@exemplo.test', SENHA)]
+                vistos[atacado] = (sequencia, vizinhos)
+        self.assertEqual(vistos['rep.a'], vistos['ninguem.aqui'])
+        self.assertEqual(vistos['rep.a'], (['CredenciaisInvalidas'] * acesso.PROTECAO_FALHAS, ['Bloqueado'] * 3))
+        chaves = [l['chave'] for l in self.linhas("SELECT chave FROM tentativas WHERE chave LIKE '#%'")]
+        self.assertEqual(chaves, ['#balde|0'])  # one counter for all of them, and none of an account
+
+    def test_todo_identificador_conta_numa_tabela_de_tamanho_fixo(self):
+        navegador = marca()
+        self.assertEqual(self.tentar('rep.a', SENHA, marca=navegador), 'entrou')
         with patch.object(acesso, 'BALDES', 3):
             respostas = [self.tentar(f'ninguem{numero}@exemplo.test') for numero in range(120)]
             self.assertEqual(set(respostas), {'CredenciaisInvalidas', 'Bloqueado'})
@@ -101,12 +120,13 @@ class ModoProtegidoTest(Base):
             baldes = self.linhas("SELECT chave, bloqueado_ate FROM tentativas WHERE chave LIKE '#balde|%'")
             self.assertEqual({b['chave'] for b in baldes}, {'#balde|0', '#balde|1', '#balde|2'})  # 120 identifiers, three counters
             self.assertTrue(all(b['bloqueado_ate'] for b in baldes))
-            # A collision only makes an identifier without an account inherit the protected mode of another.
+            # A collision makes an identifier inherit the protected mode of another, with an account or without.
             self.assertEqual(self.tentar('nunca.tentado@exemplo.test'), 'Bloqueado')
-            # An identifier WITH an account keeps its exact counter, whatever happens to the fixed table.
-            self.assertEqual(self.tentar('rep.a'), 'CredenciaisInvalidas')
-            self.assertEqual(self.tentar('rep.a', SENHA), 'entrou')
-        self.assertEqual(len(self.linhas("SELECT 1 FROM tentativas WHERE chave LIKE '#id|%'")), 1)
+            self.assertEqual(self.tentar('rep.a'), 'Bloqueado')
+            self.assertEqual(self.tentar('rep.a', SENHA), 'Bloqueado')
+            # The way through is the same as ever: a device the account already used.
+            self.assertEqual(self.tentar('rep.a', SENHA, marca=navegador), 'entrou')
+        self.assertEqual(self.linhas("SELECT 1 FROM tentativas WHERE chave LIKE '#id|%'"), [])
         self.assertNotIn('ninguem', ' '.join(l['chave'] for l in self.linhas('SELECT chave FROM tentativas WHERE chave LIKE ?', '#%')))
 
     def test_nenhum_contador_sai_antes_do_prazo(self):
@@ -114,15 +134,17 @@ class ModoProtegidoTest(Base):
         ha = lambda minutos: acesso._iso(agora - test_acesso.timedelta(minutes=minutos))  # noqa: E731
         futuro = acesso._iso(agora + test_acesso.timedelta(minutes=30))
         acesso.listar(self.root)
-        for chave, em, ate in (('#id|vivo', ha(30), None), ('#id|vencido', ha(61), None), ('#balde|7', ha(59), None),
-                               ('#balde|8', ha(200), futuro), ('ana|198.51.100.7', ha(16), None), ('bia|198.51.100.7', ha(5), None),
+        # Buckets above BALDES: counters the sign-in of this test cannot land on.
+        for chave, em, ate in (('#balde|900005', ha(30), None), ('#balde|900006', ha(61), None), ('#balde|900007', ha(59), None),
+                               ('#balde|900008', ha(200), futuro), ('ana|198.51.100.7', ha(16), None), ('bia|198.51.100.7', ha(5), None),
                                ('#senha|' + 'a' * 16, ha(16), None), ('#marca|x|y', ha(3), None)):
             self.gravar('INSERT INTO tentativas (chave, falhas, bloqueado_ate, em) VALUES (?, 1, ?, ?)', chave, ate, em)
         with patch.object(acesso, 'MAX_TENTATIVAS_GUARDADAS', 1):
             self.assertEqual(self.tentar('rep.a'), 'CredenciaisInvalidas')  # any failure prunes
         chaves = {l['chave'] for l in self.linhas('SELECT chave FROM tentativas')}
-        self.assertLessEqual({'#id|vivo', '#balde|7', '#balde|8', '#marca|x|y', '#id|rep.a'}, chaves)
-        self.assertFalse({'#id|vencido', 'ana|198.51.100.7', '#senha|' + 'a' * 16} & chaves)
+        self.assertLessEqual({'#balde|900005', '#balde|900007', '#balde|900008', '#marca|x|y'}, chaves)
+        self.assertEqual(len([c for c in chaves if c.startswith('#balde|')]), 4)  # those three and the one of this failure
+        self.assertFalse({'#balde|900006', 'ana|198.51.100.7', '#senha|' + 'a' * 16} & chaves)
         # The ceiling of the table is only for the per-address counters, which an attacker can multiply.
         self.assertEqual(len([c for c in chaves if not c.startswith('#')]), 1)
 
@@ -262,6 +284,45 @@ class SegundoPassoTest(Base):
             self.assertEqual(acesso.entrar_segundo_fator(self.root, self.bilhete(), self.codigo(1), ip=self.ip())[2]['id'], self.rep_a)
         self.assertEqual(self.linhas('SELECT 1 FROM tentativas WHERE chave = ?', acesso.CHAVE_FATOR + self.rep_a), [])
 
+    def test_o_codigo_de_reserva_atravessa_o_bloqueio_do_fator_e_tem_contador_proprio(self):
+        # T1 of the review: who has somebody's password renews the block of the factor every 15 minutes. The
+        # reserve code (80 bits, not to be guessed) is the way in of the person, and it is never blocked itself.
+        reserva = acesso.novos_codigos_do_fator(self.root, self.rep_a, SENHA, self.codigo(1))
+        self.assertEqual(self.errar(5), ['CodigoInvalido'] * 4 + ['FatorBloqueado'])
+        with self.assertRaises(acesso.Bloqueado):
+            acesso.exigir_codigo(self.root, self.rep_a, self.codigo(2))  # the authenticator: blocked
+        self.assertIsNone(acesso.exigir_codigo(self.root, self.rep_a, reserva[0]))  # a reserve code: through
+        self.assertEqual(acesso.entrar_segundo_fator(self.root, self.bilhete(), reserva[1], ip=self.ip())[2]['id'], self.rep_a)
+        self.assertTrue(self.linhas('SELECT 1 FROM tentativas WHERE chave = ? AND bloqueado_ate IS NOT NULL',
+                                    acesso.CHAVE_FATOR + self.rep_a))  # and the block of the authenticator stays
+        errada = 'ABCD-EFGH-JKLM-NPQR'
+        for _ in range(acesso.FALHAS_BLOQUEIO - 1):
+            with self.assertRaises(acesso.CodigoInvalido):
+                acesso.exigir_codigo(self.root, self.rep_a, errada)
+        for _ in range(3):  # the fifth wrong one and the ones after it: the answer of a block, with nobody to tell
+            with self.assertRaises(acesso.Bloqueado) as recusa:
+                acesso.exigir_codigo(self.root, self.rep_a, errada)
+            self.assertNotIsInstance(recusa.exception, acesso.FatorBloqueado)
+        self.assertIsNone(acesso.exigir_codigo(self.root, self.rep_a, reserva[2]))  # a right one still passes
+        self.assertEqual(self.tipos().count('fator_bloqueado'), 1)
+        with self.depois(minutes=acesso.BLOQUEIO_MINUTOS + 1):  # the wrong reserve codes never blocked the authenticator
+            self.assertIsNone(acesso.exigir_codigo(self.root, self.rep_a, self.codigo(1)))
+
+    def test_poucos_codigos_errados_de_cada_vez_tambem_somam_ate_o_bloqueio(self):
+        # T2 of the review: the counter of the factor was forgotten after 15 quiet minutes, so four wrong codes every
+        # quarter of an hour never blocked nor told anybody. It is remembered for a day.
+        self.assertEqual(self.errar(4), ['CodigoInvalido'] * 4)
+        with self.depois(minutes=acesso.BLOQUEIO_MINUTOS + 5):
+            self.assertEqual(self.tentar('ninguem.aqui'), 'CredenciaisInvalidas')  # any failure prunes the stale counters
+            self.assertEqual(self.errar(1), ['FatorBloqueado'])
+        self.assertEqual(self.tipos().count('fator_bloqueado'), 1)
+        with self.depois(hours=1):  # the block ended; a right code clears the counter
+            acesso.exigir_codigo(self.root, self.rep_a, self.codigo(1))
+            self.assertEqual(self.errar(4), ['CodigoInvalido'] * 4)
+        with self.depois(hours=acesso.FATOR_CONTADOR_HORAS + 2):  # and a counter nobody touched for a day is forgotten
+            self.assertEqual(self.tentar('ninguem.aqui'), 'CredenciaisInvalidas')
+            self.assertEqual(self.linhas('SELECT 1 FROM tentativas WHERE chave = ?', acesso.CHAVE_FATOR + self.rep_a), [])
+
     def test_codigos_errados_do_segundo_fator_contam_no_mesmo_teto_do_identificador(self):
         self.assertEqual(self.errar(5), ['CodigoInvalido'] * 4 + ['FatorBloqueado'])
         with self.depois(minutes=acesso.BLOQUEIO_MINUTOS + 1):  # the block of the factor ended; the hour of the identifier did not
@@ -379,6 +440,53 @@ class ServidorTest(cenario.DuasRedacoes):
         self.assertNotIn('http', avisos[0]['corpo'])
         atividade = self.post('dono', 'equipe-atividade', {'limite': 200})[1]['eventos']
         self.assertIn(('fator_bloqueado', self.conta), {(e['tipo'], e['conta']) for e in atividade})
+
+
+    def test_o_cookie_do_segundo_passo_sai_do_navegador_quando_a_sessao_abre_ou_o_bilhete_morre(self):
+        # F2 of the review: the ticket's cookie was left in the browser until its five minutes ran out.
+        env = patch.dict(test_acesso.os.environ, {'VLADO_SEGREDOS': ''})
+        env.start()
+        self.addCleanup(env.stop)
+        segredo = acesso.iniciar_fator(self.root, self.conta, SENHA)['segredo']
+        semente = fator.base64.b32decode(segredo + '=' * (-len(segredo) % 8))
+        reserva = acesso.confirmar_fator(self.root, self.conta, fator.codigo_do_passo(semente, fator.passo_de(acesso.agora())))
+
+        def bilhete():
+            status, corpo, cookies = self.pedir_tudo('entrar', {'login': self.email, 'senha': SENHA})
+            self.assertEqual((status, corpo, len(cookies)), (200, {'estado': 'segundo_fator'}, 1))
+            return cookies[0].split(';')[0]
+
+        def apagado(cookies):
+            return [c for c in cookies if c.startswith('vlado_passo2=;') and 'Max-Age=0' in c and 'HttpOnly' in c]
+
+        primeiro = bilhete()
+        status, _, cookies = self.pedir_tudo('entrar-segundo-fator', {'codigo': '000000'}, [primeiro])
+        self.assertEqual((status, cookies), (403, []))  # a wrong code: the ticket still stands, and so does its cookie
+        status, corpo, cookies = self.pedir_tudo('entrar-segundo-fator', {'codigo': reserva[0]}, [primeiro])
+        self.assertEqual((status, len(apagado(cookies)), len(cookies)), (200, 1, 3))  # the session opened: the ticket's cookie goes
+        self.assertTrue(cookies[-1].startswith('vlado_sessao='))
+        # A ticket that is unknown, used or expired: the answer takes its cookie away too.
+        status, corpo, cookies = self.pedir_tudo('entrar-segundo-fator', {'codigo': reserva[1]}, [primeiro])
+        self.assertEqual((status, corpo['codigo'], len(apagado(cookies)), len(cookies)), (401, 'entrada_expirada', 1, 1))
+        self.assertEqual(self.pedir_tudo('entrar-segundo-fator', {'codigo': reserva[1]})[2], [])  # no cookie came: none to clear
+        # A ticket killed by its fifth wrong code (which also blocks the factor of the account).
+        acesso.limpar_limites()
+        segundo = bilhete()
+        respostas = [self.pedir_tudo('entrar-segundo-fator', {'codigo': '000000'}, [segundo]) for _ in range(acesso.ENTRADA_FALHAS)]
+        self.assertEqual([(r[0], len(r[2])) for r in respostas], [(403, 0)] * 4 + [(429, 1)])
+        self.assertEqual(len(apagado(respostas[-1][2])), 1)
+        # While the factor is only blocked a new ticket stands, cookie and all: the reserve code gets in with it.
+        acesso.limpar_limites()
+        with acesso._bd(self.root, escrever=True) as tx:  # only the block of the factor is left
+            tx.ex("DELETE FROM tentativas WHERE chave NOT LIKE '#fator|%'")
+        terceiro = bilhete()
+        status, _, cookies = self.pedir_tudo('entrar-segundo-fator', {'codigo': '000000'}, [terceiro])
+        self.assertEqual((status, cookies), (429, []))
+        status, _, cookies = self.pedir_tudo('entrar-segundo-fator', {'codigo': reserva[1]}, [terceiro])
+        self.assertEqual((status, len(apagado(cookies))), (200, 1))
+        # A sign-in in one step, with no ticket around, clears nothing.
+        outra = self.pedir_tudo('entrar', {'login': 'leo.leitor', 'senha': SENHA})
+        self.assertEqual((outra[0], len(outra[2]), apagado(outra[2])), (200, 2, []))
 
 
 if __name__ == '__main__':

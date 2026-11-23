@@ -86,6 +86,20 @@ class ArmazenamentoTest(test_acesso.DuasRedacoes):
         self.assertEqual(acesso.sessao(self.root, aqui)['conta'], self.rep_a)
         self.assertEqual(acesso.sessao(self.root, de_outra_conta)['conta'], self.dono_a)
 
+    def test_onde_o_fator_e_obrigatorio_dono_e_editor_sem_ele_ficam_com_a_pendencia(self):
+        editor = acesso.criar_conta(self.root, 'Edu', 'edu.a', papel='editor', organizacao=self.a, por='operador')
+        acesso.ativar(self.root, editor[1], SENHA)
+        for login, cid, obrigado in (('dona.a', self.dono_a, True), ('edu.a', editor[0]['id'], True), ('rep.a', self.rep_a, False)):
+            sid = acesso.entrar(self.root, login, SENHA)[0]
+            self.assertEqual(acesso.sessao(self.root, sid)['pendencias'], [], login)  # the installed Mesa: optional
+            esperado = ['segundo_fator'] if obrigado else []
+            self.assertEqual(acesso.sessao(self.root, sid, obrigar_fator=True)['pendencias'], esperado, login)
+            segredo = acesso.iniciar_fator(self.root, cid, SENHA)['segredo']
+            self.assertEqual(acesso.sessao(self.root, sid, obrigar_fator=True)['pendencias'], esperado, login)  # started is not enrolled
+            publico = acesso.sessao(self.root, sid)['sessao']
+            acesso.confirmar_fator(self.root, cid, codigo_de(segredo), sessao_atual=publico)
+            self.assertEqual(acesso.sessao(self.root, sid, obrigar_fator=True)['pendencias'], [], login)
+
     def test_cadastro_nao_confirmado_vence_e_cinco_codigos_errados_bloqueiam(self):
         segredo = acesso.iniciar_fator(self.root, self.rep_a, SENHA)['segredo']
         with self.depois(minutes=acesso.FATOR_PENDENTE_MINUTOS, seconds=1):
@@ -195,7 +209,8 @@ class ArmazenamentoTest(test_acesso.DuasRedacoes):
         acesso.remover_fator(self.root, self.rep_a, SENHA)
         self.assertEqual(acesso.entrar(self.root, 'rep.a', SENHA)[2]['id'], self.rep_a)  # one step again
         self.assertEqual(self.linhas('SELECT 1 FROM fatores') + self.linhas('SELECT 1 FROM codigos_reserva'), [])
-        self.assertIn('fator_removido', self.tipos())
+        self.assertEqual(self.linhas("SELECT tipo, conta, por FROM eventos WHERE tipo LIKE 'fator_removido%'"),
+                         [{'tipo': 'fator_removido', 'conta': self.rep_a, 'por': self.rep_a}])  # her own doing
 
     def test_remover_a_conta_leva_o_fator_e_desativar_mata_o_bilhete(self):
         cadastrar(self.root, self.rep_a)
@@ -300,14 +315,18 @@ class RedefinicaoComFatorTest(test_acesso.DuasRedacoes):
         self.assertEqual(self.linhas('SELECT 1 FROM fatores') + self.linhas('SELECT 1 FROM codigos_reserva'), [])
         acesso.ativar(self.root, token, NOVA)
         self.assertEqual(acesso.entrar(self.root, 'pessoa@exemplo.test', NOVA)[2]['id'], self.pessoa_a)  # one step
-        self.assertIn('fator_removido', self.tipos())
+        # An event of its own, by the operator: not the `fator_removido` of who takes away the own factor.
+        self.assertEqual(self.linhas("SELECT tipo, conta, por FROM eventos WHERE tipo LIKE 'fator_removido%'"),
+                         [{'tipo': 'fator_removido_na_recuperacao', 'conta': self.pessoa_a, 'por': 'cli'}])
 
     def test_recuperacao_pedida_pelo_dono_tira_o_fator_que_a_pessoa_perdeu(self):
         feito = acesso.pedir_recuperacao(self.root, self.a, self.dono_a, self.pessoa_a, SENHA, com_envio=True)
         self.assertEqual(acesso.redefinir_senha(self.root, feito['token'], NOVA)['id'], self.pessoa_a)  # no code asked
         self.assertEqual(acesso.entrar(self.root, 'pessoa@exemplo.test', NOVA)[2]['id'], self.pessoa_a)  # one step: she enrols again
         self.assertFalse(acesso.ver_conta(self.root, self.pessoa_a)['segundo_fator']['ativo'])
-        self.assertIn('fator_removido', self.tipos())
+        # The screen tells it apart from the person removing the own factor: the type is another one.
+        self.assertEqual(self.linhas("SELECT tipo, conta, por FROM eventos WHERE tipo LIKE 'fator_removido%'"),
+                         [{'tipo': 'fator_removido_na_recuperacao', 'conta': self.pessoa_a, 'por': self.pessoa_a}])
 
 
 class ServidorTest(cenario.DuasRedacoes):
@@ -404,6 +423,89 @@ class ServidorTest(cenario.DuasRedacoes):
             self.assertEqual((recusa[0], recusa[1]['codigo']), (403, 'codigo_invalido'), codigo)
         self.assertEqual(self.publico('senha-redefinir', {'token': token, 'senha': NOVA, 'codigo': novos[0]})[0], 200)
         self.assertEqual(self.publico('entrar', {'login': self.email, 'senha': NOVA})[1], {'estado': 'segundo_fator'})
+
+
+class ObrigacaoTest(cenario.DuasRedacoes):
+    """In the hosted mode the second factor is mandatory for dono and editor (contract, 4.2 and 8.2; decision 3)."""
+    numero = 0
+
+    def setUp(self):
+        acesso.limpar_limites()
+
+    def chegar(self, papel):
+        """A person accepts an invitation with this role: (session, account id, e-mail)."""
+        type(self).numero += 1
+        email = f'obrigada{self.numero}@exemplo.test'
+        _, token, _ = acesso.convidar(self.root, self.a, self.ids['dono'], email, papel, [] if papel == 'dono' else ['alpha'],
+                                      senha=SENHA)
+        status, cabecalhos, corpo = self.pedir('POST', '/api/convite-aceitar', json.dumps(
+            {'token': token, 'nome': 'Pessoa Obrigada', 'senha': SENHA}), {'Content-Type': 'application/json', 'Origin': cenario.ORIGEM})
+        self.assertEqual(status, 200, corpo[:200])
+        aceite = json.loads(corpo)
+        return (cabecalhos['Set-Cookie'].split(';')[0], aceite['csrf']), aceite['conta']['id'], email
+
+    def pagina(self, sessao, caminho='/'):
+        status, cabecalhos, corpo = self.pedir('GET', caminho, cabecalhos={'Cookie': sessao[0]} if sessao else None)
+        return status, cabecalhos.get('Location'), corpo
+
+    def test_dono_e_editor_sem_o_fator_so_alcancam_o_cadastro_dele(self):
+        for papel in ('dono', 'editor'):
+            with self.subTest(papel=papel):
+                sessao, conta, email = self.chegar(papel)
+                status, corpo, _ = self.get(sessao, '/api/sessao')
+                self.assertEqual((status, corpo['pendencias'], corpo['conta']['papel']), (200, ['segundo_fator'], papel))
+                self.assertEqual(self.pagina(sessao)[:2], (303, '/conta/segundo-fator'))  # the Mesa does not open
+                antes = self.retrato()
+                for operacao, dados in (('codex-status', {}), ('equipe-listar', {}), ('conta-sessoes', {}), ('gerenciar-listar', {}),
+                                        ('conta-senha-trocar', {'senha_atual': SENHA, 'senha_nova': NOVA}),
+                                        ('conta-fator-codigos', {'senha': SENHA}), ('conta-fator-remover', {'senha': SENHA}),
+                                        ('codex-listar', {'caso': 'alpha'}), ('conta-atualizar', {'nome': 'Outro Nome'})):
+                    status, corpo, _ = self.post(sessao, operacao, dados)
+                    self.assertEqual((status, corpo.get('codigo'), corpo.get('pendencias')),
+                                     (403, 'pendencia_de_conta', ['segundo_fator']), operacao)
+                for caminho in ('/api/catalogo', '/api/cota', '/api/fila', '/api/integracao'):
+                    status, corpo, _ = self.get(sessao, caminho)
+                    self.assertEqual((status, corpo.get('codigo')), (403, 'pendencia_de_conta'), caminho)
+                self.assertEqual(antes, self.retrato())
+                # What resolves it: the own profile and the two steps of the enrolment. And leaving.
+                perfil = self.post(sessao, 'conta-ver', {})
+                self.assertEqual((perfil[0], perfil[1]['segundo_fator']['ativo']), (200, False))
+                descartavel = cenario.fator_de_teste.entrar(self.pedir, self.root, conta, email, SENHA, cenario.ORIGEM)
+                self.assertEqual(self.post(descartavel, 'sessao-sair', {})[0], 200)
+                status, inicio, bruto = self.post(sessao, 'conta-fator-iniciar', {'senha': SENHA})
+                self.assertEqual(status, 200, bruto[:200])
+                status, feito, bruto = self.post(sessao, 'conta-fator-confirmar', {'codigo': codigo_de(inicio['segredo'])})
+                self.assertEqual((status, feito['estado'], len(feito['codigos_de_reserva'])), (200, 'fator_ativado', 10), bruto[:200])
+                self.assertEqual(self.get(sessao, '/api/sessao')[1]['pendencias'], [])
+                self.assertEqual(self.pagina(sessao)[0], 200)
+                self.assertEqual(self.post(sessao, 'codex-status', {})[0], 200)
+                # Nor does who must have it take it away afterwards.
+                negado = self.post(sessao, 'conta-fator-remover', {'senha': SENHA})
+                self.assertEqual((negado[0], negado[1].get('codigo')), (403, 'operacao_proibida'))
+                self.assertTrue(self.post(sessao, 'conta-ver', {})[1]['segundo_fator']['ativo'])
+
+    def test_a_pagina_da_pendencia_e_estatica_e_nao_leva_dado_de_conta(self):
+        sessao, conta, email = self.chegar('editor')
+        for quem in (sessao, None):  # with the session and without one: the same page, which reads the session by itself
+            status, _, corpo = self.pagina(quem, '/conta/segundo-fator')
+            self.assertEqual(status, 200)
+            texto = corpo.decode('utf-8')
+            for dado in (conta, email, 'Pessoa Obrigada', 'Redação Alfa'):
+                self.assertNotIn(dado, texto)
+        self.assertEqual(corpo, self.pagina(None, '/entrar')[2])
+
+    def test_reporter_e_leitor_nao_tem_a_obrigacao_e_quem_e_promovido_passa_a_ter(self):
+        for papel in ('reporter', 'leitor'):
+            sessao, conta, _ = self.chegar(papel)
+            self.assertEqual(self.get(sessao, '/api/sessao')[1]['pendencias'], [], papel)
+            self.assertEqual(self.post(sessao, 'codex-status', {})[0], 200, papel)
+        sessao, conta, _ = self.chegar('reporter')
+        promovida = self.post('dono', 'equipe-papel', {'conta': conta, 'papel': 'editor', 'senha': SENHA})
+        self.assertEqual(promovida[0], 200, promovida[2][:200])
+        self.assertEqual(self.get(sessao, '/api/sessao')[1]['pendencias'], ['segundo_fator'])  # at her next request
+        self.assertEqual(self.post(sessao, 'codex-status', {})[1].get('codigo'), 'pendencia_de_conta')
+        self.assertEqual(self.post('dono', 'equipe-papel', {'conta': conta, 'papel': 'leitor', 'senha': SENHA})[0], 200)
+        self.assertEqual(self.post(sessao, 'codex-status', {})[0], 200)
 
 
 if __name__ == '__main__':

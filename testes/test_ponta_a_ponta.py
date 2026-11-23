@@ -19,6 +19,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from fixture_achados import Ambiente
 import acesso
+import fator_de_teste
+import segundo_fator
 import apuracao
 import backup
 from comum import escrever_json, ler_json
@@ -43,7 +45,7 @@ def conversa(root, identificador, caso, dono, pergunta):
 
 class PontaAPontaTest(unittest.TestCase):
     def setUp(self):
-        env = patch.dict(os.environ, {'VLADO_ACESSO': ''})
+        env = patch.dict(os.environ, {'VLADO_ACESSO': '', 'VLADO_SEGREDOS': ''})
         env.start()
         self.addCleanup(env.stop)
         self.origem = self.instalacao_original()
@@ -56,6 +58,14 @@ class PontaAPontaTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, pacotes, ignore_errors=True)
         restauradas = backup.restaurar(self.root, backup.criar(self.origem.root, pacotes))
         self.assertIn('casos', restauradas)
+        # Contas (contrato de contas, 7 e 8.2; P36): o backup comum não leva `segredos/`. Quem restaura repõe a chave
+        # do segundo fator a partir da cópia guardada com os segredos; sem ela os códigos do aplicativo não valeriam.
+        chave = segundo_fator.arquivo_da_chave(self.root)
+        chave.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(segundo_fator.arquivo_da_chave(self.origem.root), chave)
+        fator_de_teste.levar(self.origem.root, self.root)
+        self.addCleanup(fator_de_teste.esquecer, self.root)
+        self.addCleanup(fator_de_teste.esquecer, self.origem.root)
         self.server = Servidor(('127.0.0.1', 0), self.root, modo='piloto', origem=ORIGEM)
         thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         thread.start()
@@ -72,6 +82,7 @@ class PontaAPontaTest(unittest.TestCase):
         self.editora, self.token_editora = self.criar(root, 'Editora', 'editora', 'admin')
         self.ana, self.token_ana = self.criar(root, 'Ana', 'ana')
         self.bia, self.token_bia = self.criar(root, 'Bia', 'bia')
+        self.ids = {'editora': self.editora['id'], 'ana': self.ana['id'], 'bia': self.bia['id']}
         conta = {'id': self.editora['id'], 'nome': 'Editora'}
         nota = apuracao.executar(root, 'apuracao-nota-salvar', {
             'caso': 'alpha', 'requisicao_id': 'c' * 32, 'titulo': 'Pauta', 'texto': 'Hipótese.'}, conta)['nota']
@@ -95,13 +106,15 @@ class PontaAPontaTest(unittest.TestCase):
     def criar(root, nome, login, papel='convidado'):
         conta, token = acesso.criar_conta(root, nome, login, papel=papel, casos=['alpha'])
         acesso.ativar(root, token, SENHA)
+        if conta['papel'] in acesso.FATOR_OBRIGATORIO:
+            # Contrato de contas, 8.2: no piloto, dono e editor têm segundo fator obrigatório; sem ele a sessão só
+            # alcança o cadastro do fator. A editora deste cenário o cadastra antes do backup, como uma pessoa faz.
+            fator_de_teste.cadastrar(root, conta['id'], SENHA)
         return conta, login
 
     def entrar(self, login):
-        status, headers, body = self.request('POST', '/api/entrar', json.dumps({'login': login, 'senha': SENHA}),
-                                             {'Content-Type': 'application/json', 'Origin': ORIGEM})
-        self.assertEqual(status, 200, body[:200])
-        return headers['Set-Cookie'].split(';')[0], json.loads(body)['csrf']
+        # Em dois passos para quem tem o segundo fator (a editora), em um para as convidadas.
+        return fator_de_teste.entrar(self.request, self.root, self.ids[login], login, SENHA, ORIGEM)
 
     def post(self, sessao, operation, data):
         cookie, csrf = sessao
