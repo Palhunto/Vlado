@@ -368,9 +368,9 @@
       // P40 (b): o gasto com a chave de IA própria da redação, em linha separada: não entra na cota do serviço acima. A pessoa vê o que pagou por ela; o dono vê também o da redação.
       const chave=data.chave_propria,reais=raw=>{const n=Number(raw);return raw!=null&&Number.isFinite(n)?`R$ ${money(n,true)}`:'';};
       // O que a chave própria da redação pagou já está no valor da cota da pessoa: é parte ("dos quais R$ 3,25 com a chave própria"), não acréscimo. Aparece com o gasto mandado
-      // pelo servidor e some sem chave própria; o dono vê também o total da redação, que não entra na cota do serviço. Defesa (B1 da Coruja): o campo sozinho não diz que a
-      // redação tem chave própria (o servidor já mandou `conta_brl: '0.00'` a quem não tem), então com R$ 0,00 a linha só aparece quando o total da redação veio junto.
-      const dela=reais(chave?.conta_brl),inteira=reais(chave?.organizacao_brl),mostraParte=!scope&&!!dela&&(Number(chave.conta_brl)>0||!!inteira);
+      // pelo servidor (R$ 0,00 se a redação tem chave e ainda não houve gasto) e some sem chave própria; o dono vê também o total da redação, que não entra na cota do serviço.
+      // O servidor só manda `chave_propria` no piloto e com chave salva ou gasto no mês (GET /api/cota, Viga b03a919): sem o campo, nenhuma das duas linhas.
+      const dela=reais(chave?.conta_brl),inteira=reais(chave?.organizacao_brl),mostraParte=!scope&&!!dela;
       $('mesa-cota-chave').textContent=mostraParte?`dos quais ${dela} com a chave própria`:'';$('mesa-cota-chave').hidden=!mostraParte;
       $('mesa-cota-chave-redacao-valor').textContent=inteira;$('mesa-cota-chave-redacao').hidden=!inteira;
       if(mostraParte)$('mesa-cota-medidor').setAttribute('aria-label',`${$('mesa-cota-medidor').getAttribute('aria-label')}, dos quais ${dela} com a chave própria`);

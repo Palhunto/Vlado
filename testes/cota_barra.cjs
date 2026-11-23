@@ -113,13 +113,15 @@ test('P40 (b): o que a chave própria pagou é parte do valor da cota ("dos quai
   assert.equal(dono.$('mesa-cota-chave-redacao').hidden, false);
   assert.equal(dono.$('mesa-cota-chave-redacao').querySelector('.mesa-cota-rotulo').textContent, 'Chave própria da redação');
   assert.equal(dono.$('mesa-cota-chave-redacao-valor').textContent, 'R$ 12,00');
-  const zero = await abrir(comChave('0.00', '0.00', '0.00'));
-  assert.equal(zero.$('mesa-cota-chave').textContent, 'dos quais R$ 0,00 com a chave própria', 'R$ 0,00 se ainda não houve gasto, com o total da redação junto (a redação tem chave)');
-  // B1 da Coruja: a forma real que o servidor mandou a quem NÃO tem chave própria; o campo veio, mas sem a chave a linha não aparece
-  const falso = await abrir({...conta('18.40', '50.00'), chave_propria: {conta_brl: '0.00'}});
-  assert.equal(falso.$('mesa-cota-chave').hidden, true, 'conta_brl 0.00 sem o total da redação: sem chave própria, a linha some');
-  assert.equal(falso.$('mesa-cota-chave').textContent, ''); assert.equal(falso.$('mesa-cota-chave-redacao').hidden, true);
-  assert.equal(falso.$('mesa-cota-medidor').getAttribute('aria-label'), '37% da cota usada');
+  // a forma que o servidor manda (custo.situacao, b03a919): sem chave salva nem gasto o campo NÃO vem, para a pessoa e para o dono; com chave e sem gasto vem em R$ 0,00
+  const zero = await abrir(comChave('0.00', '0.00'));
+  assert.equal(zero.$('mesa-cota-chave').textContent, 'dos quais R$ 0,00 com a chave própria', 'R$ 0,00 se a redação tem chave e ainda não houve gasto');
+  const donoSem = await abrir(conta('18.40', '50.00'));
+  assert.equal(donoSem.$('mesa-cota-chave').hidden, true, 'dono de redação sem chave própria: o campo não vem e a linha da pessoa some');
+  assert.equal(donoSem.$('mesa-cota-chave-redacao').hidden, true, 'nem o total da redação aparece');
+  const donoGasto = await abrir(comChave('18.40', '0.00', '3.00'));
+  assert.equal(donoGasto.$('mesa-cota-chave').textContent, 'dos quais R$ 0,00 com a chave própria');
+  assert.equal(donoGasto.$('mesa-cota-chave-redacao-valor').textContent, 'R$ 3,00', 'dono com gasto da redação: as duas linhas aparecem');
   const sem = await abrir(conta('18.40', '50.00'));
   assert.equal(sem.$('mesa-cota-chave').hidden, true, 'sem chave própria, a linha some'); assert.equal(sem.$('mesa-cota-chave-redacao').hidden, true);
   assert.equal(sem.$('mesa-cota-medidor').getAttribute('aria-label'), '37% da cota usada');
