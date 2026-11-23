@@ -129,6 +129,7 @@ COPY scripts/acesso.py \
      scripts/rotas_redacao.py \
      scripts/rotas_tabelas.py \
      scripts/segredos.py \
+     scripts/segundo_fator.py \
      scripts/semear_ambiente.py \
      scripts/tabelas_apuracao.py \
      scripts/tetos_extracao.py \
