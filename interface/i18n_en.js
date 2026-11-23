@@ -729,18 +729,11 @@ window.VLADO_I18N_EN = {
     "Baixar o arquivo Markdown": "Download the Markdown file",
     "Link de ativação de": "Activation link for",
     ". Envie por um canal seguro (pessoalmente ou mensageiro cifrado). Ele vale uma única vez e não será mostrado de novo.": ". Send it through a secure channel (in person or an encrypted messenger). It works only once and will not be shown again.",
-    "Copiar link": "Copy link",
-    "Já enviei": "I have sent it",
-    "Link copiado.": "Link copied.",
-    "Selecione o link e copie manualmente.": "Select the link and copy it manually.",
     "Contas": "Accounts",
     "Ativa": "Active",
     "Desativada": "Deactivated",
     "Aguardando senha": "Waiting for password",
     "link vencido": "link expired",
-    "Desativar": "Deactivate",
-    "Reativar": "Reactivate",
-    "Recuperar acesso": "Recover access",
     "Alterar apurações": "Change investigations",
     "Salvar alterações": "Save changes",
     "Nenhuma conta criada.": "No accounts created.",
@@ -751,7 +744,6 @@ window.VLADO_I18N_EN = {
     "Acesso alterado. Vale a partir da próxima ação da pessoa.": "Access changed. It applies from the person's next action.",
     "Desativar esta conta? A pessoa sai na próxima ação.": "Deactivate this account? The person is signed out on their next action.",
     "Gerar novo link de ativação? A senha atual deixa de valer e as sessões abertas são encerradas.": "Generate a new activation link? The current password stops working and open sessions are ended.",
-    "Sair": "Sign out",
 
     // Findings: card chrome and record values (pretty() output)
     "Conferir": "Check",
@@ -1655,6 +1647,8 @@ window.VLADO_I18N_EN = {
     // Trocar o próprio e-mail (conta.js)
     "Você pediu essa troca há pouco. Espere alguns minutos para pedir de novo.": "You asked for this change a moment ago. Wait a few minutes before asking again.",
     "Esse já é o e-mail da conta.": "That is already the account email.",
+    "Convidar": "Invite",
+    "Sessão expirada ou encerrada. Entre novamente.": "Your session expired or was ended. Sign in again.",
     "Trocar e-mail": "Change email",
     "Cadastrar e-mail": "Add email",
     "Trocar o e-mail da conta": "Change the account email",
@@ -1735,6 +1729,15 @@ window.VLADO_I18N_EN = {
     "{conta} entrou com um código de reserva": "{conta} signed in with a reserve code",
     "O segundo fator de {conta} foi bloqueado por muitos códigos errados": "{conta}’s second factor was blocked after too many wrong codes",
     "A entrada de {conta} foi protegida por muitas tentativas": "{conta}’s sign-in was protected after too many attempts",
+    // Textos que as telas de Contas usam e que antes vinham de outras telas (conta.js, equipe.js, fator.js): ficam aqui para não sumirem com elas
+    "Copiar link": "Copy link",
+    "Desativar": "Deactivate",
+    "Já enviei": "I have sent it",
+    "Link copiado.": "Link copied.",
+    "Reativar": "Reactivate",
+    "Recuperar acesso": "Recover access",
+    "Sair": "Sign out",
+    "Selecione o link e copie manualmente.": "Select the link and copy it manually.",
   },
   padroes: [
     // Cota do mês na barra lateral
