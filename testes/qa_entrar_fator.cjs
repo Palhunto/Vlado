@@ -116,6 +116,45 @@ async function entrarAte2(page, email, senha) {
     resultado.redefinir = 'ok';
     assert.deepEqual(erros, []);
     await ctx.close();
+
+    // 5. capturas do Design (só com `capturas`): cada estado em 375 e 1440 px, nos dois temas; o aviso de entrada expirada só no tema claro
+    if (args.capturas && args.extras) {
+      fs.mkdirSync(args.capturas, {recursive: true});
+      let i = -1;
+      for (const [rotulo, largura, altura] of [['375', 375, 812], ['1440', 1440, 900]]) for (const tema of ['light', 'dark']) {
+        i += 1;
+        const conta = args.extras[i], marca = `${rotulo}-${tema}`;
+        const c = await browser.newContext({viewport: {width: largura, height: altura}, locale: 'pt-BR', colorScheme: tema});
+        await c.addInitScript(t => { try { localStorage.setItem('vlado-idioma', 'pt'); localStorage.setItem('apuracao:tema', t); } catch (_) { /* sem armazenamento */ } }, tema);
+        await c.route(`${args.origem}/**`, async rota => { try {
+          const pedido = rota.request(), endereco = new URL(pedido.url());
+          if (endereco.pathname === '/api/entrar-segundo-fator' && c.__expirar) return await rota.fulfill({status: 401, contentType: 'application/json', body: JSON.stringify({estado: 'credenciais', codigo: 'entrada_expirada', erro: 'A entrada expirou.'})});
+          const resposta = await rota.fetch({url: `http://127.0.0.1:${args.porta}${endereco.pathname}${endereco.search}`, headers: {...pedido.headers(), host: new URL(args.origem).host}, maxRedirects: 0});
+          await rota.fulfill({response: resposta});
+        } catch (_) { /* a página fechou com o pedido em voo */ } });
+        const pagina = await c.newPage();
+        const foto = nome => pagina.screenshot({path: path.join(args.capturas, `${nome}-${marca}.png`), fullPage: true});
+        await entrarAte2(pagina, conta.email, args.senha);
+        await foto('fator-1-codigo-do-aplicativo');
+        await pagina.click('#fator-reserva');
+        await foto('fator-2-codigo-de-reserva');
+        await pagina.click('#fator-reserva');
+        await pagina.fill('#fator-codigo', '000000'); await pagina.click('#fator-enviar'); await pagina.waitForSelector('.campo-erro');
+        await foto('fator-3-codigo-incorreto');
+        if (tema === 'light') {
+          c.__expirar = true;
+          await pagina.fill('#fator-codigo', '123456'); await pagina.click('#fator-enviar');
+          await pagina.waitForSelector('#entrar-secao:not([hidden])'); await pagina.waitForSelector('#entrar-mensagem:not([hidden])');
+          await foto('fator-4-entrada-expirada');
+        }
+        await pagina.goto(`${args.origem}/redefinir/${args.redefinires[i]}`);
+        await pagina.waitForSelector('#redefinir-form:not([hidden])');
+        await pagina.fill('#redefinir-senha', args.redefinir.senha_nova); await pagina.click('#redefinir-enviar');
+        await pagina.waitForSelector('#redefinir-codigo-campo:not([hidden])');
+        await foto('fator-5-redefinir-com-codigo');
+        await c.close();
+      }
+    }
   } finally {
     await browser.close();
   }

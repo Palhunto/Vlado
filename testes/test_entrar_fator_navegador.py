@@ -60,6 +60,14 @@ class EntrarComFatorNoNavegadorTest(cenario.DuasRedacoes):
                    'redefinir': {'token': token, 'segredo': segredo_redefinir, 'senha_nova': NOVA}}
         if os.environ.get('VLADO_CAPTURAS'):
             entrada['capturas'] = os.environ['VLADO_CAPTURAS']
+            # Uma conta com fator e um link de redefinição para cada captura (375 e 1440, claro e escuro): cada link vale uma vez.
+            entrada['extras'], entrada['redefinires'] = [], []
+            for i in range(4):
+                email = f'captura{i}@exemplo.test'
+                cid = self.conta(email, f'Pessoa Captura {i}')
+                cadastrar(self.root, cid)
+                entrada['extras'].append({'email': email})
+                entrada['redefinires'].append(acesso.pedir_redefinicao(self.root, email)[0])
         with patch.object(acesso, 'TENTATIVAS_IP_MINUTO', 10000), correio.usar('simulado'):
             processo = subprocess.run(['node', str(Path(__file__).with_name('qa_entrar_fator.cjs')), json.dumps(entrada)],
                                       capture_output=True, text=True, encoding='utf-8', timeout=420, cwd=RAIZ)
