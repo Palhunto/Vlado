@@ -937,8 +937,10 @@ def _eh_conta(tx: _Tx, quem) -> bool:
 
 
 def _donos_ativos(tx: _Tx, organizacao: str, exceto: str | None = None) -> int:
-    return tx.um("SELECT COUNT(*) AS total FROM contas WHERE organizacao = ? AND papel = 'dono' AND ativa = 1 AND id IS NOT ?",
-                 organizacao, exceto)['total']
+    """The donos who can run the newsroom: active and with a password. One waiting for a recovery, or for the first
+    password, does not count (Y2 of the review of 4b-3): the last dono who can sign in is never the one to leave."""
+    return tx.um("SELECT COUNT(*) AS total FROM contas WHERE organizacao = ? AND papel = 'dono' AND ativa = 1"
+                 ' AND senha_hash IS NOT NULL AND excluida_em IS NULL AND id IS NOT ?', organizacao, exceto)['total']
 
 
 def _cancelar_convites_de(tx: _Tx, cid: str, momento: datetime | None = None) -> None:
@@ -1544,20 +1546,23 @@ def excluir_conta(root: Path, cid, nome, senha, ip=None) -> dict:
 CONTA_EXCLUIDA = 'Conta excluída'
 
 
-def nomes_publicos(root: Path, ids, organizacao: str | None = None) -> dict:
-    """The name to show for each account id: its name, `CONTA_EXCLUIDA` for a deleted account, and None for what is
-    not an account (a fixed label of the system, an old login) or is an account of another newsroom than
-    `organizacao`, when it is given: a name never tells one newsroom who is in another."""
+def nomes_publicos(root: Path, ids, organizacao: str) -> dict:
+    """The name to show for each account id: its name, `CONTA_EXCLUIDA` for a deleted account, and nothing for what
+    is not an account (a fixed label of the system, an old login) or is an account of another newsroom than
+    `organizacao`: a name never tells one newsroom who is in another. The newsroom is required (Y1 of the review):
+    a caller that forgets it gets an error, never the names of every newsroom."""
+    if not isinstance(organizacao, str) or not organizacao:
+        raise ValueError('A redação de quem vai ver os nomes é obrigatória.')
     pedidos = sorted({i for i in ids if isinstance(i, str) and ID_CONTA.fullmatch(i)})
     if not pedidos:
         return {}
     with _bd(root) as tx:
         linhas = tx.todos(f'SELECT id, nome, organizacao, excluida_em FROM contas WHERE id IN ({", ".join("?" * len(pedidos))})',
                           *pedidos)
-    return {c['id']: _nome_para_mostrar(c) for c in linhas if organizacao is None or c['organizacao'] == organizacao}
+    return {c['id']: _nome_para_mostrar(c) for c in linhas if c['organizacao'] == organizacao}
 
 
-def nome_publico(root: Path, cid, organizacao: str | None = None) -> str | None:
+def nome_publico(root: Path, cid, organizacao: str) -> str | None:
     """One id of `nomes_publicos`."""
     return nomes_publicos(root, [cid], organizacao).get(cid)
 
@@ -1997,6 +2002,42 @@ def avisar_inativas(root: Path) -> dict:
     `tela` or `simulado`, without an address, or with the delivery failing, nothing is counted and the account goes
     to the operator's list, and the next sweep tries again. The last active dono is warned too, with a message of
     its own: it is never deactivated. Each message is sent outside the store's transaction."""
+    with _trinco_sem_espera(Path(str(caminho_bd(root)) + '.avisos')) as meu:
+        if not meu:  # another sweep (the server's start, the daily job) is sending them now (Z3 of the review)
+            return {'contas_avisadas': 0, 'para_o_operador': []}
+        return _avisar_inativas(root)
+
+
+@contextmanager
+def _trinco_sem_espera(caminho: Path):
+    """An exclusive lock across processes that never waits: True when this one holds it, False when another does."""
+    trava = Path(str(caminho) + '.lock')
+    trava.parent.mkdir(parents=True, exist_ok=True)
+    with open(trava, 'a+b') as stream:
+        try:
+            if os.name == 'nt':
+                import msvcrt
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            if os.name == 'nt':
+                import msvcrt
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(stream, fcntl.LOCK_UN)
+
+
+def _avisar_inativas(root: Path) -> dict:
     import correio  # here: the store loads without the mail module (the operator's tools)
     momento = agora()
     with _bd(root) as tx:
@@ -3152,17 +3193,40 @@ def _quem(tx: _Tx, valor, cid: str) -> str | None:
     return 'outra_conta'
 
 
+EXPORTACOES_POR_JANELA, EXPORTACAO_JANELA_S = 5, 3600  # per account (X1 of the review): a file, not a feed
+_EXPORTACOES: dict[str, deque] = {}
+
+
+def _limite_de_exportacao(cid: str, momento: datetime) -> None:
+    with _IPS_TRAVA:
+        fila = _EXPORTACOES.setdefault(cid, deque())
+        while fila and (momento - fila[0]).total_seconds() >= EXPORTACAO_JANELA_S:
+            fila.popleft()
+        if len(fila) >= EXPORTACOES_POR_JANELA:
+            registro_acesso.registrar('admin_recusada', 'falha', cid, motivo='bloqueado')
+            raise Bloqueado(BLOQUEADO)
+        fila.append(momento)
+        if len(_EXPORTACOES) > 10000:
+            for chave in [k for k, f in _EXPORTACOES.items() if not f or (momento - f[-1]).total_seconds() >= EXPORTACAO_JANELA_S]:
+                _EXPORTACOES.pop(chave, None)
+
+
 def exportar_conta(root: Path, cid) -> dict:
     """`conta-exportar`: what the store keeps about the person, for the person (contract, 8.4). Nothing of anybody
     else, and never a secret: no password hash, token, ticket, seed, reserve code, csrf, session id or cookie, device
-    mark or its summary, nor AI key. The content of the cases is the newsroom's and leaves by their own export."""
+    mark or its summary, nor AI key. The content of the cases is the newsroom's and leaves by their own export.
+    At most EXPORTACOES_POR_JANELA files an hour per account (429 `bloqueado`)."""
+    if isinstance(cid, str):
+        _limite_de_exportacao(cid, agora())
     with _bd(root) as tx:
         conta = _conta(tx, cid)
         cid, momento = conta['id'], agora()
         redacao = tx.um('SELECT id, nome FROM organizacoes WHERE id = ?', conta['organizacao'])
         eventos = [{'em': e['em'], 'tipo': e['tipo'], 'conta': _quem(tx, e['conta'], cid), 'por': _quem(tx, e['por'], cid)}
-                   for e in tx.todos('SELECT em, tipo, conta, por FROM eventos WHERE (conta = ? OR por = ?) AND em > ?'
-                                     ' ORDER BY n', cid, cid, _iso(momento - timedelta(days=ATIVIDADE_DIAS)))]
+                   for e in tx.todos(  # the newsroom's own window, by its index (X1 of the review)
+                       'SELECT em, tipo, conta, por FROM eventos WHERE organizacao = ? AND (conta = ? OR por = ?)'
+                       ' AND em > ? ORDER BY n', conta['organizacao'], cid, cid,
+                       _iso(momento - timedelta(days=ATIVIDADE_DIAS)))]
         return {
             'formato': FORMATO_EXPORTACAO, 'versao': VERSAO_EXPORTACAO, 'gerado_em': _iso(momento),
             'conta': {'id': cid, 'nome': conta['nome'], 'email': conta['email'], 'login': conta['login'],
@@ -3183,6 +3247,18 @@ def exportar_conta(root: Path, cid) -> dict:
             'eventos': eventos,
             'incompleto': list(EXPORTACAO_INCOMPLETA),
         }
+
+
+def idioma_gravado(root: Path, cid) -> str | None:
+    """The language the account chose, as stored: 'pt', 'en', or None when it never chose one (P42: the page then
+    follows the browser's Accept-Language). Only this column of the own account, which the caller takes from the
+    session; an unknown or deleted account, or a value outside IDIOMAS, is None, never an error."""
+    if not isinstance(cid, str) or not ID_CONTA.fullmatch(cid):
+        return None
+    with _bd(root) as tx:
+        linha = tx.um('SELECT idioma FROM contas WHERE id = ? AND excluida_em IS NULL', cid)
+    valor = linha['idioma'] if linha else None
+    return valor if valor in IDIOMAS else None
 
 
 def atualizar_perfil(root: Path, cid, *, nome=None, idioma=None) -> dict:

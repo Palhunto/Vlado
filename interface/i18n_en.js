@@ -1804,6 +1804,9 @@ window.VLADO_I18N_EN = {
     ["^R\\$ ([\\d.,]+) de R\\$ ([\\d.,]+)$", "R$ $1 of R$ $2"],
     ["^(\\d+)% da cota usada$", "$1% of the quota used"],
     ["^Cota do mês esgotada: R\\$ ([\\d.,]+) de R\\$ ([\\d.,]+)$", "Monthly quota used up: R$ $1 of R$ $2"],
+    ["^dos quais R\\$ ([\\d.,]+) com a chave própria$", "of which R$ $1 with the newsroom’s own key"],
+    ["^(\\d+)% da cota usada, dos quais R\\$ ([\\d.,]+) com a chave própria$", "$1% of the quota used, of which R$ $2 with the newsroom’s own key"],
+    ["^Cota do mês esgotada: R\\$ ([\\d.,]+) de R\\$ ([\\d.,]+), dos quais R\\$ ([\\d.,]+) com a chave própria$", "Monthly quota used up: R$ $1 of R$ $2, of which R$ $3 with the newsroom’s own key"],
     ["^Cota da instalação esgotada: R\\$ ([\\d.,]+) de R\\$ ([\\d.,]+)$", "Installation quota used up: R$ $1 of R$ $2"],
     ["^(\\d+)% da cota da instalação usada$", "$1% of the installation quota used"],
     // Contador de prazos na barra lateral

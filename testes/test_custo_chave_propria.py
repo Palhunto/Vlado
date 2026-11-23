@@ -15,6 +15,7 @@ from unittest import mock
 TESTES = Path(__file__).resolve().parent
 sys.path.insert(0, str(TESTES.parent / 'scripts'))
 sys.path.insert(0, str(TESTES))
+import acesso  # noqa: E402
 from comum import escrever_json, ler_json  # noqa: E402
 import cenario_redacoes as cenario  # noqa: E402
 import custo  # noqa: E402
@@ -128,14 +129,37 @@ class LancamentoSeparadoTest(redacoes.Redacoes, unittest.TestCase):
         with mock.patch.object(custo, 'mes', return_value='2026-11'):
             self.gastar(self.bia, 3, chave_propria=True)
             self.gastar(self.bia, 1)
-            reporter = custo.situacao(self.root, self.bia)
+            reporter = custo.situacao(self.root, self.bia, piloto=True)
             self.assertEqual(reporter['chave_propria'], {'conta_brl': '3.00'})
             self.assertEqual(reporter['conta']['gasto_brl'], '4.00')  # the person's ceiling counts both keys
-            dona = custo.situacao(self.root, self.dona, administrador=True)
+            dona = custo.situacao(self.root, self.dona, administrador=True, piloto=True)
             self.assertEqual(dona['chave_propria'], {'conta_brl': '0.00', 'organizacao_brl': '3.00'})
+            # Outside the piloto the own key never counts (P3c): no part at all, the rest of the bar as before.
+            fora = custo.situacao(self.root, self.dona, administrador=True)
+            self.assertNotIn('chave_propria', fora)
+            self.assertEqual({k: fora[k] for k in ('conta', 'organizacao')}, {k: dona[k] for k in ('conta', 'organizacao')})
             self.assertEqual(dona['organizacao']['gasto_brl'], '1.00')  # the service's quota: without the own key
             self.assertEqual(custo.gasto_chave_propria_brl(self.root, self.bia), '3.00')
             self.assertEqual(custo.gasto_chave_propria_brl(self.root, self.dona, da_redacao=True), '3.00')
+
+    def test_sem_chave_propria_a_parte_some(self):
+        # Coruja on the bar (Maestro's option a): without an own key and without spend with it, no 'R$ 0,00' part.
+        caio = acesso.criar_conta(self.root, 'Caio', 'caio', papel='reporter', organizacao=self.outra)[0]['id']
+        with mock.patch.object(custo, 'mes', return_value='2026-11'):
+            self.gastar(self.bia, 2)  # the service's key only
+            for conta, administrador in ((self.bia, False), (self.dona, True), (caio, False)):
+                with self.subTest(conta=conta):
+                    self.assertNotIn('chave_propria', custo.situacao(self.root, conta, administrador=administrador,
+                                                                     piloto=True))
+            self.gastar(self.bia, 3, chave_propria=True)  # spend with it this month: whoever it concerns sees it
+            self.assertNotIn('chave_propria', custo.situacao(self.root, caio, piloto=True))  # not the others
+            self.assertEqual(custo.situacao(self.root, self.dona, administrador=True, piloto=True)['chave_propria'],
+                             {'conta_brl': '0.00', 'organizacao_brl': '3.00'})
+            segredos.salvar_chave(self.root, 'anthropic', PROPRIA, self.outra)  # an own key now: all of it see it
+            self.assertEqual(custo.situacao(self.root, caio, piloto=True)['chave_propria'], {'conta_brl': '0.00'})
+            segredos.caminho_das_redacoes(self.root).write_text('{ilegível', encoding='utf-8')
+            self.assertNotIn('chave_propria', custo.situacao(self.root, caio, piloto=True))  # unreadable: no key
+            self.assertEqual(custo.situacao(self.root, self.bia, piloto=True)['chave_propria'], {'conta_brl': '3.00'})
 
     def test_com_a_chave_propria_so_o_teto_da_pessoa_vale(self):
         self.no_banco('UPDATE organizacoes SET cota_mensal_brl = ? WHERE id = ?', '10.00', self.outra)
@@ -306,8 +330,17 @@ class TelaDaEquipeTest(cenario.DuasRedacoes):
                     cota = self.get(reporter, '/api/cota')[1]
                     self.assertEqual(cota['chave_propria'], {'conta_brl': proprio})  # its own; no newsroom number
             for quem in ('editor', 'leitor', 'convidado'):
-                with self.subTest(quem=quem):
-                    self.assertEqual(self.get(quem, '/api/cota')[1]['chave_propria'], {'conta_brl': '0.00'})
+                with self.subTest(quem=quem):  # no own key and no spend with it: the part is not sent at all
+                    status, cota, _ = self.get(quem, '/api/cota')
+                    self.assertEqual(status, 200)
+                    self.assertNotIn('chave_propria', cota)
+                    self.assertIn('gasto_brl', cota['conta'])
+            # The newsroom saves its own key: from then on everyone in it gets the part, at R$ 0,00 until it spends.
+            segredos.salvar_chave(self.root, 'anthropic', PROPRIA, self.a)
+            self.addCleanup(segredos.remover_chave, self.root, 'anthropic', self.a)
+            for quem in ('editor', 'reporter2'):
+                self.assertEqual(self.get(quem, '/api/cota')[1]['chave_propria'], {'conta_brl': '0.00'})
+            self.assertEqual(self.get('reporter_b', '/api/cota')[1]['chave_propria'], {'conta_brl': '7.75'})
 
     def test_razao_ilegivel_a_tela_da_equipe_abre(self):
         with mock.patch.object(custo, 'gasto_chave_propria_brl', side_effect=ValueError('razão ilegível')):
@@ -315,6 +348,39 @@ class TelaDaEquipeTest(cenario.DuasRedacoes):
         self.assertEqual(status, 200)
         self.assertIsNone(corpo['gasto_chave_propria_brl'])
         self.assertTrue(all(p['gasto_chave_propria_brl'] is None for p in corpo['pessoas']))
+
+    def test_equipe_listar_diz_se_a_redacao_tem_chave_propria(self):
+        # For the Vitral (rota da Tranca, com o aval dela): presence only, of the session's newsroom.
+        self.assertIs(self.post('dono', 'equipe-listar', {})[1]['chave_propria'], False)
+        segredos.salvar_chave(self.root, 'anthropic', PROPRIA, self.a)
+        self.addCleanup(segredos.remover_chave, self.root, 'anthropic', self.a)
+        corpo, bruto = (lambda r: (r[1], r[2]))(self.post('dono', 'equipe-listar', {}))
+        self.assertIs(corpo['chave_propria'], True)
+        self.assertNotIn(b'sintetica-da-redacao', bruto)  # nothing of the key (its end is a common word here)
+        self.assertNotIn(b'"final"', bruto)
+        self.assertIs(self.post('dono_b', 'equipe-listar', {})[1]['chave_propria'], False)  # the other newsroom's own
+        status, corpo, _ = self.post('dono', 'equipe-listar', {'redacao': self.b})  # never a field of the body
+        self.assertEqual(status, 400)
+
+    def test_equipe_listar_com_o_arquivo_das_chaves_ilegivel_abre_com_null(self):
+        arquivo = segredos.caminho_das_redacoes(self.root)
+        arquivo.parent.mkdir(parents=True, exist_ok=True)
+        arquivo.write_text('{ilegível', encoding='utf-8')
+        self.addCleanup(arquivo.unlink)
+        status, corpo, _ = self.post('dono', 'equipe-listar', {})
+        self.assertEqual(status, 200)
+        self.assertIsNone(corpo['chave_propria'])
+        self.assertTrue(corpo['pessoas'])
+
+    def test_equipe_listar_fora_do_piloto_e_false_sem_ler_o_arquivo(self):
+        import rotas_equipe
+        principal = {'conta': self.ids['dono'], 'organizacao': {'id': self.a}}
+        with mock.patch.object(segredos, 'resumo', side_effect=AssertionError('leu o arquivo das chaves')) as lido:
+            for modo in ('local-contas', None):
+                with self.subTest(modo=modo):
+                    corpo = rotas_equipe.executar(self.root, 'equipe-listar', {}, principal, modo=modo)
+                    self.assertIs(corpo['chave_propria'], False)
+            lido.assert_not_called()
 
 
 if __name__ == '__main__':

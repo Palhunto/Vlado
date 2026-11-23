@@ -1038,6 +1038,11 @@ progress{accent-color:var(--green)}
 .mesa-cota-linha{display:flex;flex-wrap:wrap;justify-content:space-between;gap:0 var(--espaco-2);margin:0;font-size:var(--text-md);line-height:1.25}
 .mesa-cota-rotulo{color:var(--muted)}
 .mesa-cota-valor{font-weight:600;white-space:nowrap}
+/* P40 (b) (componentes.md, barra lateral): o que a chave de IA própria da redação pagou é parte do valor da cota da pessoa, não acréscimo: "dos quais R$ 3,25 com a chave própria"
+   logo abaixo do medidor, em 14 muted; o dono vê também o total da redação, que não entra na cota do serviço, numa linha no estilo da linha da cota. */
+.mesa-cota-dos-quais{margin:0;font-size:var(--text-md);line-height:1.25;color:var(--muted)}
+.mesa-cota-dos-quais[hidden],.mesa-cota-linha[hidden]{display:none}
+#mesa-cota-chave-redacao .mesa-cota-rotulo{white-space:nowrap}
 /* Medidor (componentes.md#medidor): 6 px, trilha de linha, preenchimento de acento; passou do teto, cor de aviso. */
 .mesa-medidor{height:6px;border-radius:var(--raio-pilula);background:var(--line);overflow:hidden}
 .mesa-medidor::before{content:'';display:block;height:100%;width:var(--uso,0%);border-radius:inherit;background:var(--theme-accent)}
@@ -2577,6 +2582,15 @@ ins.comparar-incluido,p.comparar-incluido{
 @media (prefers-reduced-motion:reduce) {
   .quadros-abas [role=tab]{transition:none}
 }
+/* Faixa que rola para o lado (componentes.md#faixa-que-rola, Q5): desktop.js põe data-rola=fim|inicio|ambos só quando há conteúdo além da borda; o esmaecido é máscara, vale nos dois temas.
+   A máscara fica no elemento que rola (as faixas não têm fundo próprio; se ganharem, o fundo passa ao pai). Sem seta e sem barra à vista. */
+#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs{scrollbar-width:none}
+#mesa-etapas::-webkit-scrollbar,.quadros-abas::-webkit-scrollbar,.mesa-tabs::-webkit-scrollbar,.notebook-tabs::-webkit-scrollbar{display:none}
+/* O encaixe das pílulas (scroll-snap) para onde a rolagem do ativo já põe o item: a folga de --espaco-4, sem briga com o scrollLeft. */
+.mesa-tabs,.notebook-tabs,.quadros-abas{scroll-padding-inline:var(--espaco-4)}
+:is(#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs)[data-rola=fim]{-webkit-mask-image:linear-gradient(to right,currentColor calc(100% - var(--espaco-8)),transparent);mask-image:linear-gradient(to right,currentColor calc(100% - var(--espaco-8)),transparent)}
+:is(#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs)[data-rola=inicio]{-webkit-mask-image:linear-gradient(to right,transparent,currentColor var(--espaco-8));mask-image:linear-gradient(to right,transparent,currentColor var(--espaco-8))}
+:is(#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs)[data-rola=ambos]{-webkit-mask-image:linear-gradient(to right,transparent,currentColor var(--espaco-8),currentColor calc(100% - var(--espaco-8)),transparent);mask-image:linear-gradient(to right,transparent,currentColor var(--espaco-8),currentColor calc(100% - var(--espaco-8)),transparent)}
 
 /* Papéis e estados da Mesa inteira (Sessao em app.js; docs/design/componentes.md#estados) */
 [data-sem-capacidade]{display:none!important}

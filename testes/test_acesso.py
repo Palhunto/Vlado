@@ -1063,5 +1063,23 @@ class ContaPropriaTest(DuasRedacoes):
         self.assertIn('sessao_encerrada_a_distancia', self.tipos())
 
 
+class IdiomaGravadoTest(DuasRedacoes):
+    """P42: the page's first language reads the column as stored; an account that never chose has none."""
+
+    def test_coluna_crua_ou_none(self):
+        self.assertIsNone(acesso.idioma_gravado(self.root, self.rep_a))  # never chose: the browser decides
+        self.assertEqual(acesso.ver_conta(self.root, self.rep_a)['conta']['idioma'], 'pt')  # what the profile shows
+        acesso.atualizar_perfil(self.root, self.rep_a, idioma='en')
+        self.assertEqual(acesso.idioma_gravado(self.root, self.rep_a), 'en')
+        acesso.atualizar_perfil(self.root, self.rep_a, idioma='pt')
+        self.assertEqual(acesso.idioma_gravado(self.root, self.rep_a), 'pt')
+        self.gravar("UPDATE contas SET idioma = 'xx' WHERE id = ?", self.rep_b)
+        self.assertIsNone(acesso.idioma_gravado(self.root, self.rep_b))  # outside IDIOMAS: never injected as it came
+        for cid in (None, 7, '', 'admin', 'f' * 16):  # unknown: None, without raising
+            self.assertIsNone(acesso.idioma_gravado(self.root, cid), cid)
+        acesso.remover(self.root, self.rep_b, self.dono_b, self.b, SENHA)
+        self.assertIsNone(acesso.idioma_gravado(self.root, self.rep_b))  # deleted
+
+
 if __name__ == '__main__':
     unittest.main()

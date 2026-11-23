@@ -33,6 +33,7 @@ class ExportarTest(cenario.DuasRedacoes):
         ExportarTest._n += 1
         login = f'pessoa.exporta{ExportarTest._n}'
         cid = self.conta(f'Pessoa Exporta {ExportarTest._n}', login, papel, casos=['alpha'])
+        acesso.limpar_limites()  # the per-address ceiling of sign-ins: this class signs in many times a minute
         return self._entrar(login), cid
 
     def exportar(self, sessao):
@@ -152,6 +153,24 @@ class ExportarTest(cenario.DuasRedacoes):
             self.assertEqual((status, json.loads(corpo).get('codigo')), (403, 'pendencia_de_conta'))
             self.assertEqual(self.post(sessao, 'conta-termos-aceitar', {'versao': 'v-exporta'})[0], 200)
             self.assertEqual(self.exportar(sessao)[0], 403)  # the factor alone, still pending
+
+    def test_limite_de_exportacoes_por_conta(self):
+        # X1 of the review: a file, not a feed. The sixth in the hour is refused; another account is not affected.
+        sessao, _ = self.nova()
+        for _ in range(acesso.EXPORTACOES_POR_JANELA):
+            self.assertEqual(self.exportar(sessao)[0], 200)
+        status, _, corpo = self.exportar(sessao)
+        self.assertEqual((status, json.loads(corpo).get('codigo')), (429, 'bloqueado'))
+        self.assertEqual(self.exportar(self.nova()[0])[0], 200)
+        with patch('acesso.agora', return_value=acesso.agora() + acesso.timedelta(seconds=acesso.EXPORTACAO_JANELA_S)):
+            self.assertEqual(self.exportar(sessao)[0], 200)  # the window passed
+
+    def test_eventos_lidos_pelo_indice_da_redacao(self):
+        # X1: the events of the file are read from the newsroom's own window, by its index, never the whole table.
+        plano = ' '.join(str(linha[-1]) for linha in self.banco(
+            'EXPLAIN QUERY PLAN SELECT em, tipo, conta, por FROM eventos WHERE organizacao = ? AND (conta = ? OR por = ?)'
+            ' AND em > ? ORDER BY n', self.a, 'c' * 16, 'c' * 16, '2026-01-01T00:00:00Z'))
+        self.assertIn('eventos_por_organizacao', plano)
 
     @staticmethod
     def downloads(registrar):

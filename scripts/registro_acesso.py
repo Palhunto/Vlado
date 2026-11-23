@@ -73,6 +73,8 @@ EVENTOS = frozenset({
     # convite, e-mail, redefinição e troca de e-mail (E3); segundo fator, entrada em dois passos e ciclo de vida (E4)
     'convite_expirado', 'redefinicao_pedida', 'email_troca_pedida', 'email_trocado', 'email_enviado', 'email_falhou',
     'aparelho_novo', 'login_protegido', 'fator_codigos_gerados', 'conta_inativa_avisada',
+    # a varredura diária desativa a conta inativa (E4b-4, por = manutencao)
+    'conta_desativada_por_inatividade',
     # segundo fator (E4): bloqueado por tentativas (atividade); indisponível, sem a chave ou com a semente ilegível
     'fator_bloqueado', 'fator_indisponivel',
     # o segundo fator retirado ao terminar uma recuperação (pelo link de redefinição ou pelo terminal)
@@ -109,7 +111,9 @@ CODIGOS = frozenset({'operacao_proibida', 'caso_nao_liberado', 'campos_nao_permi
                      # segundo fator indisponível (E4); o padrão de acesso.Recusada, que pode chegar em admin_recusada
                      'fator_indisponivel', 'requisicao_invalida',
                      # pergunta recusada porque a chave de IA da redação não pôde ser lida (P3, C3)
-                     'chave_redacao_ilegivel'})
+                     'chave_redacao_ilegivel',
+                     # excluir a própria conta com o nome digitado diferente (E4b-3, admin_recusada com validacao)
+                     'nome_confirmacao_divergente'})
 # Qual e-mail saiu ou falhou (email_enviado, email_falhou): só o tipo, nunca o endereço nem o texto.
 MENSAGENS = frozenset({'convite', 'redefinicao', 'novo_acesso', 'senha_trocada', 'fator_alterado', 'recuperacao',
                        'muitas_tentativas', 'email_novo', 'conta_inativa', 'fator_bloqueado'})

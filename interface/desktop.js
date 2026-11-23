@@ -365,6 +365,15 @@
       $('mesa-cota-valor').textContent=value;
       $('mesa-cota-medidor').style.setProperty('--uso',(spent?100:pct)+'%');
       $('mesa-cota-medidor').setAttribute('aria-label',scope?(spent?`Cota da instalação esgotada: ${value}`:`${pct}% da cota da instalação usada`):(spent?`Cota do mês esgotada: ${value}`:`${pct}% da cota usada`));
+      // P40 (b): o gasto com a chave de IA própria da redação, em linha separada: não entra na cota do serviço acima. A pessoa vê o que pagou por ela; o dono vê também o da redação.
+      const chave=data.chave_propria,reais=raw=>{const n=Number(raw);return raw!=null&&Number.isFinite(n)?`R$ ${money(n,true)}`:'';};
+      // O que a chave própria da redação pagou já está no valor da cota da pessoa: é parte ("dos quais R$ 3,25 com a chave própria"), não acréscimo. Aparece com o gasto mandado
+      // pelo servidor (R$ 0,00 se a redação tem chave e ainda não houve gasto) e some sem chave própria; o dono vê também o total da redação, que não entra na cota do serviço.
+      // O servidor só manda `chave_propria` no piloto e com chave salva ou gasto no mês (GET /api/cota, Viga b03a919): sem o campo, nenhuma das duas linhas.
+      const dela=reais(chave?.conta_brl),inteira=reais(chave?.organizacao_brl),mostraParte=!scope&&!!dela;
+      $('mesa-cota-chave').textContent=mostraParte?`dos quais ${dela} com a chave própria`:'';$('mesa-cota-chave').hidden=!mostraParte;
+      $('mesa-cota-chave-redacao-valor').textContent=inteira;$('mesa-cota-chave-redacao').hidden=!inteira;
+      if(mostraParte)$('mesa-cota-medidor').setAttribute('aria-label',`${$('mesa-cota-medidor').getAttribute('aria-label')}, dos quais ${dela} com a chave própria`);
       card.dataset.esgotada=String(spent);card.hidden=false;
     }catch(_){card.hidden=true;}
   }
@@ -504,4 +513,47 @@
     findings[next].click();
     findings[next].scrollIntoView({block: 'nearest'});
   });
+})();
+
+// Faixa que rola para o lado (docs/design/componentes.md#faixa-que-rola, Q5): a linha de etapas, as pílulas dos quadros e as abas do Caderno, de Documentos e de Minha conta, quando passam da largura. Só a faixa rola (scrollLeft,
+// nunca a página), sem animação, até o item ativo caber inteiro com a folga de --espaco-4; `data-rola` (fim, inicio, ambos) diz de que lado ainda há conteúdo e o CSS esmaece
+// esse lado; sem estouro, sem atributo. O item ativo é o que a faixa já marca (aria-current, aria-selected ou aria-pressed): ela é observada, então quem a desenha ou troca o item não muda.
+(() => {
+  const ativo = '[aria-current],[aria-selected="true"],[aria-pressed="true"]';
+  const faixas = new WeakSet();
+  const folgaDe = faixa => { const valor = parseFloat(getComputedStyle(faixa).getPropertyValue('--espaco-4')); return Number.isFinite(valor) ? valor : 16; };
+  function marcar(faixa) {
+    const resto = faixa.scrollWidth - faixa.clientWidth, esq = faixa.scrollLeft;
+    const lado = resto <= 1 ? '' : esq <= 1 ? 'fim' : esq >= resto - 1 ? 'inicio' : 'ambos';
+    if (lado) { if (faixa.dataset.rola !== lado) faixa.dataset.rola = lado; } else if (faixa.hasAttribute('data-rola')) faixa.removeAttribute('data-rola');
+  }
+  function trazerOAtivo(faixa) {
+    const item = faixa.querySelector(ativo);
+    if (item && faixa.clientWidth > 0 && faixa.scrollWidth > faixa.clientWidth) {
+      const dentro = faixa.getBoundingClientRect(), caixa = item.getBoundingClientRect(), folga = folgaDe(faixa);
+      if (caixa.left < dentro.left + folga) faixa.scrollLeft += caixa.left - dentro.left - folga;
+      else if (caixa.right > dentro.right - folga) faixa.scrollLeft += caixa.right - dentro.right + folga;
+    }
+    marcar(faixa);
+  }
+  function observar(faixa) {
+    if (!faixa || faixas.has(faixa)) return;
+    faixas.add(faixa);
+    let largura = 0;
+    faixa.addEventListener('scroll', () => marcar(faixa), {passive: true});
+    if (typeof MutationObserver === 'function') new MutationObserver(() => trazerOAtivo(faixa)).observe(faixa, {childList: true, subtree: true, attributes: true, attributeFilter: ['aria-current', 'aria-selected', 'aria-pressed']});
+    // Ao aparecer (a área estava escondida) ou ao mudar de largura a faixa recalcula; só ao aparecer ela traz o ativo de novo.
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => { const apareceu = largura === 0; largura = faixa.clientWidth; if (apareceu) trazerOAtivo(faixa); else marcar(faixa); }).observe(faixa);
+    trazerOAtivo(faixa);
+  }
+  const SELETOR = '#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs';
+  document.querySelectorAll(SELETOR).forEach(observar);
+  // As abas de Minha conta nascem depois (conta.js): quem entra na página com a classe das abas também é observado.
+  if (typeof MutationObserver === 'function' && document.body) {
+    new MutationObserver(registros => registros.forEach(r => r.addedNodes.forEach(no => {
+      if (no.nodeType !== 1) return;
+      if (no.matches(SELETOR)) observar(no);
+      no.querySelectorAll?.(SELETOR).forEach(observar);
+    }))).observe(document.body, {childList: true, subtree: true});
+  }
 })();

@@ -188,3 +188,14 @@ test('redefinir: sem segundo fator o campo do código nunca aparece; o codigo_in
   await enviar(spec.mesa, 'redefinir-form');
   assert.equal(visivel(spec.mesa, 'redefinir-codigo-campo'), true);
 });
+
+test('/conta/termos sem a pendência de termos na sessão volta a /, que leva à pendência seguinte ou à Mesa; sem sessão, ao Entrar', async () => {
+  for (const pendencias of [[], ['segundo_fator']]) {
+    const {mesa, destinos, chamadas} = await abrir({url: 'http://127.0.0.1:8765/conta/termos', api: operacao => (operacao === 'sessao' ? {pendencias} : undefined)});
+    assert.deepEqual(mesa.erros, []);
+    assert.equal(chamadas('sessao').length, 1);
+    assert.deepEqual(destinos, ['/'], JSON.stringify(pendencias));
+  }
+  const sem = await abrir({url: 'http://127.0.0.1:8765/conta/termos', api: operacao => (operacao === 'sessao' ? recusa('sem_sessao', 'sem sessão', 'credenciais') : undefined)});   // 401, como o servidor
+  assert.deepEqual(sem.destinos, ['/entrar']);
+});

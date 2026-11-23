@@ -100,3 +100,51 @@ test('codex.js avisa o cartão quando a pergunta termina (o acompanhamento para 
   const codigo = fs.readFileSync(path.join(__dirname, '..', 'interface', 'codex.js'), 'utf8');
   assert.match(codigo, /if \(!active && data\.eventos\.length < 100\) \{ window\.atualizarCotaBarra\?\.\(true\);/);
 });
+
+test('P40 (b): o que a chave própria pagou é parte do valor da cota ("dos quais R$ 3,25 com a chave própria", 14 muted abaixo do medidor); o dono vê também o total da redação; R$ 0,00 sem gasto; some sem o campo', async () => {
+  const comChave = (gasto, propria, redacao) => ({...conta(gasto, '50.00'), chave_propria: {conta_brl: propria, ...(redacao ? {organizacao_brl: redacao} : {})}});
+  const pessoa = await abrir(comChave('18.40', '3.25'));
+  assert.equal(pessoa.$('mesa-cota-valor').textContent, 'R$ 18,40 de R$ 50', 'a cota do serviço segue como estava');
+  assert.equal(pessoa.$('mesa-cota-chave').hidden, false);
+  assert.equal(pessoa.$('mesa-cota-chave').textContent, 'dos quais R$ 3,25 com a chave própria');
+  assert.equal(pessoa.$('mesa-cota-medidor').getAttribute('aria-label'), '37% da cota usada, dos quais R$ 3,25 com a chave própria');
+  assert.equal(pessoa.$('mesa-cota-chave-redacao').hidden, true, 'a pessoa não vê o total da redação');
+  const dono = await abrir(comChave('18.40', '3.25', '12.00'));
+  assert.equal(dono.$('mesa-cota-chave-redacao').hidden, false);
+  assert.equal(dono.$('mesa-cota-chave-redacao').querySelector('.mesa-cota-rotulo').textContent, 'Chave própria da redação');
+  assert.equal(dono.$('mesa-cota-chave-redacao-valor').textContent, 'R$ 12,00');
+  // a forma que o servidor manda (custo.situacao, b03a919): sem chave salva nem gasto o campo NÃO vem, para a pessoa e para o dono; com chave e sem gasto vem em R$ 0,00
+  const zero = await abrir(comChave('0.00', '0.00'));
+  assert.equal(zero.$('mesa-cota-chave').textContent, 'dos quais R$ 0,00 com a chave própria', 'R$ 0,00 se a redação tem chave e ainda não houve gasto');
+  const donoSem = await abrir(conta('18.40', '50.00'));
+  assert.equal(donoSem.$('mesa-cota-chave').hidden, true, 'dono de redação sem chave própria: o campo não vem e a linha da pessoa some');
+  assert.equal(donoSem.$('mesa-cota-chave-redacao').hidden, true, 'nem o total da redação aparece');
+  const donoGasto = await abrir(comChave('18.40', '0.00', '3.00'));
+  assert.equal(donoGasto.$('mesa-cota-chave').textContent, 'dos quais R$ 0,00 com a chave própria');
+  assert.equal(donoGasto.$('mesa-cota-chave-redacao-valor').textContent, 'R$ 3,00', 'dono com gasto da redação: as duas linhas aparecem');
+  const sem = await abrir(conta('18.40', '50.00'));
+  assert.equal(sem.$('mesa-cota-chave').hidden, true, 'sem chave própria, a linha some'); assert.equal(sem.$('mesa-cota-chave-redacao').hidden, true);
+  assert.equal(sem.$('mesa-cota-medidor').getAttribute('aria-label'), '37% da cota usada');
+  const esgotada = await abrir({...comChave('50.00', '8.00'), conta: {gasto_brl: '50.00', teto_brl: '50.00', saldo_brl: '0.00', esgotada: true}});
+  assert.equal(esgotada.$('mesa-cota-medidor').getAttribute('aria-label'), 'Cota do mês esgotada: R$ 50,00 de R$ 50, dos quais R$ 8,00 com a chave própria');
+  const ingles = await abrir(comChave('18.40', '3.25', '12.00'), 'en');
+  ingles.janela.I18N.aplicar(ingles.$('mesa-sidebar'));
+  assert.equal(ingles.$('mesa-cota-chave').textContent, "of which R$ 3,25 with the newsroom’s own key");
+  assert.equal(ingles.$('mesa-cota-medidor').getAttribute('aria-label'), "37% of the quota used, of which R$ 3,25 with the newsroom’s own key");
+  assert.equal(ingles.$('mesa-cota-chave-redacao').querySelector('.mesa-cota-rotulo').textContent, "Newsroom’s own key");
+});
+
+test('quando o cartão mostra a cota da instalação (ela não inclui a chave própria), a linha "dos quais" não aparece; o dono segue vendo o total da redação', async () => {
+  const org = {...conta('10.00', '50.00'), conta: {gasto_brl: '10.00', teto_brl: '50.00', saldo_brl: '40.00', esgotada: false},
+    organizacao: {gasto_brl: '45.00', teto_brl: '50.00', saldo_brl: '5.00', esgotada: false}, chave_propria: {conta_brl: '3.25', organizacao_brl: '12.00'}};
+  const mesa = await abrir(org);
+  assert.equal(mesa.$('mesa-cota-rotulo').textContent, 'Cota da instalação');
+  assert.equal(mesa.$('mesa-cota-chave').hidden, true);
+  assert.equal(mesa.$('mesa-cota-chave-redacao').hidden, false);
+});
+
+test('folha de estilos: "dos quais" em 14 px muted logo abaixo do medidor (8 px do cartão), e a linha do total da redação sem quebra no rótulo', () => {
+  const estilo = fs.readFileSync(path.join(__dirname, '..', 'interface', 'style.css'), 'utf8');
+  assert.ok(estilo.includes('.mesa-cota-dos-quais{margin:0;font-size:var(--text-md);line-height:1.25;color:var(--muted)}'));
+  assert.ok(estilo.includes('#mesa-cota-chave-redacao .mesa-cota-rotulo{white-space:nowrap}'));
+});
