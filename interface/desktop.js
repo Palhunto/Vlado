@@ -189,16 +189,18 @@
   activate();
 })();
 
-// Phones: language, theme and sign-out move into the navigation drawer, leaving the
-// header to the menu and the investigation selector.
+// Phones: Configurações, language, theme and sign-out move into the navigation drawer, leaving the
+// header to the menu, the investigation selector and the quota (componentes.md#cabecalho-celular).
 (() => {
   const phone = matchMedia('(max-width:719px)');
   const header = document.querySelector('.app-header');
-  const controls = ['mesa-idioma','mesa-sair','mesa-tema'].map(id => $(id));
+  // In the drawer Configurações comes first; in the header it keeps its place between language and sign-out.
+  const inDrawer = ['mesa-configuracoes','mesa-idioma','mesa-sair','mesa-tema'].map(id => $(id));
+  const inHeader = ['mesa-idioma','mesa-configuracoes','mesa-sair','mesa-tema'].map(id => $(id));
   const drawer = element('div', undefined, 'mesa-drawer-controls');
   function place() {
-    if (phone.matches) { drawer.append(...controls); $('mesa-sidebar').querySelector('.areas').after(drawer); }
-    else { header.append(...controls); drawer.remove(); }
+    if (phone.matches) { drawer.append(...inDrawer); $('mesa-sidebar').querySelector('.areas').after(drawer); }
+    else { header.append(...inHeader); drawer.remove(); }
   }
   phone.addEventListener('change', place);
   place();
@@ -361,10 +363,15 @@
       const pct=Math.min(100,Math.round(used/cap*100));
       const value=`R$ ${money(used,true)} de R$ ${money(cap,!Number.isInteger(cap))}`,spent=Boolean(block.esgotada);
       // Used up is never shown by colour alone (W11, rules 6 and 7): the label changes, a "!" comes first and the aria-label says it.
-      $('mesa-cota-rotulo').textContent=scope?(spent?'Cota da instalação esgotada':'Cota da instalação'):(spent?'Cota esgotada':'Cota do mês');
+      const rotulo=scope?(spent?'Cota da instalação esgotada':'Cota da instalação'):(spent?'Cota esgotada':'Cota do mês');
+      $('mesa-cota-rotulo').textContent=rotulo;
       $('mesa-cota-valor').textContent=value;
+      // No celular a cota vai ao cabeçalho, curta (componentes.md#cabecalho-celular): "R$ 18,40 de 50", ou "! Cota esgotada" no teto; só aparece abaixo de 720 px (CSS).
+      // O mesmo bloco do cartão (o de menor saldo, escolhido acima) e o mesmo rótulo, só no formato curto e sem a parte da chave própria: "Cota da instalação R$ 40,00 de 200", "! Cota da instalação esgotada".
+      const cabecalho=$('mesa-cota-cabecalho');cabecalho.textContent=spent?`! ${rotulo}`:`${scope?`${rotulo} `:''}R$ ${money(used,true)} de ${money(cap,!Number.isInteger(cap))}`;cabecalho.hidden=false;
       $('mesa-cota-medidor').style.setProperty('--uso',(spent?100:pct)+'%');
       $('mesa-cota-medidor').setAttribute('aria-label',scope?(spent?`Cota da instalação esgotada: ${value}`:`${pct}% da cota da instalação usada`):(spent?`Cota do mês esgotada: ${value}`:`${pct}% da cota usada`));
+      $('mesa-cota-cabecalho').setAttribute('aria-label',$('mesa-cota-medidor').getAttribute('aria-label'));
       // P40 (b): o gasto com a chave de IA própria da redação, em linha separada: não entra na cota do serviço acima. A pessoa vê o que pagou por ela; o dono vê também o da redação.
       const chave=data.chave_propria,reais=raw=>{const n=Number(raw);return raw!=null&&Number.isFinite(n)?`R$ ${money(n,true)}`:'';};
       // O que a chave própria da redação pagou já está no valor da cota da pessoa: é parte ("dos quais R$ 3,25 com a chave própria"), não acréscimo. Aparece com o gasto mandado
@@ -375,7 +382,7 @@
       $('mesa-cota-chave-redacao-valor').textContent=inteira;$('mesa-cota-chave-redacao').hidden=!inteira;
       if(mostraParte)$('mesa-cota-medidor').setAttribute('aria-label',`${$('mesa-cota-medidor').getAttribute('aria-label')}, dos quais ${dela} com a chave própria`);
       card.dataset.esgotada=String(spent);card.hidden=false;
-    }catch(_){card.hidden=true;}
+    }catch(_){card.hidden=true;$('mesa-cota-cabecalho').hidden=true;}
   }
   window.recarregarAcervo=force=>loadInventory(force);window.definirEstadoAcervo=mensagem=>text('mesa-acervo-status',mensagem);
   window.atualizarCotaBarra=force=>loadQuota(force);   // codex.js chama ao terminar cada pergunta
@@ -533,8 +540,9 @@
     const item = faixa.querySelector(ativo);
     if (item && faixa.clientWidth > 0 && faixa.scrollWidth > faixa.clientWidth) {
       const dentro = faixa.getBoundingClientRect(), caixa = item.getBoundingClientRect(), folga = folgaDe(faixa);
-      if (caixa.left < dentro.left + folga) faixa.scrollLeft += caixa.left - dentro.left - folga;
-      else if (caixa.right > dentro.right - folga) faixa.scrollLeft += caixa.right - dentro.right + folga;
+      // O destino é sempre o ponto de encaixe das pílulas (o início do item, com o scroll-padding de --espaco-4 do CSS): assim o scroll-snap proximity não desfaz a rolagem
+      // (Q5e); nas pontas o navegador limita ao que a faixa alcança, e o item segue inteiro.
+      if (caixa.left < dentro.left + folga || caixa.right > dentro.right - folga) faixa.scrollLeft += caixa.left - dentro.left - folga;
     }
     marcar(faixa);
   }
