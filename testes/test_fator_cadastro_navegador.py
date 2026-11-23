@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acesso
 import cenario_redacoes as cenario
 import correio
+import fator_de_teste
 import segundo_fator as fator
 from test_acesso import SENHA
 
@@ -58,7 +59,9 @@ class CadastroDoFatorNoNavegadorTest(cenario.DuasRedacoes):
     def test_cadastrar_gerar_e_remover_pelo_navegador(self):
         acesso.limpar_limites()
         entrada = {'porta': self.server.server_port, 'origem': cenario.ORIGEM, 'senha': SENHA,
-                   'reporter': {'login': 'rita.reporter'}, 'dono': {'login': 'dona.alfa'}}
+                   'reporter': {'login': 'rita.reporter'},
+                   # A dona já tem o segundo fator (obrigatório para o dono no piloto; o cenário o cadastra): ela entra com um código de reserva
+                   'dono': {'login': 'dona.alfa', 'codigos': [fator_de_teste.codigo(self.root, self.ids['dono']) for _ in range(2)]}}
         # Duas contas, cada uma com o cadastro, e a conta entrando de novo e errando uma senha antes de acertar: sob o teto de erros seguidos.
         with patch.object(acesso, 'TENTATIVAS_IP_MINUTO', 10000), correio.usar('simulado'):
             processo = subprocess.run(['node', str(Path(__file__).with_name('qa_fator_cadastro.cjs')), json.dumps(entrada)],
@@ -69,16 +72,13 @@ class CadastroDoFatorNoNavegadorTest(cenario.DuasRedacoes):
 
         # A repórter removeu o fator no fim: nada ficou ligado.
         self.assertFalse(self.estado_do_fator('reporter')['ativo'], 'o fator da repórter foi removido')
-        # A dona ficou com o fator ligado, com dez códigos de reserva (e a tela não tem como removê-lo: o servidor também recusou).
-        dona = self.estado_do_fator('dono')
-        self.assertTrue(dona['ativo']); self.assertEqual(dona['codigos_restantes'], 10)
-        # Os códigos de reserva que a tela mostrou são os do servidor: um deles entra uma vez e não entra de novo.
-        codigo = resultado['dono']['codigos'][0]
-        self.assertTrue(self.entra_com_reserva('dona.alfa', codigo), 'o código de reserva mostrado entra')
-        self.assertFalse(self.entra_com_reserva('dona.alfa', codigo), 'e vale uma vez só')
-        self.assertEqual(self.estado_do_fator('dono')['codigos_restantes'], 9)
+        # A dona segue com o fator ligado (a tela não tem como removê-lo e o pedido feito à mão foi recusado pelo servidor).
+        self.assertTrue(self.estado_do_fator('dono')['ativo'], 'o fator da dona continua ligado')
+        # O código de reserva que ela usou para entrar valeu uma vez só.
+        usado = entrada['dono']['codigos'][0]
+        self.assertFalse(self.entra_com_reserva('dona.alfa', usado), 'o código de reserva usado não entra de novo')
         # Nenhum arquivo de texto da instalação guarda a senha, a chave em claro ou um código de reserva em claro.
-        proibidos = [SENHA, resultado['dono']['segredo'], resultado['reporter']['segredo'], *resultado['dono']['codigos'], *resultado['reporter']['codigos'], *resultado['reporter']['novos']]
+        proibidos = [SENHA, resultado['reporter']['segredo'], *resultado['reporter']['codigos'], *resultado['reporter']['novos']]
         achados = []
         for arquivo in self.root.rglob('*'):
             if arquivo.is_file() and arquivo.suffix in ('.json', '.jsonl', '.txt', '.log', '.md', '.csv'):
