@@ -698,7 +698,7 @@ O mesmo cuidado vale para todo texto que uma conta escreve e outra lê: nome de 
 
 ## 10. O que muda para os outros agentes
 
-**Arquivos de Contas** (escreve só neles): `scripts/acesso.py`, `scripts/rotas_contas.py`, os demais `scripts/rotas_*.py` e `scripts/interface_pesquisa.py` (nesta onda, pela tabela "Quem escreve onde"), e os módulos novos `scripts/autorizacao.py`, `scripts/correio.py`, `scripts/segundo_fator.py` e `scripts/rotas_equipe.py`. Testes em arquivos novos (`test_matriz_contas.py`, `test_isolamento_redacoes.py`, `test_migracao_contas.py`, `test_convites.py`, `test_redefinicao_senha.py`, `test_recuperacao.py`, `test_segundo_fator.py`, `test_fator_contas.py`, `test_teto_entrada.py`, `test_sessoes_conta.py`, `test_equipe.py`, `test_ciclo_conta.py`, `test_correio.py`), mais `test_acesso.py` e `test_autorizacao.py`, que são de autorização.
+**Arquivos de Contas** (escreve só neles): `scripts/acesso.py`, `scripts/rotas_contas.py`, os demais `scripts/rotas_*.py` e `scripts/interface_pesquisa.py` (nesta onda, pela tabela "Quem escreve onde"), e os módulos novos `scripts/autorizacao.py`, `scripts/correio.py`, `scripts/segundo_fator.py` e `scripts/rotas_equipe.py`. Testes em arquivos novos (`test_matriz_contas.py`, `test_isolamento_redacoes.py`, `test_migracao_contas.py`, `test_convites.py`, `test_redefinicao_senha.py`, `test_recuperacao.py`, `test_segundo_fator.py`, `test_fator_contas.py`, `test_teto_entrada.py`, `test_sessoes_conta.py`, `test_equipe.py`, `test_senha_gestao.py`, `test_chave_da_redacao.py`, `test_ciclo_conta.py`, `test_correio.py`), mais `test_acesso.py` e `test_autorizacao.py`, que são de autorização.
 
 **Pedidos, um por dono de arquivo. Nenhum é feito por Contas sem o aval do Maestro.**
 
@@ -838,6 +838,7 @@ Do que a entrega 3 decide, além do texto da seção 8.1:
 **Entrega 4a, a obrigação do segundo fator:** no modo `piloto`, dono e editor sem fator ativo ficam com a pendência `segundo_fator` (`acesso.sessao`, relida a cada pedido). O que ela decide:
 
 - Com a pendência a sessão alcança `GET /api/sessao`, `sessao-sair`, `conta-ver`, `conta-fator-iniciar` e `conta-fator-confirmar`; o resto responde 403 `pendencia_de_conta`. `GET /` responde 303 para `GET /conta/segundo-fator`, que serve a mesma página estática de `/entrar` (combinado com o Design em `732eca5`); o redirecionamento não é gravado como acesso negado.
+- A pendência conta no teto do corpo como o papel (ressalva R1 da revisão): da conta com pendência, o corpo de uma operação que ela não alcança passa do limite pequeno e é recusado antes de ser lido (seção 4.2, passo 3), e não lido para depois responder 403.
 - A pendência nasce e some sozinha: quem é promovido a editor ou a dono passa a tê-la no pedido seguinte; quem confirma o cadastro deixa de tê-la; quem teve o fator retirado por uma recuperação volta a tê-la. No `local-contas` o fator é opcional e ninguém tem a pendência.
 - `conta-fator-remover` deixa de ser negada pela matriz e passa a ser negada pelo portão onde o fator é obrigatório (mudança de célula aprovada pelo Maestro em 22/11/2026, depois da pergunta do Revisor): no `local-contas`, dono e editor que cadastraram o fator conseguem removê-lo.
 - `capacidades` passa a receber o modo e tira o que o portão recusa por regra de modo (condição do Revisor). Isso corrige um descompasso que já existia: o dono do `piloto` recebia `codex-desligar` e `ia-config-salvar`, e o operador do modo `local` recebia `caso-*`, `conta-*` e `equipe-*`, todas recusadas pelo servidor.
@@ -850,7 +851,7 @@ Do que a entrega 3 decide, além do texto da seção 8.1:
 - No `piloto`, o dono nunca grava a chave do serviço pela Mesa, mesmo numa instalação com uma redação só: `ia-config-salvar` grava ou remove só a chave da própria redação. Corpo que mudaria provedor ou modelo é recusado inteiro (400), antes de gravar qualquer coisa; mandar o mesmo provedor e o mesmo modelo que leu não é mudança. Sem redação no principal, as duas operações falham (400) em vez de cair na chave do serviço.
 - `ia-config` no `piloto` devolve, de cada provedor, a chave da redação (origem `redacao`, com os quatro últimos caracteres) ou só se o serviço tem chave (origem `servico`, sem caractere nenhum). `autorizacao.filtrar` é a segunda trava, nas duas operações. A recusa por modo de `ia-config-salvar` com mais de uma redação saiu: `capacidades` do dono do `piloto` volta a ter a operação.
 - Gravar e remover a chave viram os eventos `chave_ia_salva` e `chave_ia_removida` na atividade da redação e no registro de auditoria: quem e quando, nunca a chave nem parte dela. Remover quando não há chave não gera evento.
-- A senha em `ia-config-salvar` (seção 5.15) continua na branch à parte, até a tela mandar o campo.
+- A senha de `ia-config-salvar` (seção 5.15) é conferida antes de tudo, onde há contas, e sai do corpo antes de ele chegar à chave da redação: a senha nunca é tomada por campo de configuração.
 
 **O que ainda não existe,** e onde o código difere do texto até lá:
 
@@ -860,7 +861,7 @@ Do que a entrega 3 decide, além do texto da seção 8.1:
 - A página (`GET /`), `GET /api/sessao` e `GET /api/integracao` também passam pelo portão: de uma redação suspensa, respondem 403 `redacao_suspensa` (a página, um aviso simples, sem dado nem token).
 - `data-papel` leva `admin` para o dono enquanto a interface não conhece os papéis novos; os outros papéis vão com o próprio nome. `GET /api/sessao` já devolve os valores novos e `capacidades`.
 - `pendencias` só traz `segundo_fator`; a de `termos` entra com o ciclo de vida da conta (entrega 4b).
-- `lixeira-apagar` e `ia-config-salvar` ainda não pedem a senha (seção 5.15). As telas de hoje não a mandam, e pedir só no servidor deixaria o dono sem apagar de vez e sem gravar a chave. O pedido entra junto com o campo na interface, na mesma integração.
+- `lixeira-apagar` e `ia-config-salvar` pedem a senha onde há contas (seção 5.15; `-p test_senha_gestao.py`). Em `lixeira-apagar` o nome do item é conferido antes: nome errado responde como hoje e não conta como senha errada. No modo `local`, sem contas, nada muda. Esta mudança só é integrada junto com as telas que mandam o campo `senha` (o diálogo de apagar de vez e as Configurações): sem elas, o dono ficaria sem apagar de vez e sem gravar a chave.
 - Chave de IA: a chave própria da redação é guardada e lida por `segredos.ler_chave(root, provedor, redacao)`, mas a chamada ao provedor e o lançamento à parte do gasto ainda usam a chave do serviço, até a mudança da Plataforma (seção 8.5, decisão 11).
 - O registro de auditoria descarta os códigos, motivos, papéis e eventos novos até as listas fechadas de `registro_acesso.py` os receberem (pedido à Plataforma, seção 10, em andamento). O portão já grava a recusa como `acesso_negado`, com código, motivo e o id da redação (seção 4.3); enquanto a lista da Plataforma não tiver esse evento, a linha não sai. As duas mudanças precisam entrar juntas na integração.
 
