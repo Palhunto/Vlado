@@ -128,6 +128,8 @@
     if (gasto.esgotada) bloco.append(no('span', 'equipe-uso-esgotada', `! ${valor} · ${t('esgotada')}`));
     else bloco.append(no('span', 'conta-texto', valor));
     if (pessoa.teto_mensal_brl) bloco.append(no('span', 'conta-apoio', t('teto {valor}', {valor: reais(pessoa.teto_mensal_brl, {centavos: false})})));
+    // O que a chave própria da redação pagou por esta pessoa: linha à parte, sem somar ao valor de cima (P40); só quando houve gasto.
+    if (Number(pessoa.gasto_chave_propria_brl) > 0) bloco.append(no('span', 'conta-apoio equipe-uso-propria', t('{valor} com a chave própria', {valor: reais(pessoa.gasto_chave_propria_brl)})));
     return bloco;
   }
   function botaoGerenciar(pessoa) {
@@ -631,6 +633,13 @@
       const medidor = no('div', 'mesa-medidor'); medidor.setAttribute('role', 'img'); medidor.style.setProperty('--uso', `${esgotada ? 100 : pct}%`);
       medidor.setAttribute('aria-label', esgotada ? t('Cota do mês esgotada: {valor}', {valor}) : t('{pct}% da cota usada', {pct}));
       partes.push(no('strong', 'conta-valor', valor), medidor, apoio('Cota da redação, definida por quem administra o serviço.'));
+      // O gasto com a chave de IA própria da redação, em linha separada: não entra na cota do serviço acima (P40). Vem nulo quando o gasto da redação não vem ou o razão não pôde ser lido.
+      const propria = lista?.gasto_chave_propria_brl;
+      if (propria !== null && propria !== undefined && Number.isFinite(Number(propria))) {
+        const linhaDaChave = window.Conta.linha(no('span', 'conta-texto', t('Chave própria da redação')), no('strong', 'conta-valor', reais(propria)));
+        linhaDaChave.classList.add('equipe-chave-propria');
+        partes.push(linhaDaChave, apoio('Pago pela chave da redação: não entra na cota do serviço.'));
+      }
     } else {
       partes.push(apoio('O gasto da redação aparece aqui quando o serviço passar a contá-lo por redação. O de cada pessoa está na tabela.'));
     }

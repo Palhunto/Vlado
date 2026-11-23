@@ -29,9 +29,9 @@ const pessoa = (id, nome, papel, extra = {}) => ({id, nome, login: nome.toLowerC
   organizacao: 'o1', casos: papel === 'dono' ? null : [], cota_diaria: null, teto_mensal_brl: null, idioma: 'pt', ativa: true, situacao: 'ativa',
   criada_em: '2026-01-01T00:00:00+00:00', senha_definida_em: '2026-01-02T00:00:00+00:00', ativacao_expira_em: null, ativacao_vencida: false,
   migrada_de_convite: false, responsavel_de: [], sessao_aberta: true, ultimo_uso: null,
-  gasto: {mes: '2026-11', gasto_brl: '18.40', teto_brl: '50.00', saldo_brl: '31.60', esgotada: false}, ...extra});
+  gasto: {mes: '2026-11', gasto_brl: '18.40', teto_brl: '50.00', saldo_brl: '31.60', esgotada: false}, gasto_chave_propria_brl: '0.00', ...extra});
 const equipeListar = (pessoas, extra = {}) => ({redacao: {id: 'o1', nome: 'Redação Serena', situacao: 'ativa', cota_mensal_brl: '150', teto_por_pessoa_brl: '50.00'},
-  pessoas, gasto: {mes: '2026-11', gasto_brl: '24.50', teto_brl: '150.00', saldo_brl: '125.50', esgotada: false}, convites: [], ...extra});
+  pessoas, gasto: {mes: '2026-11', gasto_brl: '24.50', teto_brl: '150.00', saldo_brl: '125.50', esgotada: false}, gasto_chave_propria_brl: '0.00', convites: [], ...extra});
 
 // Um convite pendente como `equipe-listar` o devolve (acesso._convite_publico).
 const convite = (id, email, extra = {}) => ({id, email, papel: 'leitor', casos: [], idioma: 'pt', estado: 'pendente', criado_em: new Date(Date.now() - 2 * DIA).toISOString(),
