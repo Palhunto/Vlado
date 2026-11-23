@@ -1884,6 +1884,7 @@ window.VLADO_I18N_EN = {
     limite_tokens_dia_redacao: "This newsroom's daily usage limit was reached. Try again tomorrow (UTC).",
     limite_tokens_dia: "The installation's daily usage limit was reached. Try again tomorrow (UTC).",
     limite_tokens_consulta: "This question used up its token limit. Ask the administrator to raise it.",
+    limite_de_exportacoes: "You have already exported your data 5 times in the last hour. Try again within an hour.",
     pergunta_em_andamento: "A question is already running for this invitation. Wait for the answer or cancel it.",
     conversa_indisponivel: "This conversation is unavailable for your access.",
     conversa_invalida: "Invalid conversation.",
