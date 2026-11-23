@@ -172,7 +172,8 @@ def conta_propria(root, operation, data, principal, ip=None, origem=None, marca=
 # something answers `itens_da_conta(root, conta, casos)` with `[{tipo, caso, criado_em, id}]`; the audit log answers
 # `registro_acesso.acessos_da_conta(root, conta)`. A part that is missing (its function does not exist yet) or cannot
 # be read leaves its code in `incompleto`, and the rest of the file still leaves.
-MODULOS_DE_ITENS = ('apuracao', 'caderno', 'revisao_humana', 'conferencia_redacao', 'codex_apuracao')
+MODULOS_DE_ITENS = ('apuracao', 'caderno', 'revisao_humana', 'conferencia_redacao', 'codex_apuracao', 'diligencias',
+                    'evidencias')
 _CAMPOS_DO_ITEM = ('tipo', 'caso', 'criado_em', 'id')
 MAX_ITENS_CRIADOS = 20000
 
@@ -194,7 +195,8 @@ def _funcao(modulo: str, nome: str):
 
 def _itens_criados(root, conta) -> tuple[list | None, bool]:
     """(items, whole): what the person created in the cases of the own newsroom, from each module apart. A module
-    whose function is missing, or that fails in any way, leaves the list not whole, and the others still come in;
+    whose function is missing, that fails in any way, or that sends an item out of shape or of another newsroom
+    (counted and logged), leaves the list not whole, and the others still come in;
     the items are None only when no module answered. Each item is checked here too: the four fields only, as short
     text, and a case of the own newsroom."""
     casos = acesso.casos_da_redacao_da_conta(root, conta)
@@ -212,11 +214,17 @@ def _itens_criados(root, conta) -> tuple[list | None, bool]:
             _parte_falhou(f'itens_criados ({nome})', exc)
             inteira = False
             continue
-        respondeu = True
+        respondeu, descartados = True, 0
         for item in lidos:
             if (isinstance(item, dict) and all(isinstance(item.get(c), str) and 0 < len(item[c]) <= 200 for c in _CAMPOS_DO_ITEM)
                     and item['caso'] in permitidos):
                 itens.append({c: item[c] for c in _CAMPOS_DO_ITEM})
+            else:
+                descartados += 1
+        if descartados:  # R3 of the review: an item left out is never silent, and the file never says it is whole
+            print(f'Exportação de dados: {descartados} item(ns) de {nome} fora da forma ou da redação ficaram de fora;'
+                  ' a parte sai como incompleta.', file=sys.stderr, flush=True)
+            inteira = False
     itens.sort(key=lambda item: (item['criado_em'], item['tipo'], item['id']))
     return (itens[-MAX_ITENS_CRIADOS:] if respondeu else None), inteira
 

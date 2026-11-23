@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+import contextlib
 import sys
 import time
 import types
@@ -54,9 +55,17 @@ class ExportarTest(cenario.DuasRedacoes):
         finally:
             con.close()
 
-    def sem_partes(self):
+    @staticmethod
+    def sem_partes():
         """The audit log's part absent, and no module answering for the items: the file says both are missing."""
-        return patch.object(registro_acesso, 'acessos_da_conta', None, create=True)
+        pilha = contextlib.ExitStack()
+        pilha.enter_context(patch.object(registro_acesso, 'acessos_da_conta', None, create=True))
+        pilha.enter_context(ExportarTest.sem_modulos())
+        return pilha
+
+    @staticmethod
+    def sem_modulos():
+        return patch.object(rotas_contas, 'MODULOS_DE_ITENS', ('modulo_de_itens_que_nao_existe',))
 
     def test_o_arquivo_e_um_anexo_json_com_a_conta_e_o_que_falta(self):
         sessao, cid = self.nova()
@@ -178,6 +187,25 @@ class ExportarTest(cenario.DuasRedacoes):
         with patch('acesso.agora', return_value=acesso.agora() + acesso.timedelta(seconds=acesso.EXPORTACAO_JANELA_S)):
             self.assertEqual(self.exportar(sessao)[0], 200)  # the window passed
 
+    @unittest.skipUnless(all(hasattr(__import__(m), 'itens_da_conta') for m in rotas_contas.MODULOS_DE_ITENS),
+                         'os itens_da_conta dos módulos chegam com a integração da Plataforma')
+    def test_com_os_modulos_reais_o_arquivo_traz_os_itens(self):
+        # The modules' own functions, not a simulated one: every one answers, and nothing of the other newsroom.
+        sessao, _ = self.nova()
+        status, _, corpo = self.exportar(sessao)
+        self.assertEqual(status, 200, corpo[:300])
+        dados = json.loads(corpo)
+        self.assertIsInstance(dados['itens_criados'], list)
+        self.assertNotIn('itens_criados', dados['incompleto'])
+        self.assertTrue(all(item['caso'] in cenario.CASOS_A for item in dados['itens_criados']))
+        self.sem_sentinela(corpo)
+
+    def test_o_teto_e_o_que_o_texto_em_ingles_diz(self):
+        # The page translates `limite_de_exportacoes` by its code, with the number written in the text
+        # (interface/i18n_en.js, Frontend): changing the ceiling means changing that line too.
+        self.assertEqual(acesso.EXPORTACOES_POR_JANELA, 5)
+        self.assertEqual(acesso.EXPORTACAO_JANELA_S, 3600)
+
     def test_eventos_lidos_pelo_indice_da_redacao(self):
         # X1: the events of the file are read from the newsroom's own window, by its index, never the whole table.
         plano = ' '.join(str(linha[-1]) for linha in self.banco(
@@ -193,12 +221,12 @@ class ExportarTest(cenario.DuasRedacoes):
         def acessos(root, conta):
             pedidos.append(conta)
             return linhas
-        with patch.object(registro_acesso, 'acessos_da_conta', acessos, create=True):
+        with patch.object(registro_acesso, 'acessos_da_conta', acessos, create=True), self.sem_modulos():
             dados = json.loads(self.exportar(sessao)[2])
         self.assertEqual(pedidos, [cid])  # only the own account, from the session
         self.assertEqual((dados['acessos'], dados['incompleto']), (linhas, ['itens_criados']))
         for erro in (OSError('pasta ilegível'), ValueError('linha ilegível')):
-            with patch.object(registro_acesso, 'acessos_da_conta', side_effect=erro, create=True):
+            with patch.object(registro_acesso, 'acessos_da_conta', side_effect=erro, create=True), self.sem_modulos():
                 status, _, corpo = self.exportar(sessao)
             dados = json.loads(corpo)
             self.assertEqual((status, dados['acessos'], dados['incompleto']), (200, None, ['itens_criados', 'registro_de_acesso']))
@@ -219,10 +247,20 @@ class ExportarTest(cenario.DuasRedacoes):
         with patch.dict(sys.modules, {'modulo_de_itens_falso': falso}), \
                 patch.object(rotas_contas, 'MODULOS_DE_ITENS', ('modulo_de_itens_falso',)), \
                 patch.object(registro_acesso, 'acessos_da_conta', lambda root, conta: [], create=True), \
-                self.sem_criador(lambda root, casos: None):
+                self.sem_criador(lambda root, casos: None), patch('sys.stderr') as log:
             dados = json.loads(self.exportar(sessao)[2])
+        self.assertIn('3 item(ns) de modulo_de_itens_falso', ''.join(str(c.args[0]) for c in log.write.call_args_list if c.args))
+        limpo = types.ModuleType('modulo_de_itens_falso')
+        limpo.itens_da_conta = lambda root, conta, casos: [
+            {'tipo': 'nota', 'caso': 'alpha', 'criado_em': '2026-11-20T10:00:00Z', 'id': 'E1'}]
+        with patch.dict(sys.modules, {'modulo_de_itens_falso': limpo}), \
+                patch.object(rotas_contas, 'MODULOS_DE_ITENS', ('modulo_de_itens_falso',)), \
+                patch.object(registro_acesso, 'acessos_da_conta', lambda root, conta: [], create=True), \
+                self.sem_criador(lambda root, casos: None):
+            self.assertEqual(json.loads(self.exportar(sessao)[2])['incompleto'], [])  # whole: every part in, none left out
         self.assertEqual(dados['itens_criados'], [{'tipo': 'nota', 'caso': 'alpha', 'criado_em': '2026-11-20T10:00:00Z', 'id': 'E1'}])
-        self.assertEqual(dados['incompleto'], [])  # whole: both parts in
+        # R3 of the review: three items were left out (another newsroom, no date, not a dict): never said whole
+        self.assertEqual(dados['incompleto'], ['itens_criados'])
         (conta, casos), = pedidos
         self.assertEqual(conta, cid)
         self.assertNotIn(cenario.CASO_B, casos)  # never a case of the other newsroom
@@ -309,7 +347,7 @@ class ExportarTest(cenario.DuasRedacoes):
         self.assertNotIn(cenario.CASO_B, pedidos[0])  # the same cases as the items: never of the other newsroom
         # Without the items, `itens_criados` already says it: the conversations are not asked.
         with patch.object(registro_acesso, 'acessos_da_conta', lambda root, conta: [], create=True), \
-                self.sem_criador(sem_criador):
+                self.sem_criador(sem_criador), self.sem_modulos():
             dados = json.loads(self.exportar(sessao)[2])
         self.assertEqual((dados['conversas_desde'], dados['incompleto']), (None, ['itens_criados']))
 
