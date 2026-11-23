@@ -61,422 +61,506 @@
     "achados__430__claro": {
       "largura": 430,
       "altura": 2696,
-      "bytes": 170727
+      "bytes": 170727,
+      "sha256": "25ea2d6a97a6d7f50f20d532b8e985fc34b86ab859dfe848ca0b9ca02946816a"
     },
     "achados__430__escuro": {
       "largura": 430,
       "altura": 2696,
-      "bytes": 170380
+      "bytes": 170380,
+      "sha256": "efea90aabed84710f0b3d2cdc6894f011e64cd57f673cb3af801825975410b2c"
     },
     "achados__paisagem__claro": {
       "largura": 812,
       "altura": 2126,
-      "bytes": 179963
+      "bytes": 179963,
+      "sha256": "97a0eade9d34c256b2445a7207cba3bf052fc4ab559e912af286c6410c761f0c"
     },
     "achados__paisagem__escuro": {
       "largura": 812,
       "altura": 2126,
-      "bytes": 179977
+      "bytes": 179977,
+      "sha256": "118117377441af70167f4a6e1f7b4df847439d40b055b3611cb7ea5ee183db6d"
     },
     "achados__zoom200__claro": {
       "largura": 1280,
       "altura": 4846,
-      "bytes": 407911
+      "bytes": 407911,
+      "sha256": "42cef148437d45d257bdd12968cb724f924ed26f57b9c687758c4c1bc372190c"
     },
     "achados__zoom200__escuro": {
       "largura": 1280,
       "altura": 4846,
-      "bytes": 408144
+      "bytes": 408144,
+      "sha256": "81fd80f52c9adb0c61fa0e9ca3713c269c0df00d7debc85606e89b63b415d75f"
     },
     "apuracao__430__claro": {
       "largura": 430,
       "altura": 1665,
-      "bytes": 108749
+      "bytes": 108749,
+      "sha256": "22d885466bf574a93b437aeaa8e8071f02a45bda1bd0487f41af576d0fb37c9b"
     },
     "apuracao__430__escuro": {
       "largura": 430,
       "altura": 1665,
-      "bytes": 109161
+      "bytes": 109161,
+      "sha256": "6cc2671514bbfb0e93519c22ef7fc562e121ba54df8abaadf6a4d95eca08a6f2"
     },
     "apuracao__paisagem__claro": {
       "largura": 812,
       "altura": 1355,
-      "bytes": 106932
+      "bytes": 106932,
+      "sha256": "af7f3f4a4a57416f5ee3cd0c5a5b2525ea61b620ca168e7d18d57f525653ddea"
     },
     "apuracao__paisagem__escuro": {
       "largura": 812,
       "altura": 1355,
-      "bytes": 107513
+      "bytes": 107513,
+      "sha256": "2940179e233bea21a13669babd6ac9f240cb3c80044ad9dc4f253d20abd4bde4"
     },
     "apuracao__zoom200__claro": {
       "largura": 1280,
       "altura": 2896,
-      "bytes": 251801
+      "bytes": 251801,
+      "sha256": "cb2a45e5fec7b56feb58acebcd3a70893abe6c8890986422724695fd65abf2a6"
     },
     "apuracao__zoom200__escuro": {
       "largura": 1280,
       "altura": 2896,
-      "bytes": 252911
+      "bytes": 252911,
+      "sha256": "41a5c058d6e9d7a0284ec1312af18058a71255bc45d43a2d12e42591c597b80c"
     },
     "caderno__430__claro": {
       "largura": 430,
       "altura": 1545,
-      "bytes": 111536
+      "bytes": 111536,
+      "sha256": "b365826e134fbe658f069459eb5b27635c5a0837b9fb6c600d2611029bbc3b64"
     },
     "caderno__430__escuro": {
       "largura": 430,
       "altura": 1545,
-      "bytes": 111863
+      "bytes": 111863,
+      "sha256": "79e8708c477a919f996eae678ef5ca5baa2b82b38fe914508fcf4f829bcbd441"
     },
     "caderno__paisagem__claro": {
       "largura": 812,
       "altura": 1325,
-      "bytes": 112638
+      "bytes": 112638,
+      "sha256": "9057470e689a68557a023480a5ea3a174832317c52ff7a55c9b7f934e1fd42a2"
     },
     "caderno__paisagem__escuro": {
       "largura": 812,
       "altura": 1325,
-      "bytes": 113370
+      "bytes": 113370,
+      "sha256": "1ee9b04dcc8b674ab84563f61c6d2f64cf7ec15d7c81ab76ad0c703374100b82"
     },
     "caderno__zoom200__claro": {
       "largura": 1280,
       "altura": 2632,
-      "bytes": 261010
+      "bytes": 261010,
+      "sha256": "193d85a6403939e40131a0ae87f3686e0e097287c3522af294c926fd9289f673"
     },
     "caderno__zoom200__escuro": {
       "largura": 1280,
       "altura": 2632,
-      "bytes": 261017
+      "bytes": 261017,
+      "sha256": "a3b465ee7929f3de6d6d2c5fbb647804b46c29d5f60e1e1b867afed7d96005fa"
     },
     "codex__430__claro": {
       "largura": 430,
       "altura": 2507,
-      "bytes": 173848
+      "bytes": 173848,
+      "sha256": "c559e642ce6c3948e8b0bbc7119ffb2f7dec26a4d11a38055cd06cf5025db56f"
     },
     "codex__430__escuro": {
       "largura": 430,
       "altura": 2507,
-      "bytes": 173985
+      "bytes": 173985,
+      "sha256": "19a630b36160157ff5dd8437b523fbe4216de03741f1850346aefa820e4b9ade"
     },
     "codex__paisagem__claro": {
       "largura": 812,
       "altura": 2267,
-      "bytes": 185007
+      "bytes": 185007,
+      "sha256": "8fb452d549dad3bc4cc6c81faf9b0095421a6f6935ded7068d0145f0ee429f4b"
     },
     "codex__paisagem__escuro": {
       "largura": 812,
       "altura": 2267,
-      "bytes": 184845
+      "bytes": 184845,
+      "sha256": "948abbcac196fed7899bb21b083f2d0502bb701fda9e6d73a633a1d9afabfc75"
     },
     "codex__zoom200__claro": {
       "largura": 1280,
       "altura": 4672,
-      "bytes": 420643
+      "bytes": 420643,
+      "sha256": "32318de9da4e6ac076630c69cee8601205522d63d14082e7000353d6898ec59d"
     },
     "codex__zoom200__escuro": {
       "largura": 1280,
       "altura": 4672,
-      "bytes": 418373
+      "bytes": 418373,
+      "sha256": "ea5b2d1b734a357004beb01749c192676000448f76e2ce692046d96079fb3565"
     },
     "configuracoes__430__claro": {
       "largura": 430,
       "altura": 932,
-      "bytes": 34277
+      "bytes": 34277,
+      "sha256": "3799cd6ebcf3e0d0f2bf0d7fbc9e3ddae015e09caf7cc9440c6164d50f41e834"
     },
     "configuracoes__430__escuro": {
       "largura": 430,
       "altura": 932,
-      "bytes": 33973
+      "bytes": 33973,
+      "sha256": "f80ee95f1f95aaa942810a0c566d32c411199dd410942c15e23028fd3de80206"
     },
     "configuracoes__paisagem__claro": {
       "largura": 812,
       "altura": 408,
-      "bytes": 35875
+      "bytes": 35875,
+      "sha256": "01240bc21733f539dd1f61dbf22849b20c0ec9ddbe93bc098fb442f613bc4c4e"
     },
     "configuracoes__paisagem__escuro": {
       "largura": 812,
       "altura": 408,
-      "bytes": 35673
+      "bytes": 35673,
+      "sha256": "31ae71055ce340ad47514e45d1f76e9a9db6811bf87363082b3fdb8d969c25f8"
     },
     "configuracoes__zoom200__claro": {
       "largura": 1280,
       "altura": 900,
-      "bytes": 79856
+      "bytes": 79856,
+      "sha256": "4b0a1659467962e614491d5daf208fc02ca30ed92ac63cbaaa8a7e2bafc1e350"
     },
     "configuracoes__zoom200__escuro": {
       "largura": 1280,
       "altura": 900,
-      "bytes": 79962
+      "bytes": 79962,
+      "sha256": "18779241e3e93ab9d7b98725c3dc678cf5df3aefa3f80b35847554f83658109f"
     },
     "diligencias__430__claro": {
       "largura": 430,
       "altura": 2222,
-      "bytes": 157207
+      "bytes": 157207,
+      "sha256": "8447c05f45ee7d58f1dd5bccb2ed06c14d89b27df28ebdcfb1d0333e1ee0f107"
     },
     "diligencias__430__escuro": {
       "largura": 430,
       "altura": 2222,
-      "bytes": 157548
+      "bytes": 157548,
+      "sha256": "70aca3b0e4b4a847f6c2e5c518ddcb428df4a5700ebf76975883c76d0a456498"
     },
     "diligencias__paisagem__claro": {
       "largura": 812,
       "altura": 1867,
-      "bytes": 157436
+      "bytes": 157436,
+      "sha256": "4b1b6559c866a4574c5aa59c2568cf182f1006eca7eb025d3cd65d7acb9c4541"
     },
     "diligencias__paisagem__escuro": {
       "largura": 812,
       "altura": 1867,
-      "bytes": 157870
+      "bytes": 157870,
+      "sha256": "ce2fe535769d749703160de4c5dc18ea492b344161bb092afc4cf9ac86d793f0"
     },
     "diligencias__zoom200__claro": {
       "largura": 1280,
       "altura": 3964,
-      "bytes": 365626
+      "bytes": 365626,
+      "sha256": "2bb4451a3fd3e17ccfdb34d9fc5ec250da8bed2bb1de9e585c0bbac290b9b891"
     },
     "diligencias__zoom200__escuro": {
       "largura": 1280,
       "altura": 3964,
-      "bytes": 364652
+      "bytes": 364652,
+      "sha256": "5a50ed2eb0f90cefa90d92904b612963136385e2bbf450f312c02d447bf13c47"
     },
     "documentos__430__claro": {
       "largura": 430,
       "altura": 1474,
-      "bytes": 93081
+      "bytes": 93081,
+      "sha256": "fd8218a3c4aa79c2e1b4767341e61e4ebbc79306a4bc192524ca79afb3bc8e68"
     },
     "documentos__430__escuro": {
       "largura": 430,
       "altura": 1474,
-      "bytes": 93389
+      "bytes": 93389,
+      "sha256": "dab5b3657f5d89c233b143265b1acfea95595f113c87579c8a556c70a5cd5e26"
     },
     "documentos__paisagem__claro": {
       "largura": 812,
       "altura": 1059,
-      "bytes": 103031
+      "bytes": 103031,
+      "sha256": "95b2376b5e12be98b13df6d77e8131258fa00335e881686b0b8de2123c6a53bd"
     },
     "documentos__paisagem__escuro": {
       "largura": 812,
       "altura": 1059,
-      "bytes": 103287
+      "bytes": 103287,
+      "sha256": "70d0045a3fa5c38d3e7b9167fda3aca558322e584294047b83a6a66ac4b6a188"
     },
     "documentos__zoom200__claro": {
       "largura": 1280,
       "altura": 2776,
-      "bytes": 224493
+      "bytes": 224493,
+      "sha256": "69e1329d714a5644892ba6f96f58c6196728200372840467d126130379561869"
     },
     "documentos__zoom200__escuro": {
       "largura": 1280,
       "altura": 2776,
-      "bytes": 224868
+      "bytes": 224868,
+      "sha256": "d965cb1e94cebc7aa80d3871f1308050a86f3847a816b4d32592a4360594b15d"
     },
     "entrar__430__claro": {
       "largura": 430,
       "altura": 939,
-      "bytes": 44994
+      "bytes": 44994,
+      "sha256": "2f41229969d687492db05de5c60c08181d5d1636d90142b6d16dce7e2fd9f2d8"
     },
     "entrar__430__escuro": {
       "largura": 430,
       "altura": 939,
-      "bytes": 44367
+      "bytes": 44367,
+      "sha256": "3171b174e30828151c995e05594bdcbf73da716469ec8f91f2f2bf7b10fdf525"
     },
     "entrar__paisagem__claro": {
       "largura": 812,
       "altura": 815,
-      "bytes": 48028
+      "bytes": 48028,
+      "sha256": "0540089d94eddc1c1c6742efed9f3d03fe70c7c131d4122e47ba45d851faf3f8"
     },
     "entrar__paisagem__escuro": {
       "largura": 812,
       "altura": 815,
-      "bytes": 47798
+      "bytes": 47798,
+      "sha256": "a98f47b000acdf2a1e187bfb63ab6d9bf89a0e4d7b473014387bb12d4af35148"
     },
     "entrar__zoom200__claro": {
       "largura": 1280,
       "altura": 1652,
-      "bytes": 112244
+      "bytes": 112244,
+      "sha256": "1274938de0d90d6f857f4ecf436da5034170725adc23d2c8a2aad7f8b1770e23"
     },
     "entrar__zoom200__escuro": {
       "largura": 1280,
       "altura": 1652,
-      "bytes": 111769
+      "bytes": 111769,
+      "sha256": "12334c6a7ba7fcbdb85ed470cd32c250926dcb3d7ec6a7412b67b0595800406b"
     },
     "gerenciar__430__claro": {
       "largura": 430,
       "altura": 1666,
-      "bytes": 101853
+      "bytes": 101853,
+      "sha256": "f518d25c4c6cc26463ebd98fb4f86b04c8f5fc5d3427a83b7eb1e1a6e6b96d1b"
     },
     "gerenciar__430__escuro": {
       "largura": 430,
       "altura": 1666,
-      "bytes": 101006
+      "bytes": 101006,
+      "sha256": "de92dbdb615c76e0b00b5a4b3ae3b3aa93641836a6b79796755f7ea097ae3561"
     },
     "gerenciar__paisagem__claro": {
       "largura": 812,
       "altura": 1383,
-      "bytes": 108196
+      "bytes": 108196,
+      "sha256": "2654ceb8bb27c9d71535c19cf9990d0e35044220b28f1b6f8d7d5779bc961102"
     },
     "gerenciar__paisagem__escuro": {
       "largura": 812,
       "altura": 1383,
-      "bytes": 108369
+      "bytes": 108369,
+      "sha256": "6e5eb4873692b4208d1a32f6dcee58a59b7fde214f0afcc90ce03685db68f930"
     },
     "gerenciar__zoom200__claro": {
       "largura": 1280,
       "altura": 2962,
-      "bytes": 251841
+      "bytes": 251841,
+      "sha256": "aaebbe607d0835425d4c13fe1f5a91dd86aceb49f7254b2bfb1cc2d858c3af8c"
     },
     "gerenciar__zoom200__escuro": {
       "largura": 1280,
       "altura": 2962,
-      "bytes": 251359
+      "bytes": 251359,
+      "sha256": "dc136b9e1627c4e4416d619b6b6a2be5e393ceab12b1285ac239ae13de88e68c"
     },
     "inicio__430__claro": {
       "largura": 430,
       "altura": 1727,
-      "bytes": 127687
+      "bytes": 127687,
+      "sha256": "a8e92bccad8812ae1e80eaf1a854d597b73c7990bc4a12045d2a0de41e332dc2"
     },
     "inicio__430__escuro": {
       "largura": 430,
       "altura": 1727,
-      "bytes": 127082
+      "bytes": 127082,
+      "sha256": "e4d34d5d7ffbdb17136d55d9d1c793834a48994a9031ec5b34bfbcd4438d5401"
     },
     "inicio__paisagem__claro": {
       "largura": 812,
       "altura": 1578,
-      "bytes": 140973
+      "bytes": 140973,
+      "sha256": "f849ee9085dd5a9c3c58af9d38e4765f18123dfc9ca06cd109ea7f5165c4a9aa"
     },
     "inicio__paisagem__escuro": {
       "largura": 812,
       "altura": 1578,
-      "bytes": 140476
+      "bytes": 140476,
+      "sha256": "7fd3324907251bbada70bab75a134f38f874136c5b2bbc001d567205cc8035fc"
     },
     "inicio__zoom200__claro": {
       "largura": 1280,
       "altura": 3214,
-      "bytes": 303537
+      "bytes": 303537,
+      "sha256": "71ef220cd0cde6cbf489ac453d39893ed7f2baa6466f68a812e45b3e6bee261c"
     },
     "inicio__zoom200__escuro": {
       "largura": 1280,
       "altura": 3214,
-      "bytes": 302449
+      "bytes": 302449,
+      "sha256": "dfcb9755e97526badcc0b782f8a2bed10ca38b3baf068748a4237badaf0371d5"
     },
     "nova__430__claro": {
       "largura": 430,
       "altura": 932,
-      "bytes": 55414
+      "bytes": 55414,
+      "sha256": "8aeee9a4536545b268fea6abff5881ba2fc527745ac3b08380bb29c6a66671c9"
     },
     "nova__430__escuro": {
       "largura": 430,
       "altura": 932,
-      "bytes": 55193
+      "bytes": 55193,
+      "sha256": "175219a512b1e7df51ad1eade0df99d43656330f3bf851bf92309747159461ad"
     },
     "nova__paisagem__claro": {
       "largura": 812,
       "altura": 783,
-      "bytes": 59736
+      "bytes": 59736,
+      "sha256": "c6ef91f0783b63dc08c2302d44d6f12b77d53451beffc02aa445ed34cdb57846"
     },
     "nova__paisagem__escuro": {
       "largura": 812,
       "altura": 783,
-      "bytes": 59743
+      "bytes": 59743,
+      "sha256": "9a04618804760e0b8f63bee3ad663ecf85727e2a2a006e164db803fed8472c69"
     },
     "nova__zoom200__claro": {
       "largura": 1280,
       "altura": 1642,
-      "bytes": 134734
+      "bytes": 134734,
+      "sha256": "71b306a21b57fb1698be62a4b034533fdf572e2ca08024bce470db067af6cdbd"
     },
     "nova__zoom200__escuro": {
       "largura": 1280,
       "altura": 1642,
-      "bytes": 135316
+      "bytes": 135316,
+      "sha256": "8dc56d34f14b5ba26a013fa56dc399fb391f31a9346e6fd9a4839ac2d8a99947"
     },
     "quadros__430__claro": {
       "largura": 430,
       "altura": 3807,
-      "bytes": 251970
+      "bytes": 251970,
+      "sha256": "02400be820c79728f36b445f6b721875ce5c19bbad3949c4b7d78f67a491260d"
     },
     "quadros__430__escuro": {
       "largura": 430,
       "altura": 3807,
-      "bytes": 250798
+      "bytes": 250798,
+      "sha256": "9ba8d1ed8eb4cd78795d3e97d8033a3ebbb494655ef7180ad54454a07d4813f9"
     },
     "quadros__paisagem__claro": {
       "largura": 812,
       "altura": 3255,
-      "bytes": 263651
+      "bytes": 263651,
+      "sha256": "64f97ebea95634b3bf1f3e68a9b0f075968b732f208c0747a4c06634081dd13c"
     },
     "quadros__paisagem__escuro": {
       "largura": 812,
       "altura": 3255,
-      "bytes": 263520
+      "bytes": 263520,
+      "sha256": "59c6cf641ded9993323112d6f1ecf0f6a8d2aa39962c75f455127d9fb6a3c8e4"
     },
     "quadros__zoom200__claro": {
       "largura": 1280,
       "altura": 6506,
-      "bytes": 601314
+      "bytes": 601314,
+      "sha256": "35a2ad65d164e0d8e565903211b7b0a45e53ae6145a662f67a0a7844a076d797"
     },
     "quadros__zoom200__escuro": {
       "largura": 1280,
       "altura": 6506,
-      "bytes": 599069
+      "bytes": 599069,
+      "sha256": "e6d74021903f20d4609a6572eb7088910ec0597f63b7d318646d4eeef5ca9e77"
     },
     "quadros_linha__430__claro": {
       "largura": 430,
       "altura": 2150,
-      "bytes": 176703
+      "bytes": 176703,
+      "sha256": "918937b9946bf34304525740e0086f515a47fba8d5087a6dbaadda0e2bf53bca"
     },
     "quadros_linha__430__escuro": {
       "largura": 430,
       "altura": 2150,
-      "bytes": 176928
+      "bytes": 176928,
+      "sha256": "5190c79c8470c1a00d19272af3462491b3e894656251712cdab228bee1c6e4a1"
     },
     "quadros_linha__paisagem__claro": {
       "largura": 812,
       "altura": 1453,
-      "bytes": 183820
+      "bytes": 183820,
+      "sha256": "18aea3f39df02b296425dc3e40151e871510357c88af96ee5813e6c68fc76244"
     },
     "quadros_linha__paisagem__escuro": {
       "largura": 812,
       "altura": 1453,
-      "bytes": 184282
+      "bytes": 184282,
+      "sha256": "a714befa6108f812f15ff01eb3b7d205978f2ac3170545d2fe8e0d90aecc9570"
     },
     "quadros_linha__zoom200__claro": {
       "largura": 1280,
       "altura": 3630,
-      "bytes": 421421
+      "bytes": 421421,
+      "sha256": "06ed71c236f9673b2bb07852ce01e4b7714e1bdb5f9e4c38314a261d20297fdd"
     },
     "quadros_linha__zoom200__escuro": {
       "largura": 1280,
       "altura": 3630,
-      "bytes": 418785
+      "bytes": 418785,
+      "sha256": "9199ec2dfaec9f0c7b7fca12cd844c1781b63d913bc60b9ef8156d05a20f209e"
     },
     "quadros_mapa__430__claro": {
       "largura": 430,
       "altura": 1745,
-      "bytes": 159790
+      "bytes": 159790,
+      "sha256": "fb5834a28d87c1685b92d2b2a6761410bc54e6d1ef3421890a415c8a273791ea"
     },
     "quadros_mapa__430__escuro": {
       "largura": 430,
       "altura": 1745,
-      "bytes": 159865
+      "bytes": 159865,
+      "sha256": "555ae526f60c689f566771afcf2e4db0fa77361a508bb77549437f4fa712fc5f"
     },
     "quadros_mapa__paisagem__claro": {
       "largura": 812,
       "altura": 1555,
-      "bytes": 169592
+      "bytes": 169592,
+      "sha256": "09fe7536a4ad51c8f0ba3c9f6e4d097f75c8a87c231a9bd8fe0ee8489b0388c5"
     },
     "quadros_mapa__paisagem__escuro": {
       "largura": 812,
       "altura": 1555,
-      "bytes": 169742
+      "bytes": 169742,
+      "sha256": "ea09ba2716464828c8f6651440b6b2b303df908dabb4287c58f4379d5f301c6d"
     },
     "quadros_mapa__zoom200__claro": {
       "largura": 1280,
       "altura": 3198,
-      "bytes": 390028
+      "bytes": 390028,
+      "sha256": "fc548a9fca25a781a3a4a5487907811d703aac297158bbb1d0c3b8b02456871a"
     },
     "quadros_mapa__zoom200__escuro": {
       "largura": 1280,
       "altura": 3198,
-      "bytes": 389838
+      "bytes": 389838,
+      "sha256": "f49339df0e035ec1e74bf3a56b553110239c7dfeb4343ba3f0fedb49a5a77fd0"
     }
   }
 }

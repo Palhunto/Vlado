@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -187,7 +188,8 @@ def _escrever_manifesto(pasta: Path, meta: dict, nomes) -> None:
     for nome in sorted(nomes):
         arquivo = pasta / f'{nome}.png'
         with Image.open(arquivo) as imagem:
-            capturas[nome] = {'largura': imagem.width, 'altura': imagem.height, 'bytes': arquivo.stat().st_size}
+            capturas[nome] = {'largura': imagem.width, 'altura': imagem.height, 'bytes': arquivo.stat().st_size,
+                              'sha256': hashlib.sha256(arquivo.read_bytes()).hexdigest()}
     manifesto = {**meta, 'gerado_em_utc': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
                  'tolerancia': {'canal': comparador.TOLERANCIA_CANAL, 'pixels': comparador.TOLERANCIA_PIXELS},
                  'total_bytes': sum(c['bytes'] for c in capturas.values()), 'capturas': capturas}

@@ -1,6 +1,10 @@
 """Testes do que não precisa de navegador em regressao_visual_extras.py: os cenários, os nomes e a seleção."""
 import argparse
+import hashlib
+import json
 import unittest
+
+from PIL import Image
 
 import regressao_visual as rv
 import regressao_visual_extras as ex
@@ -35,6 +39,38 @@ class ExtrasTest(unittest.TestCase):
             ex._selecao(argparse.Namespace(telas='cadastro', cenarios=None, temas=None))
         with self.assertRaises(SystemExit):
             ex._selecao(argparse.Namespace(telas=None, cenarios='tablet', temas=None))
+
+
+class ReferenciasExtrasTest(unittest.TestCase):
+    """As 84 referências versionadas conferem com o manifesto, têm a largura do cenário e nenhuma é uma página em branco."""
+
+    def setUp(self):
+        self.pasta = ex.pasta_extras()
+        if not (self.pasta / 'manifesto.json').is_file():
+            self.skipTest('sem referências extras para esta plataforma: rode `regressao_visual_extras.py gerar`')
+        self.manifesto = json.loads((self.pasta / 'manifesto.json').read_text(encoding='utf-8'))
+
+    def test_manifesto_confere_com_as_imagens(self):
+        esperados = set(ex.nomes_esperados(ex.TELAS, list(ex.CENARIOS), list(rv.TEMAS)))
+        self.assertEqual(set(self.manifesto['capturas']), esperados)
+        self.assertEqual({p.stem for p in self.pasta.glob('*.png')}, esperados)
+        for nome, dados in self.manifesto['capturas'].items():
+            arquivo = self.pasta / f'{nome}.png'
+            self.assertEqual(hashlib.sha256(arquivo.read_bytes()).hexdigest(), dados['sha256'], f'{nome}: imagem trocada ou apagada à mão')
+            self.assertEqual(arquivo.stat().st_size, dados['bytes'], nome)
+
+    def test_largura_do_cenario_e_conteudo(self):
+        for nome in self.manifesto['capturas']:
+            tela, cenario, tema = nome.split('__')
+            config = ex.CENARIOS[cenario]
+            with Image.open(self.pasta / f'{nome}.png') as imagem:
+                rgb = imagem.convert('RGB')
+                self.assertGreaterEqual(rgb.width, config['viewport']['width'] * config['escala'], nome)
+                cinza = rgb.convert('L').histogram()
+                self.assertLess(max(cinza) / sum(cinza), 0.985, f'{nome} parece em branco')
+
+    def test_nenhuma_rolagem_horizontal_nas_referencias(self):
+        self.assertEqual(self.manifesto['rolagem_horizontal'], {}, 'uma referência extra com rolagem horizontal precisa de decisão do Design')
 
 
 if __name__ == '__main__':
