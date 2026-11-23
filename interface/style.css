@@ -2669,7 +2669,8 @@ body[data-nova="passo2"] #area-documentos :is(.docs-avisos,.docs-paginas){displa
 :is(.areas,.mesa-tabs,.notebook-tabs,.quadros-abas) :is(a,button,[role=tab]):not([aria-pressed=true],[aria-current],[aria-selected=true]):focus-visible{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:-1px}
 /* (b) Editor do Caderno (Vditor): a área de edição ocupa o cartão inteiro e o cartão corta, então o anel é interno (mudancas-de-token.md, item 2). */
 #apuracao-vditor .vditor-reset:focus{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:calc(-1 * var(--foco-largura) - 2px)}
-#apuracao-vditor .vditor-toolbar :is(button,.vditor-tooltipped):focus-visible{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:0}
+/* O painel de busca e substituição do editor (.vditor-panel) fica fora da barra: os botões e os campos dele têm o mesmo anel (o campo só mudava o fundo, 1,16:1). */
+#apuracao-vditor :is(.vditor-toolbar,.vditor-panel) :is(button,.vditor-tooltipped):focus-visible,#apuracao-vditor .vditor-panel input:focus-visible{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:0}
 /* (c) Seletor de apuração do topo, sem caixa como no canvas (P34): o que o identifica é o rótulo, o nome e a seta, todos em --theme-text; o fundo ao passar o mouse só reforça. */
 .persistent-context select{color:var(--theme-text)}
 .persistent-context select:hover{background:var(--theme-soft)}

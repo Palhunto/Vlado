@@ -23,3 +23,8 @@ test('R2: o desabilitado tem o texto do token --theme-disabled-text, mais apagad
   assert.ok(claro && escuro, 'o token existe nos dois temas');
   assert.ok(/button:disabled,button:disabled:hover\{background:var\(--theme-sidebar\);border-color:var\(--line\);color:var\(--theme-disabled-text\)/.test(estilo));
 });
+
+test('AA: o painel de busca e substituição do Vditor tem o mesmo anel da barra (botões e campos)', () => {
+  const estilo = css('style.css');
+  assert.ok(estilo.includes('#apuracao-vditor :is(.vditor-toolbar,.vditor-panel) :is(button,.vditor-tooltipped):focus-visible,#apuracao-vditor .vditor-panel input:focus-visible{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:0}'));
+});
