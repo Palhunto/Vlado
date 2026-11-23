@@ -63,7 +63,6 @@
       <button id="ver-apuracao" type="button" aria-pressed="false" aria-controls="area-apuracao">Caderno</button>
       <button id="ver-diligencias" type="button" aria-pressed="false" aria-controls="area-diligencias">Pedidos e prazos</button>
       <button id="ver-nova" type="button" aria-pressed="false" aria-controls="area-nova" hidden>Nova apuração</button>
-      <button id="ver-cadastro" type="button" aria-pressed="false" aria-controls="area-cadastro" hidden>Cadastrar documentos</button>
       <button id="ver-caderno" type="button" aria-pressed="false" aria-controls="area-caderno" hidden>Trechos com fonte</button>
       <button id="ver-gerenciar" type="button" aria-pressed="false" aria-controls="area-gerenciar" hidden>Apurações e lixeira</button>
     </nav>
@@ -82,7 +81,7 @@
     <section id="area-inicio" aria-label="Começar ou retomar" hidden>
       <div class="panel mesa-primeiro-passo"><div><h2 id="mesa-primeiro-titulo">Nova apuração</h2><p id="mesa-primeiro-texto">Cadastre os documentos da pauta, pergunte à IA e confira cada achado na página do original.</p></div><div class="start-actions"><button id="inicio-trocar" data-requer="gerenciar-listar" type="button" class="secondary">Trocar de apuração</button><button id="inicio-nova" data-requer="cadastrar" type="button">Nova apuração</button></div></div>
       <section id="mesa-continuar" class="mesa-home-section"><div class="section-heading"><h2>Continue de onde parou</h2><a href="/?area=gerenciar" data-mesa-area="gerenciar" data-requer="gerenciar-listar">Ver apurações →</a></div><div id="mesa-retomada" class="panel"><h3>Escolha sua próxima história.</h3><p>Selecione uma apuração no topo da mesa para retomar seu trabalho.</p></div><div class="start-actions"><button id="inicio-adicionar" data-requer="cadastrar" type="button" class="secondary">Adicionar documentos</button><button id="inicio-retomar" type="button" class="secondary">Retomar trabalho</button></div></section>
-      <section class="mesa-home-section"><h2>Um caminho claro para cada pauta</h2><div class="mesa-workflow"><a href="/?area=cadastro" data-mesa-area="cadastro"><span>01</span><h3>Reúna os documentos →</h3><p>Cadastre os arquivos e confira o recibo.</p></a><a href="/?area=codex" data-mesa-area="codex"><span>02</span><h3>Faça sua pergunta →</h3><p>Explore o acervo com a ajuda da IA.</p></a><a href="/?area=achados" data-mesa-area="achados"><span>03</span><h3>Confira cada achado →</h3><p>Leia a fonte e registre sua avaliação.</p></a><a href="/?area=apuracao" data-mesa-area="apuracao"><span>04</span><h3>Construa sua história →</h3><p>Reúna notas e trechos no caderno.</p></a></div></section>
+      <section class="mesa-home-section"><h2>Um caminho claro para cada pauta</h2><div class="mesa-workflow"><a href="/?area=documentos" data-mesa-area="documentos"><span>01</span><h3>Reúna os documentos →</h3><p>Cadastre os arquivos e confira o recibo.</p></a><a href="/?area=codex" data-mesa-area="codex"><span>02</span><h3>Faça sua pergunta →</h3><p>Explore o acervo com a ajuda da IA.</p></a><a href="/?area=achados" data-mesa-area="achados"><span>03</span><h3>Confira cada achado →</h3><p>Leia a fonte e registre sua avaliação.</p></a><a href="/?area=apuracao" data-mesa-area="apuracao"><span>04</span><h3>Construa sua história →</h3><p>Reúna notas e trechos no caderno.</p></a></div></section>
       <details class="first-use"><summary>Como começar</summary><ol><li>Cadastre os arquivos e confira o recibo de cada envio.</li><li>Abra Perguntar à IA, confira a conexão com a API e escolha o caso.</li><li>Envie a pergunta e acompanhe a resposta e as fontes nesta tela.</li></ol><p>A análise é feita online pela API do provedor configurado, com cobrança por uso.</p><p>Atalhos: Ctrl+Enter (⌘+Enter no Mac) envia a pergunta. Em Conferir achados, J e K (ou Alt+↓ e Alt+↑) passam ao achado seguinte e ao anterior.</p></details>
     </section>
     <nav id="caderno-abas" class="actions notebook-tabs" aria-label="Caderno" hidden><button id="caderno-aba-notas" type="button" class="secondary" aria-pressed="true">Notas e redação</button><button id="caderno-aba-trechos" type="button" class="secondary" aria-pressed="false">Trechos com fonte e contribuições</button></nav>
@@ -207,36 +206,6 @@
         <div id="nova-site-campo" hidden><label>Endereço do site<input id="nova-site" maxlength="253" placeholder="prefeitura.sp.gov.br" translate="no" autocomplete="off" spellcheck="false" autocapitalize="none" aria-describedby="nova-site-dica"></label><p id="nova-site-dica" class="small nova-dica">Só o domínio, exato. Escolhido só agora: depois de criada, a apuração não troca de site.</p></div>
         <div class="actions nova-acoes"><button id="nova-cancelar" type="button" class="secondary">Cancelar</button><button id="nova-continuar" type="submit">Continuar para documentos</button></div>
       </form>
-    </section>
-    <section id="area-cadastro" aria-labelledby="cadastro-titulo" hidden>
-    <div class="workflow" aria-label="Fluxo de entrada"><span class="current">1 · Cadastrar e conferir</span><span>2 · Perguntar à IA</span><span>3 · Conferir a resposta e as fontes</span></div>
-    <div class="panel">
-      <h2 id="cadastro-titulo">Cadastrar documentos</h2>
-      <div id="pdf-ambiente-aviso" class="notice" role="status" hidden></div>
-      <div id="pdf-ambiente-tecnico"></div>
-      <form id="cadastro">
-        <div class="filters">
-          <label>Destino do envio<select id="cadastro-caso"><option value="">Novo caso</option></select></label>
-          <label>Natureza dos documentos<select id="cadastro-natureza"><option value="publicos">Documentos públicos</option><option value="sinteticos">Materiais sintéticos</option></select></label>
-        </div>
-        <div class="filters" id="novo-caso-campos">
-          <label>Nome da apuração<input id="cadastro-titulo-input" maxlength="200" placeholder="Ex.: Transporte escolar…" required><span class="small">Escolha um nome para reconhecer esta apuração.</span></label>
-          <label>Fontes da apuração<select id="cadastro-modo-fontes"><option value="somente_documental">Somente documentos</option><option value="documentos_web">Documentos + um site</option></select><span class="small">Escolhido só na criação. Sem a opção do site, a apuração não acessa a internet.</span></label>
-          <label id="cadastro-dominio-campo" hidden>Site permitido<input id="cadastro-dominio" maxlength="253" placeholder="www.exemplo.gov.br" autocomplete="off" spellcheck="false" translate="no"><span class="small">Só páginas deste site poderão ser capturadas. Informe o nome, sem https:// nem caminho.</span></label>
-        </div>
-        <label class="file-label">Arquivos deste envio<input id="cadastro-arquivos" type="file" multiple required></label>
-        <p id="arquivos-selecionados" class="small">Selecione todos os arquivos do lote. Até 50 MB por envio; o limite de documentos do caso é conferido no cadastro.</p>
-        <button id="enviar-documentos">Enviar e cadastrar agora</button>
-      </form>
-      <p id="cadastro-status" role="status" aria-live="polite"></p>
-      <div id="cadastro-envio"></div>
-      <p id="cadastro-erro" role="alert" hidden></p>
-      <div id="cadastro-preparacao" class="notice" hidden><p id="cadastro-preparacao-resumo"></p><button id="cadastro-preparar" type="button" class="secondary">Preparar PDFs pendentes</button><p class="small">Usa as cópias já cadastradas, sem reenvio. A nova preparação vale para próximas conversas; análises anteriores são preservadas.</p></div>
-      <div id="cadastro-recibo" hidden></div>
-      <button id="cadastro-perguntar" type="button" hidden>Perguntar sobre estes documentos</button>
-      <div id="cadastro-inventario" hidden></div>
-      <p class="small">O cadastro prepara o texto dos PDFs; páginas digitalizadas passam por OCR local. Depois de conferir o envio, abra Perguntar à IA.</p>
-    </div>
     </section>
     <section id="area-configuracoes" aria-labelledby="configuracoes-titulo" hidden>
       <div class="panel"><h2 id="configuracoes-titulo">Configurações</h2><p class="small">O provedor e a chave da IA ficam em Perguntar, em Conexão e opções.</p></div>

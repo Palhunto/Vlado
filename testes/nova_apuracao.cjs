@@ -63,7 +63,7 @@ test('"Nova apuração" da Visão geral abre o passo 1: título, linha de etapas
   await mesa.esperar(12);
   assert.deepEqual(mesa.erros, []);
   mesa.$('inicio-nova').click(); await mesa.esperar(4);
-  assert.equal(area(mesa), 'nova'); assert.equal(mesa.$('area-nova').hidden, false); assert.equal(mesa.$('area-cadastro').hidden, true, 'a área antiga não abre');
+  assert.equal(area(mesa), 'nova'); assert.equal(mesa.$('area-nova').hidden, false); assert.equal(mesa.$('area-cadastro'), null, 'a área antiga não existe mais');
   assert.equal(mesa.$('area-titulo').textContent, 'Nova apuração');
   assert.equal(mesa.$('area-descricao').hidden, true, 'sem a descrição da apuração escolhida');
   const etapas = mesa.$('nova-etapas-1');
@@ -283,7 +283,6 @@ test('N1: sem o envio por arquivo no servidor a própria Nova apuração envia e
   assert.equal(pedido.dados.novo, true); assert.ok(!('caso' in pedido.dados), 'sem caso escolhido pela tela');
   assert.equal(pedido.dados.titulo, 'Obra da escola'); assert.equal(pedido.dados.modo_fontes, 'documentos_web'); assert.equal(pedido.dados.dominio_permitido, 'prefeitura.sp.gov.br');
   assert.deepEqual(pedido.dados.arquivos, [{nome: 'primeiro.pdf', base64: 'AAAA'}]);
-  assert.equal(mesa.$('area-cadastro').hidden, true, 'não cai na área antiga');
   assert.equal(mesa.janela.contextoCaso(), CASO_NOVO); assert.equal(mesa.doc.body.dataset.nova, undefined);
   assert.equal(mesa.$('nova-etapas-2').querySelector('[aria-current="step"]').textContent.trim(), '3 Conferir recibo');
   assert.match(mesa.$('documentos-recibo').textContent, /Recibo do lote: 1 de 1 arquivos/);

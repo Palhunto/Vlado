@@ -160,7 +160,7 @@
       const pendentes = partes.length ? `, ${partes.join(', ')}` : '';
       const texto = no('span');
       texto.append(`${t('Recibo do lote')}: `, forte, `${pendentes}. ${t('É conferido antes da primeira pergunta.')}`);
-      const ver = no('a', 'envio-link', t('Ver recibo')); ver.href = '#cadastro-recibo';
+      const ver = no('a', 'envio-link', t('Ver recibo')); ver.href = '#documentos-recibo';
       ver.addEventListener('click', evento => { evento.preventDefault(); ctx.aoVerRecibo?.(); window.dispatchEvent(new Event('envio-recibo-visto')); });
       recibo.replaceChildren(texto, ver);
     }
@@ -324,7 +324,7 @@
     resultado.pendentes = resultado.naoCadastrados + resultado.aConferir;
     resultado.arquivos = ctx.linhas;
     ui.mostrarRecibo(resultado.enviados || resultado.recusados ? {recebidos: resultado.recebidos, total: ctx.linhas.length, naoCadastrados: resultado.naoCadastrados, aConferir: resultado.aConferir} : null);
-    ctx.aoVerRecibo = () => { const detalhe = alvoRecibo || document.getElementById('cadastro-recibo'); if (detalhe && !detalhe.hidden) { detalhe.scrollIntoView({block: 'start'}); detalhe.focus?.(); } };
+    ctx.aoVerRecibo = () => { const detalhe = alvoRecibo || document.getElementById('documentos-recibo'); if (detalhe && !detalhe.hidden) { detalhe.scrollIntoView({block: 'start'}); detalhe.focus?.(); } };
     ui.desenhar();
     return resultado;
   }

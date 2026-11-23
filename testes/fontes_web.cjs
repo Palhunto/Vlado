@@ -27,33 +27,15 @@ function abrir({capturar} = {}) {
 }
 
 async function selecionar(mesa, caso) {
-  mesa.$('cadastro-caso').value = caso;
-  mesa.$('cadastro-caso').dispatchEvent(new Evento('change', {bubbles: true}));
+  mesa.janela.showArea('documentos');
+  mesa.janela.definirContextoCaso(caso, {force: true});
   await mesa.esperar(10);
 }
 
-test('novo caso: o site só aparece e só é exigido no modo documentos + web', async () => {
-  const mesa = abrir();
-  await mesa.esperar(12);
-  assert.deepEqual(mesa.erros, []);
-  assert.equal(mesa.$('cadastro-modo-fontes').value, 'somente_documental');
-  assert.equal(mesa.$('cadastro-dominio-campo').hidden, true);
-  assert.deepEqual(JSON.parse(JSON.stringify(mesa.avaliar('FontesWeb.escopoNovo()'))), {modo_fontes: 'somente_documental'});
-  mesa.$('cadastro-modo-fontes').value = 'documentos_web';
-  mesa.$('cadastro-modo-fontes').dispatchEvent(new Evento('change', {bubbles: true}));
-  assert.equal(mesa.$('cadastro-dominio-campo').hidden, false);
-  assert.equal(mesa.$('cadastro-dominio').required, true);
-  mesa.$('cadastro-dominio').value = '  www.exemplo.gov.br ';
-  assert.deepEqual(JSON.parse(JSON.stringify(mesa.avaliar('FontesWeb.escopoNovo()'))),
-    {modo_fontes: 'documentos_web', dominio_permitido: 'www.exemplo.gov.br'});
-});
-
-test('caso existente: o modo não pode ser trocado', async () => {
+test('apuração só de documentos: o cartão das páginas do site fica escondido e nada é consultado', async () => {
   const mesa = abrir();
   await mesa.esperar(12);
   await selecionar(mesa, 'beta');
-  assert.equal(mesa.$('cadastro-modo-fontes').disabled, true);
-  assert.equal(mesa.$('cadastro-dominio-campo').hidden, true);
   assert.equal(mesa.$('fontes-web').hidden, true);
   assert.equal(mesa.chamadas.some(c => c.operacao.startsWith('fontes-web-')), false);
 });

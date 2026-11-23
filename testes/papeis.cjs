@@ -75,9 +75,9 @@ test('editor, repórter e leitor não herdam o dono nem ficam presos na pergunta
 
 test('uma área que o papel não alcança vira a Visão geral, também quando o endereço a pede', async () => {
   assert.equal(area(await abrir({papel: 'leitor', url: 'http://127.0.0.1:8765/?area=gerenciar'})), 'inicio');
-  assert.equal(area(await abrir({papel: 'editor', url: 'http://127.0.0.1:8765/?area=cadastro'})), 'inicio');
+  assert.equal(area(await abrir({papel: 'editor', url: 'http://127.0.0.1:8765/?area=nova'})), 'inicio');
   assert.equal(area(await abrir({papel: 'dono', url: 'http://127.0.0.1:8765/?area=gerenciar'})), 'gerenciar');
-  assert.equal(area(await abrir({papel: 'reporter', url: 'http://127.0.0.1:8765/?area=cadastro'})), 'cadastro');
+  assert.equal(area(await abrir({papel: 'reporter', url: 'http://127.0.0.1:8765/?area=nova'})), 'nova');
   const leitor = await abrir({papel: 'leitor'});
   leitor.avaliar("showArea('gerenciar')");
   assert.equal(area(leitor), 'inicio', 'a troca de área depois da carga também');

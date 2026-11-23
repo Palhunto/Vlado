@@ -229,65 +229,6 @@ test('cancelar durante o envio: o pedido é abortado, os arquivos ficam cancelad
 });
 
 // A tela Cadastrar (app.js) com o envio em fluxo: só quando o servidor o anuncia em /api/integracao.
-async function abrirCadastro({fluxo}) {
-  const pedidos = [];
-  class XHR {
-    constructor() { this.ouvintes = {}; this.upload = {addEventListener() {}}; pedidos.push(this); }
-    open() {} setRequestHeader() {} addEventListener(tipo, f) { this.ouvintes[tipo] = f; } send(corpo) { this.corpo = corpo; }
-    responder(status, corpo) { this.status = status; this.responseText = JSON.stringify(corpo); this.ouvintes.load(); }
-    falharRede() { this.ouvintes.error(); }
-  }
-  const lote = {lote: 'L1', caso: 'alfa', estado: 'publicado', recibo: {recebidos: 2, novos: 2, duplicados: 0, corpus_id: 'c1'},
-    arquivos: [{indice: 0, estado: 'pronto', extracao: 'extraido', paginas: 4}, {indice: 1, estado: 'pronto', extracao: 'sem_texto'}]};
-  const mesa = criarMesa({url: 'http://127.0.0.1:8765/?area=cadastro&caso=alfa', catalogo: [{id: 'alfa', titulo: 'Pauta Alfa', rodadas: []}],
-    api: operacao => ({inventario: {caso_id: 'alfa', corpus_id: 'c1', documentos: [], total_documentos: 2}, 'codex-listar': {conversas: []}}[operacao] || {}),
-    preparar: janela => {
-      janela.XMLHttpRequest = XHR; janela.TextEncoder = TextEncoder;
-      janela.setTimeout = (funcao, ms, ...resto) => (ms === 1500 ? setImmediate(funcao) : setTimeout(funcao, ms, ...resto));   // o intervalo da fila
-      const original = janela.fetch;   // o /api/integracao é lido no carregamento: a troca vem antes dos scripts
-      janela.fetch = async (endereco, opcoes) => {
-        if (String(endereco) === '/api/integracao') {
-          const resposta = {ok: true, json: async () => (fluxo ? {envio_fluxo: true} : {})};
-          return janela.__segurar ? janela.__segurar.then(() => resposta) : resposta;   // a resposta lenta, liberada pelo teste
-        }
-        if (String(endereco).startsWith('/api/fila?lote=')) return {ok: true, json: async () => ({lote})};
-        return original(endereco, opcoes);
-      };
-    }});
-  await mesa.esperar(12);
-  mesa.pedidos = pedidos;
-  return mesa;
-}
-
-test('Cadastrar com o servidor em fluxo: o submit usa o envio por arquivo, mostra o cartão, o recibo e o inventário', async () => {
-  const mesa = await abrirCadastro({fluxo: true});
-  Object.defineProperty(mesa.$('cadastro-arquivos'), 'files', {value: [arquivo('a.pdf', 100), arquivo('b.png', 200)]});
-  mesa.$('cadastro-caso').value = 'alfa';
-  mesa.$('cadastro').requestSubmit();
-  await mesa.esperar(8);
-  assert.equal(mesa.pedidos.length, 1, 'um pedido em fluxo');
-  assert.equal(mesa.$('cadastro-envio').querySelectorAll('.envio-arquivo').length, 2);
-  mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', caso: 'alfa', estado: 'enfileirado', arquivos: []}});
-  await mesa.esperar(20);
-  assert.equal(mesa.$('cadastro-recibo').hidden, false);
-  assert.match(mesa.$('cadastro-recibo').textContent, /Recibo do lote: 2 de 2 arquivos/);
-  assert.ok(mesa.chamadas.some(c => c.operacao === 'inventario'), 'o inventário é relido depois do envio');
-  assert.match(mesa.$('cadastro-status').textContent, /Confira as limitações de extração no recibo antes da pergunta/, 'arquivo sem texto pede conferência');
-  assert.equal(mesa.$('cadastro-perguntar').hidden, false);
-  assert.equal(mesa.$('enviar-documentos').disabled, false, 'o formulário volta a ficar livre');
-  assert.equal(mesa.$('cadastro-arquivos').disabled, false);
-});
-
-test('Cadastrar com um servidor sem envio em fluxo não cria pedido em fluxo (o envio em JSON de antes continua)', async () => {
-  const mesa = await abrirCadastro({fluxo: false});
-  Object.defineProperty(mesa.$('cadastro-arquivos'), 'files', {value: [arquivo('a.pdf', 100)]});
-  mesa.$('cadastro-caso').value = 'alfa';
-  mesa.$('cadastro').requestSubmit();
-  await mesa.esperar(8);
-  assert.equal(mesa.pedidos.length, 0);
-  assert.equal(mesa.$('cadastro-envio').childNodes.length, 0);
-});
-
 test('recibo conferido: só a contagem do lote e Detalhes técnicos, plural concordado e sem repetir o resultado de cada arquivo', () => {
   const mesa = abrir();
   const destino = mesa.$('cadastro-recibo');
@@ -302,43 +243,6 @@ test('recibo conferido: só a contagem do lote e Detalhes técnicos, plural conc
   assert.equal(destino.querySelectorAll('p')[0].textContent, '1 novo · 1 duplicado');
   mesa.janela.Envio.renderRecibo(destino, lote(0, 2, ['a.pdf', 'b.pdf']));
   assert.equal(destino.querySelectorAll('p')[0].textContent, 'nenhum novo · 2 duplicados');
-});
-
-test('clique duplo em Enviar enquanto a Mesa consulta o servidor manda o lote uma vez só, no envio em fluxo (B1 da Coruja)', async () => {
-  const mesa = await abrirCadastro({fluxo: true});
-  mesa.janela.__segurar = new Promise(resolver => { mesa.liberar = resolver; });
-  Object.defineProperty(mesa.$('cadastro-arquivos'), 'files', {value: [arquivo('a.pdf', 100)]});
-  mesa.$('cadastro-caso').value = 'alfa';
-  mesa.$('cadastro').requestSubmit();
-  mesa.$('cadastro').requestSubmit();
-  await mesa.esperar(4);
-  mesa.liberar(); await mesa.esperar(8);
-  assert.equal(mesa.pedidos.length, 1, 'um segundo clique na espera não manda o lote de novo');
-  mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', caso: 'alfa', estado: 'enfileirado', arquivos: []}});
-  await mesa.esperar(20);
-  assert.equal(mesa.$('enviar-documentos').disabled, false, 'a tela volta a ficar livre ao terminar');
-});
-
-test('clique duplo no envio em JSON de antes também manda um pedido só, e uma saída antecipada solta o ocupado', async () => {
-  const mesa = await abrirCadastro({fluxo: false});
-  mesa.janela.FileReader = class { readAsDataURL() { this.result = 'data:;base64,AAAA'; this.onload(); } };
-  mesa.janela.__segurar = new Promise(resolver => { mesa.liberar = resolver; });
-  Object.defineProperty(mesa.$('cadastro-arquivos'), 'files', {value: [arquivo('a.pdf', 100)], configurable: true});
-  mesa.$('cadastro-caso').value = 'alfa';
-  mesa.$('cadastro').requestSubmit();
-  mesa.$('cadastro').requestSubmit();
-  await mesa.esperar(4);
-  mesa.liberar(); await mesa.esperar(12);
-  assert.equal(mesa.chamadas.filter(c => c.operacao === 'cadastrar').length, 1, 'um pedido só');
-  // Lote acima de 50 MB no envio antigo: a recusa sai cedo e a tela não fica presa em "ocupado".
-  Object.defineProperty(mesa.$('cadastro-arquivos'), 'files', {value: [arquivo('enorme.pdf', 60 * 1024 * 1024)], configurable: true});
-  mesa.janela.__segurar = null;
-  mesa.$('cadastro').requestSubmit();
-  await mesa.esperar(8);
-  assert.match(mesa.$('cadastro-erro').textContent, /O lote excede 50 MB/);
-  mesa.$('cadastro').requestSubmit();
-  await mesa.esperar(8);
-  assert.match(mesa.$('cadastro-erro').textContent, /O lote excede 50 MB/, 'um novo envio ainda é tentado (não ficou preso)');
 });
 
 test('aviso_natureza do servidor aparece no recibo do lote, como aviso (sinal e cor de aviso), e não como erro', async () => {
@@ -391,39 +295,6 @@ test('apuração que já existe: todos os lotes levam o caso desde o primeiro, e
   assert.deepEqual([manifestoDe(mesa.pedidos[1]).novo, manifestoDe(mesa.pedidos[1]).caso], [false, 'alfa']);
   mesa.pedidos[1].responder(200, {estado: 'enfileirado', lote: {lote: 'L2', estado: 'enfileirado', arquivos: []}});
   assert.equal((await promessa).caso_id, 'alfa');
-});
-
-test('Cadastrar arquivos com apuração nova não escolhe o identificador, no envio em fluxo e no JSON de antes; cada tentativa é nova', async () => {
-  const fluxo = await abrirCadastro({fluxo: true});
-  Object.defineProperty(fluxo.$('cadastro-arquivos'), 'files', {value: [arquivo('a.pdf', 100)], configurable: true});
-  fluxo.$('cadastro-caso').value = '';
-  fluxo.$('cadastro-titulo-input').value = 'Apuração nova';
-  fluxo.$('cadastro').requestSubmit();
-  await fluxo.esperar(10);
-  const manifesto = manifestoDe(fluxo.pedidos[0]);
-  assert.equal(manifesto.novo, true); assert.ok(!('caso' in manifesto), 'sem caso escolhido pela tela');
-  assert.equal(manifesto.titulo, 'Apuração nova');
-
-  const antigo = await abrirCadastro({fluxo: false});
-  antigo.janela.FileReader = class { readAsDataURL() { this.result = 'data:;base64,AAAA'; this.onload(); } };
-  Object.defineProperty(antigo.$('cadastro-arquivos'), 'files', {value: [arquivo('a.pdf', 100)], configurable: true});
-  antigo.$('cadastro-caso').value = '';
-  antigo.$('cadastro-titulo-input').value = 'Apuração nova';
-  antigo.$('cadastro').requestSubmit();
-  await antigo.esperar(12);
-  const [pedido] = antigo.chamadas.filter(c => c.operacao === 'cadastrar');
-  assert.equal(pedido.dados.novo, true); assert.ok(!('caso' in pedido.dados), 'o JSON de antes também não escolhe o caso');
-  antigo.$('cadastro').requestSubmit();
-  await antigo.esperar(12);
-  const todos = antigo.chamadas.filter(c => c.operacao === 'cadastrar');
-  assert.ok(todos.every(c => !('caso' in c.dados)), 'uma nova tentativa não reaproveita um identificador feito na tela');
-
-  const existente = await abrirCadastro({fluxo: true});
-  Object.defineProperty(existente.$('cadastro-arquivos'), 'files', {value: [arquivo('a.pdf', 100)], configurable: true});
-  existente.$('cadastro-caso').value = 'alfa';
-  existente.$('cadastro').requestSubmit();
-  await existente.esperar(10);
-  assert.deepEqual([manifestoDe(existente.pedidos[0]).novo, manifestoDe(existente.pedidos[0]).caso], [false, 'alfa']);
 });
 
 // --- B1 da Coruja: entrar no caso assim que o servidor o devolve (aceitação do lote), não só na publicação --------------------------------------
@@ -585,18 +456,32 @@ test('R3, Nova apuração: depois de um envio sem nada recebido e sem saber se a
   assert.equal(pedidos.length, 2, 'depois de ver o aviso, o reenvio segue');
 });
 
-test('R3, formulário de Cadastrar arquivos (até o passo 3): o mesmo cuidado depois de um envio de apuração nova que não se sabe se criou', async () => {
-  const mesa = await abrirCadastro({fluxo: true});
-  Object.defineProperty(mesa.$('cadastro-arquivos'), 'files', {value: [arquivo('a.pdf', 100)], configurable: true});
-  mesa.$('cadastro-caso').value = ''; mesa.$('cadastro-titulo-input').value = 'Apuração nova';
-  mesa.$('cadastro').requestSubmit(); await mesa.esperar(10);
-  mesa.pedidos[0].falharRede(); await mesa.esperar(14);
-  mesa.$('cadastro').requestSubmit(); await mesa.esperar(8);
-  const dialogo = mesa.doc.querySelector('dialog.dialogo');
-  assert.ok(dialogo, 'o reenvio pede confirmação'); assert.equal(mesa.pedidos.length, 1);
-  assert.ok(dialogo.textContent.includes(AVISO_INCERTO));
-  [...dialogo.querySelectorAll('.dialogo-acoes button')][0].click(); await mesa.esperar(6);
-  assert.equal(mesa.pedidos.length, 1, 'cancelar não envia'); assert.match(mesa.$('cadastro-erro').textContent, /Não sabemos se a apuração foi criada/);
+test('N2: um 500 no pedido do primeiro lote de apuração nova também é incerto (como rede, 502 e 504): para os lotes seguintes e avisa', async () => {
+  for (const status of [500, 504]) {
+    const mesa = abrir();
+    const promessa = mesa.janela.Envio.enviar({escopo: {novo: true, titulo: 'T'}, arquivos: [arquivo('a.pdf', 40 * MB), arquivo('b.pdf', 40 * MB)], alvo: mesa.$('alvo')});
+    await livre(mesa);
+    mesa.pedidos[0].responder(status, {});
+    const final = await promessa;
+    assert.equal(mesa.pedidos.length, 1, `${status}: nenhum lote seguinte`); assert.equal(final.incerto, true, String(status)); assert.equal(final.aviso_incerto, AVISO_INCERTO);
+  }
+  const claro = abrir();   // 400 e 503 seguem sendo recusa clara
+  const envio = claro.janela.Envio.enviar({escopo: {novo: true, titulo: 'T'}, arquivos: [arquivo('a.pdf', 40 * MB), arquivo('b.pdf', 40 * MB)], alvo: claro.$('alvo')});
+  await livre(claro); claro.pedidos[0].responder(400, {estado: 'erro', erro: 'Informe o título do novo caso.'});
+  await livre(claro); await livre(claro);
+  assert.equal(claro.pedidos.length, 2); claro.pedidos[1].responder(400, {estado: 'erro', erro: 'Informe o título do novo caso.'});
+  assert.notEqual((await envio).incerto, true);
+});
+
+test('N3: depois de o primeiro lote falhar, o reenvio ao caso responde "inexistente" e a pessoa lê "recomece a Nova apuração", sem enviar os outros lotes', async () => {
+  const mesa = abrir();
+  const promessa = mesa.janela.Envio.enviar({escopo: {novo: false, caso: 'apuracao_perdida'}, arquivos: [arquivo('a.pdf', 40 * MB), arquivo('b.pdf', 40 * MB), arquivo('c.pdf', 40 * MB)], alvo: mesa.$('alvo')});
+  await livre(mesa);
+  mesa.pedidos[0].responder(400, {estado: 'erro', codigo: 'caso_inexistente', erro: 'Caso inexistente; não cadastrar em outro caso automaticamente.'});
+  const final = await promessa;
+  assert.equal(mesa.pedidos.length, 1, 'os outros lotes não são enviados');
+  for (const linha of linhas(mesa)) assert.match(resultado(linha), /Esta apuração não chegou a ser criada: o primeiro envio falhou\. Recomece a Nova apuração\./);
+  assert.equal(final.recebidos, 0); assert.ok(final.erro);
 });
 
 test('N2: um 500 no pedido do primeiro lote de apuração nova também é incerto (como rede, 502 e 504): para os lotes seguintes e avisa', async () => {

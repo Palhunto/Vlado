@@ -139,18 +139,7 @@ test('soltar arquivos envia para a apuração escolhida, sem natureza, e recarre
   assert.match(mesa.$('mesa-acervo-status').textContent, /Documentos registrados\. Aguardando sua pergunta\./);
 });
 
-test('sem o envio em fluxo no servidor, a área de envio leva à tela de Nova apuração (envio em JSON)', async () => {
-  const mesa = abrir({fluxo: false});
-  await mesa.esperar(12);
-  const soltar = new Evento('drop', {bubbles: true, cancelable: true});
-  soltar.dataTransfer = {files: [{name: 'novo.pdf', size: 500}]};
-  mesa.$('documentos-zona').dispatchEvent(soltar);
-  await mesa.esperar(8);
-  assert.equal(mesa.pedidos.length, 0);
-  assert.equal(mesa.$('area-cadastro').hidden, false);
-  assert.equal(mesa.$('cadastro-arquivos').files.length, 1, 'os arquivos escolhidos seguem para a Nova apuração, sem escolher de novo');
-  assert.equal(mesa.$('cadastro-arquivos').files[0].name, 'novo.pdf');
-});
+// Sem o envio em fluxo no servidor, a Documentos envia em JSON para a apuração escolhida: coberto em area_cadastro.cjs (F3).
 
 test('o convidado não vê a área de envio', async () => {
   const mesa = abrir({papel: 'convidado'});
