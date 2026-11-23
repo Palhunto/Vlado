@@ -30,13 +30,13 @@ EVENTOS = ('acesso_negado', 'caso_criado', 'caso_atribuido', 'participacao_inclu
            'convite_expirado', 'redefinicao_pedida', 'email_troca_pedida', 'email_trocado', 'email_enviado',
            'email_falhou', 'aparelho_novo', 'login_protegido', 'fator_codigos_gerados', 'conta_inativa_avisada',
            'fator_bloqueado', 'fator_indisponivel', 'fator_removido_na_recuperacao', 'chave_ia_salva',
-           'chave_ia_removida', 'chaves_ia_ilegiveis')
+           'chave_ia_removida', 'chaves_ia_ilegiveis', 'conta_desativada_por_inatividade')
 PAPEIS = ('dono', 'editor', 'reporter', 'leitor')
 CODIGOS = ('caso_indisponivel', 'conversa_indisponivel', 'lote_inexistente', 'redacao_suspensa', 'pendencia_de_conta',
            'operacao_inexistente', 'acesso_indisponivel', 'senha_atual_incorreta', 'ultimo_dono', 'senha_necessaria',
            'convite_duplicado', 'limite_de_convites', 'transporte_indisponivel', 'codigo_invalido', 'fator_necessario',
            'recuperacao_pelo_operador', 'link_invalido', 'senha_invalida', 'fator_indisponivel', 'requisicao_invalida',
-           'chave_redacao_ilegivel')
+           'chave_redacao_ilegivel', 'nome_confirmacao_divergente')
 MOTIVOS = ('sem_participacao', 'outra_redacao', 'inexistente', 'redacao_suspensa', 'senha_incorreta', 'ultimo_dono',
            'link_expirado', 'email_em_uso', 'limite', 'codigo_invalido', 'protegido', 'pendencia', 'chave_ausente',
            'semente_ilegivel')
@@ -133,7 +133,9 @@ class ListasDoContratoTest(unittest.TestCase):
 
     def test_manutencao_como_autor(self):
         # A varredura diária (acesso.py manutencao) vence convites, avisa e desativa conta inativa.
-        for evento in ('convite_expirado', 'conta_inativa_avisada', 'conta_desativada'):
+        # E4b-4: desativa por inatividade; a exclusão da conta sem senha vencida é conta_excluida, pela varredura.
+        for evento in ('convite_expirado', 'conta_inativa_avisada', 'conta_desativada', 'conta_desativada_por_inatividade',
+                       'conta_excluida'):
             with self.subTest(evento=evento):
                 self.assertEqual(r.montar(evento, 'ok', CONTA, por='manutencao')['por'], 'manutencao')
         self.assertNotIn('por', r.montar('convite_expirado', 'ok', CONTA, por='sistema'))
@@ -142,6 +144,13 @@ class ListasDoContratoTest(unittest.TestCase):
         # E3: a recovery the operator must do is refused to the dono, and the refusal keeps its code.
         linha = r.montar('admin_recusada', 'negado', CONTA, codigo='recuperacao_pelo_operador', alvo=CONTA, organizacao=ORG)
         self.assertEqual((linha['evento'], linha['codigo'], linha['alvo']), ('admin_recusada', 'recuperacao_pelo_operador', CONTA))
+
+    def test_exclusao_da_conta_com_nome_divergente(self):
+        # E4b-3: deleting one's own account with a mistyped name is refused (validacao) and keeps the code.
+        linha = r.montar('admin_recusada', 'negado', CONTA, motivo='validacao', codigo='nome_confirmacao_divergente',
+                         alvo=CONTA, organizacao=ORG)
+        self.assertEqual((linha['evento'], linha['motivo'], linha['codigo']),
+                         ('admin_recusada', 'validacao', 'nome_confirmacao_divergente'))
 
     def test_segundo_fator_indisponivel_e_bloqueado(self):
         # E4: written straight by registrar, failed, with the reason; without an account at the server's start.
