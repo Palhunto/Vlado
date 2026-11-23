@@ -34,6 +34,8 @@ FORA_DA_TABELA = {
     'codex-desligar': 'no piloto o serviço não se encerra pela interface: recusado a todos (observação da linha)',
     'ia-config-salvar': 'com mais de uma redação, a chave do serviço não se troca pela Mesa até existir a chave própria '
                         'de cada redação (entrega seguinte)',
+    'conta-fator-remover': 'no piloto o segundo fator é obrigatório para dono e editor, que não o removem (observação '
+                           'da linha); no local-contas, onde é opcional, a célula vale para todos',
     'sessao-sair': 'encerra a sessão usada pelo próprio teste: conferida à parte, com uma sessão só para isso'}
 
 
@@ -135,14 +137,19 @@ class ContratoTest(unittest.TestCase):
             self.assertEqual(autorizacao.MATRIZ[operacao].resolvedor, frozenset({'nenhum'}))
 
     def test_capacidades_saem_da_matriz(self):
-        self.assertIn('redacao-revisar', autorizacao.capacidades({'papel': 'editor'}))
-        self.assertNotIn('redacao-revisar', autorizacao.capacidades({'papel': 'reporter'}))
-        self.assertNotIn('cadastrar', autorizacao.capacidades({'papel': 'editor'}))
-        self.assertEqual(set(autorizacao.capacidades({'papel': 'convidado'})),
-                         set(interface_pesquisa.OPERACOES_CONVIDADO) | set(interface_pesquisa.CONTA_PROPRIA))
-        self.assertIn('equipe-papel', autorizacao.capacidades({'papel': 'dono'}))
+        def de(papel):  # the mode with accounts that refuses nothing of its own: the cells alone
+            return autorizacao.capacidades(None, 'local-contas', {'papel': papel})
+        self.assertIn('redacao-revisar', de('editor'))
+        self.assertNotIn('redacao-revisar', de('reporter'))
+        self.assertNotIn('cadastrar', de('editor'))
+        self.assertEqual(set(de('convidado')), set(interface_pesquisa.OPERACOES_CONVIDADO) | set(interface_pesquisa.CONTA_PROPRIA))
+        self.assertIn('equipe-papel', de('dono'))
         for papel in ('editor', 'reporter', 'leitor', 'convidado'):
-            self.assertFalse([o for o in autorizacao.capacidades({'papel': papel}) if o.startswith('equipe-')], papel)
+            self.assertFalse([o for o in de(papel) if o.startswith('equipe-')], papel)
+        # The single operator of the local mode has no accounts: nothing of them is offered to the interface.
+        local = autorizacao.capacidades(None, 'local', {'papel': 'dono'})
+        self.assertFalse([o for o in local if o.startswith(('conta-', 'equipe-', 'caso-'))])
+        self.assertIn('codex-desligar', local)
 
 
 class Pedido:
@@ -243,7 +250,10 @@ class CelulasTest(cenario.DuasRedacoes):
             else:  # an item of the trash out of reach: the answer to an item that does not exist, byte for byte
                 self.assertEqual((status, bruto), inexistente[pedido.operacao], bruto[:200])
         else:
-            self.assertNotIn(status, (401, 403, 404, 500, 503), bruto[:200])
+            # The gate let it through. A sensitive operation may still ask the password of who does it, or the
+            # code of the second factor: that is not a refusal of the role, and each has its own code.
+            self.assertNotIn(status, (401, 404, 500, 503), bruto[:200])
+            self.assertTrue(status != 403 or codigo in ('senha_necessaria', 'fator_necessario'), bruto[:200])
             self.assertNotIn(codigo, ('caso_indisponivel', 'conversa_indisponivel', 'operacao_proibida'), bruto[:200])
             self.assertNotIn('não liberada', str(corpo.get('erro')))
             if pedido.alcance == 'item':
@@ -315,6 +325,47 @@ class CelulasTest(cenario.DuasRedacoes):
             'openai': {'configurada': False, 'origem': None, 'final': None}})
         self.assertEqual(autorizacao.filtrar(self.root, 'local', principal, 'ia-config', resposta), resposta)
 
+    def test_remover_o_fator_e_negado_onde_ele_e_obrigatorio_e_so_ali(self):
+        antes = self.retrato()
+        for papel in autorizacao.PAPEIS:
+            status, corpo, _ = self.post(papel, 'conta-fator-remover', {})
+            # Who must have it is refused by the gate; the others pass it and are asked the password (5.15).
+            esperado = 'operacao_proibida' if papel in acesso.FATOR_OBRIGATORIO else 'senha_necessaria'
+            self.assertEqual((status, corpo.get('codigo')), (403, esperado), papel)
+        self.assertEqual(antes, self.retrato())
+        for papel in autorizacao.PAPEIS:  # in the installed Mesa the factor is optional, and everybody removes it
+            principal = acesso.sessao(self.root, self.sessoes[papel][0].split('=', 1)[1])
+            concedido = autorizacao.conferir(self.root, 'local-contas', principal, 'conta-fator-remover', {})
+            self.assertEqual(concedido.operacao, 'conta-fator-remover', papel)
+
+    def test_capacidades_e_portao_concordam_em_todo_modo_e_papel(self):
+        # Condition of the review for the cell above: the interface never gets a capability the gate refuses by a
+        # rule of the mode, and never loses one the gate grants. Asked to the gate itself, operation by operation.
+        local = {'papel': 'dono', 'conta': None, 'organizacao': None, 'casos': None, 'responsavel_de': None, 'pendencias': []}
+        contas = {papel: acesso.sessao(self.root, self.sessoes[papel][0].split('=', 1)[1], obrigar_fator=True)
+                  for papel in autorizacao.PAPEIS}
+        recusas_de_papel_ou_modo = {(403, 'operacao_proibida'), (403, 'servico_nao_encerravel')}
+        conferidas = 0
+        for modo, principais in (('local', {'operador': local}), ('local-contas', contas), ('piloto', contas)):
+            for quem, principal in principais.items():
+                self.assertEqual(principal['pendencias'], [], quem)
+                recebidas = set(autorizacao.capacidades(self.root, modo, principal))
+                for operacao in sorted(autorizacao.operacoes_com_sessao()):
+                    passa = False
+                    for dados in ({}, {'novo': True}, {'conversa': 'f' * 32}):  # every variant of the operation
+                        try:
+                            autorizacao.conferir(self.root, modo, principal, operacao, dados)
+                            passa = True
+                        except autorizacao.Recusa as recusa:  # out of reach, missing object: not the role nor the mode
+                            passa = passa or (recusa.status, recusa.codigo) not in recusas_de_papel_ou_modo
+                    self.assertEqual(operacao in recebidas, passa, (modo, quem, operacao))
+                    conferidas += 1
+        self.assertEqual(conferidas, len(autorizacao.operacoes_com_sessao()) * 11)
+        piloto = set(autorizacao.capacidades(self.root, 'piloto', contas['dono']))
+        instalada = set(autorizacao.capacidades(self.root, 'local-contas', contas['dono']))
+        self.assertEqual(instalada - piloto, {'codex-desligar', 'ia-config-salvar', 'conta-fator-remover'})
+        self.assertEqual(piloto - instalada, set())
+
     def test_as_contas_antigas_respondem_como_operacao_inexistente_a_todos_os_papeis(self):
         # Withdrawn with the invitation by e-mail (P30): the same 404 of an operation that never existed, to the
         # dono as to anybody, with the body they would send before.
@@ -342,8 +393,11 @@ class CelulasTest(cenario.DuasRedacoes):
                 self.assertEqual(status, 200)
                 self.assertEqual((corpo['conta']['papel'], corpo['conta']['casos'], corpo['organizacao']),
                                  (papel, casos, {'id': self.a, 'nome': 'Redação Alfa'}))
-                self.assertEqual(corpo['capacidades'], autorizacao.capacidades({'papel': papel}))
-                self.assertEqual(corpo['pendencias'], [])
+                self.assertEqual(corpo['capacidades'], autorizacao.capacidades(self.root, 'piloto', {'papel': papel}))
+                # What the hosted mode refuses is not offered: the page would show a button that answers 403.
+                self.assertFalse({'codex-desligar', 'ia-config-salvar'} & set(corpo['capacidades']), papel)
+                self.assertEqual('conta-fator-remover' in corpo['capacidades'], papel not in acesso.FATOR_OBRIGATORIO, papel)
+                self.assertEqual(corpo['pendencias'], [])  # dono and editor of the scenario have their second factor
                 self.sem_sentinela(bruto)
 
 

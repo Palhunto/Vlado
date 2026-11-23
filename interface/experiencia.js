@@ -44,7 +44,7 @@
     select.value = value;
   }
   function canSwitch(value) {
-    if(cadastroBusy||window.Documentos?.ocupado()){notice('Aguarde o recibo deste envio antes de trocar de apuração.');return false;}
+    if(window.NovaApuracao?.ocupado()||window.Documentos?.ocupado()){notice('Aguarde o recibo deste envio antes de trocar de apuração.');return false;}
     if (window.estadoConversa?.().ocupada) {
       notice('Aguarde a execução ou reconecte o acompanhamento antes de trocar de apuração.'); return false;
     }
@@ -59,8 +59,6 @@
     for (const id of caseSelects) {
       if ($(id).value !== value) { adapt(id,value); $(id).dispatchEvent(new Event('change')); }
     }
-    // Upload destination follows the desk; starting a new case is always explicit.
-    adapt('cadastro-caso', value); toggleNewCase();
     try { localStorage.setItem('mesa-apuracao', value); } catch {}
     notice(value ? `Apuração: ${cases.find(c => c.id === value)?.titulo || value}.` : 'Escolha uma apuração ou comece uma nova.', false);
     window.dispatchEvent(new Event('mesa-contexto-alterado'));
@@ -170,14 +168,6 @@
   $('inicio-retomar').addEventListener('click',()=>{
     if (!current) { notice('Escolha a apuração que deseja retomar.'); $('contexto-caso').focus(); }
     else showArea('codex');
-  });
-  $('cadastro-perguntar').addEventListener('click',()=>{
-    const caseId = $('cadastro-perguntar').dataset.caso;
-    if (!window.definirContextoCaso(caseId)) return;
-    $('codex-recibo-alerta').replaceChildren(element('summary','Recibo dos documentos enviados · confira as limitações antes de perguntar'),$('cadastro-recibo').cloneNode(true));
-    // Avoid duplicated DOM IDs when preserving the receipt alongside the question.
-    for (const child of $('codex-recibo-alerta').querySelectorAll('[id]')) child.removeAttribute('id');
-    $('codex-recibo-alerta').hidden=false; showArea('codex'); window.abrirComposicaoMesa?.(); $('codex-pergunta').focus();
   });
   for (const id of routeIds) $(id).addEventListener('change',()=>writeRoute());
   for (const form of ['pesquisa','achados-form','caderno-pesquisa','diligencias-filtros']) $(form).addEventListener('submit',()=>writeRoute());

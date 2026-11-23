@@ -57,7 +57,7 @@ import trava_cadastro
 from indice_sqlite import ID_CASO, caminho_rodada, cobertura, ler_passagem, pesquisar
 # Names also imported from here by the launcher, the tests and older callers.
 from rotas_caderno import CADERNO_OPERACOES, DILIGENCIAS_OPERACOES
-from rotas_contas import (RotasContas, OPERACOES_CONVIDADO, OPERACOES_CONVERSA,  # noqa: F401
+from rotas_contas import (RotasContas, avisar_bloqueio_do_fator, OPERACOES_CONVIDADO, OPERACOES_CONVERSA,  # noqa: F401
                           OPERACOES_PUBLICAS, AMBIENTES, SEM_SESSAO, OPERACOES_COM_COTA, ATIVOS_CONVERSA,
                           COOKIE_PILOTO, CONTA_PROPRIA)
 from rotas_conversa import RotasConversa, RESPONDIDO, CAMPOS_INTERNOS_CONVERSA, _sem_internos  # noqa: F401
@@ -598,7 +598,8 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             # One year, subdomains included; no `preload` (hard to undo: see deploy/MONITORAMENTO.md).
             self.send_header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
         for key, value in (extra or {}).items():
-            self.send_header(key, value)
+            for cada in (value if isinstance(value, (list, tuple)) else (value,)):  # more than one Set-Cookie
+                self.send_header(key, cada)
         baixando = status == 200 and str((extra or {}).get('Content-Disposition', '')).startswith('attachment')
         try:
             self.end_headers()
@@ -681,7 +682,11 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             try:
                 autorizacao.conferir(self.server.root, self.server.modo, self._principal(), 'GET:' + path, {})
             except autorizacao.Recusa as recusa:
-                self._recusado(recusa, self._principal(), pagina=path == '/')
+                destino = autorizacao.pagina_da_pendencia(recusa) if path == '/' else None
+                if destino:  # not a denial: the account has something to finish first, and goes to where it is done
+                    self._send(303, b'', 'text/plain; charset=utf-8', {'Location': destino})
+                else:
+                    self._recusado(recusa, self._principal(), pagina=path == '/')
                 return
         if path == '/api/sessao':
             self._sessao_atual()
@@ -706,9 +711,11 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 # Public, before any session: what the sign-in page may offer. Nothing of any account.
                 self._json(200, {'esqueci_senha': self._esqueci_ligado()})
                 return
-            if path == '/entrar' or re.fullmatch(r'/ativar(/[A-Za-z0-9_-]{1,100})?|/(aceitar|redefinir|confirmar-email)/[A-Za-z0-9_-]{1,100}', path):
+            if (path == '/entrar' or path in autorizacao.PAGINA_DA_PENDENCIA.values()
+                    or re.fullmatch(r'/ativar(/[A-Za-z0-9_-]{1,100})?|/(aceitar|redefinir|confirmar-email)/[A-Za-z0-9_-]{1,100}', path)):
                 # Static page without case data; the token stays in the path, read by entrar.js. Like every answer,
-                # it goes with `Cache-Control: no-store` and `Referrer-Policy: no-referrer` (`_send`).
+                # it goes with `Cache-Control: no-store` and `Referrer-Policy: no-referrer` (`_send`). The page that
+                # resolves a pending item of the account is of the same family: it reads the session by itself.
                 self._send(200, rotas_estaticas.conteudo('entrar.html'), 'text/html; charset=utf-8')
                 return
             if path in ('/', '/api/catalogo', '/api/integracao', '/api/fila', '/api/cota') and self._principal() is None:
@@ -895,10 +902,11 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             self._json(409, {'estado': 'erro', 'codigo': 'conflito', 'erro': str(exc), 'atual': exc.atual})
         except rascunhos.ConflitoRascunho as exc:
             self._json(409, {'estado': 'erro', 'codigo': 'rascunho_conflito', 'erro': str(exc), 'atual': exc.atual})
-        except acesso.Bloqueado as exc:  # too many wrong passwords on a sensitive operation
+        except acesso.Bloqueado as exc:  # too many wrong passwords, or wrong codes, on a sensitive operation
+            avisar_bloqueio_do_fator(self.server.root, exc)
             self._json(429, {'estado': 'bloqueado', 'codigo': 'bloqueado', 'erro': str(exc)})
         except acesso.Recusada as exc:  # a refusal with its own status and code (password asked again, last dono)
-            self._json(exc.status, {'estado': 'proibido' if exc.status == 403 else 'erro', 'codigo': exc.codigo,
+            self._json(exc.status, {'estado': {403: 'proibido', 503: 'indisponivel'}.get(exc.status, 'erro'), 'codigo': exc.codigo,
                                     'erro': str(exc)})
         except (ValueError, OSError, KeyError, TypeError, sqlite3.Error) as exc:
             if operation in DOWNLOADS:
@@ -1036,6 +1044,9 @@ def main():
         if server.com_contas:
             try:  # the daily sweep also runs at the start: invitations past their date, old activity
                 acesso.manutencao(server.root)
+                aviso = acesso.conferir_chave_do_fator(server.root)
+                if aviso:  # second factors enrolled and the key of their seeds is not here: the operator must know
+                    print(aviso, file=sys.stderr, flush=True)
             except (ValueError, OSError):
                 pass  # an unreadable store answers 503 to each request; it does not stop the start
         print(f'Mesa de apuração ({args.modo}): {server.origin}', flush=True)

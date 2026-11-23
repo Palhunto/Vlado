@@ -101,14 +101,11 @@ main{padding:30px 32px;min-width:0}
 .notice{margin-top:22px}
 .workflow{display:flex;flex-wrap:wrap;gap:12px 24px;margin-bottom:24px;color:var(--muted);font-size:var(--text-md)}
 .workflow .current{font-weight:600;color:var(--green)}
-#cadastro .filters{margin-bottom:18px}
 .file-label{margin:24px 0 10px}
 .document-list{padding:0;list-style:none}
 .document-list li{padding:16px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
 .document-list p{margin:8px 0}
-#cadastro-recibo{background:var(--soft);padding:20px;border-radius:var(--raio-cartao);margin:20px 0}
-#cadastro-inventario h3,#cadastro-recibo h3{font-size:var(--text-lg)}
-#erro,#cadastro-erro,#achados-erro{
+#erro,#achados-erro{
   padding:16px 18px;
   background:var(--warning-bg);
   color:var(--warning);
@@ -356,8 +353,6 @@ body[data-idioma-padrao=en]:not([data-i18n-pronto]){visibility:hidden;animation:
 .brand>span{color:var(--green)}
 .badge{font-size:var(--text-md)}.intro h1{max-width:28ch}
 h1,h2,h3{font-optical-sizing:auto}
-#novo-caso-campos{grid-template-columns:1fr}
-#cadastro-titulo-input{max-width:720px}
 .connection-status{font-size:var(--text-md);background:var(--soft);color:var(--green);padding:6px 12px;border-radius:var(--raio-pilula);margin:0}
 .connection-status.connected::before{
   content:'';
@@ -763,7 +758,6 @@ h1,h2,h3{font-optical-sizing:auto}
 #original-conteudo img{max-width:100%;height:auto}
 #original-conteudo pre{white-space:pre-wrap;overflow-wrap:anywhere}
 #achados-voltar-lista{display:none}
-#cadastro-perguntar{margin:16px 0}
 @media (max-width:1023px) {
   .app-header{gap:12px;flex-wrap:wrap}
   .header-note{display:none}
@@ -1081,7 +1075,6 @@ main{padding:var(--espaco-8);max-width:1600px;min-height:calc(100dvh - var(--cab
 }
 #mesa-etapas a[aria-current=step]{color:var(--green);border-color:var(--green);font-weight:600}
 #mesa-etapas a[aria-current=step]>span{background:var(--green);border-color:var(--green);color:var(--white)}
-#area-cadastro>.workflow{display:none}
 .mesa-home-section{margin-top:30px}
 .mesa-home-section>.section-heading{margin-bottom:16px}
 .mesa-home-section>.section-heading a{font-size:var(--text-sm);text-decoration:none}
@@ -1195,28 +1188,7 @@ main{padding:var(--espaco-8);max-width:1600px;min-height:calc(100dvh - var(--cab
 .scope-panel #contexto-rodada{margin-bottom:0;font-size:var(--text-xs)}
 #mesa-pesquisa>#selecao-acervo{margin-bottom:18px}
 #mesa-pesquisa #busca-tecnica>summary{font-size:var(--text-xs)}
-#cadastro .file-label{
-  display:flex;
-  align-items:center;
-  text-align:center;
-  padding:28px;
-  border:1px dashed var(--theme-input-line);
-  border-radius:var(--raio-cartao);
-  background:var(--theme-reading);
-  font-size:var(--text-base);
-  gap:15px;
-}
-#cadastro-arquivos{max-width:600px;padding:14px;background:var(--white);font-size:var(--text-md)}
-#enviar-documentos{display:block;margin:24px 0 0 auto}
-#cadastro-titulo-input{max-width:none}
-#novo-caso-campos{grid-template-columns:1fr}
-#cadastro-recibo{background:var(--theme-soft);border:1px solid var(--theme-input-line);border-radius:var(--raio-cartao);padding:23px;margin-top:20px}
-#cadastro-recibo>h3{font:500 var(--text-2xl)/1.3 var(--fonte-titulo)}
-#cadastro-recibo>.document-list{background:var(--white);border:1px solid var(--line);border-radius:var(--raio-controle);padding:0;list-style:none}
-#cadastro-recibo .document-list>li{padding:15px 18px;border-bottom:1px solid var(--line);font-size:var(--text-md)}
-#cadastro-recibo .document-list>li:last-child{border-bottom:0}
 .document-list .limitation{font-size:var(--text-sm);padding:10px 14px;margin-top:10px}
-#cadastro-inventario{margin-top:25px}
 #area-codex>.panel:first-child{padding:20px 25px}
 #codex-acervo>summary{font-size:var(--text-sm)}
 #codex-titulo{font-size:var(--text-xl)}
@@ -1527,12 +1499,6 @@ footer{font-size:var(--text-xs);margin-top:32px;padding-top:20px;color:var(--mut
   .scope-panel .section-heading{flex-wrap:wrap}
   .scope-panel .section-heading h2{font-size:var(--text-xl)}
   .selectors,.index-selection,.filters{grid-template-columns:1fr}
-  #cadastro .file-label{padding:23px 15px;font-size:var(--text-base)}
-  #cadastro-arquivos{font-size:var(--text-xs);padding:10px}
-  #enviar-documentos{width:100%;margin-top:20px}
-  #cadastro-recibo{padding:19px}
-  #cadastro-recibo>h3{font-size:var(--text-xl)}
-  #cadastro-recibo .document-list>li{padding:14px;font-size:var(--text-md)}
   .query-row{flex-direction:column}
   .codex-user{padding:15px}
   .codex-answer{padding:0}
@@ -1716,13 +1682,13 @@ body>svg:has(>defs>symbol[id^="vditor-icon-"]){position:absolute;width:0;height:
   .app-header .persistent-context{max-width:none}
   .app-header .mobile-brand{display:none}
 }
-@media (pointer:coarse) {
-}
 @media print {
   #mesa-tema,#mesa-idioma{display:none}
 }
 .ia-config{display:grid;gap:8px;margin:14px 0;padding-top:12px;border-top:1px solid var(--line)}
 .ia-config h3{margin:0;font-size:var(--text-md)}
+/* F1: a linha do estado da chave chega depois da leitura do servidor; reservada, ela não empurra o botão Salvar para baixo quando o texto entra. */
+.ia-config #ia-chave-estado{min-height:1.65em}
 .ia-config label{display:grid;gap:4px;font-size:var(--text-sm)}
 .ia-config input,.ia-config select{width:100%;max-width:420px}
 body[data-papel="convidado"] [data-somente-admin]{display:none}
@@ -2660,6 +2626,8 @@ body[data-nova="passo2"] #area-documentos :is(.mesa-tabs,.docs-topo,.mesa-acervo
 .docs-ler{min-height:var(--espaco-6);padding:0;border:0;background:none;color:var(--theme-accent);font-size:var(--text-md);font-weight:600;text-decoration:underline}
 .docs-ler:hover{background:none;color:var(--theme-primary-hover)}
 body[data-nova="passo2"] #area-documentos :is(.docs-avisos,.docs-paginas){display:none}
+.nova-recomecar{margin:0 0 var(--espaco-3)}
+.nova-incerto:not([hidden])+.nova-recomecar:not([hidden]){margin-top:calc(-1 * var(--espaco-1))}
 .nova-incerto{margin:0 0 var(--espaco-3);padding:var(--espaco-3) var(--espaco-4);border:1px solid var(--theme-warning-line);border-radius:var(--raio-controle);background:var(--theme-warning-bg);color:var(--theme-warning)}
 
 /* Portão AA (docs/design/componentes.md#foco-aa). Só tokens.
@@ -2669,7 +2637,8 @@ body[data-nova="passo2"] #area-documentos :is(.docs-avisos,.docs-paginas){displa
 :is(.areas,.mesa-tabs,.notebook-tabs,.quadros-abas) :is(a,button,[role=tab]):not([aria-pressed=true],[aria-current],[aria-selected=true]):focus-visible{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:-1px}
 /* (b) Editor do Caderno (Vditor): a área de edição ocupa o cartão inteiro e o cartão corta, então o anel é interno (mudancas-de-token.md, item 2). */
 #apuracao-vditor .vditor-reset:focus{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:calc(-1 * var(--foco-largura) - 2px)}
-#apuracao-vditor .vditor-toolbar :is(button,.vditor-tooltipped):focus-visible{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:0}
+/* O painel de busca e substituição do editor (.vditor-panel) fica fora da barra: os botões e os campos dele têm o mesmo anel (o campo só mudava o fundo, 1,16:1). */
+#apuracao-vditor :is(.vditor-toolbar,.vditor-panel) :is(button,.vditor-tooltipped):focus-visible,#apuracao-vditor .vditor-panel input:focus-visible{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:0}
 /* (c) Seletor de apuração do topo, sem caixa como no canvas (P34): o que o identifica é o rótulo, o nome e a seta, todos em --theme-text; o fundo ao passar o mouse só reforça. */
 .persistent-context select{color:var(--theme-text)}
 .persistent-context select:hover{background:var(--theme-soft)}

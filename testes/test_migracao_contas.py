@@ -233,7 +233,8 @@ class NaoAmpliacaoTest(Base):
                 ops_antes = operacoes_de_antes if admin else set(interface_pesquisa.OPERACOES_CONVIDADO)
                 registro = {c['id']: c for c in acesso.listar(self.root)}[cid]
                 casos_depois = set(acesso.alcance(self.root, cid)[0])
-                ops_depois = set(autorizacao.capacidades({'papel': registro['papel']}))
+                # The cells of the role alone (the mode with accounts that refuses nothing of its own).
+                ops_depois = set(autorizacao.capacidades(self.root, 'local-contas', {'papel': registro['papel']}))
                 if not conta['ativa']:
                     self.assertEqual(casos_depois, set())
                 self.assertLessEqual(casos_depois, casos_antes)

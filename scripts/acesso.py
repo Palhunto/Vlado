@@ -39,6 +39,7 @@ from collections import deque
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import hashlib
+import hmac
 import ipaddress
 import json
 import os
@@ -58,6 +59,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from comum import ler_json, trava_arquivo  # noqa: E402
 import registro_acesso  # noqa: E402
+import segundo_fator  # noqa: E402
 
 PAPEIS = ('dono', 'editor', 'reporter', 'leitor', 'convidado')
 # Names of the two-role model, accepted on input (old CLI, `contas-*` while they exist) and never stored.
@@ -92,7 +94,22 @@ REDEFINICAO_MINUTOS = 60  # a password-reset link is valid for one hour, once (d
 REDEFINICAO_INTERVALO_MINUTOS = 5  # the same address is sent at most one reset message in this time
 CHAVE_ESQUECI = '#esqueci|'  # when a reset was last asked for an address, whether an account has it or not
 RECUPERACAO_HORAS = 24  # a recovery asked by a dono: how long it waits for the second dono, and how long its link lives
-ESQUEMA = 5  # PRAGMA user_version of the store; `_ATUALIZACOES` takes an older store up to it
+ENTRADA_MINUTOS = 5  # between the right password and the second factor: the ticket of the second step
+ENTRADA_FALHAS = 5  # wrong codes that kill that ticket
+FATOR_OBRIGATORIO = ('dono', 'editor')  # who must have a second factor where it is mandatory: the hosted mode (8.2)
+FATOR_PENDENTE_MINUTOS = 15  # an enrolment not confirmed in this time starts again
+FATOR_RETIRADO = 'fator_removido_na_recuperacao'  # the event of a factor that a recovery took away (link or operator)
+CHAVE_FATOR = '#fator|'  # wrong codes of the authenticator, counted on the account (sign-in and sensitive operations)
+CHAVE_RESERVA = '#reserva|'  # wrong reserve codes, on a counter of their own: they never block the authenticator
+FATOR_CONTADOR_HORAS = 24  # how long those two counters are remembered without a new failure
+PROTECAO_FALHAS = 10  # failures of one identifier, from any address, inside the window below ...
+PROTECAO_JANELA_MINUTOS = 60
+PROTECAO_MINUTOS = 60  # ... put it in protected mode for this long
+BALDES = 20000  # counters of identifiers WITHOUT an account: a table of fixed size, so it never fills nor grows
+APARELHOS_MAX = 20  # known devices kept for each account (the least recently used goes first)
+CHAVE_BALDE = '#balde|'  # the ceiling of an identifier, with an account or without: one of BALDES counters, by HMAC
+CHAVE_MARCA = '#marca|'  # failures with a known device mark: the mark does not switch the ceiling off
+ESQUEMA = 7  # PRAGMA user_version of the store; `_ATUALIZACOES` takes an older store up to it
 ESPERA_BD_S = 10
 NOME_PADRAO_REDACAO = 'Redação'
 CREDENCIAIS = 'Login ou senha incorretos.'
@@ -109,6 +126,12 @@ TETO_INVALIDO = 'Informe o teto em reais, com até duas casas decimais (por exem
 CONVITE_INVALIDO = 'Convite inválido, cancelado ou vencido. Peça um novo a quem convidou.'
 CONVITE_INEXISTENTE = 'Convite não encontrado.'
 LINK_INVALIDO = 'Link inválido, usado ou vencido. Peça outro em Esqueci a senha.'
+CODIGO_INVALIDO = 'Código incorreto.'
+FATOR_INDISPONIVEL = ('O código do aplicativo não pode ser conferido neste servidor agora. Se você tem um código de '
+                      'reserva, use-o, e avise quem administra o serviço.')
+CADASTRO_INDISPONIVEL = 'O cadastro do segundo fator está indisponível neste servidor. Avise quem administra o serviço.'
+CODIGO_NECESSARIO = 'Digite o código do aplicativo autenticador, ou um código de reserva.'
+ENTRADA_EXPIRADA = 'A entrada expirou. Digite o login e a senha de novo.'
 CHAVE_CONFIRMACAO = '#senha|'  # attempt counter of the password asked again; `#` never starts a login
 
 _HASHER = PasswordHasher()  # library defaults (argon2id); check_needs_rehash follows them
@@ -187,6 +210,18 @@ CREATE TABLE recuperacoes (
     pedida_por TEXT NOT NULL, pedida_em TEXT NOT NULL, expira_em TEXT NOT NULL, estado TEXT NOT NULL DEFAULT 'pendente',
     confirmada_por TEXT, encerrada_em TEXT);
 CREATE INDEX recuperacoes_por_organizacao ON recuperacoes (organizacao, estado);
+CREATE TABLE fatores (
+    conta TEXT PRIMARY KEY REFERENCES contas(id), semente TEXT, ativo INTEGER NOT NULL DEFAULT 0, criado_em TEXT NOT NULL,
+    ativado_em TEXT, ultimo_passo INTEGER, pendente TEXT, pendente_em TEXT);
+CREATE TABLE codigos_reserva (
+    conta TEXT NOT NULL REFERENCES contas(id), resumo TEXT NOT NULL, criado_em TEXT NOT NULL, usado_em TEXT,
+    PRIMARY KEY (conta, resumo));
+CREATE TABLE entradas (
+    id_sha256 TEXT PRIMARY KEY, conta TEXT NOT NULL REFERENCES contas(id), chave TEXT NOT NULL, criada_em TEXT NOT NULL,
+    expira_em TEXT NOT NULL, falhas INTEGER NOT NULL DEFAULT 0, cliente TEXT, aparelho TEXT);
+CREATE TABLE aparelhos (
+    conta TEXT NOT NULL REFERENCES contas(id), resumo TEXT NOT NULL, criado_em TEXT NOT NULL, ultimo_uso TEXT NOT NULL,
+    PRIMARY KEY (conta, resumo));
 """
 # From each older version of the store to the next one (applied in order, each in one transaction).
 _ATUALIZACOES = {1: ('ALTER TABLE contas ADD COLUMN idioma TEXT',
@@ -209,7 +244,17 @@ _ATUALIZACOES = {1: ('ALTER TABLE contas ADD COLUMN idioma TEXT',
                      'CREATE TABLE recuperacoes (id TEXT PRIMARY KEY, organizacao TEXT NOT NULL REFERENCES organizacoes(id),'
                      ' conta TEXT NOT NULL REFERENCES contas(id), pedida_por TEXT NOT NULL, pedida_em TEXT NOT NULL,'
                      " expira_em TEXT NOT NULL, estado TEXT NOT NULL DEFAULT 'pendente', confirmada_por TEXT, encerrada_em TEXT)",
-                     'CREATE INDEX recuperacoes_por_organizacao ON recuperacoes (organizacao, estado)')}
+                     'CREATE INDEX recuperacoes_por_organizacao ON recuperacoes (organizacao, estado)'),
+                 5: ('CREATE TABLE fatores (conta TEXT PRIMARY KEY REFERENCES contas(id), semente TEXT,'
+                     ' ativo INTEGER NOT NULL DEFAULT 0, criado_em TEXT NOT NULL, ativado_em TEXT, ultimo_passo INTEGER,'
+                     ' pendente TEXT, pendente_em TEXT)',
+                     'CREATE TABLE codigos_reserva (conta TEXT NOT NULL REFERENCES contas(id), resumo TEXT NOT NULL,'
+                     ' criado_em TEXT NOT NULL, usado_em TEXT, PRIMARY KEY (conta, resumo))',
+                     'CREATE TABLE entradas (id_sha256 TEXT PRIMARY KEY, conta TEXT NOT NULL REFERENCES contas(id),'
+                     ' chave TEXT NOT NULL, criada_em TEXT NOT NULL, expira_em TEXT NOT NULL,'
+                     ' falhas INTEGER NOT NULL DEFAULT 0, cliente TEXT, aparelho TEXT)'),
+                 6: ('CREATE TABLE aparelhos (conta TEXT NOT NULL REFERENCES contas(id), resumo TEXT NOT NULL,'
+                     ' criado_em TEXT NOT NULL, ultimo_uso TEXT NOT NULL, PRIMARY KEY (conta, resumo))',)}
 
 
 class RegistroIlegivel(ValueError):
@@ -234,6 +279,15 @@ class _VezDoHash:
 
 class Bloqueado(ValueError):
     """Too many attempts for this login (15 min) or from this address (per minute)."""
+
+
+class FatorBloqueado(Bloqueado):
+    """The fifth wrong code in a row just blocked the second factor of an account, whatever the addresses the
+    codes came from. `aviso` is who is told, at the account's own address."""
+
+    def __init__(self, aviso: dict):
+        super().__init__(BLOQUEADO)
+        self.aviso = aviso
 
 
 class AtivacaoInvalida(ValueError):
@@ -294,6 +348,37 @@ class LinkInvalido(ValueError):
     def __init__(self, motivo='link_invalido', mensagem=None):
         super().__init__(mensagem or LINK_INVALIDO)
         self.motivo = motivo
+
+
+class CodigoInvalido(Recusada):
+    """The code of the second factor (or the reserve code) is wrong, or was already used (it counts)."""
+    status, codigo, motivo = 403, 'codigo_invalido', 'codigo_invalido'
+
+
+class CodigoNecessario(Recusada):
+    """The operation needs the second factor and no code came. Not a wrong code: nothing is counted nor recorded
+    (a page may ask first without it, to learn that the account has a factor)."""
+    status, codigo, motivo = 403, 'fator_necessario', 'validacao'
+
+
+class FatorIndisponivel(Recusada):
+    """The second factor cannot be checked or enrolled here: the key of the seeds is missing, or is not the one
+    they were stored with (a restore without `segredos/`). Not the person's mistake: nothing is counted. A reserve
+    code still works, as it needs neither the seed nor the key."""
+    status, codigo, motivo = 503, 'fator_indisponivel', 'erro'
+
+
+class PedeSegundoFator(Exception):
+    """The password was right and the account has a second factor: no session yet. `bilhete` is the ticket of the
+    second step (five minutes, good only for `entrar_segundo_fator`). Not an error: `entrar` says it this way."""
+
+    def __init__(self, bilhete: str):
+        super().__init__('segundo_fator')
+        self.bilhete = bilhete
+
+
+class EntradaExpirada(ValueError):
+    """The ticket of the second step is unknown, past its five minutes, or was killed by wrong codes."""
 
 
 class SoPeloOperador(Recusada):
@@ -850,6 +935,7 @@ def _derrubar_sessoes(tx: _Tx, cid: str) -> None:
     sessions (deactivation, recovery, removal, a new password) must not leave a way back in."""
     tx.ex('DELETE FROM sessoes WHERE conta = ?', cid)
     tx.ex('DELETE FROM links WHERE conta = ?', cid)
+    tx.ex('DELETE FROM entradas WHERE conta = ?', cid)
 
 
 def _emitir_ativacao(tx: _Tx, cid: str, horas: int, motivo: str, momento: datetime) -> str:
@@ -1288,6 +1374,12 @@ def recuperar(root: Path, cid, por='cli', horas=ATIVACAO_HORAS, organizacao: str
         conta = _conta(tx, cid, organizacao)
         momento = agora()
         _derrubar_sessoes(tx, cid)
+        if tx.um('SELECT 1 FROM fatores WHERE conta = ?', cid):
+            # Recovered by the operator: the person lost the password and may have lost the device too. The
+            # second factor goes with the password, and is enrolled again after the new sign-in.
+            _sem_fator(tx, cid)
+            _evento(tx, FATOR_RETIRADO, cid, por, momento)
+        tx.ex('DELETE FROM aparelhos WHERE conta = ?', cid)
         tx.ex('UPDATE contas SET senha_hash = NULL, senha_definida_em = NULL WHERE id = ?', cid)
         token = _emitir_ativacao(tx, cid, horas, 'recuperacao', momento)
         _limpar_tentativas(tx, conta)
@@ -1360,6 +1452,8 @@ def remover(root: Path, cid, por: str, organizacao: str, senha=None, ip=None) ->
             raise UltimoDono(ULTIMO_DONO)
         _derrubar_sessoes(tx, cid)
         _cancelar_convites_de(tx, cid, momento)
+        _sem_fator(tx, cid)
+        tx.ex('DELETE FROM aparelhos WHERE conta = ?', cid)
         tx.ex('DELETE FROM participacoes WHERE conta = ?', cid)
         _sem_responsabilidade(tx, cid)
         tx.ex('DELETE FROM uso_diario WHERE conta = ?', cid)
@@ -1623,7 +1717,7 @@ def consultar_convite(root: Path, token) -> dict:
 
 
 def aceitar_convite(root: Path, token, nome, senha, termos_versao=None, ip: str | None = None, cliente='web',
-                    aparelho=None) -> tuple[str, str, dict]:
+                    aparelho=None, marca=None) -> tuple[str, str, dict]:
     """Accept an invitation: the account is born with the invitation's e-mail, role and participations, and its
     first session opens. Returns what `entrar` returns. The link works once."""
     nome, senha = _validar_nome(nome), _validar_senha(senha)
@@ -1652,6 +1746,7 @@ def aceitar_convite(root: Path, token, nome, senha, termos_versao=None, ip: str 
                   _iso(momento), cid, convite['id'])
             _evento(tx, 'convite_aceito', cid, cid, momento, papel=convite['papel'])
             sid, csrf = _abrir_sessao(tx, cid, momento, cliente, aparelho, ip)
+            _registrar_aparelho(tx, cid, marca, momento)  # the browser that accepted is the account's first known device
             return sid, csrf, _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), momento)
     except ConviteInvalido as exc:
         _convite_recusado(exc)
@@ -1738,23 +1833,41 @@ def _por_link(tx: _Tx, token, tipos: tuple, momento: datetime, mensagem=None):
 LINKS_DE_SENHA = ('redefinicao', 'recuperacao')  # the person asked ("esqueci a senha") or a dono asked for the person
 
 
-def redefinir_senha(root: Path, token, senha) -> dict:
+def redefinir_senha(root: Path, token, senha, codigo=None, ip: str | None = None, marca=None) -> dict:
     """Set a new password from the link of the reset message, or of the recovery a dono asked: every session of the
     account ends, the link (and any other pending one) dies, and the person signs in next. Returns who to tell
-    that the password changed."""
+    that the password changed.
+
+    An account with a second factor also gives its code (`codigo`) to reset by e-mail: the mailbox alone is not
+    enough. A recovery asked by a dono, already confirmed by two parties, removes the factor instead: the person
+    lost it, and enrols again.
+
+    `marca` is the device mark of the browser that uses the link: it becomes the ONLY known device of the account.
+    The link is something only the owner of the mailbox has, so this is the way out for somebody kept in protected
+    mode by another person's wrong passwords; and whoever had got into the account stops being a known device."""
     senha = _validar_senha(senha)
     try:
         with _bd(root) as tx:
-            _por_link(tx, token, LINKS_DE_SENHA, agora())  # refuse before spending time on the hash
+            link, conta = _por_link(tx, token, LINKS_DE_SENHA, agora())  # refuse before spending time on the hash
+            pede_codigo = link['tipo'] == 'redefinicao' and bool(
+                tx.um('SELECT 1 FROM fatores WHERE conta = ? AND ativo = 1', conta['id']))
+        if pede_codigo:
+            exigir_codigo(root, conta['id'], codigo, ip)
         with _VezDoHash():
             senha_hash = _HASHER.hash(senha)
         with _bd(root, escrever=True) as tx:
             momento = agora()
-            _, conta = _por_link(tx, token, LINKS_DE_SENHA, momento)
+            link, conta = _por_link(tx, token, LINKS_DE_SENHA, momento)
             cid = conta['id']
+            if link['tipo'] == 'recuperacao' and tx.um('SELECT 1 FROM fatores WHERE conta = ?', cid):
+                _sem_fator(tx, cid)
+                # Not `fator_removido`, which is the person taking away the own factor: the activity of the
+                # newsroom tells the two apart.
+                _evento(tx, FATOR_RETIRADO, cid, cid, momento)
             tx.ex('UPDATE contas SET senha_hash = ?, senha_definida_em = ?, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
                   ' ativacao_motivo = NULL WHERE id = ?', senha_hash, _iso(momento), cid)
             _derrubar_sessoes(tx, cid)
+            _so_este_aparelho(tx, cid, marca, momento)
             _limpar_tentativas(tx, conta)
             tx.ex('DELETE FROM tentativas WHERE chave = ?', CHAVE_CONFIRMACAO + cid)
             _evento(tx, 'senha_redefinida', cid, cid, momento)
@@ -1762,6 +1875,276 @@ def redefinir_senha(root: Path, token, senha) -> dict:
     except LinkInvalido as exc:
         registro_acesso.registrar('ativacao_falha', 'falha', motivo=exc.motivo, acesso_operacao='redefinir')
         raise
+
+
+# --- the second factor (conta-fator-*, entrar-segundo-fator) --------------------------------------
+
+def _sem_fator(tx: _Tx, cid: str) -> None:
+    tx.ex('DELETE FROM fatores WHERE conta = ?', cid)
+    tx.ex('DELETE FROM codigos_reserva WHERE conta = ?', cid)
+    tx.ex('DELETE FROM tentativas WHERE chave IN (?, ?)', CHAVE_FATOR + cid, CHAVE_RESERVA + cid)
+
+
+def _estado_do_fator(tx: _Tx, cid: str) -> dict:
+    fator = tx.um('SELECT ativado_em FROM fatores WHERE conta = ? AND ativo = 1', cid)
+    restantes = tx.um('SELECT COUNT(*) AS n FROM codigos_reserva WHERE conta = ? AND usado_em IS NULL', cid)['n']
+    return {'ativo': bool(fator), 'ativado_em': fator['ativado_em'] if fator else None,
+            'codigos_restantes': restantes if fator else 0}
+
+
+def _usar_codigo(tx: _Tx, root: Path, cid: str, codigo, momento: datetime) -> str | None:
+    """'totp' or 'reserva' when `codigo` is good for the account's active factor, and then it is spent (the step of
+    the authenticator, or the reserve code); None otherwise. Neither kind is ever accepted twice."""
+    fator = tx.um('SELECT semente, ultimo_passo FROM fatores WHERE conta = ? AND ativo = 1', cid)
+    if not fator:
+        return None
+    # The reserve code first, by its shape: it is checked against its own hash and needs neither the seed nor the
+    # key of the seeds, so it still lets the person in when that key is missing (a restore without `segredos/`).
+    resumo = segundo_fator.resumo_da_reserva(codigo)
+    if resumo:
+        if tx.ex('UPDATE codigos_reserva SET usado_em = ? WHERE conta = ? AND resumo = ? AND usado_em IS NULL',
+                 _iso(momento), cid, resumo).rowcount:
+            _evento(tx, 'codigo_reserva_usado', cid, cid, momento)
+            return 'reserva'
+        return None
+    passo = segundo_fator.conferir(_semente_do_fator(root, fator['semente'], cid), codigo, momento, fator['ultimo_passo'])
+    if passo is not None:
+        tx.ex('UPDATE fatores SET ultimo_passo = ? WHERE conta = ?', passo, cid)
+        return 'totp'
+    return None
+
+
+def _semente_do_fator(root: Path, guardada, cid: str) -> bytes:
+    """The seed of an account, opened. When it does not open (the key file is missing or is another one) that is
+    told to the operator in the audit log and to the person as FatorIndisponivel: not a wrong code."""
+    try:
+        return segundo_fator.decifrar(root, guardada, cid)
+    except (segundo_fator.ChaveIlegivel, segundo_fator.SementeIlegivel) as exc:
+        registro_acesso.registrar('fator_indisponivel', 'falha', cid,
+                                  motivo='chave_ausente' if isinstance(exc, segundo_fator.ChaveIlegivel) else 'semente_ilegivel')
+        raise FatorIndisponivel(FATOR_INDISPONIVEL) from exc
+
+
+def conferir_chave_do_fator(root: Path) -> str | None:
+    """For the start of the server: the warning for the operator when accounts have a second factor and the key of
+    their seeds is missing, unreadable or another one (a restore without `segredos/`), or None. It also goes to
+    the audit log. Nothing is made or repaired here."""
+    with _bd(root) as tx:
+        ativos = tx.todos('SELECT conta, semente FROM fatores WHERE ativo = 1 ORDER BY conta')
+    if not ativos:
+        return None
+    try:
+        segundo_fator.decifrar(root, ativos[0]['semente'], ativos[0]['conta'])
+        return None
+    except segundo_fator.ChaveIlegivel:
+        motivo, defeito = 'chave_ausente', 'não está nesta instalação, ou está ilegível'
+    except segundo_fator.SementeIlegivel:
+        motivo, defeito = 'semente_ilegivel', 'não é a que cifrou as sementes guardadas'
+    registro_acesso.lembrar_raiz(root)
+    registro_acesso.registrar('fator_indisponivel', 'falha', motivo=motivo)
+    return (f'ATENÇÃO: {len(ativos)} conta(s) têm segundo fator e a chave das sementes (segredos/contas.chave) {defeito}. '
+            'Os códigos do aplicativo não serão aceitos, só os códigos de reserva. Restaure o arquivo a partir da cópia '
+            'guardada com os segredos (deploy/BACKUP.md). Não crie outro: as sementes já cadastradas não abririam com ele.')
+
+
+def _fator_recusado(tx: _Tx, cid: str, momento: datetime, ip: str | None) -> None:
+    tx.depois.append(lambda: registro_acesso.registrar('fator_recusado', 'falha', cid, momento, motivo='codigo_invalido', ip=ip))
+
+
+def _falha_do_fator(tx: _Tx, cid: str, momento: datetime, ip: str | None) -> dict | None:
+    """A wrong code of the second factor, counted on the account, whatever the address or the ticket it came
+    with: the fifth in a row blocks the factor of the account for 15 minutes, in the sign-in and in every
+    operation that asks it. After the right password the existence of the account is no secret, so counting on
+    it tells nothing. Returns who to tell when this failure starts the block (event `fator_bloqueado`)."""
+    _fator_recusado(tx, cid, momento, ip)
+    if not _registrar_falha(tx, CHAVE_FATOR + cid, None, momento):
+        return None
+    _evento(tx, 'fator_bloqueado', cid, None, momento)
+    return _destinatario(tx.um('SELECT * FROM contas WHERE id = ?', cid))
+
+
+def _conferir_codigo(tx: _Tx, root: Path, cid: str, codigo, momento: datetime, ip: str | None) -> tuple:
+    """The whole rule of a code of the second factor of an account, for the sign-in and for the operations that
+    ask it: (kind accepted or None, the answer is a block, a wrong code was counted, who to tell).
+
+    A code of the authenticator is not even tried while the factor is blocked. A reserve code crosses that block:
+    it has 80 random bits, so letting it be tried gives nothing to who guesses, and it is the way in of the person
+    whose password somebody else has and uses to keep the factor blocked. A right one always passes; the wrong
+    ones count on a counter of their own, which never blocks the authenticator nor a right reserve code."""
+    if segundo_fator.resumo_da_reserva(codigo):
+        if _usar_codigo(tx, root, cid, codigo, momento):
+            tx.ex('DELETE FROM tentativas WHERE chave = ? OR (chave = ? AND bloqueado_ate IS NULL)',
+                  CHAVE_RESERVA + cid, CHAVE_FATOR + cid)
+            return 'reserva', False, False, None
+        if _bloqueado(tx, CHAVE_RESERVA + cid, momento):
+            return None, True, False, None
+        _fator_recusado(tx, cid, momento, ip)
+        return None, _registrar_falha(tx, CHAVE_RESERVA + cid, None, momento), True, None
+    if _bloqueado(tx, CHAVE_FATOR + cid, momento):
+        return None, True, False, None
+    if _usar_codigo(tx, root, cid, codigo, momento):
+        tx.ex('DELETE FROM tentativas WHERE chave = ?', CHAVE_FATOR + cid)
+        return 'totp', False, False, None
+    aviso = _falha_do_fator(tx, cid, momento, ip)
+    return None, bool(aviso), True, aviso
+
+
+def _recusa_do_codigo(aviso: dict | None, bloqueado: bool) -> Exception:
+    if aviso:
+        return FatorBloqueado(aviso)
+    return Bloqueado(BLOQUEADO) if bloqueado else CodigoInvalido(CODIGO_INVALIDO)
+
+
+def _sem_codigo(codigo) -> bool:
+    return not isinstance(codigo, str) or not codigo.strip()
+
+
+def exigir_codigo(root: Path, cid: str, codigo, ip: str | None = None) -> None:
+    """The second factor asked by an operation of an account that has one (new reserve codes, a new device, a reset
+    of the password by e-mail). A wrong code counts: five in a row block it for this account for 15 minutes.
+    A code that did not come is asked for (CodigoNecessario) and counts for nothing. Raises CodigoNecessario,
+    CodigoInvalido or Bloqueado."""
+    if _sem_codigo(codigo):
+        raise CodigoNecessario(CODIGO_NECESSARIO)
+    bloqueado, aviso = False, None
+    with _bd(root, escrever=True) as tx:
+        aceito, bloqueado, _, aviso = _conferir_codigo(tx, root, cid, codigo, agora(), ip)
+        if aceito:
+            return
+    raise _recusa_do_codigo(aviso, bloqueado)
+
+
+def iniciar_fator(root: Path, cid: str, senha, codigo=None, ip: str | None = None) -> dict:
+    """Start enrolling an authenticator: asks the password and gives the new seed, once, as text and as an
+    `otpauth://` address. Nothing changes until `confirmar_fator` proves the app has it. An account that already
+    has a factor (a new phone) also gives a code of the current one, or a reserve code."""
+    confirmar_senha(root, cid, senha, ip)
+    with _bd(root) as tx:
+        ativo = bool(tx.um('SELECT 1 FROM fatores WHERE conta = ? AND ativo = 1', cid))
+        algum = bool(tx.um('SELECT 1 FROM fatores WHERE ativo = 1 LIMIT 1'))
+    if ativo:
+        exigir_codigo(root, cid, codigo, ip)
+    semente = segundo_fator.nova_semente()
+    try:
+        # The key file is only made while no account has a factor. If one has and the file is gone (a restore
+        # without `segredos/`), a new key would leave every stored seed unreadable for good: nobody enrols until
+        # the operator puts the file back.
+        cifrada = segundo_fator.cifrar(root, semente, cid, criar_chave=not algum)
+    except segundo_fator.ChaveIlegivel as exc:
+        registro_acesso.registrar('fator_indisponivel', 'falha', cid, motivo='chave_ausente', ip=ip)
+        raise FatorIndisponivel(CADASTRO_INDISPONIVEL) from exc
+    with _bd(root, escrever=True) as tx:
+        conta, momento = _conta(tx, cid), agora()
+        tx.ex('INSERT INTO fatores (conta, criado_em, pendente, pendente_em) VALUES (?, ?, ?, ?) ON CONFLICT (conta) DO UPDATE'
+              ' SET pendente = excluded.pendente, pendente_em = excluded.pendente_em', cid, _iso(momento), cifrada, _iso(momento))
+        return {'segredo': segundo_fator.em_base32(semente),
+                'otpauth': segundo_fator.endereco(semente, conta['email'] or conta['login'] or cid)}
+
+
+def confirmar_fator(root: Path, cid: str, codigo, ip: str | None = None, sessao_atual=None) -> list[str]:
+    """Finish the enrolment with a code of the new authenticator: the factor becomes the account's (the one
+    before, if any, is replaced) and ten new reserve codes are returned, to be shown once. Every other session of
+    the account ends, as when the password changes: a session somebody else opened with the password alone does
+    not outlive the factor. `sessao_atual` is the public id of the session that asks, the only one kept."""
+    if _sem_codigo(codigo):
+        raise CodigoNecessario(CODIGO_NECESSARIO)
+    chave, codigos, bloqueado, aviso = CHAVE_FATOR + cid, segundo_fator.novos_codigos_de_reserva(), False, None
+    with _bd(root, escrever=True) as tx:
+        momento = agora()
+        fator = tx.um('SELECT pendente, pendente_em FROM fatores WHERE conta = ?', cid)
+        if (not fator or not fator['pendente']
+                or _data(fator['pendente_em']) + timedelta(minutes=FATOR_PENDENTE_MINUTOS) <= momento):
+            raise ValueError('Comece de novo o cadastro do segundo fator.')
+        bloqueado = _bloqueado(tx, chave, momento)
+        if not bloqueado:
+            passo = segundo_fator.conferir(_semente_do_fator(root, fator['pendente'], cid), codigo, momento)
+            if passo is not None:
+                tx.ex('UPDATE fatores SET semente = pendente, pendente = NULL, pendente_em = NULL, ativo = 1, ativado_em = ?,'
+                      ' ultimo_passo = ? WHERE conta = ?', _iso(momento), passo, cid)
+                _novos_codigos(tx, cid, codigos, momento)
+                tx.ex('DELETE FROM tentativas WHERE chave = ?', chave)
+                tx.ex('DELETE FROM sessoes WHERE conta = ? AND publico IS NOT ?', cid, sessao_atual)
+                _evento(tx, 'fator_ativado', cid, cid, momento)
+                return codigos
+            aviso = _falha_do_fator(tx, cid, momento, ip)
+    raise _recusa_do_codigo(aviso, bloqueado)
+
+
+def _novos_codigos(tx: _Tx, cid: str, codigos: list[str], momento: datetime) -> None:
+    tx.ex('DELETE FROM codigos_reserva WHERE conta = ?', cid)
+    for codigo in codigos:
+        tx.ex('INSERT INTO codigos_reserva (conta, resumo, criado_em) VALUES (?, ?, ?)', cid,
+              segundo_fator.resumo_da_reserva(codigo), _iso(momento))
+
+
+def novos_codigos_do_fator(root: Path, cid: str, senha, codigo, ip: str | None = None) -> list[str]:
+    """New reserve codes; the ones before stop working. Asks the password and a code."""
+    confirmar_senha(root, cid, senha, ip)
+    exigir_codigo(root, cid, codigo, ip)
+    codigos = segundo_fator.novos_codigos_de_reserva()
+    with _bd(root, escrever=True) as tx:
+        momento = agora()
+        if not tx.um('SELECT 1 FROM fatores WHERE conta = ? AND ativo = 1', cid):
+            raise ValueError('Esta conta não tem segundo fator.')
+        _novos_codigos(tx, cid, codigos, momento)
+        _evento(tx, 'fator_codigos_gerados', cid, cid, momento)
+        return codigos
+
+
+def remover_fator(root: Path, cid: str, senha, ip: str | None = None) -> None:
+    """Remove the own second factor (whoever must have one is refused before, by the gate). Asks the password."""
+    confirmar_senha(root, cid, senha, ip)
+    with _bd(root, escrever=True) as tx:
+        if not tx.um('SELECT 1 FROM fatores WHERE conta = ?', cid):
+            raise ValueError('Esta conta não tem segundo fator.')
+        _sem_fator(tx, cid)
+        _evento(tx, 'fator_removido', cid, cid)
+
+
+def entrar_segundo_fator(root: Path, bilhete, codigo, ip: str | None = None, marca=None) -> tuple[str, str, dict]:
+    """The second step of the sign-in: the ticket `entrar` gave and a code of the authenticator (or a reserve
+    code). Returns what `entrar` returns. A wrong code counts on the ticket, which dies at the fifth, on the
+    counters of the sign-in (identifier and address, and the identifier alone) and on the account: five wrong
+    codes in a row, from any addresses and with any tickets, block the second factor of the account for 15
+    minutes (FatorBloqueado on the fifth, Bloqueado while it lasts, when nothing is tried, counted or spent).
+    An unknown, expired or dead ticket is EntradaExpirada. A code that did not come is asked for
+    (CodigoNecessario) and leaves the ticket as it was."""
+    if _sem_codigo(codigo):
+        raise CodigoNecessario(CODIGO_NECESSARIO)
+    momento = agora()
+    try:
+        _limite_ip(ip, momento)
+    except Bloqueado:
+        registro_acesso.registrar_limite_ip('login_falha', ip, _rede(ip), acesso_operacao='segundo_fator')
+        raise
+    errou, bloqueado, aviso, morto = False, False, None, False
+    with _bd(root, escrever=True) as tx:
+        entrada = (tx.um('SELECT * FROM entradas WHERE id_sha256 = ?', _hash(bilhete))
+                   if isinstance(bilhete, str) and SID.fullmatch(bilhete) else None)
+        conta = tx.um('SELECT * FROM contas WHERE id = ?', entrada['conta']) if entrada else None
+        if entrada and (_data(entrada['expira_em']) <= momento or not conta or not conta['ativa']):
+            tx.ex('DELETE FROM entradas WHERE id_sha256 = ?', entrada['id_sha256'])
+        elif entrada:
+            cid = conta['id']
+            aceito, bloqueado, contou, aviso = _conferir_codigo(tx, root, cid, codigo, momento, ip)
+            if aceito:
+                tx.ex('DELETE FROM entradas WHERE conta = ?', cid)
+                tx.ex('DELETE FROM tentativas WHERE chave = ?', entrada['chave'])
+                return _sessao_aberta(tx, conta, momento, entrada['cliente'], entrada['aparelho'], ip, marca)
+            if contou:  # an attempt during a block is neither tried, counted nor spent
+                errou = True
+                if entrada['falhas'] + 1 >= ENTRADA_FALHAS:
+                    tx.ex('DELETE FROM entradas WHERE id_sha256 = ?', entrada['id_sha256'])
+                    morto = True
+                else:
+                    tx.ex('UPDATE entradas SET falhas = falhas + 1 WHERE id_sha256 = ?', entrada['id_sha256'])
+                _registrar_falha(tx, entrada['chave'], cid, momento)
+                _falha_do_identificador(tx, entrada['chave'].split('|', 1)[0], cid, momento)  # the same ceilings as the password
+    if errou or bloqueado:
+        recusa = _recusa_do_codigo(aviso, bloqueado)
+        recusa.bilhete_morto = morto  # the fifth wrong code of a ticket: whoever answers also clears its cookie
+        raise recusa
+    raise EntradaExpirada(ENTRADA_EXPIRADA)
 
 
 # --- recovery asked by a dono (equipe-recuperar, equipe-recuperar-confirmar) ----------------------
@@ -1997,7 +2380,7 @@ def consultar_ativacao(root: Path, token) -> dict:
         raise
 
 
-def ativar(root: Path, token, senha) -> dict:
+def ativar(root: Path, token, senha, marca=None) -> dict:
     """Set the password from a single-use link. Does not open a session (the person signs in next)."""
     senha = _validar_senha(senha)
     try:
@@ -2015,6 +2398,7 @@ def ativar(root: Path, token, senha) -> dict:
         tx.ex('UPDATE contas SET senha_hash = ?, senha_definida_em = ?, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
               ' ativacao_motivo = NULL WHERE id = ?', senha_hash, _iso(momento), cid)
         _limpar_tentativas(tx, conta)
+        _so_este_aparelho(tx, cid, marca, momento)  # the browser that used the activation link, and no other
         _evento(tx, 'senha_definida', cid, cid, momento)
         return _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), momento)
 
@@ -2109,14 +2493,119 @@ def _registrar_falha(tx: _Tx, chave: str, cid: str | None, momento: datetime) ->
 
 
 def _podar_tentativas(tx: _Tx, momento: datetime) -> None:
-    """Forget stale counters; active blocks are never evicted."""
-    agora_, limite = _iso(momento), _iso(momento - timedelta(minutes=BLOQUEIO_MINUTOS))
+    """Forget stale counters. An active block is never evicted, and neither is a counter before its time: the
+    per-identifier ones (the fixed table of BALDES counters) live for their whole window; the ones of the second
+    factor of an account live FATOR_CONTADOR_HORAS, so that a few wrong codes every quarter of an hour add up to a
+    block and a notice instead of being forgotten each time; the others live BLOQUEIO_MINUTOS, and only the
+    per-address counters of the sign-in, which an attacker can multiply, have a ceiling."""
+    agora_ = _iso(momento)
+    curto, longo = _iso(momento - timedelta(minutes=BLOQUEIO_MINUTOS)), _iso(momento - timedelta(minutes=PROTECAO_JANELA_MINUTOS))
+    dia = _iso(momento - timedelta(hours=FATOR_CONTADOR_HORAS))
     ativo = '(bloqueado_ate IS NOT NULL AND bloqueado_ate > ?)'
-    tx.ex(f"DELETE FROM tentativas WHERE NOT {ativo} AND coalesce(em, '') <= ?", agora_, limite)
-    excesso = tx.um('SELECT COUNT(*) AS total FROM tentativas')['total'] - MAX_TENTATIVAS_GUARDADAS
+    do_identificador = f"chave LIKE '{CHAVE_BALDE}%'"
+    do_fator = f"(chave LIKE '{CHAVE_FATOR}%' OR chave LIKE '{CHAVE_RESERVA}%')"
+    tx.ex(f"DELETE FROM tentativas WHERE NOT {ativo} AND coalesce(em, '') <= ? AND NOT {do_identificador} AND NOT {do_fator}",
+          agora_, curto)
+    tx.ex(f"DELETE FROM tentativas WHERE NOT {ativo} AND coalesce(em, '') <= ? AND {do_identificador}", agora_, longo)
+    tx.ex(f"DELETE FROM tentativas WHERE NOT {ativo} AND coalesce(em, '') <= ? AND {do_fator}", agora_, dia)
+    excesso = tx.um("SELECT COUNT(*) AS total FROM tentativas WHERE chave NOT LIKE '#%'")['total'] - MAX_TENTATIVAS_GUARDADAS
     if excesso > 0:
         tx.ex(f"DELETE FROM tentativas WHERE chave IN (SELECT chave FROM tentativas WHERE NOT {ativo}"
-              " ORDER BY coalesce(em, '') LIMIT ?)", agora_, excesso)
+              " AND chave NOT LIKE '#%' ORDER BY coalesce(em, '') LIMIT ?)", agora_, excesso)
+
+
+def _chave_do_identificador(tx: _Tx, login: str, criar: bool = False) -> str:
+    """Where the failures of an identifier, from every address, are counted: one of BALDES counters, chosen by a
+    keyed hash of the identifier. The same for an identifier with an account and for one without: every identifier
+    always has a counter, the table never grows and there is no "full" state. Two identifiers may share a counter,
+    and then share its protected mode. An exact counter for the ones with an account would tell them apart: its
+    protected mode would never spread to a neighbour, and a few tens of thousands of requests would confirm that
+    one person has an account (B1 of the review). What is counted on the account itself (the codes of the second
+    factor, the password asked again) only starts after the right password, when its existence is no secret."""
+    segredo = _meta(tx, 'chave_dos_baldes')
+    if not segredo:
+        if not criar:
+            return CHAVE_BALDE + '-'  # no counter was ever made: nothing to find
+        segredo = secrets.token_hex(32)
+        _definir_meta(tx, 'chave_dos_baldes', segredo)
+    resumo = hmac.new(bytes.fromhex(segredo), login.encode('utf-8'), hashlib.sha256).digest()
+    return CHAVE_BALDE + str(int.from_bytes(resumo[:8], 'big') % BALDES)
+
+
+def _falha_do_identificador(tx: _Tx, login: str, cid: str | None, momento: datetime) -> None:
+    """Count a failure of the identifier, whatever the address: PROTECAO_FALHAS inside the window start the
+    protected mode. While it lasts nothing counts and nothing extends it."""
+    chave = _chave_do_identificador(tx, login, criar=True)
+    linha = tx.um('SELECT falhas, bloqueado_ate, em FROM tentativas WHERE chave = ?', chave)
+    falhas, ate, inicio = (linha['falhas'], linha['bloqueado_ate'], linha['em']) if linha else (0, None, None)
+    if ate and _data(ate) > momento:
+        return
+    if ate or not inicio or _data(inicio) + timedelta(minutes=PROTECAO_JANELA_MINUTOS) <= momento:
+        falhas, inicio = 0, _iso(momento)  # a new window (also after a protection ended)
+    falhas, ate = falhas + 1, None
+    if falhas >= PROTECAO_FALHAS:
+        falhas, ate = 0, _iso(momento + timedelta(minutes=PROTECAO_MINUTOS))
+        if cid:
+            _evento(tx, 'login_protegido', cid, None, momento)
+        else:
+            tx.depois.append(lambda: registro_acesso.registrar('login_protegido', 'falha', None, momento, motivo='protegido',
+                                                               login_ref=registro_acesso.referencia_do_login(login)))
+    tx.ex('INSERT INTO tentativas (chave, falhas, bloqueado_ate, em) VALUES (?, ?, ?, ?) ON CONFLICT (chave) DO UPDATE'
+          ' SET falhas = excluded.falhas, bloqueado_ate = excluded.bloqueado_ate, em = excluded.em', chave, falhas, ate, inicio)
+    _podar_tentativas(tx, momento)
+
+
+# --- known devices ------------------------------------------------------------------------------------
+
+def _marca(marca) -> str | None:
+    """The device mark of a browser as the store keeps it (its hash), or None when it cannot be one."""
+    return _hash(marca) if isinstance(marca, str) and SID.fullmatch(marca) else None
+
+
+def _marca_conhecida(tx: _Tx, cid: str, marca, momento: datetime) -> bool:
+    """Whether the browser carries the mark of a device this account already used, and that mark is not blocked by
+    its own wrong passwords. A known mark crosses the protected mode; it never switches the counting off."""
+    resumo = _marca(marca)
+    return bool(resumo and tx.um('SELECT 1 FROM aparelhos WHERE conta = ? AND resumo = ?', cid, resumo)
+                and not _bloqueado(tx, f'{CHAVE_MARCA}{cid}|{resumo}', momento))
+
+
+def _registrar_aparelho(tx: _Tx, cid: str, marca, momento: datetime) -> bool:
+    """The browser becomes a known device of the account (only ever after something that proves who it is: a
+    sign-in that worked, or a link only the person receives). Returns whether it is a NEW device of an account
+    that already had another: that is what the person is told about."""
+    resumo = _marca(marca)
+    if not resumo:
+        return False
+    if tx.ex('UPDATE aparelhos SET ultimo_uso = ? WHERE conta = ? AND resumo = ?', _iso(momento), cid, resumo).rowcount:
+        return False
+    tinha = tx.um('SELECT COUNT(*) AS n FROM aparelhos WHERE conta = ?', cid)['n']
+    tx.ex('INSERT INTO aparelhos (conta, resumo, criado_em, ultimo_uso) VALUES (?, ?, ?, ?)', cid, resumo, _iso(momento), _iso(momento))
+    for antigo in tx.todos('SELECT resumo FROM aparelhos WHERE conta = ? ORDER BY ultimo_uso DESC, rowid DESC LIMIT -1 OFFSET ?',
+                           cid, APARELHOS_MAX):
+        tx.ex('DELETE FROM aparelhos WHERE conta = ? AND resumo = ?', cid, antigo['resumo'])
+    if tinha:
+        _evento(tx, 'aparelho_novo', cid, cid, momento)
+    return bool(tinha)
+
+
+def _so_este_aparelho(tx: _Tx, cid: str, marca, momento: datetime) -> None:
+    """The password was changed or reset: every known device of the account is forgotten but the browser that did
+    it. If the account had been broken into, the intruder's browser became a known device when it signed in, and
+    must not go on being one."""
+    tx.ex('DELETE FROM aparelhos WHERE conta = ?', cid)
+    tx.ex("DELETE FROM tentativas WHERE substr(chave, 1, ?) = ?", len(CHAVE_MARCA) + len(cid) + 1, f'{CHAVE_MARCA}{cid}|')
+    resumo = _marca(marca)
+    if resumo:
+        tx.ex('INSERT INTO aparelhos (conta, resumo, criado_em, ultimo_uso) VALUES (?, ?, ?, ?)', cid, resumo, _iso(momento), _iso(momento))
+
+
+def _sessao_aberta(tx: _Tx, conta, momento: datetime, cliente, aparelho, ip: str | None, marca) -> tuple[str, str, dict]:
+    """Open the session of a sign-in that worked and make the browser a known device: what `entrar` returns, plus
+    `aparelho_novo` in the account (for the caller to tell the person; it never goes to the browser)."""
+    sid, csrf = _abrir_sessao(tx, conta['id'], momento, cliente, aparelho, ip)
+    novo = _registrar_aparelho(tx, conta['id'], marca, momento)
+    return sid, csrf, {**_publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', conta['id']), momento), 'aparelho_novo': novo}
 
 
 def _motivo_vencida(registro, momento: datetime) -> str:
@@ -2171,10 +2660,17 @@ def _abrir_sessao(tx: _Tx, cid: str, momento: datetime, cliente, aparelho, ip: s
     return sid, csrf
 
 
-def entrar(root: Path, login, senha, ip: str | None = None, cliente='web', aparelho=None) -> tuple[str, str, dict]:
+def entrar(root: Path, login, senha, ip: str | None = None, cliente='web', aparelho=None, marca=None) -> tuple[str, str, dict]:
     """Return (session id, csrf token, public account). One generic refusal for every bad credential.
     Every outcome goes to the audit log: success, wrong credentials, lockout and per-address limit (never the text typed).
-    `aparelho` and `ip` are kept with the session, for the person's own list of sessions."""
+    `aparelho` and `ip` are kept with the session, for the person's own list of sessions.
+
+    Two ceilings, both counted by the identifier typed, whether an account has it or not (contract, 8.2): five
+    failures of an identifier from one address block that pair for 15 minutes; ten failures of an identifier in an
+    hour, from any addresses, put it in protected mode for an hour, when every attempt gets the same refusal, right
+    password or wrong, with no hash computed for anybody. The only attempt that crosses the protected mode carries
+    `marca`, the mark of a device this account already used (cookie `vlado_aparelho`); it is still counted, on a
+    counter of that mark. A sign-in that works makes `marca` a known device."""
     momento = agora()
     try:
         _limite_ip(ip, momento)
@@ -2184,7 +2680,7 @@ def entrar(root: Path, login, senha, ip: str | None = None, cliente='web', apare
     login = login.strip().lower() if isinstance(login, str) else ''
     senha = senha if isinstance(senha, str) and len(senha) <= SENHA_MAX else ''
     # The identifier typed is the e-mail (accounts born of an invitation) or the old login; counters, blocks and
-    # answers are the same whether an account has it or not.
+    # answers are the same whether an account has it or not. One out of both formats makes no counter.
     por_email = '@' in login
     valido = bool(len(login) <= 254 and EMAIL.fullmatch(login)) if por_email else bool(LOGIN.fullmatch(login))
     chave = _chave_tentativa(login, ip)
@@ -2192,10 +2688,14 @@ def entrar(root: Path, login, senha, ip: str | None = None, cliente='web', apare
         conta = (tx.um(f'SELECT id, ativa, senha_hash FROM contas WHERE {"email" if por_email else "login"} = ?', login)
                  if valido else None)
         cid = conta['id'] if conta else None
+        conhecida = bool(cid and _marca_conhecida(tx, cid, marca, momento))
+        protegido = valido and not conhecida and _bloqueado(tx, _chave_do_identificador(tx, login), momento)
         bloqueado = valido and _bloqueado(tx, chave, momento)
         guardado = conta['senha_hash'] if conta and conta['ativa'] else None
-    if bloqueado:
-        _auditar_falha('bloqueado', cid, login, cliente, ip)
+    if bloqueado or protegido:
+        # Refused before any hash, for an account and for none alike: neither the answer nor its time tells.
+        # An attempt made during the protected mode does not count and does not extend it.
+        _auditar_falha('bloqueado' if bloqueado else 'protegido', cid, login, cliente, ip)
         raise Bloqueado(BLOQUEADO)
     # The hash is checked even for unknown logins (similar timing), outside the store's transaction.
     try:
@@ -2204,7 +2704,7 @@ def entrar(root: Path, login, senha, ip: str | None = None, cliente='web', apare
     except (VerifyMismatchError, VerificationError, InvalidHashError):
         certo = False
     momento = agora()
-    aberta, bloqueou, existe = None, False, False
+    aberta, bloqueou, existe, bilhete = None, False, False, None
     with _bd(root, escrever=True) as tx:
         conta = tx.um('SELECT * FROM contas WHERE id = ?', cid) if cid else None
         existe = bool(conta)
@@ -2214,13 +2714,28 @@ def entrar(root: Path, login, senha, ip: str | None = None, cliente='web', apare
             else:
                 if _HASHER.check_needs_rehash(guardado):
                     tx.ex('UPDATE contas SET senha_hash = ? WHERE id = ?', _HASHER.hash(senha), cid)
-                tx.ex('DELETE FROM tentativas WHERE chave = ?', chave)
-                sid, csrf = _abrir_sessao(tx, cid, momento, cliente, aparelho, ip)
-                aberta = (sid, csrf, _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), momento))
+                if tx.um('SELECT 1 FROM fatores WHERE conta = ? AND ativo = 1', cid):
+                    # The password alone opens nothing: a ticket for the second step, and the counters stay as
+                    # they are until the code is right (wrong codes count on the same ceilings).
+                    bilhete = secrets.token_urlsafe(32)
+                    tx.ex('DELETE FROM entradas WHERE conta = ? OR expira_em <= ?', cid, _iso(momento))
+                    tx.ex('INSERT INTO entradas (id_sha256, conta, chave, criada_em, expira_em, cliente, aparelho)'
+                          ' VALUES (?, ?, ?, ?, ?, ?, ?)', _hash(bilhete), cid, chave, _iso(momento),
+                          _iso(momento + timedelta(minutes=ENTRADA_MINUTOS)), _cliente(cliente), _aparelho(aparelho))
+                else:
+                    # The per-address counter is cleared; the per-identifier one runs out by itself, so a sign-in of
+                    # the owner never gives an attacker a fresh allowance.
+                    tx.ex('DELETE FROM tentativas WHERE chave = ?', chave)
+                    aberta = _sessao_aberta(tx, conta, momento, cliente, aparelho, ip, marca)
         elif valido:
             bloqueou = _registrar_falha(tx, chave, cid if conta else None, momento)
+            _falha_do_identificador(tx, login, cid if conta else None, momento)
+            if conhecida:
+                _registrar_falha(tx, f'{CHAVE_MARCA}{cid}|{_marca(marca)}', None, momento)
     if aberta:
         return aberta
+    if bilhete:
+        raise PedeSegundoFator(bilhete)
     _auditar_falha('bloqueado' if bloqueado or bloqueou else 'credenciais', cid if existe else None, login, cliente, ip)
     raise (Bloqueado(BLOQUEADO) if bloqueado or bloqueou else CredenciaisInvalidas(CREDENCIAIS))
 
@@ -2237,12 +2752,15 @@ def _auditar_falha(motivo: str, cid: str | None, login: str, cliente, ip: str | 
                               cliente=_cliente(cliente), ip=ip)
 
 
-def sessao(root: Path, sid, ip: str | None = None) -> dict | None:
+def sessao(root: Path, sid, ip: str | None = None, obrigar_fator: bool = False) -> dict | None:
     """The calling account, re-read on every request (deactivation, role, participations and quota apply at once).
     `ip` is kept as the session's last address, at most once a minute, with its last use.
 
     `casos` is always the explicit reach (for a dono, every case of the own newsroom) and `responsavel_de` the cases
-    the account answers for: outside the local mode no caller ever has "every case"."""
+    the account answers for: outside the local mode no caller ever has "every case".
+
+    `obrigar_fator` is the hosted mode: a dono or an editor without an active second factor carries the pending
+    item `segundo_fator`, and the gate lets the session reach only what resolves it (contract, 4.2 and 8.2)."""
     if not isinstance(sid, str) or not SID.fullmatch(sid):
         return None  # malformed ids never touch the store
     momento, chave = agora(), _hash(sid)
@@ -2258,12 +2776,14 @@ def sessao(root: Path, sid, ip: str | None = None) -> dict | None:
             if not conta or not conta['ativa'] or not conta['senha_hash']:
                 return None
             casos, responsavel = _alcance(tx, conta)
+            pendencias = (['segundo_fator'] if obrigar_fator and conta['papel'] in FATOR_OBRIGATORIO
+                          and not tx.um('SELECT 1 FROM fatores WHERE conta = ? AND ativo = 1', conta['id']) else [])
             tocar = (momento - _data(registro['ultimo_uso'])).total_seconds() >= ULTIMO_USO_SEGUNDOS
             principal = {'conta': conta['id'], 'nome': conta['nome'], 'login': conta['login'], 'email': conta['email'],
                          'papel': conta['papel'],
                          'organizacao': {'id': conta['organizacao'], 'nome': conta['redacao_nome'],
                                          'situacao': conta['redacao_situacao']},
-                         'casos': casos, 'responsavel_de': responsavel, 'pendencias': [],
+                         'casos': casos, 'responsavel_de': responsavel, 'pendencias': pendencias,
                          'cota_diaria': conta['cota_diaria'], 'csrf': registro['csrf'], 'sessao': registro['publico'],
                          'expira_em': registro['expira_em'], 'cliente': registro['cliente'] or 'web'}
     if vencida or tocar:
@@ -2334,7 +2854,7 @@ def ver_conta(root: Path, cid) -> dict:
         return {'conta': {'id': conta['id'], 'nome': conta['nome'], 'email': conta['email'], 'login': conta['login'],
                           'papel': conta['papel'], 'idioma': conta['idioma'] or IDIOMAS[0],
                           'senha_definida_em': conta['senha_definida_em'], 'criada_em': conta['criada_em']},
-                'organizacao': dict(redacao), 'segundo_fator': {'ativo': False}, 'termos': None}
+                'organizacao': dict(redacao), 'segundo_fator': _estado_do_fator(tx, cid), 'termos': None}
 
 
 def atualizar_perfil(root: Path, cid, *, nome=None, idioma=None) -> dict:
@@ -2356,7 +2876,7 @@ def atualizar_perfil(root: Path, cid, *, nome=None, idioma=None) -> dict:
     return ver_conta(root, cid)
 
 
-def trocar_senha(root: Path, cid, senha_atual, senha_nova, sessao_atual=None, ip: str | None = None) -> int:
+def trocar_senha(root: Path, cid, senha_atual, senha_nova, sessao_atual=None, ip: str | None = None, marca=None) -> int:
     """Change the own password: asks the current one and ends every other session of the account (W08, rule 2).
     `sessao_atual` is the public id of the session that asks, the only one kept. Returns how many were ended."""
     senha_nova = _validar_senha(senha_nova)
@@ -2372,6 +2892,7 @@ def trocar_senha(root: Path, cid, senha_atual, senha_nova, sessao_atual=None, ip
               ' ativacao_motivo = NULL WHERE id = ?', senha_hash, _iso(momento), cid)
         encerradas = tx.ex('DELETE FROM sessoes WHERE conta = ? AND publico IS NOT ?', cid, sessao_atual).rowcount
         tx.ex('DELETE FROM links WHERE conta = ?', cid)  # a reset link asked before the change is dead
+        _so_este_aparelho(tx, cid, marca, momento)  # every other known device is forgotten with the other sessions
         _limpar_tentativas(tx, conta)
         _evento(tx, 'senha_trocada', cid, cid, momento)
         return encerradas

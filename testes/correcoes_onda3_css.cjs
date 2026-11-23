@@ -23,3 +23,18 @@ test('R2: o desabilitado tem o texto do token --theme-disabled-text, mais apagad
   assert.ok(claro && escuro, 'o token existe nos dois temas');
   assert.ok(/button:disabled,button:disabled:hover\{background:var\(--theme-sidebar\);border-color:var\(--line\);color:var\(--theme-disabled-text\)/.test(estilo));
 });
+
+test('AA: o painel de busca e substituição do Vditor tem o mesmo anel da barra (botões e campos)', () => {
+  const estilo = css('style.css');
+  assert.ok(estilo.includes('#apuracao-vditor :is(.vditor-toolbar,.vditor-panel) :is(button,.vditor-tooltipped):focus-visible,#apuracao-vditor .vditor-panel input:focus-visible{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:0}'));
+});
+
+test('B1 do Traço (#segundo-fator): o código de reserva nunca quebra; a grade só tem duas colunas quando cada uma cabe um código inteiro', () => {
+  const estilo = css('componentes_o3.css');
+  assert.ok(estilo.includes('.fator-codigo{white-space:nowrap;'), 'cada código em uma linha');
+  assert.ok(estilo.includes('grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr))'), 'uma coluna num cartão estreito, como o da pendência (440 px)');
+});
+
+test('F1 da Coruja: a linha do estado da chave tem altura reservada, para o painel Conexão e opções não se mexer quando o texto chega', () => {
+  assert.ok(css('style.css').includes('.ia-config #ia-chave-estado{min-height:1.65em}'));
+});

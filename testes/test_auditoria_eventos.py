@@ -218,7 +218,11 @@ class DiaCheioTest(Auditoria):
             self.assertEqual(status, 200, criada)
             self.publico('entrar', {'login': 'ninguem', 'senha': SENHA})  # falha anônima: descartada, sem derrubar nada
         eventos = [(l['evento'], l['resultado']) for l in self.novas()]
-        self.assertEqual(eventos, [('login_ok', 'ok'), ('convite_enviado', 'ok')])
+        # Contrato de contas, 8.2: no piloto o dono tem segundo fator e entra em dois passos. O cenário usa um código
+        # de reserva no segundo passo, e este navegador (sem a marca do primeiro) é um aparelho novo da conta: as
+        # duas coisas também ficam no registro com o dia cheio.
+        self.assertEqual(eventos, [('codigo_reserva_usado', 'ok'), ('login_ok', 'ok'), ('aparelho_novo', 'ok'),
+                                   ('convite_enviado', 'ok')])
         convite = self.novas('convite_enviado')[0]
         self.assertEqual((convite['por'], convite['papel'], convite['operacao']), (self.admin_id, 'dono', 'equipe-convidar'))
 

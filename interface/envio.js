@@ -160,7 +160,7 @@
       const pendentes = partes.length ? `, ${partes.join(', ')}` : '';
       const texto = no('span');
       texto.append(`${t('Recibo do lote')}: `, forte, `${pendentes}. ${t('É conferido antes da primeira pergunta.')}`);
-      const ver = no('a', 'envio-link', t('Ver recibo')); ver.href = '#cadastro-recibo';
+      const ver = no('a', 'envio-link', t('Ver recibo')); ver.href = '#documentos-recibo';
       ver.addEventListener('click', evento => { evento.preventDefault(); ctx.aoVerRecibo?.(); window.dispatchEvent(new Event('envio-recibo-visto')); });
       recibo.replaceChildren(texto, ver);
     }
@@ -256,17 +256,20 @@
           const cancelou = falha.abortado || ctx.cancelado;
           // O pedido do primeiro lote de uma apuração nova terminou em erro de rede ou 502/504: a tela não sabe se o servidor aceitou (e criou a apuração).
           // Para os lotes seguintes e avisa para conferir a Visão geral antes de enviar de novo, porque um reenvio pode criar OUTRA apuração.
-          const incerto = !cancelou && !!escopo.novo && !escopo.caso && !casoAceito && (falha.rede === true || [502, 504].includes(falha.status));
+          const incerto = !cancelou && !!escopo.novo && !escopo.caso && !casoAceito && (falha.rede === true || [500, 502, 504].includes(falha.status));
           // Só a recusa que diz que a apuração nova não existe (o primeiro lote não chegou a criá-la): para e avisa. Outra recusa não diz isso. O código é
           // do servidor (erros.py: caso_inexistente, "Caso inexistente; não cadastrar em outro caso automaticamente."; ou caso_indisponivel, do portão).
           const semApuracao = !cancelou && !!casoAceito && !resultado.lotes.length && [400, 404].includes(falha.status)
             && ['caso_inexistente', 'caso_indisponivel'].includes(falha.codigo);
+          // N3: o primeiro lote de uma apuração nova foi aceito e depois falhou na fila; a tela já passou à apuração, e o reenvio ao caso responde "inexistente".
+          const casoPerdido = !cancelou && !escopo.novo && falha.codigo === 'caso_inexistente';
           const parada = incerto ? t('Não sabemos se a apuração foi criada: a resposta do servidor não chegou. Confira a apuração na Visão geral antes de enviar de novo.')
-            : semApuracao ? t('A apuração nova não foi criada: o primeiro envio não terminou. Envie de novo.') : '';
+            : semApuracao ? t('A apuração nova não foi criada: o primeiro envio não terminou. Envie de novo.')
+            : casoPerdido ? t('Esta apuração não chegou a ser criada: o primeiro envio falhou. Recomece a Nova apuração.') : '';
           for (const linha of linhas) { linha.estado = cancelou ? 'cancelado' : 'nao-enviado'; linha.motivo = cancelou ? '' : parada || falha.message; }
           ui.desenhar();
           if (cancelou) { ctx.cancelado = true; break; }
-          if (incerto || semApuracao) {
+          if (incerto || semApuracao || casoPerdido) {
             resultado.erro = falha; if (incerto) { resultado.incerto = true; resultado.aviso_incerto = parada; }
             for (const resto of lotes.slice(lotes.indexOf(linhas) + 1).flat()) { resto.estado = 'nao-enviado'; resto.motivo = parada; }
             ui.desenhar(); break;
@@ -321,7 +324,7 @@
     resultado.pendentes = resultado.naoCadastrados + resultado.aConferir;
     resultado.arquivos = ctx.linhas;
     ui.mostrarRecibo(resultado.enviados || resultado.recusados ? {recebidos: resultado.recebidos, total: ctx.linhas.length, naoCadastrados: resultado.naoCadastrados, aConferir: resultado.aConferir} : null);
-    ctx.aoVerRecibo = () => { const detalhe = alvoRecibo || document.getElementById('cadastro-recibo'); if (detalhe && !detalhe.hidden) { detalhe.scrollIntoView({block: 'start'}); detalhe.focus?.(); } };
+    ctx.aoVerRecibo = () => { const detalhe = alvoRecibo || document.getElementById('documentos-recibo'); if (detalhe && !detalhe.hidden) { detalhe.scrollIntoView({block: 'start'}); detalhe.focus?.(); } };
     ui.desenhar();
     return resultado;
   }

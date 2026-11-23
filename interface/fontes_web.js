@@ -20,26 +20,6 @@
     el('fontes-web-erro').hidden = !mensagem;
   }
 
-  function alternarDominio() {
-    const web = el('cadastro-modo-fontes').value === MODO_WEB && !el('cadastro-modo-fontes').disabled;
-    el('cadastro-dominio-campo').hidden = !web;
-    el('cadastro-dominio').required = web;
-    el('cadastro-dominio').disabled = !web;
-  }
-
-  function alternarNovo(novo) {
-    el('cadastro-modo-fontes').disabled = !novo;
-    alternarDominio();
-    if (novo) { caso = ''; el('fontes-web').hidden = true; }
-  }
-
-  function escopoNovo() {
-    const modo = el('cadastro-modo-fontes').value;
-    return modo === MODO_WEB
-      ? {modo_fontes: modo, dominio_permitido: el('cadastro-dominio').value.trim()}
-      : {modo_fontes: 'somente_documental'};
-  }
-
   // A data da captura, no idioma da Mesa e na hora de quem lê (o servidor guarda em UTC).
   function dataDa(iso) {
     const quando = new Date(iso);
@@ -102,8 +82,7 @@
   }
 
   function iniciar() {
-    if (!el('fontes-web') || !el('cadastro-modo-fontes')) return;
-    el('cadastro-modo-fontes').addEventListener('change', alternarDominio);
+    if (!el('fontes-web')) return;
     el('fontes-web-form').addEventListener('submit', async event => {
       event.preventDefault();
       if (ocupado || !caso) return;
@@ -128,10 +107,9 @@
         el('fontes-web-capturar').disabled = false;
       }
     });
-    alternarDominio();
   }
 
-  window.FontesWeb = {alternarNovo, escopoNovo, mostrar};
+  window.FontesWeb = {mostrar};
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);
   else iniciar();
 })();

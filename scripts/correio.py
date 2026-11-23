@@ -112,6 +112,35 @@ MODELOS = {
         'en': ('The e-mail of your Vlado account was changed',
                'The e-mail of your Vlado account was changed to another address, and this one no longer signs in.\n\n'
                'If it was not you, tell whoever runs your newsroom now.\n')}),
+    'novo_acesso': ('novo_acesso', {
+        'pt': ('Novo acesso à sua conta no Vlado',
+               'A sua conta no Vlado acaba de ser acessada de um aparelho que ela ainda não tinha usado: {aparelho}.\n\n'
+               'Se foi você, não precisa fazer nada. Se não foi, troque a sua senha agora e avise quem administra a sua '
+               'redação.\n'),
+        'en': ('New sign-in to your Vlado account',
+               'Your Vlado account has just been signed in from a device it had not used before: {aparelho}.\n\n'
+               'If it was you, there is nothing to do. If it was not, change your password now and tell whoever runs '
+               'your newsroom.\n')}),
+    'fator_bloqueado': ('fator_bloqueado', {
+        'pt': ('O segundo fator da sua conta no Vlado foi bloqueado por alguns minutos',
+               'O código do segundo fator da sua conta no Vlado foi digitado errado cinco vezes seguidas, e por isso ele '
+               'fica bloqueado por {minutos} minutos. Um código de reserva continua valendo durante o bloqueio.\n\nSe foi '
+               'você, espere esse tempo e tente de novo. Se não foi, alguém pode ter a sua senha ou o acesso ao seu '
+               'e-mail: entre com um código de reserva, ou numa sessão que já esteja aberta, e troque a senha. Se não '
+               'conseguir entrar, peça a quem administra a sua redação a recuperação do seu acesso.\n'),
+        'en': ('The second factor of your Vlado account was blocked for a few minutes',
+               'The second-factor code of your Vlado account was typed wrong five times in a row, so it is blocked for '
+               '{minutos} minutes. A reserve code still works while it is blocked.\n\nIf it was you, wait that long and try '
+               'again. If it was not, somebody may have your password or access to your e-mail: sign in with a reserve '
+               'code, or use a session that is already open, and change the password. If you cannot get in, ask '
+               'whoever runs your newsroom to recover your access.\n')}),
+    'fator_alterado': ('fator_alterado', {
+        'pt': ('O segundo fator da sua conta no Vlado foi alterado',
+               'O segundo fator da sua conta no Vlado (o aplicativo autenticador ou os códigos de reserva) acaba de ser '
+               'alterado.\n\nSe não foi você, troque a sua senha agora e avise quem administra a sua redação.\n'),
+        'en': ('The second factor of your Vlado account was changed',
+               'The second factor of your Vlado account (the authenticator app or the reserve codes) has just been '
+               'changed.\n\nIf it was not you, change your password now and tell whoever runs your newsroom.\n')}),
     'senha_trocada': ('senha_trocada', {
         'pt': ('A senha da sua conta no Vlado foi trocada',
                'A senha da sua conta no Vlado acaba de ser trocada, e as outras sessões da conta foram encerradas.\n\n'

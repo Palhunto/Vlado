@@ -24,6 +24,13 @@
 // envia. `validar(valores)` devolve {id: mensagem} e, se houver erro, nada é enviado: cada mensagem vai junto ao seu campo, e o foco, ao primeiro.
 // Se `executar` lançar uma falha com `falha.campo` (id de um campo), a mensagem vai junto àquele campo, ele é limpo e recebe o foco; a senha
 // `falha.bloqueado` deixa a ação indisponível (sobra "Cancelar"); a senha nunca fica guardada: os campos são limpos quando o diálogo fecha. ctx.valores() devolve {id: valor}; ctx.erroCampo(id, mensagem) e ctx.limparCampos().
+// `campos[i].oculto` esconde um campo até `ctx.campoVisivel(id, true)` (o campo "Sua senha" só vale com o papel Dono, no convite); um campo oculto não é exigido e
+// seu valor nunca vai em ctx.valores(). `validar(valores, ctx)` pode devolver `false` quando já mostrou os próprios erros (campos que não são de senha): nada é
+// enviado e nada é limpo. Uma falha com `silencioso: true` não mostra mensagem do diálogo (quem lançou já a pôs junto ao campo).
+// `ctx.trocarPor({titulo, texto, acao, semCancelar, montar(corpo)})`, chamado de `executar`, troca o formulário por outra vista sem fechar (o link do convite, que
+// só aparece uma vez): a ação fecha (devolve true), Esc também, e `semCancelar` tira o botão de cancelar; o que a vista mostrou some quando o diálogo fecha.
+// `semAcoes: true` tira os botões do diálogo (quem o usa traz os próprios, como o cadastro do segundo fator, em vários passos): `ctx.fechar(valor)` o fecha e `ctx.travar(true)` faz o Esc
+// deixar de fechar (o passo dos códigos de reserva, que não voltam).
 // Clique no véu não fecha (decisão do dono, P12.5). Esc fecha como "Cancelar". O foco fica preso e, ao fechar, volta a `gatilho`.
 (() => {
   const t = (pt, vars) => (window.I18N ? window.I18N.t(pt, vars) : String(pt).replace(/\{(\w+)\}/g, (todo, nome) => vars?.[nome] ?? todo));
@@ -38,11 +45,20 @@
     if (texto !== undefined && texto !== null) elemento.textContent = texto;
     return elemento;
   }
+  // Um e-mail só quebra de linha depois do @ ou antes de um ponto (<wbr> nesses lugares), nunca no meio da palavra; o texto não muda (wbr não tem texto).
+  function quebraveis(texto) {
+    const alvo = document.createDocumentFragment();
+    String(texto).split(/(\S+@\S+)/).forEach((pedaco, indice) => {
+      if (indice % 2 === 0) { if (pedaco) alvo.append(pedaco); return; }
+      pedaco.split(/(?<=@)|(?=\.[A-Za-z0-9])/).forEach((parte, ordem) => { if (ordem) alvo.append(document.createElement('wbr')); if (parte) alvo.append(parte); });
+    });
+    return alvo;
+  }
   // Título com o nome do item no lugar de {item}.
   function preencherTitulo(destino, titulo, item, aspas = true) {
     const [antes, depois] = String(titulo).split('{item}');
     if (depois === undefined || !item) { destino.textContent = String(titulo).replace('{item}', item ?? ''); return; }
-    const nome = no('span', 'dialogo-item', aspas ? `“${item}”` : item);
+    const nome = no('span', 'dialogo-item'); nome.append(quebraveis(aspas ? `“${item}”` : item));
     nome.setAttribute('translate', 'no');
     destino.replaceChildren(antes, nome, depois);
   }
@@ -121,10 +137,12 @@
         const mensagemDoCampo = no('p', 'dialogo-erro dialogo-erro-campo'); mensagemDoCampo.id = `${base}-erro`; mensagemDoCampo.hidden = true;
         const ligacoes = [];
         if (apoio) { apoio.id = `${base}-apoio`; ligacoes.push(apoio.id); }
-        entrada.setAttribute('aria-describedby', [...ligacoes, mensagemDoCampo.id].join(' '));
-        grupo.append(rotuloDoCampo, linha, ...(apoio ? [apoio] : []), mensagemDoCampo);
+        entrada.setAttribute('aria-describedby', [mensagemDoCampo.id, ...ligacoes].join(' '));
+        // O erro vem primeiro, a 4 px do campo, e o apoio depois (#dialogo-senha).
+        grupo.append(rotuloDoCampo, linha, mensagemDoCampo, ...(apoio ? [apoio] : []));
         partes.push(grupo);
-        entradas.set(def.id, {def, entrada, mostrar, mensagem: mensagemDoCampo});
+        if (def.oculto) grupo.hidden = true;
+        entradas.set(def.id, {def, entrada, mostrar, mensagem: mensagemDoCampo, grupo});
       }
 
       const progresso = no('div', 'dialogo-progresso'); progresso.hidden = true;
@@ -142,10 +160,12 @@
       const botaoAcao = no('button', destrutivo ? 'danger' : '', t(opcoes.acao || 'Confirmar')); botaoAcao.type = 'button';
       const acoes = no('div', 'dialogo-acoes');
       acoes.append(botaoCancelar, botaoAcao);
+      if (opcoes.semAcoes) acoes.hidden = true;
       partes.push(acoes);
       caixa.append(...partes);
 
       let estado = 'aberto';       // aberto | ocupado | cancelando | fechado
+      let travado = false;         // o Esc não fecha (ctx.travar)
       let bloqueado = false;       // recusa que não passa com nova tentativa (bloqueio por senhas erradas): sobra "Cancelar"
       let controlador = null;
       const fechamento = new AbortController();
@@ -154,9 +174,10 @@
       const inertes = [];
 
       const nomeConfere = () => !campo || (nomeEsperado !== null && comparavel(campo.value) === comparavel(nomeEsperado));
-      const camposCompletos = () => [...entradas.values()].every(({def, entrada}) => !def.exigido || entrada.value !== '');
-      const valores = () => Object.fromEntries([...entradas].map(([chave, {entrada}]) => [chave, entrada.value]));
+      const camposCompletos = () => [...entradas.values()].every(({def, entrada, grupo}) => !def.exigido || grupo.hidden || entrada.value !== '');
+      const valores = () => Object.fromEntries([...entradas].map(([chave, {entrada, grupo}]) => [chave, grupo.hidden ? '' : entrada.value]));
       function atualizar() {
+        if (estado === 'resultado') return;  // a vista de resultado (trocarPor) cuida dos próprios botões
         const livre = estado === 'aberto';
         // Na espera nada recebe `disabled` onde há foco: o campo fica só leitura e a ação, aria-disabled; assim o foco não vai para o corpo da
         // página (o Tab e o Esc continuam presos no diálogo) e o clique na ação é ignorado por `confirmar`.
@@ -207,6 +228,21 @@
         if (gatilho && gatilho.isConnected && typeof gatilho.focus === 'function') gatilho.focus();
         resolver(valor);
       }
+      // A vista de resultado: o formulário some, entra o texto e o que `montar` puser; a ação fecha. O que foi mostrado sai da página com o diálogo.
+      function trocarPor({titulo: novoTitulo, texto: novoTexto, acao: novaAcao, semCancelar = false, travada = false, montar, item, itemAspas = false} = {}) {
+        travado = !!travada;  // os códigos de reserva: nem o Esc fecha, só "Já guardei"
+        for (const filho of [...caixa.children]) if (filho !== titulo && filho !== acoes) filho.hidden = true;
+        preencherTitulo(titulo, t(novoTitulo || ''), item, itemAspas);
+        const vista = no('div', 'dialogo-resultado');
+        if (novoTexto) vista.append(no('p', 'dialogo-texto', t(novoTexto)));
+        montar?.(vista);
+        caixa.insertBefore(vista, acoes);
+        estado = 'resultado';
+        caixa.removeAttribute('aria-busy'); caixa.removeAttribute('aria-describedby');
+        botaoCancelar.hidden = !!semCancelar;
+        botaoAcao.disabled = false; botaoAcao.setAttribute('aria-disabled', 'false'); botaoAcao.className = ''; botaoAcao.textContent = t(novaAcao || 'Fechar');
+        return vista;
+      }
       // O que `preparar`, `executar` e `aoIdioma` recebem.
       const ctx = {
         corpo,
@@ -221,15 +257,28 @@
         valor: () => (campo ? campo.value : ''),
         valores,
         erroCampo,
+        campoVisivel(chave, visivel) {
+          const item = entradas.get(chave);
+          if (!item) return;
+          item.grupo.hidden = !visivel;
+          if (!visivel) { item.entrada.value = ''; erroCampo(chave, '', {foco: false}); }
+          atualizar();
+        },
+        trocarPor,
+        fechar: valor => fechar(valor ?? false),
+        travar: valor => { travado = !!valor; },
         limparCampos() { for (const {entrada} of entradas.values()) entrada.value = ''; limparErrosDeCampo(); },
         fechou: () => estado === 'fechado',
         sinalFechado: fechamento.signal,
       };
       function aoMudarIdioma() { rotularCampo(); opcoes.aoIdioma?.(ctx); }
       async function confirmar() {
+        if (estado === 'resultado') { fechar(true); return; }
         if (estado !== 'aberto' || bloqueado || !nomeConfere() || !camposCompletos()) return;  // bloqueado: nem o Enter no campo envia mais um pedido
         limparErrosDeCampo();
-        const recusas = opcoes.validar ? Object.entries(opcoes.validar(valores()) || {}) : [];
+        const brutas = opcoes.validar ? opcoes.validar(valores(), ctx) : {};
+        if (brutas === false) return;  // quem validou já mostrou os próprios erros
+        const recusas = Object.entries(brutas || {}).filter(([chave]) => entradas.has(chave));
         if (recusas.length) {
           for (const [chave, mensagem] of recusas) erroCampo(chave, mensagem, {foco: false});
           entradas.get(recusas[0][0])?.entrada.focus();
@@ -243,12 +292,14 @@
         tarefa = Promise.resolve().then(() => opcoes.executar({...ctx, etapa, sinal: controlador.signal}));
         try {
           await tarefa;
+          if (estado === 'resultado') { botaoAcao.focus(); return; }  // a vista de resultado segue aberta
           fechar(true);
         } catch (falha) {
           if (estado === 'cancelando') { fechar(false); return; }
           estado = 'aberto';
           if (falha?.bloqueado) bloqueado = true;
           atualizar();
+          if (falha?.silencioso) return;  // quem lançou já pôs a mensagem junto ao campo
           // Recusa de um campo (senha incorreta): a mensagem vai junto ao campo, que é limpo e recebe o foco; as demais vão junto às ações.
           if (falha?.campo && entradas.has(falha.campo)) { erroCampo(falha.campo, falha.message || 'Não deu para concluir. Tente de novo.', {limpar: true}); return; }
           // Qualquer outra recusa também leva a senha embora: ela não fica no campo entre uma tentativa e outra.
@@ -260,6 +311,8 @@
         }
       }
       function cancelar() {
+        if (travado) return;
+        if (estado === 'resultado') { fechar(true); return; }  // Esc na vista de resultado fecha como a ação
         if (estado === 'aberto') { fechar(false); return; }
         if (estado === 'ocupado' && opcoes.longa) {
           // A espera longa se cancela; a tarefa recebe o sinal e, ao terminar, fecha. Se acabou mesmo assim, vale o resultado.
@@ -352,5 +405,5 @@
     return confirmado ? resultado : null;
   }
 
-  window.Dialogo = {confirmar, comSenha, recusaDaSenha};
+  window.Dialogo = {confirmar, comSenha, recusaDaSenha, quebraveis};
 })();

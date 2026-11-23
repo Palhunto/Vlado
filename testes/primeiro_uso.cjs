@@ -28,7 +28,7 @@ for (const desktop of [true, false]) {
     assert.equal(mesa.$('inicio-nova').classList.contains('secondary'), false);
     mesa.$('inicio-nova').click();
     assert.equal(mesa.$('area-nova').hidden, false, 'abre o passo 1 da Nova apuração (R4)');
-    assert.equal(mesa.$('area-cadastro').hidden, true);
+    assert.equal(mesa.$('area-cadastro'), null);
     assert.equal(mesa.doc.activeElement, mesa.$('nova-nome'));
   });
 }

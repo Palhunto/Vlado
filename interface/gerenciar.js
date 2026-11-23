@@ -155,6 +155,9 @@
     if (busy || deleting) return;
     deleting = true;
     let scope = null, failed = false, result = null;
+    // Onde há contas (todo modo que não é o local) o servidor pede a senha de quem apaga, no mesmo corpo (contrato de contas, 5.15; #dialogo-senha): o campo "Sua senha"
+    // fica abaixo do campo do nome, e a ação só se habilita com o nome conferido e a senha preenchida.
+    const withPassword = document.body.dataset.modo !== 'local';
     const loadScope = async ctx => {
       scope = null; ctx.nome(null); ctx.corpo.replaceChildren(); ctx.estado('Calculando o que será apagado…');
       try {
@@ -169,10 +172,11 @@
         variante:'campo', titulo:'Apagar definitivamente', linha:[labels[item.tipo], item.tipo === 'rodada' ? item.rodada : item.titulo],
         texto:'Os arquivos listados saem do projeto. A Mesa não consegue recuperá-los depois.',
         acao:'Apagar definitivamente', ocupado:'Apagando…', gatilho:opener,
+        campos: withPassword ? [{id:'senha', rotulo:'Sua senha', apoio:'A senha com que você entra na Mesa.', autocomplete:'current-password', exigido:true}] : [],
         preparar:loadScope,
         aoIdioma:ctx => { if (scope) ctx.corpo.replaceChildren(...scopeNodes(scope)); },
         executar:async ctx => {
-          try { result = await api('lixeira-apagar', {item:item.id, nome:ctx.valor(), confirmacao:scope.confirmacao}); }
+          try { result = await api('lixeira-apagar', {item:item.id, nome:ctx.valor(), confirmacao:scope.confirmacao, ...(withPassword ? {senha:ctx.valores().senha} : {})}); }
           catch (error) {
             failed = true;
             // Stable code from the server (8f03d9c); the PT text is only a fallback for older servers.
@@ -180,7 +184,9 @@
               ctx.limparCampo(); await loadScope(ctx);
               throw new Error('O conteúdo mudou desde a conferência. Confira o alcance atualizado e digite o nome de novo.');
             }
-            throw error;   // any other refusal stays in the dialog, with the server's own text
+            // Wrong password: the error goes to the password field (cleared, focused; the name typed stays); a block leaves only Cancel; any other refusal
+            // stays in the dialog, with the server's own text.
+            throw withPassword ? window.Dialogo.recusaDaSenha(error) : error;
           }
         },
       });

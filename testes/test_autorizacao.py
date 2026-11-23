@@ -17,6 +17,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acesso
+import fator_de_teste
 import test_codex_integracao as integracao  # module import: its TestCase is not re-collected here
 from test_acesso import SENHA, hasher_rapido
 from interface_pesquisa import Servidor
@@ -65,7 +66,7 @@ SO_ADMIN = (
 class Http(unittest.TestCase):
     def setUp(self):
         integracao.CodexIntegrationTest.setUp(self)
-        env = patch.dict(os.environ, {'VLADO_ACESSO': '', 'VLADO_AMBIENTE': '', 'VLADO_CONFIAR_PROXY': ''})
+        env = patch.dict(os.environ, {'VLADO_ACESSO': '', 'VLADO_AMBIENTE': '', 'VLADO_CONFIAR_PROXY': '', 'VLADO_SEGREDOS': ''})
         env.start()
         self.addCleanup(env.stop)
         hasher_rapido(self)
@@ -76,6 +77,8 @@ class Http(unittest.TestCase):
         thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         thread.start()
         self.addCleanup(lambda: (self.server.shutdown(), self.server.server_close(), thread.join(3)))
+        self.ids_por_login = {}
+        self.addCleanup(fator_de_teste.esquecer, self.root)
         self.admin_id = self.conta('Editora', 'editora', papel='admin')
         self.ana_id = self.conta('Ana', 'ana', casos=['alpha'], cota=5)
         self.bia_id = self.conta('Bia', 'bia', casos=['beta'], cota=5)
@@ -84,6 +87,11 @@ class Http(unittest.TestCase):
     def conta(self, nome, login, papel='convidado', casos=(), cota=20):
         conta, token = acesso.criar_conta(self.root, nome, login, papel=papel, casos=list(casos), cota_diaria=cota)
         acesso.ativar(self.root, token, SENHA)
+        self.ids_por_login[login] = conta['id']
+        if conta['papel'] in acesso.FATOR_OBRIGATORIO:
+            # Contract, 8.2: in the hosted mode dono and editor must have a second factor, or their session only
+            # reaches its enrolment. The administrator of these tests enrols as a person does.
+            fator_de_teste.cadastrar(self.root, conta['id'], SENHA)
         return conta['id']
 
     def request(self, method, path, body=None, headers=None):
@@ -100,9 +108,7 @@ class Http(unittest.TestCase):
         return status, headers, json.loads(body or b'{}')
 
     def entrar(self, login, senha=SENHA):
-        status, headers, body = self.publico('entrar', {'login': login, 'senha': senha})
-        self.assertEqual(status, 200, body)
-        return headers['Set-Cookie'].split(';')[0], body['csrf']
+        return fator_de_teste.entrar(self.request, self.root, self.ids_por_login.get(login), login, senha, ORIGEM)
 
     def post(self, sessao, operation, data, origin=ORIGEM):
         cookie, csrf = sessao
@@ -259,7 +265,9 @@ class AtivacaoTest(Http):
         self.assertEqual(self.publico('ativar', {'token': token, 'senha': 'curta'})[0], 400)
         status, headers, body = self.publico('ativar', {'token': token, 'senha': SENHA})
         self.assertEqual(status, 200, body)
-        self.assertNotIn('Set-Cookie', headers)
+        # No session; the only cookie is the mark of the browser that used the link (contract, 8.2: known device).
+        self.assertTrue(headers['Set-Cookie'].startswith('vlado_aparelho='))
+        self.assertNotIn('vlado_sessao', headers['Set-Cookie'])
         status, _, body = self.publico('ativar', {'token': token, 'senha': SENHA})
         self.assertEqual((status, body['codigo']), (400, 'ativacao_invalida'))
         self.assertEqual(self.publico('ativacao-consultar', {'token': token})[0], 400)
@@ -411,6 +419,12 @@ class PapeisTest(Http):
         self.assertEqual(self.post(self.ana, 'equipe-listar', {})[0], 403)  # still a guest
         self.assertEqual(self.post(self.admin, 'equipe-listar', {})[1]['convites'], [])
         self.assertEqual(self.post(self.admin, 'equipe-papel', {'conta': self.ana_id, 'papel': 'dono', 'senha': SENHA})[0], 200)
+        # A dono now, and in the hosted mode a dono must have a second factor (contract, 8.2): until she enrols it,
+        # her session only reaches the enrolment.
+        status, result = self.post(self.ana, 'equipe-listar', {})
+        self.assertEqual((status, result.get('codigo'), result.get('pendencias')), (403, 'pendencia_de_conta', ['segundo_fator']))
+        segredo = self.post(self.ana, 'conta-fator-iniciar', {'senha': SENHA})[1]['segredo']
+        self.assertEqual(self.post(self.ana, 'conta-fator-confirmar', {'codigo': fator_de_teste.do_aplicativo(segredo)})[0], 200)
         self.assertEqual(self.post(self.ana, 'equipe-listar', {})[0], 200)
 
     def test_as_contas_antigas_sairam_com_o_convite(self):
@@ -448,9 +462,27 @@ class PapeisTest(Http):
 
     def test_cota_diaria_por_conta(self):
         acesso.atualizar(self.root, self.ana_id, por='cli', cota_diaria=1)  # the legacy daily quota is the operator's
-        self.perguntar(self.ana)
-        status, erro = self.post(self.ana, 'codex-perguntar', {'caso': 'alpha', 'pergunta': 'Outra.'})
+        # The quota is of the UTC day. With the clock of the accounts stopped the two questions fall on the same
+        # day even when the suite runs across 00:00 UTC: there the second one was counted on a new day, passed the
+        # quota and met the first one still running (`pergunta_em_andamento`, which has no `parametros`).
+        with patch('acesso.agora', return_value=acesso.agora()):
+            self.perguntar(self.ana)
+            status, erro = self.post(self.ana, 'codex-perguntar', {'caso': 'alpha', 'pergunta': 'Outra.'})
         self.assertEqual((status, erro['codigo'], erro['parametros']), (400, 'cota_diaria_esgotada', {'cota': 1}))
+
+    def test_cota_diaria_e_do_dia_em_utc_e_recomeca_a_meia_noite(self):
+        acesso.atualizar(self.root, self.ana_id, por='cli', cota_diaria=1)
+        fim_do_dia = acesso.agora().replace(hour=23, minute=59, second=30, microsecond=0)
+        with patch('acesso.agora', return_value=fim_do_dia):
+            ana = self.entrar('ana')  # a session of that moment
+            self.perguntar(ana)
+        with patch('acesso.agora', return_value=fim_do_dia + timedelta(seconds=10)):  # the same day: the quota refuses
+            status, erro = self.post(ana, 'codex-perguntar', {'caso': 'alpha', 'pergunta': 'Outra.'})
+            self.assertEqual((status, erro['codigo'], erro['parametros']), (400, 'cota_diaria_esgotada', {'cota': 1}))
+        with patch('acesso.agora', return_value=fim_do_dia + timedelta(minutes=1)):  # 00:00:30 UTC of the next day
+            # The quota lets it through again; what refuses it now is yesterday's question, still running.
+            status, erro = self.post(ana, 'codex-perguntar', {'caso': 'alpha', 'pergunta': 'Outra.'})
+            self.assertEqual((status, erro['codigo']), (400, 'pergunta_em_andamento'))
 
     def test_convidado_nao_envia_corpo_grande(self):
         cookie, csrf = self.ana

@@ -223,6 +223,15 @@ class ServidorTest(cenario.DuasRedacoes):
         type(self).numero += 1
         self.email = f'recuperada{self.numero}@exemplo.test'
         self.pessoa = com_email(self.root, self.a, self.ids['dono'], self.email)
+        self.com_fator = {}
+
+    def dona(self, email):
+        """Another dono of Alfa who will sign in: with her second factor, which the hosted mode makes mandatory for
+        a dono (contract, 8.2); without it her session would only reach its enrolment."""
+        conta = com_email(self.root, self.a, self.ids['dono'], email, 'dono')
+        cenario.fator_de_teste.cadastrar(self.root, conta, SENHA)
+        self.com_fator[email] = conta
+        return conta
 
     def publico(self, operacao, dados):
         status, cabecalhos, corpo = self.pedir('POST', '/api/' + operacao, json.dumps(dados),
@@ -231,6 +240,11 @@ class ServidorTest(cenario.DuasRedacoes):
 
     def entrar(self, email, senha=SENHA):
         status, corpo, cabecalhos, _ = self.publico('entrar', {'login': email, 'senha': senha})
+        if status == 200 and corpo.get('estado') == 'segundo_fator':  # the second step, for who has the factor
+            status, cabecalhos, bruto = self.pedir('POST', '/api/entrar-segundo-fator', json.dumps(
+                {'codigo': cenario.fator_de_teste.codigo(self.root, self.com_fator[email])}),
+                {'Content-Type': 'application/json', 'Origin': cenario.ORIGEM, 'Cookie': cabecalhos['Set-Cookie'].split(';')[0]})
+            corpo = json.loads(bruto or b'{}')
         return (cabecalhos['Set-Cookie'].split(';')[0], corpo['csrf']) if status == 200 else None
 
     def test_no_servico_hospedado_o_link_vai_so_a_pessoa_e_nunca_volta_na_resposta(self):
@@ -273,7 +287,7 @@ class ServidorTest(cenario.DuasRedacoes):
 
     def test_recuperar_um_dono_passa_por_um_terceiro_dono(self):
         alvo = com_email(self.root, self.a, self.ids['dono'], f'dona.alvo{self.numero}@exemplo.test', 'dono')
-        terceira = com_email(self.root, self.a, self.ids['dono'], f'dona.terceira{self.numero}@exemplo.test', 'dono')
+        terceira = self.dona(f'dona.terceira{self.numero}@exemplo.test')
         da_terceira = self.entrar(f'dona.terceira{self.numero}@exemplo.test')
         with correio.usar('simulado'):
             status, corpo, _ = self.post('dono', 'equipe-recuperar', {'conta': alvo, 'senha': SENHA})
@@ -302,7 +316,7 @@ class ServidorTest(cenario.DuasRedacoes):
         # link in the answer and the other person's session gone. It left with the invitation (P30): 404, like the
         # other `contas-*`, with or without the password, and nothing happens to anybody.
         email_da_outra = f'outra.dona{self.numero}@exemplo.test'
-        outra = com_email(self.root, self.a, self.ids['dono'], email_da_outra, 'dono')
+        outra = self.dona(email_da_outra)
         da_outra = self.entrar(email_da_outra)
         inexistente = self.post('dono', 'operacao-que-nunca-existiu', {})
         for alvo in (outra, self.ids['leitor']):

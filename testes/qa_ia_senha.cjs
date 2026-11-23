@@ -36,7 +36,7 @@ async function esperarDialogo(page) {
   try { await page.waitForSelector(DIALOGO, {timeout: 15000}); }
   catch (erro) {
     const estado = await page.evaluate(() => ({mensagem: document.getElementById('ia-config-mensagem')?.textContent, dialogos: document.querySelectorAll('dialog').length,
-      abertos: document.querySelectorAll('dialog[open]').length, chave: document.getElementById('ia-chave')?.value?.length, url: location.href,
+      abertos: document.querySelectorAll('dialog[open]').length, dlgs: [...document.querySelectorAll('dialog.dialogo')].map(d => ({aberto: d.open, cls: d.className, txt: d.textContent.slice(0, 60)})), foco: document.activeElement?.id, chave: document.getElementById('ia-chave')?.value?.length, url: location.href,
       salvar: document.getElementById('ia-salvar')?.disabled, formulario: document.getElementById('ia-config')?.hidden}));
     throw new Error(`o diálogo não abriu: ${JSON.stringify(estado)}`);
   }
@@ -60,10 +60,17 @@ async function esperarDialogo(page) {
       await page.waitForSelector('#codex-conexao summary');
       await page.evaluate(() => { document.getElementById('codex-conexao').open = true; });
       await page.waitForSelector('#ia-config:not([hidden]) #ia-salvar', {timeout: 15000});
+      // F1: o painel não muda de lugar nem fecha depois de carregar (a verificação da conexão resolve com ele aberto): o botão fica onde estava
+      const posicao = () => page.evaluate(() => ({aberto: document.getElementById('codex-conexao').open, y: Math.round(document.getElementById('ia-salvar').getBoundingClientRect().top + scrollY),
+        acao: Math.round(document.getElementById('codex-conectar').getBoundingClientRect().top + scrollY)}));
+      const antes = await posicao();
+      await page.waitForFunction(() => !/Verificando/.test(document.getElementById('codex-conta').textContent), null, {timeout: 15000});
+      await page.waitForTimeout(1200);
+      assert.deepEqual(await posicao(), antes, 'o painel Conexão e opções não se mexe depois de carregar');
 
       // 1. salvar a chave: o servidor pede a senha, o diálogo reenvia o mesmo pedido
       await page.fill('#ia-chave', CHAVE);
-      await page.click('#ia-salvar', {force: true});
+      await page.click('#ia-salvar');
       await esperarDialogo(page);
       assert.equal(await texto(page, `${DIALOGO} .dialogo-titulo`), 'Salvar a configuração da IA?');
       assert.equal(await page.getAttribute(`${DIALOGO} input`, 'type'), 'password');
@@ -85,7 +92,7 @@ async function esperarDialogo(page) {
       // 2. cancelar o diálogo: nada é enviado nem anunciado
       await page.evaluate(() => { document.getElementById('codex-conexao').open = true; });   // a verificação de conexão pode fechar o painel
       await page.fill('#ia-modelo', '');
-      await page.click('#ia-salvar', {force: true});
+      await page.click('#ia-salvar');
       await esperarDialogo(page);
       await page.click(`${DIALOGO} .dialogo-acoes button:first-child`);
       await page.waitForSelector(DIALOGO, {state: 'detached', timeout: 15000});
@@ -94,7 +101,7 @@ async function esperarDialogo(page) {
 
       // 3. remover a chave salva: diálogo destrutivo, mesma senha
       await page.evaluate(() => { document.getElementById('codex-conexao').open = true; });
-      await page.click('#ia-remover', {force: true});
+      await page.click('#ia-remover');
       await esperarDialogo(page);
       assert.equal(await page.getAttribute(DIALOGO, 'data-variante'), 'destrutivo');
       assert.equal(await texto(page, `${DIALOGO} .dialogo-titulo`), 'Remover a chave de IA?');

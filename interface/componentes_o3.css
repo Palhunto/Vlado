@@ -175,7 +175,7 @@ button[aria-disabled="true"]{cursor:progress}
 .dialogo-senha-linha input{flex:1 1 auto;min-width:0}
 .dialogo-mostrar{flex:none;min-height:44px;padding:0 var(--espaco-3)}
 .dialogo-campo-senha .dialogo-nota{font-weight:400}
-.dialogo-erro-campo{font-weight:400}
+.dialogo-erro-campo{font-weight:400;margin-top:calc(var(--espaco-1) - var(--espaco-2))}  /* a 4 px do campo, mesmo dentro do intervalo de 8 do grupo */
 .dialogo-campo-senha input[aria-invalid="true"]{border:2px solid var(--theme-danger)}
 @media (max-width:719px) {
   .dialogo-senha-linha input,.dialogo-mostrar{min-height:48px}
@@ -240,8 +240,11 @@ button[aria-disabled="true"]{cursor:progress}
 .equipe-pessoa p{margin:0}
 .equipe-pessoa-nome{font-size:var(--text-base);overflow-wrap:anywhere}
 .equipe-uso{display:flex;flex-direction:column;gap:var(--espaco-1)}
-.equipe-uso-esgotada{font-size:var(--text-md);font-weight:600;color:var(--theme-warning)}
+.equipe-uso-esgotada{font-size:var(--text-md);font-weight:600;color:var(--theme-warning);white-space:nowrap}
 .equipe-papel{min-height:44px;min-width:220px;max-width:100%}
+.equipe-celula-papel{min-width:calc(220px + 2 * var(--espaco-4))}
+.equipe-celula-pessoa{min-width:calc(200px + 2 * var(--espaco-4))}
+.equipe-link.equipe-link-texto{display:inline;min-height:0;padding:0;font-size:inherit}
 .equipe-gerenciar-botao{min-height:44px;padding:0 var(--espaco-2);border:0;background:none;color:var(--theme-accent);font-size:var(--text-base);font-weight:600;text-decoration:underline;cursor:pointer}
 .equipe-gerenciar-botao:hover{background:none;color:var(--theme-primary-hover)}
 .equipe-gerenciar-botao.secondary{width:100%;border:1px solid var(--theme-input-line);text-decoration:none;background:var(--theme-surface);color:var(--theme-text)}
@@ -270,4 +273,78 @@ button[aria-disabled="true"]{cursor:progress}
 }
 @media (max-width:719px) {
   .conta-linha{min-height:44px}
+  .equipe-atividade-item{flex-direction:column}  /* a data sempre abaixo da frase no celular */
+}
+
+/* === Convites na Equipe (componentes.md#convites; equipe.js) === */
+.equipe-acao-titulo{order:2;margin-left:auto;min-height:44px}
+.equipe-acao-titulo[hidden]{display:none}
+@media (max-width:719px) {
+  .equipe-acao-titulo{order:3;flex:1 0 100%;min-height:48px;margin:var(--espaco-2) 0 0}
+}
+.conta-estado[data-tom="aviso"]{color:var(--theme-warning)}
+.convite-form{display:flex;flex-direction:column;gap:var(--espaco-4)}
+.convite-form :is(input[type="email"],select){width:100%;box-sizing:border-box}
+.convite-form p{margin:0}
+.convite-apuracoes{display:flex;flex-direction:column;gap:var(--espaco-2);min-width:0;margin:0;padding:0;border:0}
+.convite-apuracoes legend{padding:0;margin-bottom:var(--espaco-1)}
+.convite-apuracoes[hidden]{display:none}
+.convite-casos{display:flex;flex-direction:column;gap:var(--espaco-1)}
+.convite-casos[data-rolagem="true"]{max-height:calc(6 * 44px);overflow-y:auto}
+.convite-caso{display:flex;flex-direction:row;gap:var(--espaco-2);align-items:center;min-height:44px;font-size:var(--text-base);font-weight:400;overflow-wrap:anywhere}
+.convite-caso input{flex:none;width:auto;min-height:0}
+.dialogo-resultado{display:flex;flex-direction:column;gap:var(--espaco-3)}
+.dialogo-resultado p{margin:0}
+.convite-link-linha{display:flex;gap:var(--espaco-2);align-items:stretch}
+.convite-link{flex:1 1 auto;min-width:0;min-height:44px;box-sizing:border-box;font-size:var(--text-md)}
+.equipe-celula-acoes{min-width:calc(204px + 2 * var(--espaco-4))}
+.convite-link-linha button{white-space:nowrap}
+.equipe-convite-acoes{display:flex;flex-wrap:wrap;gap:0 var(--espaco-4)}
+.equipe-convite-acoes-celular{flex-direction:column;gap:var(--espaco-2)}
+.equipe-convite-acoes-celular>button{width:100%;min-height:48px}
+.equipe-convite-falha{font-weight:600;color:var(--theme-warning)}
+@media (max-width:719px) {
+  .convite-link-linha{flex-direction:column}
+}
+
+/* === Recuperar o acesso de outra pessoa (componentes.md#recuperar; equipe.js) === */
+.equipe-recuperacoes[hidden]{display:none}
+.equipe-recuperacoes-lista{display:flex;flex-direction:column;gap:var(--espaco-2);margin:0;padding:0;list-style:none}
+.equipe-recuperacao+.equipe-recuperacao{padding-top:var(--espaco-2);border-top:1px solid var(--theme-line)}
+
+/* === Segundo fator (componentes.md#segundo-fator; fator.js, conta.js) === */
+.conta-fator{display:flex;flex-wrap:wrap;gap:var(--espaco-2) var(--espaco-3);align-items:center;justify-content:space-between;margin-top:var(--espaco-2);padding-top:var(--espaco-2);border-top:1px solid var(--theme-line)}
+.conta-fator .conta-rotulo{flex:1 1 240px}
+.conta-fator-ativo{color:var(--theme-accent)}
+.conta-fator-aviso{font-weight:600;color:var(--theme-warning)}
+.fator-rubrica,.fator-rubrica-pagina{margin:0;font-size:var(--text-md);font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--theme-muted)}
+.fator-titulo,.fator-titulo-pagina{margin:0;font:600 var(--text-xl)/1.25 var(--fonte-titulo);color:var(--theme-text)}
+.fator-texto{margin:0;font-size:var(--text-base);line-height:1.5}
+.fator-apoio{margin:0;font-size:var(--text-md);line-height:1.5;color:var(--theme-muted)}
+.fator-erro{margin:0;font-size:var(--text-md);line-height:1.5;color:var(--theme-danger)}
+.fator-erro[hidden]{display:none}
+.fator-campo{display:flex;flex-direction:column;gap:var(--espaco-2)}
+.fator-campo>label{font-size:var(--text-base);font-weight:600}
+.fator-campo input{width:100%;box-sizing:border-box;min-height:44px}
+.fator-campo input[aria-invalid="true"]{border:2px solid var(--theme-danger)}
+.fator-campo .fator-erro{margin-top:calc(var(--espaco-1) - var(--espaco-2))}
+.fator-senha-linha{display:flex;gap:var(--espaco-2);align-items:stretch}
+.fator-senha-linha input{flex:1 1 auto;min-width:0}
+.fator-mostrar{flex:none;min-height:44px;padding:0 var(--espaco-3)}
+.fator-passos,.fator-pagina{display:flex;flex-direction:column;gap:var(--espaco-4)}
+.fator-acoes{display:flex;flex-wrap:wrap;gap:var(--espaco-2)}
+.fator-acoes-fim{justify-content:flex-end;padding-top:var(--espaco-2)}
+.fator-qr-quadro{display:flex;justify-content:center}
+.fator-qr{display:block;max-width:100%;height:auto;border-radius:var(--raio-folha)}
+.fator-chave-bloco{display:flex;flex-direction:column;gap:var(--espaco-2);align-items:flex-start}
+.fator-chave-rotulo{margin:0;font-size:var(--text-md);font-weight:600;color:var(--theme-muted)}
+.fator-chave{margin:0;font-size:var(--text-base);font-weight:600;letter-spacing:1px;font-variant-numeric:tabular-nums;user-select:all;overflow-wrap:anywhere}
+/* Código nunca quebra: duas colunas só quando cada uma cabe um código de 19 caracteres inteiro (o cartão da pendência, de 440 px, fica com uma). */
+.fator-codigos{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));gap:var(--espaco-2) var(--espaco-4);margin:0;padding:var(--espaco-3);list-style:none;border:1px dashed var(--theme-input-line);border-radius:var(--raio-controle)}
+.fator-codigo{white-space:nowrap;font-size:var(--text-base);font-weight:600;letter-spacing:1px;font-variant-numeric:tabular-nums;user-select:all}
+.fator-rodape{margin:0}
+.fator-link{min-height:44px;padding:0 var(--espaco-2);border:0;background:none;color:var(--theme-accent);font-size:var(--text-md);font-weight:600;text-decoration:underline;cursor:pointer}
+@media (max-width:719px) {
+  .fator-codigos{grid-template-columns:minmax(0,1fr)}
+  .fator-senha-linha input,.fator-mostrar{min-height:48px}
 }
