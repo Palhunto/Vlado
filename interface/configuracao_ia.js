@@ -33,9 +33,11 @@
     }
   }
   function travar(travado) { $('ia-salvar').disabled = travado; $('ia-remover').disabled = travado; }
-  // Onde há contas, salvar ou remover a chave pede a senha de quem faz (contrato de contas, 5.15): o pedido segue primeiro e, se o servidor responder
-  // 403 senha_necessaria, o diálogo pede "Sua senha" e reenvia o mesmo pedido com ela. Os botões só ficam travados enquanto um pedido está no ar,
-  // para o foco voltar a eles quando o diálogo fecha. Sem contas (modo local) o servidor não pede e o diálogo nem abre.
+  // Onde há contas, salvar ou remover a chave pede a senha de quem faz (contrato de contas, 5.15): o diálogo abre antes e o pedido vai uma vez, com a senha.
+  // Os botões só ficam travados enquanto um pedido está no ar, para o foco voltar a eles quando o diálogo fecha. Sem contas (modo local) o diálogo nem abre.
+  // Onde há contas (tudo menos o modo local sem login) o servidor pede a senha: a Mesa a pede ANTES de enviar, para a chave viajar uma vez só, e não
+  // primeiro sem senha, para ser recusada, e de novo com ela.
+  const comContas = () => document.body.dataset.modo !== 'local';
   async function enviar(extra, gatilho) {
     if (ocupado) return;
     ocupado = true;
@@ -45,7 +47,7 @@
     if (chave && !extra.remover_chave) dados.chave = chave;
     const remover = !!extra.remover_chave;
     try {
-      const resposta = await window.Dialogo.comSenha({operacao: 'ia-config-salvar', dados, pedirAntes: false, gatilho,
+      const resposta = await window.Dialogo.comSenha({operacao: 'ia-config-salvar', dados, pedirAntes: comContas(), gatilho,
         enviar: async (nome, corpo) => { travar(true); try { return await api(nome, corpo); } finally { travar(false); } },
         dialogo: remover
           ? {titulo: 'Remover a chave de IA?', texto: 'A Mesa deixa de usar a chave salva. A senha confirma que é você quem muda a conexão com a IA.', acao: 'Remover chave', destrutiva: true}

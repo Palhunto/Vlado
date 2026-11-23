@@ -9,9 +9,9 @@ const falha = (codigo, erro, estado = 'proibido') => Object.assign(new Error(err
 const ESTADO = {provedor: 'anthropic', modelo_preferido: null, modelos_padrao: {anthropic: 'modelo-a', openai: 'modelo-o'},
   chaves: {anthropic: {configurada: true, origem: 'salva', final: '1234'}, openai: {configurada: false}}};
 
-async function abrir({exigeSenha = true, certa = 'senha-certa'} = {}) {
+async function abrir({exigeSenha = true, certa = 'senha-certa', modo = 'piloto'} = {}) {
   const pedidos = [];
-  const mesa = criarMesa({modo: 'piloto', papel: 'admin', api: (operacao, dados) => {
+  const mesa = criarMesa({modo, papel: 'admin', api: (operacao, dados) => {
     if (operacao === 'ia-config') return ESTADO;
     if (operacao === 'ia-config-salvar') {
       pedidos.push({...dados});
@@ -33,18 +33,17 @@ const botoes = mesa => [...dialogo(mesa).querySelectorAll('.dialogo-acoes button
 const digitar = (entrada, texto) => { entrada.value = texto; entrada.dispatchEvent(new Evento('input', {bubbles: true})); };
 const salvar = async mesa => { mesa.$('ia-config').dispatchEvent(new Evento('submit', {bubbles: true, cancelable: true})); await mesa.esperar(8); };
 
-test('salvar: o pedido segue sem senha; o servidor pede; o diálogo reenvia o mesmo pedido com a senha e a tela guarda o resultado', async () => {
+test('salvar com contas: o diálogo abre ANTES e o pedido vai uma vez só, com a senha, levando a chave (G1 da Coruja)', async () => {
   const {mesa, pedidos} = await abrir();
   mesa.$('ia-modelo').value = 'modelo-x'; mesa.$('ia-chave').value = '  chave-nova-123 ';
   await salvar(mesa);
-  assert.deepEqual(pedidos.map(p => p.senha), [undefined], 'o primeiro pedido vai sem senha');
+  assert.equal(pedidos.length, 0, 'nada vai ao servidor antes da senha: a chave não viaja para ser recusada');
   assert.ok(dialogo(mesa), 'o diálogo abre');
   assert.equal(dialogo(mesa).querySelector('.dialogo-titulo').textContent, 'Salvar a configuração da IA?');
   assert.equal(campo(mesa).type, 'password');
   digitar(campo(mesa), 'senha-certa'); botoes(mesa)[1].click(); await mesa.esperar(8);
-  assert.equal(pedidos.length, 2);
-  assert.deepEqual({...pedidos[1], senha: undefined}, {...pedidos[0], senha: undefined}, 'o MESMO pedido, só com a senha a mais');
-  assert.equal(pedidos[1].senha, 'senha-certa'); assert.equal(pedidos[1].chave, 'chave-nova-123');
+  assert.equal(pedidos.length, 1, 'a chave viaja uma vez só');
+  assert.equal(pedidos[0].senha, 'senha-certa'); assert.equal(pedidos[0].chave, 'chave-nova-123'); assert.equal(pedidos[0].modelo_preferido, 'modelo-x');
   assert.equal(dialogo(mesa), null);
   assert.equal(mesa.$('ia-config-mensagem').textContent, 'Configuração salva.');
   assert.equal(mesa.$('ia-chave').value, '', 'a chave digitada sai do campo');
@@ -56,13 +55,14 @@ test('salvar: o pedido segue sem senha; o servidor pede; o diálogo reenvia o me
 test('senha incorreta fica no campo do diálogo e nada é salvo; cancelar não envia mais nada, não mostra sucesso e devolve os botões', async () => {
   const {mesa, pedidos} = await abrir();
   await salvar(mesa);
+  assert.equal(pedidos.length, 0);
   digitar(campo(mesa), 'errada'); botoes(mesa)[1].click(); await mesa.esperar(8);
   assert.ok(dialogo(mesa), 'continua aberto');
   assert.ok([...dialogo(mesa).querySelectorAll('.dialogo-erro-campo')].some(p => !p.hidden && p.textContent.startsWith('Senha incorreta')));
   assert.equal(mesa.$('ia-chave-estado').textContent, 'Chave salva · termina em 1234', 'nada mudou');
   botoes(mesa)[0].click(); await mesa.esperar(6);
   assert.equal(dialogo(mesa), null);
-  assert.equal(pedidos.length, 2, 'o sem senha e a tentativa errada, nada além');
+  assert.equal(pedidos.length, 1, 'só a tentativa com a senha errada, nada além');
   assert.equal(mesa.$('ia-config-mensagem').textContent, '', 'cancelar não anuncia nada');
   assert.equal(mesa.$('ia-salvar').disabled, false);
 });
@@ -74,13 +74,13 @@ test('remover a chave salva pede a senha no diálogo destrutivo e reenvia remove
   assert.equal(dialogo(mesa).dataset.variante, 'destrutivo');
   assert.equal(dialogo(mesa).querySelector('.dialogo-titulo').textContent, 'Remover a chave de IA?');
   digitar(campo(mesa), 'senha-certa'); botoes(mesa)[1].click(); await mesa.esperar(8);
-  assert.deepEqual(pedidos.map(p => [p.remover_chave, p.senha]), [[true, undefined], [true, 'senha-certa']]);
+  assert.deepEqual(pedidos.map(p => [p.remover_chave, p.senha]), [[true, 'senha-certa']]);
   assert.equal(mesa.$('ia-config-mensagem').textContent, 'Chave removida.');
   assert.equal(mesa.$('ia-chave-estado').textContent, 'Nenhuma chave configurada.');
 });
 
 test('sem contas (o servidor não pede senha) o diálogo nem abre e a chave é salva direto', async () => {
-  const {mesa, pedidos} = await abrir({exigeSenha: false});
+  const {mesa, pedidos} = await abrir({exigeSenha: false, modo: 'local'});
   mesa.$('ia-chave').value = 'chave-nova-123';
   await salvar(mesa);
   assert.equal(dialogo(mesa), null);
