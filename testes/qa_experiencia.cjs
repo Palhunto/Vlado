@@ -1,4 +1,5 @@
 const {chromium}=require('playwright');
+const {enviarArquivos}=require('./qa_navegacao.cjs');
 const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
 (async()=>{
@@ -6,16 +7,19 @@ const fs=require('node:fs/promises');
   const page=await browser.newPage({viewport:{width:1440,height:1000}});
   const errors=[];page.on('pageerror',e=>{errors.push(e.message);console.error('PAGE:',e.stack);});
   page.on('console',message=>{if(message.type()==='error')console.error('CONSOLE:',message.text());});
+  // A pesquisa no conteúdo (rodada, geração, consulta) é a aba "Pesquisar no conteúdo" da tela Documentos.
+  const irParaPesquisa=async()=>{await page.click('#ver-documentos');await page.click('#mesa-aba-pesquisa');};
   try {
     await page.goto(process.argv[2]);
     await page.locator('#area-inicio').waitFor({state:'visible'});
     await page.selectOption('#contexto-caso','beta');
-    await page.click('#inicio-adicionar');
-    await page.setInputFiles('#cadastro-arquivos',{name:'lote_sintetico.txt',mimeType:'text/plain',buffer:Buffer.from('Documento sintético adicional para teste de cadastro.')});
-    await page.click('#enviar-documentos');
-    await page.locator('#cadastro-perguntar:not([hidden])').waitFor();
-    await page.click('#cadastro-perguntar');
-    await page.locator('#codex-recibo-alerta:not([hidden])').waitFor();
+    await page.click('#inicio-adicionar');   // leva a Documentos com a apuração escolhida (a área Cadastrar arquivos saiu, R4)
+    await page.locator('#area-documentos:not([hidden])').waitFor();
+    await enviarArquivos(page,{name:'lote_sintetico.txt',mimeType:'text/plain',buffer:Buffer.from('Documento sintético adicional para teste de cadastro.')});
+    await page.click('#mesa-perguntar');
+    await page.locator('#area-codex:not([hidden])').waitFor();
+    // O alerta do recibo ao lado da pergunta (#codex-recibo-alerta) era do botão Perguntar sobre estes documentos, da área que saiu: Documentos leva
+    // a Perguntar por #mesa-perguntar, sem ele. Quando o Design decidir se o recibo acompanha a pergunta, a conferência volta aqui.
     await page.evaluate(()=>document.getElementById('codex-mensagens').append(document.createTextNode('Histórico sintético longo. '.repeat(2500))));
     await page.locator('#codex-mensagens').scrollIntoViewIfNeeded();
     const composer=await page.locator('#codex-pergunta').boundingBox();
@@ -34,13 +38,13 @@ const fs=require('node:fs/promises');
     await page.locator('.diligence-entry').waitFor();
     assert.match(await page.locator('.diligence-entry').innerText(),/02\/01\/2020.*vencida/);
     await page.selectOption('#contexto-caso','alpha');
-    await page.click('#ver-documentos');
+    await irParaPesquisa();
     await page.selectOption('#rodada','R001');
     await page.selectOption('#geracao','v1');
     await page.locator('#buscar:not([disabled])').waitFor();
     await page.fill('#consulta','valor');await page.click('#buscar');
     await page.locator('#resultados .result').first().waitFor();
-    await page.locator('#resultados .result').first().getByRole('button',{name:'Conferir original',exact:true}).click();
+    await page.locator('#resultados .result').first().getByRole('button',{name:/^(Abrir original|Ver página \d+ no original)$/}).click();
     await page.locator('#original-dialogo[open]').waitFor();
     assert.match(await page.locator('#original-conteudo').innerText(),/valor/);
     await page.click('#original-fechar');
@@ -59,7 +63,7 @@ const fs=require('node:fs/promises');
     page.once('dialog',d=>d.dismiss());await page.selectOption('#contexto-caso','beta');
     assert.equal(await page.inputValue('#contexto-caso'),'alpha');
     assert.equal(await page.inputValue('#apuracao-nota-titulo'),'Não perder esta nota');
-    await page.click('#ver-documentos');
+    await irParaPesquisa();
     await page.locator('#resultados .result').first().getByRole('button',{name:'Registrar trecho com fonte',exact:true}).click();
     await page.locator('#caderno-trecho:not([disabled])').waitFor();
     await page.fill('#caderno-titulo-input','Texto não salvo');
