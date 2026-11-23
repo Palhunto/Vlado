@@ -49,8 +49,11 @@ MENSAGEM_CAMPOS = {'codex-perguntar': 'Esta conta envia somente a pergunta e a c
 # O que uma conta com pendência ainda alcança (seção 4.2): a própria sessão e o que resolve cada pendência.
 SEM_PENDENCIA = frozenset({'sessao-sair', 'GET:/api/sessao'})
 RESOLVE_PENDENCIA = {'segundo_fator': frozenset({'conta-ver', 'conta-fator-iniciar', 'conta-fator-confirmar'}),
-                     # Quem não aceita os termos novos ainda leva os próprios dados e sai do serviço (ressalva B2).
-                     'termos': frozenset({'conta-ver', 'conta-termos-aceitar', 'conta-exportar', 'conta-excluir'})}
+                     'termos': frozenset({'conta-ver', 'conta-termos-aceitar'})}
+# As saídas que uma pendência deixa abertas sem resolvê-la: quem não aceita os termos novos ainda leva os próprios
+# dados e sai do serviço (ressalva B2). Uma saída só passa se TODAS as pendências da conta a deixam: com o segundo
+# fator pendente, nenhuma (ressalva R1 da revisão da 4b-1: a liberação de uma pendência nunca abre o que outra fecha).
+SAIDAS_DA_PENDENCIA = {'termos': frozenset({'conta-exportar', 'conta-excluir'}), 'segundo_fator': frozenset()}
 # A página que resolve cada pendência: com ela, `GET /` responde 303 para cá (da família do Entrar, sem dado de conta).
 PAGINA_DA_PENDENCIA = {'termos': '/conta/termos', 'segundo_fator': '/conta/segundo-fator'}
 FATOR_OBRIGATORIO = 'O segundo fator é obrigatório para o seu papel neste serviço e não pode ser removido.'
@@ -253,7 +256,11 @@ def _barrada_pela_pendencia(principal: dict, operacao: str) -> bool:
     """A conta com pendência só alcança a própria sessão e o que resolve a pendência (seção 4.2). Um lugar só,
     lido pelo portão e pelo teto do corpo."""
     pendencias = principal.get('pendencias') or ()
-    return bool(pendencias) and operacao not in SEM_PENDENCIA.union(*(RESOLVE_PENDENCIA.get(p, ()) for p in pendencias))
+    if not pendencias:
+        return False
+    if operacao in SEM_PENDENCIA.union(*(RESOLVE_PENDENCIA.get(p, ()) for p in pendencias)):
+        return False  # what resolves one of them, whatever the others
+    return not all(operacao in SAIDAS_DA_PENDENCIA.get(p, ()) for p in pendencias)
 
 
 def corpo_grande(modo: str, principal: dict, operacao: str) -> bool:

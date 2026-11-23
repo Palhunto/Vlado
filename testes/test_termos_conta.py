@@ -124,10 +124,20 @@ class TermosTest(cenario.DuasRedacoes):
                 status, corpo, _ = self.post(sessao, operacao, {})
                 self.assertNotEqual(corpo.get('codigo'), 'pendencia_de_conta', operacao)
             self.assertEqual(self.post(sessao, 'sessao-sair', {})[0], 200)
-        principal = {'papel': 'editor', 'conta': 'c' * 16, 'pendencias': ['segundo_fator']}
-        for operacao in ('conta-exportar', 'conta-excluir', 'conta-termos-aceitar'):
-            self.assertTrue(autorizacao._barrada_pela_pendencia(principal, operacao), operacao)
-            self.assertFalse(autorizacao._barrada_pela_pendencia({**principal, 'pendencias': ['termos']}, operacao), operacao)
+        def barrada(pendencias, operacao):
+            return autorizacao._barrada_pela_pendencia({'papel': 'editor', 'conta': 'c' * 16, 'pendencias': pendencias}, operacao)
+        for operacao in ('conta-exportar', 'conta-excluir'):
+            self.assertFalse(barrada(['termos'], operacao), operacao)
+            # R1 of the review: what one pending item leaves open never opens what another closes. With the second
+            # factor pending too, in either order, the exits stay closed.
+            for pendencias in (['segundo_fator'], ['termos', 'segundo_fator'], ['segundo_fator', 'termos']):
+                self.assertTrue(barrada(pendencias, operacao), (pendencias, operacao))
+        for pendencias in (['termos'], ['termos', 'segundo_fator']):  # each one is still resolved with the other there
+            self.assertFalse(barrada(pendencias, 'conta-termos-aceitar'), pendencias)
+            self.assertFalse(barrada(pendencias, 'conta-ver'), pendencias)
+        self.assertFalse(barrada(['termos', 'segundo_fator'], 'conta-fator-confirmar'))
+        self.assertTrue(barrada(['segundo_fator'], 'conta-termos-aceitar'))
+        self.assertTrue(barrada(['termos', 'segundo_fator'], 'codex-status'))
 
     def test_com_as_duas_pendencias_os_termos_vem_primeiro(self):
         sessao, cid = self.nova('editor')
