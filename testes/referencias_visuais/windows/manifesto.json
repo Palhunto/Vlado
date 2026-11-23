@@ -77,12 +77,12 @@
       "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
     ]
   },
-  "gerado_em_utc": "2026-11-23T03:06:10Z",
+  "gerado_em_utc": "2026-11-23T04:03:30Z",
   "tolerancia": {
     "canal": 4,
     "pixels": 8
   },
-  "total_bytes": 17031970,
+  "total_bytes": 17104743,
   "capturas": {
     "achados__1024__claro": {
       "largura": 1024,
@@ -519,62 +519,62 @@
     "foco_mesa_barra__1440__claro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 84376,
-      "sha256": "4f67258fbcf431944b76a54c6580f60e194c9d8d066f64fee044bb95c5d5357d"
+      "bytes": 89209,
+      "sha256": "3cb65a4e2dc836aad5f4a578b8514909a7ae8d92b23c47900bd98550b09cd294"
     },
     "foco_mesa_barra__1440__escuro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 84550,
-      "sha256": "2b7046c86df6c2f04883275868bafd2ff0e9a7ef0814ad9f2bdc10640652b1c2"
+      "bytes": 89469,
+      "sha256": "aedd92f1fc1b5146715f13e6aef5aed8ccc5efea39ca36d51094be68150496b9"
     },
     "foco_mesa_botao__1440__claro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 84537,
-      "sha256": "44a377f269d4ac0a7c045c9668c86e3637c8dd44dfc77c0ed1a1aebe52f6cf5b"
+      "bytes": 89416,
+      "sha256": "a7041fa720dac4b4d0f8f5af1fd4b5181f89d69fb679e7ff66ca7153940b6bf5"
     },
     "foco_mesa_botao__1440__escuro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 84771,
-      "sha256": "cf723855c29391381a69b61472387bcbbe6778618e948454b008c9eb2e207516"
+      "bytes": 89674,
+      "sha256": "d04490a3b26d644731c9f11b8f39440852db1d5a3e663d3d2186de3d8e4cfe07"
     },
     "foco_mesa_botao__375__claro": {
       "largura": 375,
-      "altura": 868,
-      "bytes": 55145,
-      "sha256": "92318e00977b7e9eabadaddc6d0681f6b2a8c0d3221be113539674daf0bf0908"
+      "altura": 905,
+      "bytes": 57731,
+      "sha256": "990d870c9a2a5308dae2964e34bb9dca7252881c213a292dd35a834307bed7d8"
     },
     "foco_mesa_botao__375__escuro": {
       "largura": 375,
-      "altura": 868,
-      "bytes": 55302,
-      "sha256": "e9d67a5b3676b6ae3951be59daa7f53a58fd6ca8e2961009fbcc3b4857bd4e78"
+      "altura": 905,
+      "bytes": 57894,
+      "sha256": "e3260bd0e52fd5da74f10c1828846641b50537a79140ae71578e7174c9bab62d"
     },
     "foco_mesa_campo__1440__claro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 84634,
-      "sha256": "228468339d7477f145a3354618b095e5be93b7ac795a0a90c116f5b667be09a9"
+      "bytes": 89359,
+      "sha256": "52a5db418c1123c6a3a86c735e9cba8cd04c2e8f8107c202b25e1caca08de249"
     },
     "foco_mesa_campo__1440__escuro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 84911,
-      "sha256": "16e29d3d6f45303f5fd0bcb22b3d040d35e1d8c761bdf926e1264ae54238811e"
+      "bytes": 89639,
+      "sha256": "e5d2df9c510a83d1247b3b36f6d9765643b12cb5f6b1a37cd54ef3086c25a7df"
     },
     "foco_mesa_campo__375__claro": {
       "largura": 375,
-      "altura": 868,
-      "bytes": 55089,
-      "sha256": "09dd87fd8ada032a66edcd6229446944d46bdc7672b1b6886193b2e1e352315b"
+      "altura": 905,
+      "bytes": 57688,
+      "sha256": "db83b3b75be9911034fe558475a63850fcb6f63e8d20dfd750868bac7d161cfd"
     },
     "foco_mesa_campo__375__escuro": {
       "largura": 375,
-      "altura": 868,
-      "bytes": 55267,
-      "sha256": "55793d7a4c878b3b082c4f1be00322912d4be8aa6be553c334af5acd8abf7c3c"
+      "altura": 905,
+      "bytes": 57861,
+      "sha256": "ffdb86d2251ef0546ca66791f2b602ec84a7d763e651fcb0c43bbc84526953fb"
     },
     "gerenciar__1024__claro": {
       "largura": 1024,
@@ -674,51 +674,51 @@
     },
     "nova__1024__claro": {
       "largura": 1024,
-      "altura": 768,
-      "bytes": 63857,
-      "sha256": "4937bafe466193d8a435f032728e1e0645e3642394f86c801d89218c48c67844"
+      "altura": 797,
+      "bytes": 68630,
+      "sha256": "b8c743b477aa971fe9fce24914e17f82b4572030e1b1750f2933b631c3c3609d"
     },
     "nova__1024__escuro": {
       "largura": 1024,
-      "altura": 768,
-      "bytes": 64186,
-      "sha256": "20842f767e7e9ac56591ddfec5f175cc383dc560c6df192972f965fb2ca35b7f"
+      "altura": 797,
+      "bytes": 68839,
+      "sha256": "8aa050f444e9e55cf452f52c10249c1eb4f809dfd9f8831ebc372a62c355bdfe"
     },
     "nova__1440__claro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 83726,
-      "sha256": "9e54d76632bca197c1fa07d697f00dfa2eabdd7fbe89abb1c7ac7220414c596a"
+      "bytes": 88505,
+      "sha256": "7655ffc58fa71aea3c838b3cf2d2bf90e2ea32d4b959786776e56c75aa65158a"
     },
     "nova__1440__escuro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 83916,
-      "sha256": "87b8dd8e8422d6a7f4926af82b18897563b0d1355ebb81328efb540eacd2661b"
+      "bytes": 88761,
+      "sha256": "ec456542b65cf7904f29da20435a95993d18c50ef540b2df8b4dfec6081d1782"
     },
     "nova__375__claro": {
       "largura": 375,
-      "altura": 868,
-      "bytes": 54277,
-      "sha256": "38e1f0415238405aa3b706c34c47aca2f95b5841a5fbf987486b643790c2b7ee"
+      "altura": 905,
+      "bytes": 56864,
+      "sha256": "4dfe6bc937cec79a1de4ffc18200082a97b240156ad53ab9bd9f8918ec5daa08"
     },
     "nova__375__escuro": {
       "largura": 375,
-      "altura": 868,
-      "bytes": 54409,
-      "sha256": "4455fa8c8aaf3462f22b0ae83a1bed734416731eefce12dd1c413532e089271d"
+      "altura": 905,
+      "bytes": 57005,
+      "sha256": "52aa81fbdcffd0aabc548555ac36ecb1b5d6370597d2c05ed70c1aab817f76a1"
     },
     "nova__768__claro": {
       "largura": 768,
       "altura": 1024,
-      "bytes": 61708,
-      "sha256": "48621ccf8ea5f2cd80082f59ff5e6b03b2c5ee56f1056af68d4746ccb1e74e79"
+      "bytes": 66322,
+      "sha256": "e87d0f1b284ee9b67e38297323f9ab5f012b25f624f31838368a82da9f5813de"
     },
     "nova__768__escuro": {
       "largura": 768,
       "altura": 1024,
-      "bytes": 61670,
-      "sha256": "e51d2eb0463cf1acb88321bbcf153e50bebeba8f62ea4e6470e8b2ae9040e361"
+      "bytes": 66238,
+      "sha256": "6a71beb4f792ea29d44baa37981e4ffba4fe9cb74939c9ff8a0a6c5c37a8aff9"
     },
     "quadros__1024__claro": {
       "largura": 1024,

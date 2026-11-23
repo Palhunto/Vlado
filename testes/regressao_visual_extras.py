@@ -1,4 +1,4 @@
-"""Capturas adicionais da regressão visual (Onda 3, R6 do Traço): celular deitado, 430 px e texto a 200%.
+"""Capturas adicionais da regressão visual (Onda 3, R6 do Traço): celular deitado, 430 px, texto a 200% e reflow a 320 px.
 
     python testes/regressao_visual_extras.py gerar      # refaz testes/referencias_visuais/<plataforma>_extras/
     python testes/regressao_visual_extras.py comparar   # captura de novo e compara; relatório em tmp/regressao_visual_extras/
@@ -13,6 +13,9 @@ Cenários (nome da captura: `<tela>__<cenário>__<tema>.png`):
   zoom200   página a 200%: janela de 1280 px com a página ampliada a 200%, ou seja, 640 px de largura em CSS com fator de escala 2 (a imagem sai
             com 1280 px). É o "redimensionar texto até 200%" da WCAG 1.4.4 como o navegador o faz. A CSP da Mesa não deixa injetar CSS para ampliar só a fonte,
             e esta é a forma que a pessoa de verdade usa (Ctrl +).
+
+  reflow320 320 x 640 px: o reflow da WCAG 1.4.10 (o conteúdo cabe em 320 px de largura em CSS, equivalente a 1280 px a 400%, sem rolagem em duas direções).
+            A regra é a mesma dos outros cenários: nenhuma rolagem horizontal.
 
 Rolagem horizontal (a página mais larga que a janela) NÃO reprova a geração: entra no manifesto (`rolagem_horizontal`) e é avisada. No `comparar`, só
 reprova rolagem horizontal que a referência não tinha, além das diferenças de imagem e de qualquer pedido a endereço externo.
@@ -38,6 +41,7 @@ CENARIOS = {
     'paisagem': {'viewport': {'width': 812, 'height': 375}, 'escala': 1},
     '430': {'viewport': {'width': 430, 'height': 932}, 'escala': 1},
     'zoom200': {'viewport': {'width': 640, 'height': 450}, 'escala': 2},
+    'reflow320': {'viewport': {'width': 320, 'height': 640}, 'escala': 1},
 }
 TELAS = tuple(rv.TELAS) + tuple(rv.VARIANTES) + (rv.TELA_ENTRAR,)
 
@@ -261,7 +265,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('comando', choices=('gerar', 'comparar'))
     parser.add_argument('--telas', help='lista separada por vírgula (padrão: as 14 da linha de base, sem os focos)')
-    parser.add_argument('--cenarios', help='paisagem,430,zoom200 (padrão: os três)')
+    parser.add_argument('--cenarios', help='paisagem,430,zoom200,reflow320 (padrão: os quatro)')
     parser.add_argument('--temas', help='claro,escuro (padrão: ambos)')
     parser.add_argument('--python-servidor', help='Python do projeto (padrão: .venv do projeto)')
     parser.add_argument('--relatorio', help='pasta do relatório de `comparar` (padrão: tmp/regressao_visual_extras)')

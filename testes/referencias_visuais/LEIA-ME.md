@@ -139,9 +139,9 @@ não a cada commit, e usar recorte (`--telas`, `--larguras`, `--temas`) para tro
 - A área `apuracao` registra no console um bloqueio da CSP (`style-src 'self'`): estilo inline aplicado por script.
   Fica no manifesto (`erros_do_navegador`); `comparar` avisa se aparecer erro novo.
 
-## Capturas adicionais (R6 do Traço): paisagem, 430 px e texto a 200%
+## Capturas adicionais (R6 do Traço): paisagem, 430 px, texto a 200% e reflow a 320 px
 
-`python testes/regressao_visual_extras.py gerar` refaz, e `comparar` confere, 84 capturas em `windows_extras/` (14 telas, sem os focos, nos
+`python testes/regressao_visual_extras.py gerar` refaz, e `comparar` confere, 112 capturas em `windows_extras/` (14 telas, sem os focos, nos
 dois temas; nome `<tela>__<cenário>__<tema>.png`). São referências ADICIONAIS: as 130 de cima não mudam. Cenários:
 
 | Cenário | Janela | Para quê |
@@ -149,15 +149,14 @@ dois temas; nome `<tela>__<cenário>__<tema>.png`). São referências ADICIONAIS
 | `paisagem` | 812 x 375 px | celular deitado: cabeçalho, gaveta e diálogos com altura curta |
 | `430` | 430 x 932 px | celular grande em pé, entre os 375 e os 768 da linha de base |
 | `zoom200` | 640 px em CSS, escala 2 (imagem de 1280 px) | a janela de 1280 px com a página ampliada a 200% (WCAG 1.4.4) |
+| `reflow320` | 320 x 640 px | o reflow da WCAG 1.4.10: o conteúdo cabe em 320 px de largura em CSS, sem rolagem horizontal |
 
 O `zoom200` é a página ampliada, não só a fonte: a CSP da Mesa não deixa injetar CSS para aumentar o texto sozinho, e Ctrl + é como a pessoa de verdade
-faz. Rolagem horizontal não impede gerar: fica no manifesto (`rolagem_horizontal`, hoje vazio nas 84) e `comparar` reprova a que for nova, além de diferença
+faz. Rolagem horizontal não impede gerar: fica no manifesto (`rolagem_horizontal`, hoje vazio nas 112) e `comparar` reprova a que for nova, além de diferença
 de imagem e de pedido a endereço externo. O Vditor do Caderno registra um aviso de CSP (estilo em linha) no manifesto, como na linha de base. Os testes sem
 navegador estão em `test_regressao_visual_extras.py`.
 
-## Pendentes (não valem como aceitas)
+## Pendentes
 
-As 14 capturas `nova__*` ficam **pendentes** até serem regeradas: 8 na linha de base (`nova__375|768|1024|1440__claro|escuro`) e 6 nas extras
-(`nova__paisagem|430|zoom200__claro|escuro`). O Traço as recusou porque `?area=nova` abre o passo 1 sem a linha de etapas ("1 Nome e fontes, 2 Documentos,
-3 Conferir recibo"). **Dono: Lume** (a correção é da tela). **Motivo: linha de etapas ausente.** Quem regera é a Sonda, depois da correção, numa só janela com as
-demais capturas novas. Até lá essas 14 guardam o estado recusado, só para o comparador ter o que comparar; nenhuma delas é prova de que a tela está certa.
+Nenhuma. As 14 `nova__*` (8 da linha de base e 6 das extras), que o Traço recusara por faltar a linha de etapas em `?area=nova`, foram regeradas sobre o 06d478e
+do Lume, que a desenha ("1 Nome e fontes · 2 Documentos · 3 Conferir recibo"; no celular, "Passo 1 de 3 · Nome e fontes"). Os 10 `foco_mesa_*` (anel de foco na própria tela `nova`) foram regerados junto, porque a linha de etapas muda a página. A aceitação visual segue sendo do Traço.

@@ -12,9 +12,12 @@ import regressao_visual_extras as ex
 
 class ExtrasTest(unittest.TestCase):
     def test_cenarios_pedidos_pelo_design(self):
-        self.assertEqual(set(ex.CENARIOS), {'paisagem', '430', 'zoom200'})
+        self.assertEqual(set(ex.CENARIOS), {'paisagem', '430', 'zoom200', 'reflow320'})
         self.assertEqual(ex.CENARIOS['paisagem']['viewport'], {'width': 812, 'height': 375})
         self.assertEqual(ex.CENARIOS['430']['viewport']['width'], 430)
+        # reflow (WCAG 1.4.10): 320 px de largura em CSS, sem ampliar
+        self.assertEqual(ex.CENARIOS['reflow320']['viewport']['width'], 320)
+        self.assertEqual(ex.CENARIOS['reflow320']['escala'], 1)
         # 200%: 640 px de largura em CSS com fator 2 = a janela de 1280 px ampliada a 200%
         self.assertEqual(ex.CENARIOS['zoom200']['viewport']['width'] * ex.CENARIOS['zoom200']['escala'], 1280)
 
@@ -24,9 +27,9 @@ class ExtrasTest(unittest.TestCase):
         self.assertIn('nova', ex.TELAS)
         self.assertNotIn('cadastro', ex.TELAS)
 
-    def test_84_capturas_no_conjunto_completo(self):
+    def test_112_capturas_no_conjunto_completo(self):
         nomes = ex.nomes_esperados(ex.TELAS, list(ex.CENARIOS), list(rv.TEMAS))
-        self.assertEqual(len(nomes), 14 * 3 * 2)
+        self.assertEqual(len(nomes), 14 * 4 * 2)
         self.assertEqual(len(set(nomes)), len(nomes))
         self.assertIn('inicio__paisagem__claro', nomes)
 
@@ -42,7 +45,7 @@ class ExtrasTest(unittest.TestCase):
 
 
 class ReferenciasExtrasTest(unittest.TestCase):
-    """As 84 referências versionadas conferem com o manifesto, têm a largura do cenário e nenhuma é uma página em branco."""
+    """As 112 referências versionadas conferem com o manifesto, têm a largura do cenário e nenhuma é uma página em branco."""
 
     def setUp(self):
         self.pasta = ex.pasta_extras()
