@@ -189,6 +189,19 @@
   activate();
 })();
 
+// Configurações (P43): o botão do cabeçalho fica com aria-pressed enquanto a página está aberta, e o link "Alterar em Configurações" de Perguntar > Conexão e opções
+// abre a página com o foco no título do painel do provedor e da chave da IA (o formulário mora lá, em todos os modos).
+(() => {
+  const botao = $('mesa-configuracoes'), alterar = $('ia-alterar');
+  registrarGanchoArea({depois: nome => botao.setAttribute('aria-pressed', String(nome === 'configuracoes'))});
+  alterar?.addEventListener('click', async evento => {
+    evento.preventDefault();
+    showArea('configuracoes');
+    try { await window.Conta?.abrir?.('configuracoes'); } catch (_) { /* a aba não abriu: o painel segue onde está */ }
+    $('ia-titulo').focus();
+  });
+})();
+
 // Phones: Configurações, language, theme and sign-out move into the navigation drawer, leaving the
 // header to the menu, the investigation selector and the quota (componentes.md#cabecalho-celular).
 (() => {
@@ -540,8 +553,9 @@
     const item = faixa.querySelector(ativo);
     if (item && faixa.clientWidth > 0 && faixa.scrollWidth > faixa.clientWidth) {
       const dentro = faixa.getBoundingClientRect(), caixa = item.getBoundingClientRect(), folga = folgaDe(faixa);
-      if (caixa.left < dentro.left + folga) faixa.scrollLeft += caixa.left - dentro.left - folga;
-      else if (caixa.right > dentro.right - folga) faixa.scrollLeft += caixa.right - dentro.right + folga;
+      // O destino é sempre o ponto de encaixe das pílulas (o início do item, com o scroll-padding de --espaco-4 do CSS): assim o scroll-snap proximity não desfaz a rolagem
+      // (Q5e); nas pontas o navegador limita ao que a faixa alcança, e o item segue inteiro.
+      if (caixa.left < dentro.left + folga || caixa.right > dentro.right - folga) faixa.scrollLeft += caixa.left - dentro.left - folga;
     }
     marcar(faixa);
   }

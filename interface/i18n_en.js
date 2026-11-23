@@ -598,6 +598,8 @@ window.VLADO_I18N_EN = {
 
     // Provider and key settings
     "Provedor e chave da API": "API provider and key",
+    "Provedor e chave da IA": "AI provider and key",
+    "Alterar em Configurações": "Change in Settings",
     "Provedor": "Provider",
     "Modelo (opcional)": "Model (optional)",
     "Chave da API": "API key",
@@ -1805,6 +1807,8 @@ window.VLADO_I18N_EN = {
     // Cota do mês na barra lateral
     ["^R\\$ ([\\d.,]+) de R\\$ ([\\d.,]+)$", "R$ $1 of R$ $2"],
     ["^R\\$ ([\\d.,]+) de ([\\d.,]+)$", "R$ $1 of $2"],
+    ["^IA: (.+), modelo padrão\\.$", "AI: $1, default model."],
+    ["^IA: (.+), modelo (.+)\\.$", "AI: $1, model $2."],
     ["^Cota da instalação R\\$ ([\\d.,]+) de ([\\d.,]+)$", "Installation quota R$ $1 of $2"],
     ["^(\\d+)% da cota usada$", "$1% of the quota used"],
     ["^Cota do mês esgotada: R\\$ ([\\d.,]+) de R\\$ ([\\d.,]+)$", "Monthly quota used up: R$ $1 of R$ $2"],
@@ -1927,6 +1931,7 @@ window.VLADO_I18N_EN = {
     limite_tokens_dia_redacao: "This newsroom's daily usage limit was reached. Try again tomorrow (UTC).",
     limite_tokens_dia: "The installation's daily usage limit was reached. Try again tomorrow (UTC).",
     limite_tokens_consulta: "This question used up its token limit. Ask the administrator to raise it.",
+    limite_de_exportacoes: "You have already exported your data 5 times in the last hour. Try again within an hour.",
     pergunta_em_andamento: "A question is already running for this invitation. Wait for the answer or cancel it.",
     conversa_indisponivel: "This conversation is unavailable for your access.",
     conversa_invalida: "Invalid conversation.",

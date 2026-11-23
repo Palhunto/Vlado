@@ -56,17 +56,17 @@ async function esperarDialogo(page) {
       await page.fill('#entrar-login', args.login);
       await page.fill('#entrar-senha', args.senha);
       await Promise.all([page.waitForURL(url => url.pathname === '/' || url.pathname === '/index.html'), page.click('#entrar-enviar')]);
-      await page.goto(`${args.origem}/?area=codex`);
-      await page.waitForSelector('#codex-conexao summary');
-      await page.evaluate(() => { document.getElementById('codex-conexao').open = true; });
+      // P43: o formulário mora em Configurações (aba Configurações da página das contas), não mais em Perguntar > Conexão e opções
+      await page.goto(`${args.origem}/?area=configuracoes`);
+      await page.waitForSelector('#conta-aba-configuracoes:not([hidden])', {timeout: 15000});
+      await page.click('#conta-aba-configuracoes');
       await page.waitForSelector('#ia-config:not([hidden]) #ia-salvar', {timeout: 15000});
-      // F1: o painel não muda de lugar nem fecha depois de carregar (a verificação da conexão resolve com ele aberto): o botão fica onde estava
-      const posicao = () => page.evaluate(() => ({aberto: document.getElementById('codex-conexao').open, y: Math.round(document.getElementById('ia-salvar').getBoundingClientRect().top + scrollY),
-        acao: Math.round(document.getElementById('codex-conectar').getBoundingClientRect().top + scrollY)}));
+      // F1: o painel não muda de lugar depois de carregar: o botão fica onde estava
+      const posicao = () => page.evaluate(() => ({y: Math.round(document.getElementById('ia-salvar').getBoundingClientRect().top + scrollY)}));
       const antes = await posicao();
-      await page.waitForFunction(() => !/Verificando/.test(document.getElementById('codex-conta').textContent), null, {timeout: 15000});
+      await page.waitForFunction(() => document.getElementById('ia-chave-estado').textContent !== '', null, {timeout: 15000});
       await page.waitForTimeout(1200);
-      assert.deepEqual(await posicao(), antes, 'o painel Conexão e opções não se mexe depois de carregar');
+      assert.deepEqual(await posicao(), antes, 'o painel do provedor e da chave não se mexe depois de carregar');
 
       // 1. salvar a chave: o servidor pede a senha, o diálogo reenvia o mesmo pedido
       await page.fill('#ia-chave', CHAVE);
@@ -90,7 +90,6 @@ async function esperarDialogo(page) {
       assert.ok(!(await page.content()).includes(CHAVE), 'a chave não volta à página');
 
       // 2. cancelar o diálogo: nada é enviado nem anunciado
-      await page.evaluate(() => { document.getElementById('codex-conexao').open = true; });   // a verificação de conexão pode fechar o painel
       await page.fill('#ia-modelo', '');
       await page.click('#ia-salvar');
       await esperarDialogo(page);
@@ -100,7 +99,6 @@ async function esperarDialogo(page) {
       assert.equal(await page.isDisabled('#ia-salvar'), false);
 
       // 3. remover a chave salva: diálogo destrutivo, mesma senha
-      await page.evaluate(() => { document.getElementById('codex-conexao').open = true; });
       await page.click('#ia-remover');
       await esperarDialogo(page);
       assert.equal(await page.getAttribute(DIALOGO, 'data-variante'), 'destrutivo');
