@@ -96,17 +96,20 @@ CHAVE_ESQUECI = '#esqueci|'  # when a reset was last asked for an address, wheth
 RECUPERACAO_HORAS = 24  # a recovery asked by a dono: how long it waits for the second dono, and how long its link lives
 ENTRADA_MINUTOS = 5  # between the right password and the second factor: the ticket of the second step
 ENTRADA_FALHAS = 5  # wrong codes that kill that ticket
+FATOR_OBRIGATORIO = ('dono', 'editor')  # who must have a second factor where it is mandatory: the hosted mode (8.2)
 FATOR_PENDENTE_MINUTOS = 15  # an enrolment not confirmed in this time starts again
-CHAVE_FATOR = '#fator|'  # attempt counter of the second factor asked again by a sensitive operation
+FATOR_RETIRADO = 'fator_removido_na_recuperacao'  # the event of a factor that a recovery took away (link or operator)
+CHAVE_FATOR = '#fator|'  # wrong codes of the authenticator, counted on the account (sign-in and sensitive operations)
+CHAVE_RESERVA = '#reserva|'  # wrong reserve codes, on a counter of their own: they never block the authenticator
+FATOR_CONTADOR_HORAS = 24  # how long those two counters are remembered without a new failure
 PROTECAO_FALHAS = 10  # failures of one identifier, from any address, inside the window below ...
 PROTECAO_JANELA_MINUTOS = 60
 PROTECAO_MINUTOS = 60  # ... put it in protected mode for this long
 BALDES = 20000  # counters of identifiers WITHOUT an account: a table of fixed size, so it never fills nor grows
 APARELHOS_MAX = 20  # known devices kept for each account (the least recently used goes first)
-CHAVE_IDENTIFICADOR = '#id|'  # the ceiling of an identifier that has an account
-CHAVE_BALDE = '#balde|'  # and of the ones that have none, by HMAC of the identifier
+CHAVE_BALDE = '#balde|'  # the ceiling of an identifier, with an account or without: one of BALDES counters, by HMAC
 CHAVE_MARCA = '#marca|'  # failures with a known device mark: the mark does not switch the ceiling off
-ESQUEMA = 7  # PRAGMA user_version of the store; `_ATUALIZACOES` takes an older store up to it
+ESQUEMA = 8  # PRAGMA user_version of the store; `_ATUALIZACOES` takes an older store up to it
 ESPERA_BD_S = 10
 NOME_PADRAO_REDACAO = 'Redação'
 CREDENCIAIS = 'Login ou senha incorretos.'
@@ -219,6 +222,8 @@ CREATE TABLE entradas (
 CREATE TABLE aparelhos (
     conta TEXT NOT NULL REFERENCES contas(id), resumo TEXT NOT NULL, criado_em TEXT NOT NULL, ultimo_uso TEXT NOT NULL,
     PRIMARY KEY (conta, resumo));
+CREATE TABLE termos_aceites (conta TEXT NOT NULL REFERENCES contas(id), versao TEXT NOT NULL, aceito_em TEXT NOT NULL, ip TEXT);
+CREATE INDEX termos_por_conta ON termos_aceites (conta, aceito_em);
 """
 # From each older version of the store to the next one (applied in order, each in one transaction).
 _ATUALIZACOES = {1: ('ALTER TABLE contas ADD COLUMN idioma TEXT',
@@ -251,7 +256,10 @@ _ATUALIZACOES = {1: ('ALTER TABLE contas ADD COLUMN idioma TEXT',
                      ' chave TEXT NOT NULL, criada_em TEXT NOT NULL, expira_em TEXT NOT NULL,'
                      ' falhas INTEGER NOT NULL DEFAULT 0, cliente TEXT, aparelho TEXT)'),
                  6: ('CREATE TABLE aparelhos (conta TEXT NOT NULL REFERENCES contas(id), resumo TEXT NOT NULL,'
-                     ' criado_em TEXT NOT NULL, ultimo_uso TEXT NOT NULL, PRIMARY KEY (conta, resumo))',)}
+                     ' criado_em TEXT NOT NULL, ultimo_uso TEXT NOT NULL, PRIMARY KEY (conta, resumo))',),
+                 7: ('CREATE TABLE termos_aceites (conta TEXT NOT NULL REFERENCES contas(id), versao TEXT NOT NULL,'
+                     ' aceito_em TEXT NOT NULL, ip TEXT)',
+                     'CREATE INDEX termos_por_conta ON termos_aceites (conta, aceito_em)')}
 
 
 class RegistroIlegivel(ValueError):
@@ -313,6 +321,16 @@ class SenhaIncorreta(Recusada):
 class UltimoDono(Recusada):
     """The newsroom would be left without an active dono."""
     status, codigo, motivo = 400, 'ultimo_dono', 'ultimo_dono'
+
+
+class NomeDivergente(Recusada):
+    """The name typed to confirm the deletion of the own account is not the account's (it is not a wrong password)."""
+    status, codigo, motivo = 400, 'nome_confirmacao_divergente', 'validacao'
+
+
+class TermosDesatualizados(Recusada):
+    """The version of the terms sent is not the one in force (or none came while there is one)."""
+    status, codigo, motivo = 400, 'termos_desatualizados', 'validacao'
 
 
 class ConviteDuplicado(Recusada):
@@ -1013,6 +1031,18 @@ def listar_redacoes(root: Path) -> list[dict]:
                 for o in tx.todos('SELECT * FROM organizacoes ORDER BY criada_em, id')]
 
 
+EVENTOS_DA_CHAVE_DE_IA = ('chave_ia_salva', 'chave_ia_removida')
+
+
+def registrar_chave_de_ia(root: Path, cid: str, tipo: str) -> None:
+    """The dono saved or removed the newsroom's own AI key: it goes to the activity of the newsroom and to the audit
+    log. Who and when; never the key, nor any part of it."""
+    if tipo not in EVENTOS_DA_CHAVE_DE_IA:
+        raise ValueError('Evento de chave desconhecido.')
+    with _bd(root, escrever=True) as tx:
+        _evento(tx, tipo, _conta(tx, cid)['id'], cid)
+
+
 def total_redacoes(root: Path) -> int:
     with _bd(root) as tx:
         return tx.um('SELECT COUNT(*) AS total FROM organizacoes')['total']
@@ -1375,7 +1405,7 @@ def recuperar(root: Path, cid, por='cli', horas=ATIVACAO_HORAS, organizacao: str
             # Recovered by the operator: the person lost the password and may have lost the device too. The
             # second factor goes with the password, and is enrolled again after the new sign-in.
             _sem_fator(tx, cid)
-            _evento(tx, 'fator_removido', cid, por, momento)
+            _evento(tx, FATOR_RETIRADO, cid, por, momento)
         tx.ex('DELETE FROM aparelhos WHERE conta = ?', cid)
         tx.ex('UPDATE contas SET senha_hash = NULL, senha_definida_em = NULL WHERE id = ?', cid)
         token = _emitir_ativacao(tx, cid, horas, 'recuperacao', momento)
@@ -1443,24 +1473,79 @@ def remover(root: Path, cid, por: str, organizacao: str, senha=None, ip=None) ->
         _conta(tx, cid, organizacao)  # an unknown account is refused before the password is asked
     confirmar_senha(root, por, senha, ip)
     with _bd(root, escrever=True) as tx:
-        conta = _conta(tx, cid, organizacao)
-        momento = agora()
-        if conta['papel'] == 'dono' and conta['ativa'] and not _donos_ativos(tx, organizacao, exceto=cid):
+        return _apagar_conta(tx, _conta(tx, cid, organizacao), por, agora())
+
+
+def _ultimo_dono(tx: _Tx, conta) -> bool:
+    return conta['papel'] == 'dono' and bool(conta['ativa']) and not _donos_ativos(tx, conta['organizacao'], exceto=conta['id'])
+
+
+def _apagar_conta(tx: _Tx, conta, por: str, momento: datetime) -> dict:
+    """What removing a person and deleting the own account both do (contract, 8.4: the same effect): only the id
+    stays, with the situation `excluida`. The last active dono of a newsroom is refused, checked inside the same
+    transaction that deletes."""
+    cid = conta['id']
+    if _ultimo_dono(tx, conta):
+        raise UltimoDono(ULTIMO_DONO)
+    _derrubar_sessoes(tx, cid)
+    _cancelar_convites_de(tx, cid, momento)
+    _sem_fator(tx, cid)
+    tx.ex('DELETE FROM aparelhos WHERE conta = ?', cid)
+    tx.ex('DELETE FROM participacoes WHERE conta = ?', cid)
+    tx.ex('UPDATE termos_aceites SET ip = NULL WHERE conta = ?', cid)  # the proof stays: id, version, date (P41 b)
+    _sem_responsabilidade(tx, cid)
+    tx.ex('DELETE FROM uso_diario WHERE conta = ?', cid)
+    _limpar_tentativas(tx, conta)
+    tx.ex('DELETE FROM tentativas WHERE chave = ?', CHAVE_CONFIRMACAO + cid)
+    tx.ex("UPDATE contas SET ativa = 0, nome = '', login = NULL, email = NULL, senha_hash = NULL, senha_definida_em = NULL,"
+          ' cota_diaria = NULL, teto_mensal_brl = NULL, idioma = NULL, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
+          ' ativacao_motivo = NULL, excluida_em = ? WHERE id = ?', _iso(momento), cid)
+    _evento(tx, 'conta_excluida', cid, por, momento)
+    return {'id': cid, 'situacao': 'excluida'}
+
+
+def excluir_conta(root: Path, cid, nome, senha, ip=None) -> dict:
+    """`conta-excluir`: the person deletes the own account (contract, 8.4 and the delivery 4b-3), with the same
+    effect as `equipe-remover`. The order is the one agreed with the Frontend: the typed name first (the account's
+    current name, ignoring the ends' spaces and the case; a wrong one is not a wrong password), then the last dono,
+    so that an impossible deletion never spends an attempt, then the password."""
+    with _bd(root) as tx:
+        conta = _conta(tx, cid)
+        digitado = nome.strip().casefold() if isinstance(nome, str) and len(nome) <= 400 else None
+        if not digitado or digitado != (conta['nome'] or '').strip().casefold():
+            raise NomeDivergente('O nome digitado não é o da conta.')
+        if _ultimo_dono(tx, conta):
             raise UltimoDono(ULTIMO_DONO)
-        _derrubar_sessoes(tx, cid)
-        _cancelar_convites_de(tx, cid, momento)
-        _sem_fator(tx, cid)
-        tx.ex('DELETE FROM aparelhos WHERE conta = ?', cid)
-        tx.ex('DELETE FROM participacoes WHERE conta = ?', cid)
-        _sem_responsabilidade(tx, cid)
-        tx.ex('DELETE FROM uso_diario WHERE conta = ?', cid)
-        _limpar_tentativas(tx, conta)
-        tx.ex('DELETE FROM tentativas WHERE chave = ?', CHAVE_CONFIRMACAO + cid)
-        tx.ex("UPDATE contas SET ativa = 0, nome = '', login = NULL, email = NULL, senha_hash = NULL, senha_definida_em = NULL,"
-              ' cota_diaria = NULL, teto_mensal_brl = NULL, idioma = NULL, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
-              ' ativacao_motivo = NULL, excluida_em = ? WHERE id = ?', _iso(momento), cid)
-        _evento(tx, 'conta_excluida', cid, por, momento)
-        return {'id': cid, 'situacao': 'excluida'}
+    confirmar_senha(root, cid, senha, ip)
+    with _bd(root, escrever=True) as tx:
+        return _apagar_conta(tx, _conta(tx, cid), cid, agora())
+
+
+# What the Mesa shows as the author of something made by an account that no longer exists (contract, 8.4 and
+# decision 10). The records keep the old name; only the output changes, here, in one place.
+CONTA_EXCLUIDA = 'Conta excluída'
+
+
+def nomes_publicos(root: Path, ids, organizacao: str | None = None) -> dict:
+    """The name to show for each account id: its name, `CONTA_EXCLUIDA` for a deleted account, and None for what is
+    not an account (a fixed label of the system, an old login) or is an account of another newsroom than
+    `organizacao`, when it is given: a name never tells one newsroom who is in another."""
+    pedidos = sorted({i for i in ids if isinstance(i, str) and ID_CONTA.fullmatch(i)})
+    if not pedidos:
+        return {}
+    with _bd(root) as tx:
+        linhas = tx.todos(f'SELECT id, nome, organizacao, excluida_em FROM contas WHERE id IN ({", ".join("?" * len(pedidos))})',
+                          *pedidos)
+    return {c['id']: _nome_para_mostrar(c) for c in linhas if organizacao is None or c['organizacao'] == organizacao}
+
+
+def nome_publico(root: Path, cid, organizacao: str | None = None) -> str | None:
+    """One id of `nomes_publicos`."""
+    return nomes_publicos(root, [cid], organizacao).get(cid)
+
+
+def _nome_para_mostrar(conta) -> str:
+    return CONTA_EXCLUIDA if conta['excluida_em'] else conta['nome']
 
 
 def _valor_do_teto(valor) -> str | None:
@@ -1517,8 +1602,8 @@ def atividade(root: Path, organizacao: str, limite: int = 50, antes=None) -> dic
     with _bd(root) as tx:
         # At most MAX_EVENTOS rows: the window of each newsroom.
         linhas = tx.todos('SELECT em, tipo, conta, por FROM eventos WHERE organizacao = ? ORDER BY n', organizacao)
-        nomes = {c['id']: c['nome'] for c in tx.todos(
-            'SELECT id, nome FROM contas WHERE organizacao = ? AND excluida_em IS NULL', organizacao)}
+        nomes = {c['id']: _nome_para_mostrar(c) for c in tx.todos(  # a deleted one shows as `CONTA_EXCLUIDA`
+            'SELECT id, nome, excluida_em FROM contas WHERE organizacao = ?', organizacao)}
         fim = len(linhas) if antes is None else min(antes - 1, len(linhas))
         inicio = max(0, fim - limite)
         return {'eventos': [{'em': l['em'], 'tipo': l['tipo'], 'conta': l['conta'], 'por': l['por'],
@@ -1698,28 +1783,92 @@ def _convite_recusado(exc: ConviteInvalido) -> None:
     registro_acesso.registrar('ativacao_falha', 'falha', motivo=exc.motivo, acesso_operacao='aceitar')
 
 
-def consultar_convite(root: Path, token) -> dict:
-    """What the acceptance page shows (read-only): newsroom, e-mail, role, who invited, until when. The e-mail comes
-    from the invitation and is not changed on acceptance. `termos_versao` is None until the terms exist."""
+# --- terms of service with a version (contract of accounts, 8.4 and the delivery 4b-1) ---------------------------
+
+TERMOS_VERSAO = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{0,31}')
+TERMOS_ENDERECO = re.compile(r'https://[^\s"<>\\]{1,490}')
+TERMOS_NOVOS = 'Os termos de uso mudaram. Leia a versão em vigor e aceite-a para continuar.'
+
+
+def termos_vigentes() -> dict | None:
+    """The terms in force, from whoever runs the service: `VLADO_TERMOS_VERSAO` and `VLADO_TERMOS_ENDERECO` (the text
+    is the Documentation's and lives at that address; the server never serves it). None without a version: nobody
+    has the pending item and the acceptance takes no version, as before. A version without a valid address, or a
+    malformed one, raises ValueError: the server refuses to start rather than ask to accept what nobody can read."""
+    versao = os.environ.get('VLADO_TERMOS_VERSAO', '').strip()
+    endereco = os.environ.get('VLADO_TERMOS_ENDERECO', '').strip()
+    if not versao:
+        if endereco:
+            raise ValueError('VLADO_TERMOS_ENDERECO definido sem VLADO_TERMOS_VERSAO.')
+        return None
+    if not TERMOS_VERSAO.fullmatch(versao):
+        raise ValueError('VLADO_TERMOS_VERSAO inválida: até 32 letras, dígitos, ponto, hífen ou sublinhado.')
+    if not TERMOS_ENDERECO.fullmatch(endereco):
+        raise ValueError('VLADO_TERMOS_ENDERECO ausente ou inválido: o endereço https:// do texto dos termos.')
+    return {'versao': versao, 'endereco': endereco}
+
+
+def _ultimo_aceite(tx: _Tx, cid: str):
+    return tx.um('SELECT versao, aceito_em FROM termos_aceites WHERE conta = ? ORDER BY aceito_em DESC, rowid DESC LIMIT 1',
+                 cid)
+
+
+def _aceitar(tx: _Tx, cid: str, versao: str, momento: datetime, ip: str | None) -> None:
+    """One row per acceptance; nothing is ever rewritten (only the address goes, when the account is deleted)."""
+    tx.ex('INSERT INTO termos_aceites (conta, versao, aceito_em, ip) VALUES (?, ?, ?, ?)', cid, versao, _iso(momento), ip)
+    _evento(tx, 'termos_aceitos', cid, cid, momento, versao=versao)
+
+
+def _versao_aceita(termos_versao, termos: dict | None) -> str | None:
+    """The version an acceptance may carry: the one in force, or None when there are no terms."""
+    if termos is None:
+        if termos_versao is not None:
+            raise ValueError('Versão dos termos desconhecida.')
+        return None
+    if termos_versao != termos['versao']:
+        raise TermosDesatualizados(TERMOS_NOVOS)
+    return termos_versao
+
+
+def aceitar_termos(root: Path, cid, versao, termos: dict | None, ip: str | None = None) -> dict:
+    """`conta-termos-aceitar`: the person accepts the version in force. Accepting the one already accepted writes
+    nothing. Returns `{versao, aceito_em}` of the last acceptance. Without terms in force, any version is not the one
+    in force: the same refusal, one code for the page."""
+    if termos is None:
+        raise TermosDesatualizados('Não há termos de uso a aceitar neste serviço.')
+    _versao_aceita(versao, termos)
+    with _bd(root, escrever=True) as tx:
+        conta = _conta(tx, cid)
+        ultimo = _ultimo_aceite(tx, conta['id'])
+        if not ultimo or ultimo['versao'] != termos['versao']:
+            _aceitar(tx, conta['id'], termos['versao'], agora(), ip)
+        return dict(_ultimo_aceite(tx, conta['id']))
+
+
+def consultar_convite(root: Path, token, termos: dict | None = None) -> dict:
+    """What the acceptance page shows (read-only): newsroom, e-mail, role, who invited, until when, and the terms in
+    force (`termos`, from `termos_vigentes` where the service has them). The e-mail comes from the invitation and is
+    not changed on acceptance."""
     try:
         with _bd(root) as tx:
             convite = _por_convite(tx, token, agora())
             contexto = _contexto_do_convite(tx, convite)
             return {'redacao': contexto['redacao'], 'email': convite['email'], 'papel': convite['papel'],
                     'convidado_por': contexto['convidado_por'], 'expira_em': convite['expira_em'],
-                    'idioma': convite['idioma'] or IDIOMAS[0], 'termos_versao': None}
+                    'idioma': convite['idioma'] or IDIOMAS[0], 'termos_versao': termos['versao'] if termos else None,
+                    'termos_endereco': termos['endereco'] if termos else None}
     except ConviteInvalido as exc:
         _convite_recusado(exc)
         raise
 
 
 def aceitar_convite(root: Path, token, nome, senha, termos_versao=None, ip: str | None = None, cliente='web',
-                    aparelho=None, marca=None) -> tuple[str, str, dict]:
+                    aparelho=None, marca=None, termos: dict | None = None) -> tuple[str, str, dict]:
     """Accept an invitation: the account is born with the invitation's e-mail, role and participations, and its
-    first session opens. Returns what `entrar` returns. The link works once."""
+    first session opens. Returns what `entrar` returns. The link works once. Where the service has terms
+    (`termos`), `termos_versao` must be the one in force, and the acceptance is written with the account."""
     nome, senha = _validar_nome(nome), _validar_senha(senha)
-    if termos_versao is not None:
-        raise ValueError('Versão dos termos desconhecida.')  # the terms come with their own delivery
+    versao = _versao_aceita(termos_versao, termos)
     try:
         with _bd(root) as tx:
             _por_convite(tx, token, agora())  # refuse before spending time on the hash
@@ -1742,6 +1891,8 @@ def aceitar_convite(root: Path, token, nome, senha, termos_versao=None, ip: str 
             tx.ex("UPDATE convites SET estado = 'aceito', token_sha256 = NULL, encerrado_em = ?, conta = ? WHERE id = ?",
                   _iso(momento), cid, convite['id'])
             _evento(tx, 'convite_aceito', cid, cid, momento, papel=convite['papel'])
+            if versao is not None:
+                _aceitar(tx, cid, versao, momento, ip)
             sid, csrf = _abrir_sessao(tx, cid, momento, cliente, aparelho, ip)
             _registrar_aparelho(tx, cid, marca, momento)  # the browser that accepted is the account's first known device
             return sid, csrf, _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), momento)
@@ -1858,7 +2009,9 @@ def redefinir_senha(root: Path, token, senha, codigo=None, ip: str | None = None
             cid = conta['id']
             if link['tipo'] == 'recuperacao' and tx.um('SELECT 1 FROM fatores WHERE conta = ?', cid):
                 _sem_fator(tx, cid)
-                _evento(tx, 'fator_removido', cid, cid, momento)
+                # Not `fator_removido`, which is the person taking away the own factor: the activity of the
+                # newsroom tells the two apart.
+                _evento(tx, FATOR_RETIRADO, cid, cid, momento)
             tx.ex('UPDATE contas SET senha_hash = ?, senha_definida_em = ?, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
                   ' ativacao_motivo = NULL WHERE id = ?', senha_hash, _iso(momento), cid)
             _derrubar_sessoes(tx, cid)
@@ -1877,7 +2030,7 @@ def redefinir_senha(root: Path, token, senha, codigo=None, ip: str | None = None
 def _sem_fator(tx: _Tx, cid: str) -> None:
     tx.ex('DELETE FROM fatores WHERE conta = ?', cid)
     tx.ex('DELETE FROM codigos_reserva WHERE conta = ?', cid)
-    tx.ex('DELETE FROM tentativas WHERE chave = ?', CHAVE_FATOR + cid)
+    tx.ex('DELETE FROM tentativas WHERE chave IN (?, ?)', CHAVE_FATOR + cid, CHAVE_RESERVA + cid)
 
 
 def _estado_do_fator(tx: _Tx, cid: str) -> dict:
@@ -1958,6 +2111,32 @@ def _falha_do_fator(tx: _Tx, cid: str, momento: datetime, ip: str | None) -> dic
     return _destinatario(tx.um('SELECT * FROM contas WHERE id = ?', cid))
 
 
+def _conferir_codigo(tx: _Tx, root: Path, cid: str, codigo, momento: datetime, ip: str | None) -> tuple:
+    """The whole rule of a code of the second factor of an account, for the sign-in and for the operations that
+    ask it: (kind accepted or None, the answer is a block, a wrong code was counted, who to tell).
+
+    A code of the authenticator is not even tried while the factor is blocked. A reserve code crosses that block:
+    it has 80 random bits, so letting it be tried gives nothing to who guesses, and it is the way in of the person
+    whose password somebody else has and uses to keep the factor blocked. A right one always passes; the wrong
+    ones count on a counter of their own, which never blocks the authenticator nor a right reserve code."""
+    if segundo_fator.resumo_da_reserva(codigo):
+        if _usar_codigo(tx, root, cid, codigo, momento):
+            tx.ex('DELETE FROM tentativas WHERE chave = ? OR (chave = ? AND bloqueado_ate IS NULL)',
+                  CHAVE_RESERVA + cid, CHAVE_FATOR + cid)
+            return 'reserva', False, False, None
+        if _bloqueado(tx, CHAVE_RESERVA + cid, momento):
+            return None, True, False, None
+        _fator_recusado(tx, cid, momento, ip)
+        return None, _registrar_falha(tx, CHAVE_RESERVA + cid, None, momento), True, None
+    if _bloqueado(tx, CHAVE_FATOR + cid, momento):
+        return None, True, False, None
+    if _usar_codigo(tx, root, cid, codigo, momento):
+        tx.ex('DELETE FROM tentativas WHERE chave = ?', CHAVE_FATOR + cid)
+        return 'totp', False, False, None
+    aviso = _falha_do_fator(tx, cid, momento, ip)
+    return None, bool(aviso), True, aviso
+
+
 def _recusa_do_codigo(aviso: dict | None, bloqueado: bool) -> Exception:
     if aviso:
         return FatorBloqueado(aviso)
@@ -1975,15 +2154,11 @@ def exigir_codigo(root: Path, cid: str, codigo, ip: str | None = None) -> None:
     CodigoInvalido or Bloqueado."""
     if _sem_codigo(codigo):
         raise CodigoNecessario(CODIGO_NECESSARIO)
-    chave, bloqueado, aviso = CHAVE_FATOR + cid, False, None
+    bloqueado, aviso = False, None
     with _bd(root, escrever=True) as tx:
-        momento = agora()
-        bloqueado = _bloqueado(tx, chave, momento)
-        if not bloqueado:
-            if _usar_codigo(tx, root, cid, codigo, momento):
-                tx.ex('DELETE FROM tentativas WHERE chave = ?', chave)
-                return
-            aviso = _falha_do_fator(tx, cid, momento, ip)
+        aceito, bloqueado, _, aviso = _conferir_codigo(tx, root, cid, codigo, agora(), ip)
+        if aceito:
+            return
     raise _recusa_do_codigo(aviso, bloqueado)
 
 
@@ -2090,7 +2265,7 @@ def entrar_segundo_fator(root: Path, bilhete, codigo, ip: str | None = None, mar
     except Bloqueado:
         registro_acesso.registrar_limite_ip('login_falha', ip, _rede(ip), acesso_operacao='segundo_fator')
         raise
-    errou, bloqueado, aviso = False, False, None
+    errou, bloqueado, aviso, morto = False, False, None, False
     with _bd(root, escrever=True) as tx:
         entrada = (tx.um('SELECT * FROM entradas WHERE id_sha256 = ?', _hash(bilhete))
                    if isinstance(bilhete, str) and SID.fullmatch(bilhete) else None)
@@ -2099,23 +2274,24 @@ def entrar_segundo_fator(root: Path, bilhete, codigo, ip: str | None = None, mar
             tx.ex('DELETE FROM entradas WHERE id_sha256 = ?', entrada['id_sha256'])
         elif entrada:
             cid = conta['id']
-            if _bloqueado(tx, CHAVE_FATOR + cid, momento):
-                bloqueado = True
-            elif _usar_codigo(tx, root, cid, codigo, momento):
+            aceito, bloqueado, contou, aviso = _conferir_codigo(tx, root, cid, codigo, momento, ip)
+            if aceito:
                 tx.ex('DELETE FROM entradas WHERE conta = ?', cid)
-                tx.ex('DELETE FROM tentativas WHERE chave IN (?, ?)', entrada['chave'], CHAVE_FATOR + cid)
+                tx.ex('DELETE FROM tentativas WHERE chave = ?', entrada['chave'])
                 return _sessao_aberta(tx, conta, momento, entrada['cliente'], entrada['aparelho'], ip, marca)
-            else:
+            if contou:  # an attempt during a block is neither tried, counted nor spent
                 errou = True
                 if entrada['falhas'] + 1 >= ENTRADA_FALHAS:
                     tx.ex('DELETE FROM entradas WHERE id_sha256 = ?', entrada['id_sha256'])
+                    morto = True
                 else:
                     tx.ex('UPDATE entradas SET falhas = falhas + 1 WHERE id_sha256 = ?', entrada['id_sha256'])
                 _registrar_falha(tx, entrada['chave'], cid, momento)
                 _falha_do_identificador(tx, entrada['chave'].split('|', 1)[0], cid, momento)  # the same ceilings as the password
-                aviso = _falha_do_fator(tx, cid, momento, ip)  # and the account's own, whatever the address
     if errou or bloqueado:
-        raise _recusa_do_codigo(aviso, bloqueado)
+        recusa = _recusa_do_codigo(aviso, bloqueado)
+        recusa.bilhete_morto = morto  # the fifth wrong code of a ticket: whoever answers also clears its cookie
+        raise recusa
     raise EntradaExpirada(ENTRADA_EXPIRADA)
 
 
@@ -2135,8 +2311,9 @@ def _link_de_recuperacao(tx: _Tx, conta, momento: datetime) -> str:
 
 
 def _recuperacao_publica(tx: _Tx, linha) -> dict:
-    nomes = {c['id']: c['nome'] for c in tx.todos('SELECT id, nome FROM contas WHERE id IN (?, ?) AND excluida_em IS NULL',
-                                                  linha['conta'], linha['pedida_por'])}
+    nomes = {c['id']: _nome_para_mostrar(c) for c in tx.todos('SELECT id, nome, excluida_em FROM contas WHERE id IN (?, ?)'
+                                                               ' AND organizacao = ?', linha['conta'], linha['pedida_por'],
+                                                               linha['organizacao'])}
     return {'id': linha['id'], 'conta': linha['conta'], 'conta_nome': nomes.get(linha['conta']),
             'pedida_por': linha['pedida_por'], 'pedida_por_nome': nomes.get(linha['pedida_por']),
             'pedida_em': linha['pedida_em'], 'expira_em': linha['expira_em'], 'estado': linha['estado']}
@@ -2466,28 +2643,34 @@ def _registrar_falha(tx: _Tx, chave: str, cid: str | None, momento: datetime) ->
 
 def _podar_tentativas(tx: _Tx, momento: datetime) -> None:
     """Forget stale counters. An active block is never evicted, and neither is a counter before its time: the
-    per-identifier ones (exact, or in the fixed table of the identifiers without an account) live for their whole
-    window, and are bounded by the number of accounts and by BALDES; the others live BLOQUEIO_MINUTOS, and only
-    the per-address counters of the sign-in, which an attacker can multiply, have a ceiling."""
+    per-identifier ones (the fixed table of BALDES counters) live for their whole window; the ones of the second
+    factor of an account live FATOR_CONTADOR_HORAS, so that a few wrong codes every quarter of an hour add up to a
+    block and a notice instead of being forgotten each time; the others live BLOQUEIO_MINUTOS, and only the
+    per-address counters of the sign-in, which an attacker can multiply, have a ceiling."""
     agora_ = _iso(momento)
     curto, longo = _iso(momento - timedelta(minutes=BLOQUEIO_MINUTOS)), _iso(momento - timedelta(minutes=PROTECAO_JANELA_MINUTOS))
+    dia = _iso(momento - timedelta(hours=FATOR_CONTADOR_HORAS))
     ativo = '(bloqueado_ate IS NOT NULL AND bloqueado_ate > ?)'
-    do_identificador = f"(chave LIKE '{CHAVE_IDENTIFICADOR}%' OR chave LIKE '{CHAVE_BALDE}%')"
-    tx.ex(f"DELETE FROM tentativas WHERE NOT {ativo} AND coalesce(em, '') <= ? AND NOT {do_identificador}", agora_, curto)
+    do_identificador = f"chave LIKE '{CHAVE_BALDE}%'"
+    do_fator = f"(chave LIKE '{CHAVE_FATOR}%' OR chave LIKE '{CHAVE_RESERVA}%')"
+    tx.ex(f"DELETE FROM tentativas WHERE NOT {ativo} AND coalesce(em, '') <= ? AND NOT {do_identificador} AND NOT {do_fator}",
+          agora_, curto)
     tx.ex(f"DELETE FROM tentativas WHERE NOT {ativo} AND coalesce(em, '') <= ? AND {do_identificador}", agora_, longo)
+    tx.ex(f"DELETE FROM tentativas WHERE NOT {ativo} AND coalesce(em, '') <= ? AND {do_fator}", agora_, dia)
     excesso = tx.um("SELECT COUNT(*) AS total FROM tentativas WHERE chave NOT LIKE '#%'")['total'] - MAX_TENTATIVAS_GUARDADAS
     if excesso > 0:
         tx.ex(f"DELETE FROM tentativas WHERE chave IN (SELECT chave FROM tentativas WHERE NOT {ativo}"
               " AND chave NOT LIKE '#%' ORDER BY coalesce(em, '') LIMIT ?)", agora_, excesso)
 
 
-def _chave_do_identificador(tx: _Tx, login: str, cid: str | None, criar: bool = False) -> str:
-    """Where the failures of an identifier, from every address, are counted. With an account: its own counter.
-    Without one: one of BALDES counters, chosen by a keyed hash of the identifier, so every identifier always has
-    a counter, the table never grows and there is no "full" state to tell anything. Two identifiers without an
-    account may share a counter, and then share its protected mode: that tells nobody anything."""
-    if cid:
-        return CHAVE_IDENTIFICADOR + login
+def _chave_do_identificador(tx: _Tx, login: str, criar: bool = False) -> str:
+    """Where the failures of an identifier, from every address, are counted: one of BALDES counters, chosen by a
+    keyed hash of the identifier. The same for an identifier with an account and for one without: every identifier
+    always has a counter, the table never grows and there is no "full" state. Two identifiers may share a counter,
+    and then share its protected mode. An exact counter for the ones with an account would tell them apart: its
+    protected mode would never spread to a neighbour, and a few tens of thousands of requests would confirm that
+    one person has an account (B1 of the review). What is counted on the account itself (the codes of the second
+    factor, the password asked again) only starts after the right password, when its existence is no secret."""
     segredo = _meta(tx, 'chave_dos_baldes')
     if not segredo:
         if not criar:
@@ -2501,7 +2684,7 @@ def _chave_do_identificador(tx: _Tx, login: str, cid: str | None, criar: bool = 
 def _falha_do_identificador(tx: _Tx, login: str, cid: str | None, momento: datetime) -> None:
     """Count a failure of the identifier, whatever the address: PROTECAO_FALHAS inside the window start the
     protected mode. While it lasts nothing counts and nothing extends it."""
-    chave = _chave_do_identificador(tx, login, cid, criar=True)
+    chave = _chave_do_identificador(tx, login, criar=True)
     linha = tx.um('SELECT falhas, bloqueado_ate, em FROM tentativas WHERE chave = ?', chave)
     falhas, ate, inicio = (linha['falhas'], linha['bloqueado_ate'], linha['em']) if linha else (0, None, None)
     if ate and _data(ate) > momento:
@@ -2655,7 +2838,7 @@ def entrar(root: Path, login, senha, ip: str | None = None, cliente='web', apare
                  if valido else None)
         cid = conta['id'] if conta else None
         conhecida = bool(cid and _marca_conhecida(tx, cid, marca, momento))
-        protegido = valido and not conhecida and _bloqueado(tx, _chave_do_identificador(tx, login, cid), momento)
+        protegido = valido and not conhecida and _bloqueado(tx, _chave_do_identificador(tx, login), momento)
         bloqueado = valido and _bloqueado(tx, chave, momento)
         guardado = conta['senha_hash'] if conta and conta['ativa'] else None
     if bloqueado or protegido:
@@ -2718,12 +2901,17 @@ def _auditar_falha(motivo: str, cid: str | None, login: str, cliente, ip: str | 
                               cliente=_cliente(cliente), ip=ip)
 
 
-def sessao(root: Path, sid, ip: str | None = None) -> dict | None:
+def sessao(root: Path, sid, ip: str | None = None, obrigar_fator: bool = False, termos: str | None = None) -> dict | None:
     """The calling account, re-read on every request (deactivation, role, participations and quota apply at once).
     `ip` is kept as the session's last address, at most once a minute, with its last use.
 
     `casos` is always the explicit reach (for a dono, every case of the own newsroom) and `responsavel_de` the cases
-    the account answers for: outside the local mode no caller ever has "every case"."""
+    the account answers for: outside the local mode no caller ever has "every case".
+
+    `obrigar_fator` is the hosted mode: a dono or an editor without an active second factor carries the pending
+    item `segundo_fator`, and the gate lets the session reach only what resolves it (contract, 4.2 and 8.2).
+    `termos` is the version of the terms in force in the hosted mode: an account whose last acceptance is another
+    one carries `termos`, which comes first (contract, 8.4)."""
     if not isinstance(sid, str) or not SID.fullmatch(sid):
         return None  # malformed ids never touch the store
     momento, chave = agora(), _hash(sid)
@@ -2739,12 +2927,16 @@ def sessao(root: Path, sid, ip: str | None = None) -> dict | None:
             if not conta or not conta['ativa'] or not conta['senha_hash']:
                 return None
             casos, responsavel = _alcance(tx, conta)
+            ultimo = _ultimo_aceite(tx, conta['id']) if termos else None
+            pendencias = ['termos'] if termos and (not ultimo or ultimo['versao'] != termos) else []
+            pendencias += (['segundo_fator'] if obrigar_fator and conta['papel'] in FATOR_OBRIGATORIO
+                           and not tx.um('SELECT 1 FROM fatores WHERE conta = ? AND ativo = 1', conta['id']) else [])
             tocar = (momento - _data(registro['ultimo_uso'])).total_seconds() >= ULTIMO_USO_SEGUNDOS
             principal = {'conta': conta['id'], 'nome': conta['nome'], 'login': conta['login'], 'email': conta['email'],
                          'papel': conta['papel'],
                          'organizacao': {'id': conta['organizacao'], 'nome': conta['redacao_nome'],
                                          'situacao': conta['redacao_situacao']},
-                         'casos': casos, 'responsavel_de': responsavel, 'pendencias': [],
+                         'casos': casos, 'responsavel_de': responsavel, 'pendencias': pendencias,
                          'cota_diaria': conta['cota_diaria'], 'csrf': registro['csrf'], 'sessao': registro['publico'],
                          'expira_em': registro['expira_em'], 'cliente': registro['cliente'] or 'web'}
     if vencida or tocar:
@@ -2806,16 +2998,76 @@ def confirmar_senha(root: Path, cid, senha, ip: str | None = None) -> None:
     raise SenhaIncorreta(SENHA_INCORRETA)
 
 
-def ver_conta(root: Path, cid) -> dict:
-    """The own profile: name, e-mail, login, role, language, newsroom and when the password was set. The second
-    factor and the terms come with their own deliveries."""
+def ver_conta(root: Path, cid, termos: dict | None = None) -> dict:
+    """The own profile: name, e-mail, login, role, language, newsroom, when the password was set, the second factor,
+    the last acceptance of the terms (`termos`) and, where the service has them, the terms in force
+    (`termos_vigente`)."""
     with _bd(root) as tx:
         conta = _conta(tx, cid)
         redacao = tx.um('SELECT id, nome FROM organizacoes WHERE id = ?', conta['organizacao'])
         return {'conta': {'id': conta['id'], 'nome': conta['nome'], 'email': conta['email'], 'login': conta['login'],
                           'papel': conta['papel'], 'idioma': conta['idioma'] or IDIOMAS[0],
                           'senha_definida_em': conta['senha_definida_em'], 'criada_em': conta['criada_em']},
-                'organizacao': dict(redacao), 'segundo_fator': _estado_do_fator(tx, cid), 'termos': None}
+                'organizacao': dict(redacao), 'segundo_fator': _estado_do_fator(tx, cid),
+                'termos': _dict_ou_none(_ultimo_aceite(tx, conta['id'])), 'termos_vigente': dict(termos) if termos else None}
+
+
+def _dict_ou_none(linha):
+    return dict(linha) if linha else None
+
+
+# --- export of the own data (`conta-exportar`, contract of accounts, 8.4 and the delivery 4b-2) ---------------------
+
+FORMATO_EXPORTACAO, VERSAO_EXPORTACAO = 'vlado-meus-dados', 1
+# What the file does not carry yet, as fixed codes the page translates (ressalva E4): the list of what the person
+# created, which lives in other modules' files, and the accesses in the audit log, which is the Platform's.
+EXPORTACAO_INCOMPLETA = ('itens_criados', 'registro_de_acesso')
+# Who did an event, when it was not an account: the fixed labels this module writes in `por`.
+POR_SISTEMA = frozenset({'operador', 'manutencao', 'migracao', 'migracao_contas', 'primeiro_acesso', 'primeiro_admin'})
+
+
+def _quem(tx: _Tx, valor, cid: str) -> str | None:
+    """The other side of an event, as the export shows it (ressalva B1): the person, a fixed label of the system, or
+    just "another account", never its id nor its name."""
+    if valor is None:
+        return None
+    if valor == cid:
+        return 'voce'
+    if valor in POR_SISTEMA and not tx.um('SELECT 1 FROM contas WHERE id = ?', valor):
+        return valor
+    return 'outra_conta'
+
+
+def exportar_conta(root: Path, cid) -> dict:
+    """`conta-exportar`: what the store keeps about the person, for the person (contract, 8.4). Nothing of anybody
+    else, and never a secret: no password hash, token, ticket, seed, reserve code, csrf, session id or cookie, device
+    mark or its summary, nor AI key. The content of the cases is the newsroom's and leaves by their own export."""
+    with _bd(root) as tx:
+        conta = _conta(tx, cid)
+        cid, momento = conta['id'], agora()
+        redacao = tx.um('SELECT id, nome FROM organizacoes WHERE id = ?', conta['organizacao'])
+        eventos = [{'em': e['em'], 'tipo': e['tipo'], 'conta': _quem(tx, e['conta'], cid), 'por': _quem(tx, e['por'], cid)}
+                   for e in tx.todos('SELECT em, tipo, conta, por FROM eventos WHERE (conta = ? OR por = ?) AND em > ?'
+                                     ' ORDER BY n', cid, cid, _iso(momento - timedelta(days=ATIVIDADE_DIAS)))]
+        return {
+            'formato': FORMATO_EXPORTACAO, 'versao': VERSAO_EXPORTACAO, 'gerado_em': _iso(momento),
+            'conta': {'id': cid, 'nome': conta['nome'], 'email': conta['email'], 'login': conta['login'],
+                      'papel': conta['papel'], 'idioma': conta['idioma'] or IDIOMAS[0], 'situacao': _situacao(conta),
+                      'criada_em': conta['criada_em'], 'senha_definida_em': conta['senha_definida_em'],
+                      'cota_diaria': conta['cota_diaria'], 'teto_mensal_brl': conta['teto_mensal_brl']},
+            'redacao': dict(redacao),
+            'segundo_fator': _estado_do_fator(tx, cid),
+            'termos': [dict(t) for t in tx.todos('SELECT versao, aceito_em, ip FROM termos_aceites WHERE conta = ?'
+                                                 ' ORDER BY aceito_em, rowid', cid)],
+            'sessoes': [dict(s) for s in tx.todos(
+                'SELECT criada_em, ultimo_uso, expira_em, cliente, aparelho, ip_criacao, ip_ultimo FROM sessoes'
+                ' WHERE conta = ? AND expira_em > ? ORDER BY criada_em', cid, _iso(momento))],
+            'aparelhos': [dict(a) for a in tx.todos('SELECT criado_em, ultimo_uso FROM aparelhos WHERE conta = ?'
+                                                    ' ORDER BY criado_em', cid)],
+            'participacoes': _participacoes(tx, cid),
+            'eventos': eventos,
+            'incompleto': list(EXPORTACAO_INCOMPLETA),
+        }
 
 
 def atualizar_perfil(root: Path, cid, *, nome=None, idioma=None) -> dict:

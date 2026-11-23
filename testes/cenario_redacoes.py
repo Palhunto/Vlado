@@ -32,6 +32,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acesso
+import fator_de_teste
 import lixeira
 import test_codex_integracao as integracao  # module import: its TestCase is not re-collected here
 from agente_fluxo_fixture import encerrar_gerenciador
@@ -73,12 +74,16 @@ class DuasRedacoes(unittest.TestCase):
         cls.addClassCleanup(cls._pilha.close)
         temp, cls.root, _ = copiar('DuasRedacoes', montar)
         cls._pilha.callback(temp.cleanup)
-        cls._pilha.enter_context(patch.dict(os.environ, {'VLADO_ACESSO': '', 'VLADO_AMBIENTE': '', 'VLADO_CONFIAR_PROXY': ''}))
+        cls._pilha.enter_context(patch.dict(os.environ, {'VLADO_ACESSO': '', 'VLADO_AMBIENTE': '', 'VLADO_CONFIAR_PROXY': '',
+                                                         'VLADO_SEGREDOS': ''}))
         cls._pilha.enter_context(patch.object(acesso, '_HASHER', RAPIDO))
         acesso.limpar_limites()
         cls.manager = Conversas(cls.root, integracao.FakeServer)
         cls._pilha.callback(encerrar_gerenciador, cls.manager)
         cls.server = Servidor(('127.0.0.1', 0), cls.root, modo='piloto', origem=ORIGEM)
+        # The fake manager takes the place of the server's with the flags the server set on it: in the piloto, the
+        # newsroom's own AI key (P3c; ressalva P40a), so a server test never skips it without noticing.
+        cls.manager.chave_da_redacao = getattr(cls.server.conversas, 'chave_da_redacao', False)
         cls.server.conversas.close()
         cls.server.conversas = cls.manager
         thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
@@ -89,7 +94,8 @@ class DuasRedacoes(unittest.TestCase):
         for caso in CASOS_A:
             acesso.atribuir_caso(cls.root, caso, cls.a)
         acesso.atribuir_caso(cls.root, CASO_B, cls.b)
-        cls.ids = {}
+        cls.ids, cls.logins = {}, {}
+        cls._pilha.callback(fator_de_teste.esquecer, cls.root)
         for chave, nome, login, papel, redacao, casos in (
                 ('dono', 'Dona Alfa', 'dona.alfa', 'dono', cls.a, ()),
                 ('editor', 'Edu Editor', 'edu.editor', 'editor', cls.a, ('alpha',)),
@@ -99,10 +105,7 @@ class DuasRedacoes(unittest.TestCase):
                 ('convidado', 'Cora Convidada', 'cora.convidada', 'convidado', cls.a, ('alpha',)),
                 ('dono_b', 'Dono Sentinela', 'dono.sentinela', 'dono', cls.b, ()),
                 ('reporter_b', 'Reporter Sentinela', 'rep.sentinela', 'reporter', cls.b, ('beta',))):
-            conta, token = acesso.criar_conta(cls.root, nome, login, papel=papel, casos=list(casos), organizacao=redacao,
-                                              por='operador')
-            acesso.ativar(cls.root, token, SENHA)
-            cls.ids[chave] = conta['id']
+            cls.ids[chave] = cls.conta(nome, login, papel, casos, redacao)
         for caso, responsavel, redacao in (('alpha', 'reporter', cls.a), ('gama', 'reporter2', cls.a),
                                            ('delta', 'reporter2', cls.a), ('beta', 'reporter_b', cls.b)):
             acesso.definir_responsavel(cls.root, caso, cls.ids[responsavel], 'operador', redacao)
@@ -122,6 +125,19 @@ class DuasRedacoes(unittest.TestCase):
                           'rep.sentinela', cls.b, cls.ids['dono_b'], cls.ids['reporter_b'], cls.conversas['equipe', 'beta'])
 
     @classmethod
+    def conta(cls, nome, login, papel, casos=(), redacao=None):
+        """A new account with its password set; returns its id. Contract, 8.2: in the hosted mode dono and editor
+        must have a second factor, or their session only reaches its enrolment. They enrol it here, as a person
+        does, and `_entrar` signs them in in two steps."""
+        conta, token = acesso.criar_conta(cls.root, nome, login, papel=papel, casos=list(casos),
+                                          organizacao=redacao or cls.a, por='operador')
+        acesso.ativar(cls.root, token, SENHA)
+        cls.logins[login] = conta['id']
+        if papel in acesso.FATOR_OBRIGATORIO:
+            fator_de_teste.cadastrar(cls.root, conta['id'], SENHA)
+        return conta['id']
+
+    @classmethod
     def _conversa(cls, caso, dono):
         """A conversation that is not running, written as the manager writes it (identity only, no answer)."""
         identificador = uuid.uuid4().hex
@@ -135,10 +151,7 @@ class DuasRedacoes(unittest.TestCase):
 
     @classmethod
     def _entrar(cls, login):
-        status, headers, body = cls.pedir('POST', '/api/entrar', json.dumps({'login': login, 'senha': SENHA}),
-                                          {'Content-Type': 'application/json', 'Origin': ORIGEM})
-        assert status == 200, body
-        return headers['Set-Cookie'].split(';')[0], json.loads(body)['csrf']
+        return fator_de_teste.entrar(cls.pedir, cls.root, cls.logins.get(login), login, SENHA, ORIGEM)
 
     @classmethod
     def pedir(cls, metodo, caminho, corpo=None, cabecalhos=None):
@@ -167,6 +180,14 @@ class DuasRedacoes(unittest.TestCase):
             return status, json.loads(corpo or b'{}'), corpo
         except ValueError:
             return status, {}, corpo
+
+    def cadastrar_fator(self, sessao):
+        """The person of this session enrols her second factor through the server, as the page of the pending item
+        does (contract, 8.2): what a test does for somebody it has just promoted to editor or to dono."""
+        status, inicio, bruto = self.post(sessao, 'conta-fator-iniciar', {'senha': SENHA})
+        assert status == 200, bruto[:200]
+        status, _, bruto = self.post(sessao, 'conta-fator-confirmar', {'codigo': fator_de_teste.do_aplicativo(inicio['segredo'])})
+        assert status == 200, bruto[:200]
 
     def item_na_lixeira(self, caso):
         """A fresh trash item of a case (a round that never ran: nothing of the case is hidden by it)."""

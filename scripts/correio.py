@@ -124,14 +124,16 @@ MODELOS = {
     'fator_bloqueado': ('fator_bloqueado', {
         'pt': ('O segundo fator da sua conta no Vlado foi bloqueado por alguns minutos',
                'O código do segundo fator da sua conta no Vlado foi digitado errado cinco vezes seguidas, e por isso ele '
-               'fica bloqueado por {minutos} minutos.\n\nSe foi você, espere esse tempo e tente de novo. Se não foi, '
-               'alguém pode ter a sua senha ou o acesso ao seu e-mail: troque a senha assim que entrar e avise quem '
-               'administra a sua redação.\n'),
+               'fica bloqueado por {minutos} minutos. Um código de reserva continua valendo durante o bloqueio.\n\nSe foi '
+               'você, espere esse tempo e tente de novo. Se não foi, alguém pode ter a sua senha ou o acesso ao seu '
+               'e-mail: entre com um código de reserva, ou numa sessão que já esteja aberta, e troque a senha. Se não '
+               'conseguir entrar, peça a quem administra a sua redação a recuperação do seu acesso.\n'),
         'en': ('The second factor of your Vlado account was blocked for a few minutes',
                'The second-factor code of your Vlado account was typed wrong five times in a row, so it is blocked for '
-               '{minutos} minutes.\n\nIf it was you, wait that long and try again. If it was not, somebody may have '
-               'your password or access to your e-mail: change the password as soon as you sign in and tell whoever '
-               'runs your newsroom.\n')}),
+               '{minutos} minutes. A reserve code still works while it is blocked.\n\nIf it was you, wait that long and try '
+               'again. If it was not, somebody may have your password or access to your e-mail: sign in with a reserve '
+               'code, or use a session that is already open, and change the password. If you cannot get in, ask '
+               'whoever runs your newsroom to recover your access.\n')}),
     'fator_alterado': ('fator_alterado', {
         'pt': ('O segundo fator da sua conta no Vlado foi alterado',
                'O segundo fator da sua conta no Vlado (o aplicativo autenticador ou os códigos de reserva) acaba de ser '

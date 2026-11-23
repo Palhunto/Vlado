@@ -32,11 +32,9 @@ class EquipeTest(cenario.DuasRedacoes):
         """A fresh account of Alfa (or of ``redacao``), signed in: (id, session, login)."""
         type(self).numero += 1
         login = f'{papel}.novo{self.numero}'
-        conta, token = acesso.criar_conta(self.root, f'Pessoa Nova {self.numero}', login, papel=papel, casos=list(casos),
-                                          organizacao=redacao or self.a, por='operador')
-        acesso.ativar(self.root, token, SENHA)
+        cid = self.conta(f'Pessoa Nova {self.numero}', login, papel, casos, redacao)  # dono and editor: with the factor (8.2)
         acesso.limpar_limites()
-        return conta['id'], self._entrar(login), login
+        return cid, self._entrar(login), login
 
     def pessoa(self, quem, cid):
         return next((p for p in self.post(quem, 'equipe-listar', {})[1]['pessoas'] if p['id'] == cid), None)
@@ -121,6 +119,10 @@ class EquipeTest(cenario.DuasRedacoes):
         conta = self.get(sessao, '/api/sessao')[1]
         self.assertEqual((conta['conta']['papel'], conta['conta']['casos']), ('editor', ['alpha']))
         self.assertIn('redacao-revisar', conta['capacidades'])
+        # An editor now: in the hosted mode she must have a second factor (contract, 8.2), and until she enrols it
+        # her session only reaches the enrolment.
+        self.assertEqual(self.post(sessao, 'apuracao-nota-salvar', {'caso': 'alpha'})[1].get('codigo'), 'pendencia_de_conta')
+        self.cadastrar_fator(sessao)
         self.assertNotEqual(self.post(sessao, 'apuracao-nota-salvar', {'caso': 'alpha'})[0], 403)  # the same session, the new role
         for papel in ('convidado', 'admin', 'operador', None):
             self.assertEqual(self.post('dono', 'equipe-papel', {'conta': alvo, 'papel': papel})[0], 400, papel)
@@ -133,6 +135,9 @@ class EquipeTest(cenario.DuasRedacoes):
         self.assertEqual(self.pessoa('dono', alvo)['papel'], 'reporter')
         self.assertEqual(self.post(sessao, 'equipe-listar', {})[0], 403)
         self.assertEqual(self.post('dono', 'equipe-papel', {'conta': alvo, 'papel': 'dono', 'senha': SENHA})[0], 200)
+        # A dono now, and a dono of the hosted mode must have a second factor (contract, 8.2).
+        self.recusa(sessao, 'equipe-listar', {}, 403, 'pendencia_de_conta')
+        self.cadastrar_fator(sessao)
         self.assertEqual(self.post(sessao, 'equipe-listar', {})[0], 200)
         # P28, first condition: demoting another dono asks the password of who does it.
         self.recusa('dono', 'equipe-papel', {'conta': alvo, 'papel': 'reporter'}, 403, 'senha_necessaria')

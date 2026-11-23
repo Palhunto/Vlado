@@ -23,6 +23,7 @@ import correio
 import proxies_confiaveis
 import rascunhos
 import registro_acesso
+import rotas_conversa
 import rotas_equipe
 
 # What the legacy guest profile may call: the guest column of the matrix (`autorizacao.MATRIZ`) is exactly
@@ -45,18 +46,26 @@ COOKIE_PILOTO ='vlado_sessao'
 # Each person on the own account (contract, 5.4): the account is always the session's, never one named in the body.
 CONTA_PROPRIA = ('conta-ver', 'conta-atualizar', 'conta-senha-trocar', 'conta-sessoes', 'conta-sessao-encerrar',
                  'conta-sessoes-encerrar-outras', 'conta-email-trocar', 'conta-fator-iniciar', 'conta-fator-confirmar',
-                 'conta-fator-codigos', 'conta-fator-remover')
+                 'conta-fator-codigos', 'conta-fator-remover', 'conta-termos-aceitar', 'conta-exportar', 'conta-excluir')
 _CAMPOS_DA_CONTA = {'conta-ver': set(), 'conta-atualizar': {'nome', 'idioma'}, 'conta-senha-trocar': {'senha_atual', 'senha_nova'},
                     'conta-sessoes': set(), 'conta-sessao-encerrar': {'sessao'}, 'conta-sessoes-encerrar-outras': set(),
                     'conta-email-trocar': {'email', 'senha'}, 'conta-fator-iniciar': {'senha', 'codigo'},
                     'conta-fator-confirmar': {'codigo'}, 'conta-fator-codigos': {'senha', 'codigo'},
-                    'conta-fator-remover': {'senha'}}
+                    'conta-fator-remover': {'senha'}, 'conta-termos-aceitar': {'versao'}, 'conta-exportar': set(),
+                    'conta-excluir': {'nome', 'senha'}}
 COOKIE_APARELHO = 'vlado_aparelho'  # the mark of a device an account already used (contract, 8.2); one year
 APARELHO_SEGUNDOS = 365 * 24 * 3600
 COOKIE_SEGUNDO_PASSO = 'vlado_passo2'  # the ticket between the right password and the second factor (five minutes)
 _NAVEGADORES = (('Edg/', 'Edge'), ('OPR/', 'Opera'), ('Firefox/', 'Firefox'), ('Chrome/', 'Chrome'), ('Safari/', 'Safari'))
 _SISTEMAS = (('Android', 'Android'), ('iPhone', 'iOS'), ('iPad', 'iOS'), ('Windows', 'Windows'), ('Mac OS X', 'macOS'),
              ('Linux', 'Linux'))
+
+
+class Arquivo:
+    """An answer that is a file to save (operations of type B): the handler sends it as an attachment."""
+
+    def __init__(self, nome: str, conteudo: bytes, tipo='application/json; charset=utf-8'):
+        self.nome, self.conteudo, self.tipo = nome, conteudo, tipo
 
 
 def aparelho(agente, cliente='web'):
@@ -115,9 +124,10 @@ def _fator(root, operation, conta, data, ip, atual=None):
     return resposta
 
 
-def conta_propria(root, operation, data, principal, ip=None, origem=None, marca=None):
+def conta_propria(root, operation, data, principal, ip=None, origem=None, marca=None, termos=None):
     """``POST /api/conta-*``: the person on the own account. ``principal`` is the session; nothing here takes the id
-    of an account, and the session that asks is told apart by its public id (never the cookie)."""
+    of an account, and the session that asks is told apart by its public id (never the cookie). ``termos`` are the
+    terms in force where the service has them (``acesso.termos_vigentes``, only in the hosted mode)."""
     if operation not in CONTA_PROPRIA or not isinstance(data, dict):
         raise ValueError('Operação de conta desconhecida.')
     if set(data) - _CAMPOS_DA_CONTA[operation]:
@@ -126,7 +136,16 @@ def conta_propria(root, operation, data, principal, ip=None, origem=None, marca=
     if not conta:
         raise ValueError('Contas só existem nos modos com login.')
     if operation == 'conta-ver':
-        return {**acesso.ver_conta(root, conta), 'sessao': atual}
+        return {**acesso.ver_conta(root, conta, termos), 'sessao': atual}
+    if operation == 'conta-exportar':  # the own data, as a file (contract, 8.4; 4b-2)
+        dados = acesso.exportar_conta(root, conta)
+        return Arquivo(f'vlado-meus-dados-{dados["gerado_em"][:10]}.json',
+                       json.dumps(dados, ensure_ascii=False, indent=2).encode('utf-8'))
+    if operation == 'conta-excluir':  # the own account, for good (contract, 8.4; 4b-3): the handler clears the cookies
+        acesso.excluir_conta(root, conta, data.get('nome'), data.get('senha'), ip)
+        return {'estado': 'conta_excluida'}
+    if operation == 'conta-termos-aceitar':
+        return {'estado': 'termos_aceitos', 'termos': acesso.aceitar_termos(root, conta, data.get('versao'), termos, ip)}
     if operation == 'conta-atualizar':
         return acesso.atualizar_perfil(root, conta, nome=data.get('nome'), idioma=data.get('idioma'))
     if operation == 'conta-email-trocar':
@@ -161,10 +180,18 @@ class RotasContas:
         if not sid:
             return None, None
         try:
-            return acesso.sessao(self.server.root, sid, ip=self._ip()), sid
+            # Where the service is hosted the second factor is mandatory for dono and editor (contract, 8.2), and the
+            # terms in force must be accepted (8.4).
+            termos = self._termos()
+            return acesso.sessao(self.server.root, sid, ip=self._ip(), obrigar_fator=self.server.modo == 'piloto',
+                                 termos=termos['versao'] if termos else None), sid
         except (ValueError, OSError):
             self.acesso_indisponivel = True  # answered with 503, never with a dropped connection
             return None, sid
+
+    def _termos(self):
+        """The terms in force: only in the hosted mode (the installed Mesa has no terms of service)."""
+        return acesso.termos_vigentes() if self.server.modo == 'piloto' else None
 
     def _cookie(self, nome):
         cookie = SimpleCookie()
@@ -191,6 +218,21 @@ class RotasContas:
         return (f'{COOKIE_APARELHO}={marca}; HttpOnly; ' + ('Secure; ' if self.server.modo == 'piloto' else '')
                 + f'SameSite=Lax; Path=/; Max-Age={APARELHO_SEGUNDOS}')
 
+    def _sem_bilhete(self, exc=None):
+        """The `Set-Cookie` that takes the ticket of the second step out of the browser, when there is one to take:
+        the session opened, or the ticket died (unknown, expired, or killed by its fifth wrong code). While the
+        factor is only blocked the ticket still stands, and so does its cookie: a reserve code gets in with it."""
+        if exc is not None and not (isinstance(exc, acesso.EntradaExpirada) or getattr(exc, 'bilhete_morto', False)):
+            return []
+        if not self._cookie(COOKIE_SEGUNDO_PASSO):
+            return []
+        return [f'{COOKIE_SEGUNDO_PASSO}=; {self.server.atributos_cookie()}; Max-Age=0']
+
+    def _recusa_do_passo(self, status, corpo, exc):
+        """A refusal that may have ended the second step."""
+        cookies = self._sem_bilhete(exc)
+        self._send(status, json.dumps(corpo, ensure_ascii=False).encode('utf-8'), extra={'Set-Cookie': cookies} if cookies else None)
+
     def _entrou(self, sid, csrf, conta, marca, cliente):
         """The answer of every sign-in that worked: the session and the device mark as cookies, and, for a device
         the account had never used, a notice to the account's own address (W08, rule 6)."""
@@ -202,7 +244,7 @@ class RotasContas:
         self._send(200, json.dumps({'conta': publica, 'csrf': csrf, 'destino': autorizacao.destino_inicial(conta)},
                                    ensure_ascii=False).encode('utf-8'),
                    # The session goes last: a client that keeps one `Set-Cookie` per answer keeps the session.
-                   extra={'Set-Cookie': [self._cookie_do_aparelho(marca),
+                   extra={'Set-Cookie': [*self._sem_bilhete(), self._cookie_do_aparelho(marca),
                                          f'{COOKIE_PILOTO}={sid}; {self.server.atributos_cookie()}']})
 
     def _endereco_socket(self):
@@ -312,7 +354,7 @@ class RotasContas:
         self._json(200, {'conta': autorizacao.conta_publica(principal),
                          'organizacao': {'id': redacao['id'], 'nome': redacao['nome']} if redacao else None,
                          'pendencias': list(principal.get('pendencias') or []),
-                         'capacidades': autorizacao.capacidades(principal),
+                         'capacidades': autorizacao.capacidades(self.server.root, self.server.modo, principal),
                          'csrf': principal['csrf'], 'ambiente': self._ambiente_publico(),
                          'modo': self.server.modo, 'expira_em': principal.get('expira_em')})
 
@@ -326,8 +368,20 @@ class RotasContas:
         operation is audited once (`admin_recusada`, with the reason: validation, wrong password, last dono, blocked)."""
         try:
             if operation in CONTA_PROPRIA:
-                return conta_propria(self.server.root, operation, data, principal, ip=self._ip(), origem=self.server.origin,
-                                     marca=self._cookie(COOKIE_APARELHO))
+                resposta = conta_propria(self.server.root, operation, data, principal, ip=self._ip(),
+                                         origem=self.server.origin, marca=self._cookie(COOKIE_APARELHO), termos=self._termos())
+                if isinstance(resposta, Arquivo):  # audited as a download by `_send` (SEG-02)
+                    self._send(200, resposta.conteudo, resposta.tipo,
+                               {'Content-Disposition': f'attachment; filename="{resposta.nome}"'})
+                    return rotas_conversa.RESPONDIDO
+                if operation == 'conta-excluir':  # every session of the account just ended: this browser forgets it
+                    self._parar_execucoes(principal['conta'], ())
+                    self._send(200, json.dumps(resposta).encode('utf-8'), extra={'Set-Cookie': [
+                        f'{COOKIE_PILOTO}=; {self.server.atributos_cookie()}; Max-Age=0',
+                        f'{COOKIE_APARELHO}=; HttpOnly; ' + ('Secure; ' if self.server.modo == 'piloto' else '')
+                        + 'SameSite=Lax; Path=/; Max-Age=0']})
+                    return rotas_conversa.RESPONDIDO
+                return resposta
             return rotas_equipe.executar(
                 self.server.root, operation, data, principal, ip=self._ip(), parar=self._parar_execucoes,
                 gasto_da_redacao=autorizacao.gasto_da_redacao(self.server.root, self.server.modo, principal),
@@ -403,7 +457,7 @@ class RotasContas:
                 self._json(200, acesso.consultar_ativacao(root, data.get('token')))
             elif operation == 'convite-consultar':
                 acesso.limitar_ip(self._ip(), 'aceitar')
-                self._json(200, acesso.consultar_convite(root, data.get('token')))
+                self._json(200, acesso.consultar_convite(root, data.get('token'), self._termos()))
             elif operation == 'convite-aceitar':
                 # The account is born and its first session opens, as a sign-in does. The e-mail is the invitation's.
                 acesso.limitar_ip(self._ip(), 'aceitar')
@@ -413,7 +467,8 @@ class RotasContas:
                 sid, csrf, conta = acesso.aceitar_convite(
                     root, data.get('token'), data.get('nome'), data.get('senha'), data.get('termos_versao'), ip=self._ip(),
                     cliente=data.get('cliente', 'web'),
-                    aparelho=aparelho(self.headers.get('User-Agent'), data.get('cliente', 'web')), marca=marca)
+                    aparelho=aparelho(self.headers.get('User-Agent'), data.get('cliente', 'web')), marca=marca,
+                    termos=self._termos())
                 self._entrou(sid, csrf, conta, marca, data.get('cliente', 'web'))
             elif operation == 'senha-esqueci':
                 # One answer, in the same time, whether an account has the address or not: the message leaves in
@@ -465,15 +520,15 @@ class RotasContas:
             self._json(503, {'estado': 'indisponivel', 'erro': 'Registro de acesso indisponível. Avise a administração.'})
         except acesso.Bloqueado as exc:
             avisar_bloqueio_do_fator(self.server.root, exc)
-            self._json(429, {'estado': 'bloqueado', 'codigo': 'bloqueado', 'erro': str(exc)})
+            self._recusa_do_passo(429, {'estado': 'bloqueado', 'codigo': 'bloqueado', 'erro': str(exc)}, exc)
         except acesso.EntradaExpirada as exc:
-            self._json(401, {'estado': 'credenciais', 'codigo': 'entrada_expirada', 'erro': str(exc)})
+            self._recusa_do_passo(401, {'estado': 'credenciais', 'codigo': 'entrada_expirada', 'erro': str(exc)}, exc)
         except acesso.FatorIndisponivel as exc:  # the key of the seeds is missing: not the person's mistake
             self._json(503, {'estado': 'indisponivel', 'codigo': 'fator_indisponivel', 'erro': str(exc)})
         except acesso.CodigoNecessario as exc:  # no code came: asked for, and nothing counted
             self._json(403, {'estado': 'proibido', 'codigo': 'fator_necessario', 'erro': str(exc)})
         except acesso.CodigoInvalido as exc:  # the second factor, in the second step or in a reset by e-mail
-            self._json(403, {'estado': 'proibido', 'codigo': 'codigo_invalido', 'erro': str(exc)})
+            self._recusa_do_passo(403, {'estado': 'proibido', 'codigo': 'codigo_invalido', 'erro': str(exc)}, exc)
         except acesso.CredenciaisInvalidas as exc:
             self._json(401, {'estado': 'credenciais', 'codigo': 'credenciais', 'erro': str(exc)})
         except acesso.AtivacaoInvalida as exc:
@@ -482,6 +537,8 @@ class RotasContas:
             self._json(400, {'estado': 'erro', 'codigo': 'convite_invalido', 'erro': str(exc)})
         except acesso.LinkInvalido as exc:  # and one for every reset link that changes nothing
             self._json(400, {'estado': 'erro', 'codigo': 'link_invalido', 'erro': str(exc)})
+        except acesso.TermosDesatualizados as exc:  # the invitation accepted with other terms than the ones in force
+            self._json(exc.status, {'estado': 'erro', 'codigo': exc.codigo, 'erro': str(exc)})
         except acesso.SenhaInvalida as exc:  # the password chosen is out of size: the page says so under the field
             if operation == 'ativar':
                 registro_acesso.registrar('ativacao_falha', 'falha', motivo='validacao', acesso_operacao='ativar')
