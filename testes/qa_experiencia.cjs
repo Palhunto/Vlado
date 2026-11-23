@@ -1,5 +1,5 @@
 const {chromium}=require('playwright');
-const {enviarArquivos}=require('./qa_navegacao.cjs');
+const {enviarArquivos,dialogoCancelar,dialogoConfirmar}=require('./qa_navegacao.cjs');
 const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
 (async()=>{
@@ -60,16 +60,18 @@ const fs=require('node:fs/promises');
     await page.click('#ver-apuracao');
     await page.locator('#apuracao-nova:not([disabled])').waitFor();
     await page.click('#apuracao-nova');await page.fill('#apuracao-nota-titulo','Não perder esta nota');
-    page.once('dialog',d=>d.dismiss());await page.selectOption('#contexto-caso','beta');
+    // Com o salvamento da nota ainda pendente, a troca é recusada (sem diálogo) e a linha de estado pede para aguardar; a nota fica.
+    await page.selectOption('#contexto-caso','beta');
+    await page.locator('#experiencia-status').filter({hasText:'Aguarde o salvamento da nota.'}).waitFor();
     assert.equal(await page.inputValue('#contexto-caso'),'alpha');
     assert.equal(await page.inputValue('#apuracao-nota-titulo'),'Não perder esta nota');
     await irParaPesquisa();
     await page.locator('#resultados .result').first().getByRole('button',{name:'Registrar trecho com fonte',exact:true}).click();
     await page.locator('#caderno-trecho:not([disabled])').waitFor();
     await page.fill('#caderno-titulo-input','Texto não salvo');
-    page.once('dialog',d=>d.dismiss());await page.click('#caderno-fechar');
+    await page.click('#caderno-fechar');await dialogoCancelar(page);   // "Descartar e fechar?"
     assert.equal(await page.locator('#caderno-dialogo').getAttribute('open'),'');
-    page.once('dialog',d=>d.accept());await page.click('#caderno-fechar');
+    await page.click('#caderno-fechar');await dialogoConfirmar(page);
     // The original viewer opens PDF on the cited physical page and never executes source HTML.
     await page.evaluate(async()=>{
       const docs=await api('caderno-documentos',{caso:'alpha'}),doc=docs.documentos.find(d=>d.formato==='.pdf');
@@ -87,6 +89,7 @@ const fs=require('node:fs/promises');
     await page.evaluate(()=>scrollTo(0,0));
     await page.screenshot({path:'docs/qa_experiencia/mobile.png',fullPage:true});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    await page.click('#mesa-menu');   // em 390 px a barra lateral é uma gaveta
     await page.click('#ver-achados');
     await page.selectOption('#achados-revisao','r2');await page.selectOption('#achados-geracao','g2');
     await page.locator('.finding-open').first().waitFor();
@@ -99,9 +102,9 @@ const fs=require('node:fs/promises');
     await page.locator('#achados-inspecao').getByRole('button',{name:'Conferir',exact:true}).click();
     await page.locator('#revisao-observacao:not([disabled])').waitFor();
     await page.fill('#revisao-observacao','Observação que deve ser preservada.');
-    page.once('dialog',d=>d.dismiss());await page.click('#revisao-fechar');
+    await page.click('#revisao-fechar');await dialogoCancelar(page);
     assert.equal(await page.locator('#revisao-dialogo').getAttribute('open'),'');
-    page.once('dialog',d=>d.accept());await page.click('#revisao-fechar');
+    await page.click('#revisao-fechar');await dialogoConfirmar(page);
     // Close an unsaved note only when the test browser exits.
     assert.deepEqual(errors,[]);
     console.log('OK: contexto único, diligência livre, prazo, leitor, exportação, URL, proteção de rascunho e largura móvel.');

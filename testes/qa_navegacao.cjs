@@ -50,4 +50,20 @@ async function enviarArquivos(pagina, arquivos, {timeout = 60000} = {}) {
   }, antes, {timeout});
 }
 
-module.exports = {irParaDocumentos, irParaGerenciar, irParaNovaApuracao, criarApuracao, enviarArquivos};
+// Diálogo de confirmação próprio da Mesa (Dialogo.confirmar, UX-16): substitui o confirm() do navegador, então page.once('dialog') não o alcança.
+// A ação principal é o botão que não é "secondary" (".danger" nas destrutivas); Cancelar é o "secondary". Esc também cancela.
+const DIALOGO = 'dialog.dialogo[open]';
+async function dialogoConfirmar(pagina) {
+  const caixa = pagina.locator(DIALOGO).last();
+  await caixa.waitFor();
+  await caixa.locator('.dialogo-acoes button:not(.secondary)').click();
+  await caixa.waitFor({state: 'hidden'});
+}
+async function dialogoCancelar(pagina) {
+  const caixa = pagina.locator(DIALOGO).last();
+  await caixa.waitFor();
+  await caixa.locator('.dialogo-acoes button.secondary').click();
+  await caixa.waitFor({state: 'hidden'});
+}
+
+module.exports = {irParaDocumentos, irParaGerenciar, irParaNovaApuracao, criarApuracao, enviarArquivos, dialogoConfirmar, dialogoCancelar};
