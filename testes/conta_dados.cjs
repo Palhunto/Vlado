@@ -145,3 +145,30 @@ test('Excluir a conta, senha errada: o diálogo fica e a mensagem vai ao campo d
   assert.ok(texto(dialogo(f.mesa)).includes('Senha incorreta.'), texto(dialogo(f.mesa)));
   acoes(f.mesa)[0].click(); await esperar(f.mesa);
 });
+
+test('Exportar: conversas_anteriores diz "conversas criadas antes de <dia>" com conversas_desde, e sem a data diz que o arquivo não a informa', async () => {
+  const f = abrir(); await esperar(f.mesa);
+  pedirArquivo(f, arquivo({incompleto: ['conversas_anteriores'], conversas_desde: '2026-11-20T10:00:00+00:00'}));
+  botaoPorTexto(cartao(f.mesa), 'Exportar meus dados').click(); await esperar(f.mesa); await esperar(f.mesa);
+  assert.ok(texto(estado(f.mesa)).includes('Ainda não traz: conversas criadas antes de 20 de nov. de 2026.'), texto(estado(f.mesa)));
+  const sem = abrir(); await esperar(sem.mesa);
+  pedirArquivo(sem, arquivo({incompleto: ['itens_criados', 'conversas_anteriores'], conversas_desde: null}));
+  botaoPorTexto(cartao(sem.mesa), 'Exportar meus dados').click(); await esperar(sem.mesa); await esperar(sem.mesa);
+  assert.ok(texto(estado(sem.mesa)).includes('Ainda não traz: notas, revisões e conversas que você criou; conversas criadas antes de uma data que o arquivo não informa.'), texto(estado(sem.mesa)));
+  const ingles = abrir({idioma: 'en'}); await esperar(ingles.mesa);
+  pedirArquivo(ingles, arquivo({incompleto: ['conversas_anteriores'], conversas_desde: '2026-11-20T10:00:00+00:00'}));
+  botaoPorTexto(cartao(ingles.mesa), 'Export my data').click(); await esperar(ingles.mesa); await esperar(ingles.mesa);
+  assert.ok(texto(estado(ingles.mesa)).includes('Not yet included: conversations created before Nov 20, 2026.'), texto(estado(ingles.mesa)));
+});
+
+test('Exportar: 429 limite_de_exportacoes mostra o texto do servidor em português e a tradução pelo código em inglês, e o botão volta', async () => {
+  const corpo = {estado: 'limite', codigo: 'limite_de_exportacoes', erro: 'Você já exportou os seus dados 5 vezes na última hora. Tente de novo em até uma hora.'};
+  const f = abrir(); await esperar(f.mesa);
+  pedirArquivo(f, {ok: false, status: 429, json: async () => corpo});
+  const botao = botaoPorTexto(cartao(f.mesa), 'Exportar meus dados'); botao.click(); await esperar(f.mesa); await esperar(f.mesa);
+  assert.ok(texto(estado(f.mesa)).includes('Você já exportou os seus dados 5 vezes na última hora. Tente de novo em até uma hora.'), texto(estado(f.mesa))); assert.ok(!botao.disabled);
+  const ingles = abrir({idioma: 'en'}); await esperar(ingles.mesa);
+  pedirArquivo(ingles, {ok: false, status: 429, json: async () => corpo});
+  botaoPorTexto(cartao(ingles.mesa), 'Export my data').click(); await esperar(ingles.mesa); await esperar(ingles.mesa);
+  assert.ok(texto(estado(ingles.mesa)).includes('You have already exported your data 5 times in the last hour. Try again within an hour.'), texto(estado(ingles.mesa)));
+});
