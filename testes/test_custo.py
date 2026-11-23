@@ -599,6 +599,7 @@ class RotaDaCotaTest(Base):
         thread.start()
         self.addCleanup(lambda: (server.shutdown(), server.server_close(), thread.join(5)))
         custo.somar_gasto(self.root, None, 2_500_000)
+        custo.somar_gasto(self.root, None, 1_000_000, chave_propria=True)  # left from a pilot: never counts here
         con = http.client.HTTPConnection('127.0.0.1', server.server_port, timeout=10)
         try:
             con.request('GET', '/api/cota', headers={'X-Session-Token': server.token})
@@ -608,8 +609,9 @@ class RotaDaCotaTest(Base):
             con.close()
         self.assertEqual(resposta.status, 200)
         self.assertEqual((corpo['conta']['gasto_brl'], corpo['conta']['teto_brl'], corpo['conta']['saldo_brl']),
-                         ('2.50', '50.00', '47.50'))
+                         ('3.50', '50.00', '46.50'))
         self.assertEqual(corpo['organizacao']['gasto_brl'], '2.50')  # the local operator is the administrator
+        self.assertNotIn('chave_propria', corpo)  # outside the piloto (local, local-contas): no own-key part
 
 
 if __name__ == '__main__':
