@@ -246,10 +246,20 @@ def pagina_da_pendencia(recusa: 'Recusa') -> str | None:
     return next((PAGINA_DA_PENDENCIA[p] for p in recusa.corpo.get('pendencias', ()) if p in PAGINA_DA_PENDENCIA), None)
 
 
+def _barrada_pela_pendencia(principal: dict, operacao: str) -> bool:
+    """A conta com pendência só alcança a própria sessão e o que resolve a pendência (seção 4.2). Um lugar só,
+    lido pelo portão e pelo teto do corpo."""
+    pendencias = principal.get('pendencias') or ()
+    return bool(pendencias) and operacao not in SEM_PENDENCIA.union(*(RESOLVE_PENDENCIA.get(p, ()) for p in pendencias))
+
+
 def corpo_grande(modo: str, principal: dict, operacao: str) -> bool:
-    """Quem não alcança a operação nunca tem um corpo grande lido (seção 4.2, passo 3)."""
+    """Quem não alcança a operação nunca tem um corpo grande lido (seção 4.2, passo 3): nem pelo papel, nem pela
+    pendência da conta (ressalva R1 da revisão da obrigação)."""
     if modo == 'local':
         return True
+    if _barrada_pela_pendencia(principal, operacao):
+        return False
     return any(regra.celulas.get(principal.get('papel'), NEGADO) != NEGADO for regra in _variantes(operacao))
 
 
@@ -355,7 +365,7 @@ def conferir(root: Path, modo: str, principal: dict, operacao: str, dados: dict)
         raise _proibida('A redação desta conta está suspensa. Fale com quem administra o serviço.', 'redacao_suspensa',
                         'redacao_suspensa')
     pendencias = principal.get('pendencias') or ()
-    if pendencias and operacao not in SEM_PENDENCIA.union(*(RESOLVE_PENDENCIA.get(p, ()) for p in pendencias)):
+    if _barrada_pela_pendencia(principal, operacao):
         raise Recusa(403, {'estado': 'proibido', 'codigo': 'pendencia_de_conta', 'pendencias': list(pendencias),
                            'erro': 'Conclua o que falta na sua conta antes de continuar.'}, 'pendencia_de_conta', 'papel')
     regra = _REGRAS.get(_variante(operacao, dados))
