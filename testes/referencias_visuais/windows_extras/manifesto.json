@@ -1,0 +1,482 @@
+{
+  "navegador": "chromium 159.0.8154.6",
+  "reinicios_do_navegador": 0,
+  "playwright": "?",
+  "plataforma": "windows",
+  "relogio_fixo_utc": "2026-01-15T12:00:00+00:00",
+  "cenarios": {
+    "paisagem": {
+      "width": 812,
+      "height": 375,
+      "escala": 1
+    },
+    "430": {
+      "width": 430,
+      "height": 932,
+      "escala": 1
+    },
+    "zoom200": {
+      "width": 640,
+      "height": 450,
+      "escala": 2
+    }
+  },
+  "argumentos_chromium": [
+    "--lang=en-US",
+    "--force-color-profile=srgb",
+    "--font-render-hinting=none",
+    "--disable-lcd-text",
+    "--disable-font-subpixel-positioning",
+    "--hide-scrollbars",
+    "--disable-gpu"
+  ],
+  "rolagem_horizontal": {},
+  "erros_do_navegador": {
+    "apuracao__paisagem__claro": [
+      "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+    ],
+    "apuracao__paisagem__escuro": [
+      "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+    ],
+    "apuracao__430__claro": [
+      "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+    ],
+    "apuracao__430__escuro": [
+      "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+    ],
+    "apuracao__zoom200__claro": [
+      "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+    ],
+    "apuracao__zoom200__escuro": [
+      "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+    ]
+  },
+  "gerado_em_utc": "2026-11-23T03:23:34Z",
+  "tolerancia": {
+    "canal": 4,
+    "pixels": 8
+  },
+  "total_bytes": 15689688,
+  "capturas": {
+    "achados__430__claro": {
+      "largura": 430,
+      "altura": 2696,
+      "bytes": 170727
+    },
+    "achados__430__escuro": {
+      "largura": 430,
+      "altura": 2696,
+      "bytes": 170380
+    },
+    "achados__paisagem__claro": {
+      "largura": 812,
+      "altura": 2126,
+      "bytes": 179963
+    },
+    "achados__paisagem__escuro": {
+      "largura": 812,
+      "altura": 2126,
+      "bytes": 179977
+    },
+    "achados__zoom200__claro": {
+      "largura": 1280,
+      "altura": 4846,
+      "bytes": 407911
+    },
+    "achados__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 4846,
+      "bytes": 408144
+    },
+    "apuracao__430__claro": {
+      "largura": 430,
+      "altura": 1665,
+      "bytes": 108749
+    },
+    "apuracao__430__escuro": {
+      "largura": 430,
+      "altura": 1665,
+      "bytes": 109161
+    },
+    "apuracao__paisagem__claro": {
+      "largura": 812,
+      "altura": 1355,
+      "bytes": 106932
+    },
+    "apuracao__paisagem__escuro": {
+      "largura": 812,
+      "altura": 1355,
+      "bytes": 107513
+    },
+    "apuracao__zoom200__claro": {
+      "largura": 1280,
+      "altura": 2896,
+      "bytes": 251801
+    },
+    "apuracao__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 2896,
+      "bytes": 252911
+    },
+    "caderno__430__claro": {
+      "largura": 430,
+      "altura": 1545,
+      "bytes": 111536
+    },
+    "caderno__430__escuro": {
+      "largura": 430,
+      "altura": 1545,
+      "bytes": 111863
+    },
+    "caderno__paisagem__claro": {
+      "largura": 812,
+      "altura": 1325,
+      "bytes": 112638
+    },
+    "caderno__paisagem__escuro": {
+      "largura": 812,
+      "altura": 1325,
+      "bytes": 113370
+    },
+    "caderno__zoom200__claro": {
+      "largura": 1280,
+      "altura": 2632,
+      "bytes": 261010
+    },
+    "caderno__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 2632,
+      "bytes": 261017
+    },
+    "codex__430__claro": {
+      "largura": 430,
+      "altura": 2507,
+      "bytes": 173848
+    },
+    "codex__430__escuro": {
+      "largura": 430,
+      "altura": 2507,
+      "bytes": 173985
+    },
+    "codex__paisagem__claro": {
+      "largura": 812,
+      "altura": 2267,
+      "bytes": 185007
+    },
+    "codex__paisagem__escuro": {
+      "largura": 812,
+      "altura": 2267,
+      "bytes": 184845
+    },
+    "codex__zoom200__claro": {
+      "largura": 1280,
+      "altura": 4672,
+      "bytes": 420643
+    },
+    "codex__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 4672,
+      "bytes": 418373
+    },
+    "configuracoes__430__claro": {
+      "largura": 430,
+      "altura": 932,
+      "bytes": 34277
+    },
+    "configuracoes__430__escuro": {
+      "largura": 430,
+      "altura": 932,
+      "bytes": 33973
+    },
+    "configuracoes__paisagem__claro": {
+      "largura": 812,
+      "altura": 408,
+      "bytes": 35875
+    },
+    "configuracoes__paisagem__escuro": {
+      "largura": 812,
+      "altura": 408,
+      "bytes": 35673
+    },
+    "configuracoes__zoom200__claro": {
+      "largura": 1280,
+      "altura": 900,
+      "bytes": 79856
+    },
+    "configuracoes__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 900,
+      "bytes": 79962
+    },
+    "diligencias__430__claro": {
+      "largura": 430,
+      "altura": 2222,
+      "bytes": 157207
+    },
+    "diligencias__430__escuro": {
+      "largura": 430,
+      "altura": 2222,
+      "bytes": 157548
+    },
+    "diligencias__paisagem__claro": {
+      "largura": 812,
+      "altura": 1867,
+      "bytes": 157436
+    },
+    "diligencias__paisagem__escuro": {
+      "largura": 812,
+      "altura": 1867,
+      "bytes": 157870
+    },
+    "diligencias__zoom200__claro": {
+      "largura": 1280,
+      "altura": 3964,
+      "bytes": 365626
+    },
+    "diligencias__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 3964,
+      "bytes": 364652
+    },
+    "documentos__430__claro": {
+      "largura": 430,
+      "altura": 1474,
+      "bytes": 93081
+    },
+    "documentos__430__escuro": {
+      "largura": 430,
+      "altura": 1474,
+      "bytes": 93389
+    },
+    "documentos__paisagem__claro": {
+      "largura": 812,
+      "altura": 1059,
+      "bytes": 103031
+    },
+    "documentos__paisagem__escuro": {
+      "largura": 812,
+      "altura": 1059,
+      "bytes": 103287
+    },
+    "documentos__zoom200__claro": {
+      "largura": 1280,
+      "altura": 2776,
+      "bytes": 224493
+    },
+    "documentos__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 2776,
+      "bytes": 224868
+    },
+    "entrar__430__claro": {
+      "largura": 430,
+      "altura": 939,
+      "bytes": 44994
+    },
+    "entrar__430__escuro": {
+      "largura": 430,
+      "altura": 939,
+      "bytes": 44367
+    },
+    "entrar__paisagem__claro": {
+      "largura": 812,
+      "altura": 815,
+      "bytes": 48028
+    },
+    "entrar__paisagem__escuro": {
+      "largura": 812,
+      "altura": 815,
+      "bytes": 47798
+    },
+    "entrar__zoom200__claro": {
+      "largura": 1280,
+      "altura": 1652,
+      "bytes": 112244
+    },
+    "entrar__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 1652,
+      "bytes": 111769
+    },
+    "gerenciar__430__claro": {
+      "largura": 430,
+      "altura": 1666,
+      "bytes": 101853
+    },
+    "gerenciar__430__escuro": {
+      "largura": 430,
+      "altura": 1666,
+      "bytes": 101006
+    },
+    "gerenciar__paisagem__claro": {
+      "largura": 812,
+      "altura": 1383,
+      "bytes": 108196
+    },
+    "gerenciar__paisagem__escuro": {
+      "largura": 812,
+      "altura": 1383,
+      "bytes": 108369
+    },
+    "gerenciar__zoom200__claro": {
+      "largura": 1280,
+      "altura": 2962,
+      "bytes": 251841
+    },
+    "gerenciar__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 2962,
+      "bytes": 251359
+    },
+    "inicio__430__claro": {
+      "largura": 430,
+      "altura": 1727,
+      "bytes": 127687
+    },
+    "inicio__430__escuro": {
+      "largura": 430,
+      "altura": 1727,
+      "bytes": 127082
+    },
+    "inicio__paisagem__claro": {
+      "largura": 812,
+      "altura": 1578,
+      "bytes": 140973
+    },
+    "inicio__paisagem__escuro": {
+      "largura": 812,
+      "altura": 1578,
+      "bytes": 140476
+    },
+    "inicio__zoom200__claro": {
+      "largura": 1280,
+      "altura": 3214,
+      "bytes": 303537
+    },
+    "inicio__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 3214,
+      "bytes": 302449
+    },
+    "nova__430__claro": {
+      "largura": 430,
+      "altura": 932,
+      "bytes": 55414
+    },
+    "nova__430__escuro": {
+      "largura": 430,
+      "altura": 932,
+      "bytes": 55193
+    },
+    "nova__paisagem__claro": {
+      "largura": 812,
+      "altura": 783,
+      "bytes": 59736
+    },
+    "nova__paisagem__escuro": {
+      "largura": 812,
+      "altura": 783,
+      "bytes": 59743
+    },
+    "nova__zoom200__claro": {
+      "largura": 1280,
+      "altura": 1642,
+      "bytes": 134734
+    },
+    "nova__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 1642,
+      "bytes": 135316
+    },
+    "quadros__430__claro": {
+      "largura": 430,
+      "altura": 3807,
+      "bytes": 251970
+    },
+    "quadros__430__escuro": {
+      "largura": 430,
+      "altura": 3807,
+      "bytes": 250798
+    },
+    "quadros__paisagem__claro": {
+      "largura": 812,
+      "altura": 3255,
+      "bytes": 263651
+    },
+    "quadros__paisagem__escuro": {
+      "largura": 812,
+      "altura": 3255,
+      "bytes": 263520
+    },
+    "quadros__zoom200__claro": {
+      "largura": 1280,
+      "altura": 6506,
+      "bytes": 601314
+    },
+    "quadros__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 6506,
+      "bytes": 599069
+    },
+    "quadros_linha__430__claro": {
+      "largura": 430,
+      "altura": 2150,
+      "bytes": 176703
+    },
+    "quadros_linha__430__escuro": {
+      "largura": 430,
+      "altura": 2150,
+      "bytes": 176928
+    },
+    "quadros_linha__paisagem__claro": {
+      "largura": 812,
+      "altura": 1453,
+      "bytes": 183820
+    },
+    "quadros_linha__paisagem__escuro": {
+      "largura": 812,
+      "altura": 1453,
+      "bytes": 184282
+    },
+    "quadros_linha__zoom200__claro": {
+      "largura": 1280,
+      "altura": 3630,
+      "bytes": 421421
+    },
+    "quadros_linha__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 3630,
+      "bytes": 418785
+    },
+    "quadros_mapa__430__claro": {
+      "largura": 430,
+      "altura": 1745,
+      "bytes": 159790
+    },
+    "quadros_mapa__430__escuro": {
+      "largura": 430,
+      "altura": 1745,
+      "bytes": 159865
+    },
+    "quadros_mapa__paisagem__claro": {
+      "largura": 812,
+      "altura": 1555,
+      "bytes": 169592
+    },
+    "quadros_mapa__paisagem__escuro": {
+      "largura": 812,
+      "altura": 1555,
+      "bytes": 169742
+    },
+    "quadros_mapa__zoom200__claro": {
+      "largura": 1280,
+      "altura": 3198,
+      "bytes": 390028
+    },
+    "quadros_mapa__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 3198,
+      "bytes": 389838
+    }
+  }
+}

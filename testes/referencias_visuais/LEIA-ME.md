@@ -138,3 +138,19 @@ não a cada commit, e usar recorte (`--telas`, `--larguras`, `--temas`) para tro
 - `inicio` estoura na horizontal: página de 890 px a 768 px e de 1061 px a 1024 px (rolagem horizontal).
 - A área `apuracao` registra no console um bloqueio da CSP (`style-src 'self'`): estilo inline aplicado por script.
   Fica no manifesto (`erros_do_navegador`); `comparar` avisa se aparecer erro novo.
+
+## Capturas adicionais (R6 do Traço): paisagem, 430 px e texto a 200%
+
+`python testes/regressao_visual_extras.py gerar` refaz, e `comparar` confere, 84 capturas em `windows_extras/` (14 telas, sem os focos, nos
+dois temas; nome `<tela>__<cenário>__<tema>.png`). São referências ADICIONAIS: as 130 de cima não mudam. Cenários:
+
+| Cenário | Janela | Para quê |
+|---|---|---|
+| `paisagem` | 812 x 375 px | celular deitado: cabeçalho, gaveta e diálogos com altura curta |
+| `430` | 430 x 932 px | celular grande em pé, entre os 375 e os 768 da linha de base |
+| `zoom200` | 640 px em CSS, escala 2 (imagem de 1280 px) | a janela de 1280 px com a página ampliada a 200% (WCAG 1.4.4) |
+
+O `zoom200` é a página ampliada, não só a fonte: a CSP da Mesa não deixa injetar CSS para aumentar o texto sozinho, e Ctrl + é como a pessoa de verdade
+faz. Rolagem horizontal não impede gerar: fica no manifesto (`rolagem_horizontal`, hoje vazio nas 84) e `comparar` reprova a que for nova, além de diferença
+de imagem e de pedido a endereço externo. O Vditor do Caderno registra um aviso de CSP (estilo em linha) no manifesto, como na linha de base. Os testes sem
+navegador estão em `test_regressao_visual_extras.py`.
