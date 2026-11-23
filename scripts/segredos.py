@@ -80,23 +80,47 @@ class ChavesIlegiveis(ValueError):
 
 
 ILEGIVEIS = ('O arquivo de chaves de IA das redações está ilegível. Restaure-o a partir da cópia guardada com os '
-             'segredos; até lá, nenhuma redação usa a IA pela Mesa e nenhuma chave de redação é gravada.')
+             'segredos; até lá, nenhuma chave própria de redação pode ser lida nem gravada.')
+_AVISADOS: set = set()  # (file, mtime, size) already in the audit log: one line per state of the file, not per request
+
+
+def _avisar_ilegivel(root: Path, arquivo: Path) -> None:
+    """The audit log hears of an unreadable file at the start and in operation (ressalva C5), once per state of it."""
+    try:
+        estado = arquivo.stat()
+        marca = (str(arquivo), estado.st_mtime_ns, estado.st_size)
+    except OSError:
+        marca = (str(arquivo), None, None)
+    if marca in _AVISADOS:
+        return
+    _AVISADOS.add(marca)
+    import registro_acesso
+    registro_acesso.lembrar_raiz(root)
+    registro_acesso.registrar('chaves_ia_ilegiveis', 'falha')
+
+
+def _bem_formada(redacao, chaves) -> bool:
+    return (isinstance(redacao, str) and bool(_REDACAO.fullmatch(redacao)) and isinstance(chaves, dict) and bool(chaves)
+            and all(provedor in CHAVES_AMBIENTE and isinstance(chave, str) and FORMATO.fullmatch(chave)
+                    for provedor, chave in chaves.items()))
 
 
 def _ler_redacoes(root: Path) -> dict:
-    """{newsroom id: {provider: key}}, only what is well formed. Raises `ChavesIlegiveis` when the file is there
-    and is not a JSON object."""
+    """{newsroom id: {provider: key}}. Raises `ChavesIlegiveis` when the file is there and anything in it has a
+    form this module never writes (ressalva B1): an entry dropped in silence would put that newsroom on the key of
+    the service, and the next save would rewrite the file without it. Every save reads through here first, so an
+    unreadable file is never rewritten."""
     arquivo = caminho_das_redacoes(root)
     if not arquivo.is_file():
         return {}
     try:
         dados = json.loads(arquivo.read_text(encoding='utf-8'))
-    except (OSError, ValueError) as exc:
-        raise ChavesIlegiveis(ILEGIVEIS) from exc
-    if not isinstance(dados, dict):
+    except (OSError, ValueError):
+        dados = None
+    if not isinstance(dados, dict) or not all(_bem_formada(r, c) for r, c in dados.items()):
+        _avisar_ilegivel(root, arquivo)
         raise ChavesIlegiveis(ILEGIVEIS)
-    return {redacao: {k: v for k, v in chaves.items() if k in CHAVES_AMBIENTE and isinstance(v, str)}
-            for redacao, chaves in dados.items() if _REDACAO.fullmatch(str(redacao)) and isinstance(chaves, dict)}
+    return dados
 
 
 def _da_redacao(root: Path, provedor: str, redacao) -> str | None:
@@ -198,11 +222,7 @@ def conferir_chaves_das_redacoes(root: Path) -> str | None:
     """For the start of the server: the warning for the operator when the file of the newsrooms' keys is there
     and unreadable, or None. It also goes to the audit log (`chaves_ia_ilegiveis`). Nothing is repaired here."""
     try:
-        _ler_redacoes(root)
+        _ler_redacoes(root)  # it puts the line in the audit log itself
         return None
     except ChavesIlegiveis:
-        pass
-    import registro_acesso
-    registro_acesso.lembrar_raiz(root)
-    registro_acesso.registrar('chaves_ia_ilegiveis', 'falha')
-    return f'ATENÇÃO: {ILEGIVEIS}'
+        return f'ATENÇÃO: {ILEGIVEIS}'

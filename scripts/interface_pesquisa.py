@@ -1053,7 +1053,7 @@ def main():
                     print(aviso, file=sys.stderr, flush=True)
             except (ValueError, OSError):
                 pass  # an unreadable store answers 503 to each request; it does not stop the start
-        if server.modo == 'piloto':  # the newsrooms' own AI keys unreadable: no newsroom asks the AI until restored
+        if server.modo == 'piloto':  # the newsrooms' own AI keys unreadable: none is read nor saved until restored
             try:
                 aviso = segredos.conferir_chaves_das_redacoes(server.root)
                 if aviso:
