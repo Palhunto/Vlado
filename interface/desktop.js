@@ -520,7 +520,9 @@
 // esse lado; sem estouro, sem atributo. O item ativo é o que a faixa já marca (aria-current, aria-selected ou aria-pressed): ela é observada, então quem a desenha ou troca o item não muda.
 (() => {
   const ativo = '[aria-current],[aria-selected="true"],[aria-pressed="true"]';
-  const faixas = new WeakSet();
+  const SELETOR = '#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs';
+  const faixas = new WeakSet(), pendentes = new Set();
+  let quadro = 0;
   const folgaDe = faixa => { const valor = parseFloat(getComputedStyle(faixa).getPropertyValue('--espaco-4')); return Number.isFinite(valor) ? valor : 16; };
   function marcar(faixa) {
     const resto = faixa.scrollWidth - faixa.clientWidth, esq = faixa.scrollLeft;
@@ -536,24 +538,28 @@
     }
     marcar(faixa);
   }
+  // Um recálculo por faixa e por quadro, qualquer que seja o número de mudanças: a faixa é marcada e o quadro seguinte a atualiza.
+  function agendar(faixa) {
+    pendentes.add(faixa);
+    if (quadro) return;
+    quadro = requestAnimationFrame(() => { quadro = 0; const fila = [...pendentes]; pendentes.clear(); fila.forEach(trazerOAtivo); });
+  }
   function observar(faixa) {
     if (!faixa || faixas.has(faixa)) return;
     faixas.add(faixa);
     let largura = 0;
     faixa.addEventListener('scroll', () => marcar(faixa), {passive: true});
-    if (typeof MutationObserver === 'function') new MutationObserver(() => trazerOAtivo(faixa)).observe(faixa, {childList: true, subtree: true, attributes: true, attributeFilter: ['aria-current', 'aria-selected', 'aria-pressed']});
+    // Só a própria faixa é observada (os itens e o item ativo), nunca a página: uma conversa longa não passa por aqui.
+    if (typeof MutationObserver === 'function') new MutationObserver(() => agendar(faixa)).observe(faixa, {childList: true, subtree: true, attributes: true, attributeFilter: ['aria-current', 'aria-selected', 'aria-pressed']});
     // Ao aparecer (a área estava escondida) ou ao mudar de largura a faixa recalcula; só ao aparecer ela traz o ativo de novo.
-    if (typeof ResizeObserver === 'function') new ResizeObserver(() => { const apareceu = largura === 0; largura = faixa.clientWidth; if (apareceu) trazerOAtivo(faixa); else marcar(faixa); }).observe(faixa);
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => { const apareceu = largura === 0; largura = faixa.clientWidth; if (apareceu) agendar(faixa); else marcar(faixa); }).observe(faixa);
     trazerOAtivo(faixa);
   }
-  const SELETOR = '#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs';
   document.querySelectorAll(SELETOR).forEach(observar);
-  // As abas de Minha conta nascem depois (conta.js): quem entra na página com a classe das abas também é observado.
-  if (typeof MutationObserver === 'function' && document.body) {
-    new MutationObserver(registros => registros.forEach(r => r.addedNodes.forEach(no => {
-      if (no.nodeType !== 1) return;
-      if (no.matches(SELETOR)) observar(no);
-      no.querySelectorAll?.(SELETOR).forEach(observar);
-    }))).observe(document.body, {childList: true, subtree: true});
+  // As abas de Minha conta nascem depois (conta.js), como filhas diretas de #area-configuracoes: só esse contêiner é observado, sem descer a árvore.
+  const moldura = document.getElementById('area-configuracoes');
+  if (moldura && typeof MutationObserver === 'function') {
+    new MutationObserver(registros => registros.forEach(r => r.addedNodes.forEach(no => { if (no.nodeType === 1 && no.matches(SELETOR)) observar(no); })))
+      .observe(moldura, {childList: true});
   }
 })();
