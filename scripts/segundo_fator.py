@@ -6,8 +6,10 @@ Só as contas de aritmética e de cifra ficam aqui; quem guarda, conta tentativa
 - **TOTP** (RFC 6238): HMAC-SHA1, 6 dígitos, passo de 30 segundos, um passo de tolerância para cada lado.
   ``conferir`` devolve o passo aceito, e quem chama o guarda: um passo já aceito, ou anterior a ele, não vale de
   novo, de modo que o mesmo código não serve duas vezes.
-- **Códigos de reserva:** dez, de uso único, com 50 bits cada, mostrados uma vez. O armazenamento guarda só o
-  SHA-256 de cada um.
+- **Códigos de reserva:** dez, de uso único, com 80 bits cada, mostrados uma vez. O armazenamento guarda só o
+  SHA-256 de cada um. Com 80 bits ao acaso, percorrê-los a partir de uma cópia do banco não é viável, e a
+  conferência não depende de chave nenhuma: a das sementes pode faltar depois de uma restauração, e é aí que o
+  código de reserva mais importa.
 - **A semente é cifrada** (AES-GCM, biblioteca ``cryptography``) com uma chave de 32 bytes em
   ``segredos/contas.chave``, fora da pasta das contas e fora do backup comum: quem copiar só o banco não gera
   códigos. O id da conta entra como dado autenticado, então a semente de uma conta não decifra na linha de outra.
@@ -39,7 +41,8 @@ CODIGOS_DE_RESERVA = 10
 EMISSOR = 'Vlado'
 _CODIGO = re.compile(r'[0-9]{6}')  # ASCII digits only: `\d` would let other scripts' digits through
 _ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'  # 32 symbols, without the ones people mix up (0/O, 1/I)
-_RESERVA = re.compile(r'[A-HJ-NP-Z2-9]{10}')
+GRUPOS_DA_RESERVA, LETRAS_POR_GRUPO = 4, 4  # 16 symbols of 5 bits: 80 bits
+_RESERVA = re.compile(r'[A-HJ-NP-Z2-9]{%d}' % (GRUPOS_DA_RESERVA * LETRAS_POR_GRUPO))
 _TRAVA = threading.Lock()
 _CHAVES: dict[str, bytes] = {}
 
@@ -99,8 +102,8 @@ def endereco(semente: bytes, rotulo: str) -> str:
 # --- reserve codes --------------------------------------------------------------------------------
 
 def novos_codigos_de_reserva() -> list[str]:
-    """Ten single-use codes, shown once: 'ABCDE-FGHJK' (50 bits each)."""
-    return ['{}-{}'.format(*(''.join(secrets.choice(_ALFABETO) for _ in range(5)) for _ in range(2)))
+    """Ten single-use codes, shown once: 'ABCD-EFGH-JKLM-NPQR' (80 bits each)."""
+    return ['-'.join(''.join(secrets.choice(_ALFABETO) for _ in range(LETRAS_POR_GRUPO)) for _ in range(GRUPOS_DA_RESERVA))
             for _ in range(CODIGOS_DE_RESERVA)]
 
 
@@ -111,7 +114,8 @@ def normalizar_reserva(codigo) -> str | None:
 
 
 def resumo_da_reserva(codigo) -> str | None:
-    """What the store keeps of a reserve code: its SHA-256 (the code has 50 random bits, so a plain hash is enough)."""
+    """What the store keeps of a reserve code: its SHA-256. No key: the code has 80 random bits, out of reach of a
+    search over a copy of the store, and checking it must not depend on a key file that may be missing."""
     texto = normalizar_reserva(codigo)
     return hashlib.sha256(('reserva:' + texto).encode('ascii')).hexdigest() if texto else None
 

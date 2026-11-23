@@ -604,7 +604,7 @@ Esta seção fixa comportamento, não implementação.
 ### 8.2 Senha, segundo fator, tentativas e recuperação (CON-03)
 
 - **Senha:** 12 a 256 caracteres, argon2id, como hoje, aceitando colar e gerenciador (W08, regra 4). Trocar pede a atual e encerra as outras sessões. Redefinir por e-mail usa link de 1 hora e uso único; a conta com segundo fator informa também o código.
-- **Segundo fator:** TOTP (RFC 6238, 6 dígitos, 30 segundos, um passo de tolerância). O mesmo código não vale duas vezes. Dez códigos de reserva de uso único, mostrados uma vez.
+- **Segundo fator:** TOTP (RFC 6238, 6 dígitos, 30 segundos, um passo de tolerância). O mesmo código não vale duas vezes. Dez códigos de reserva de uso único, de 16 caracteres (80 bits), mostrados uma vez.
 - **Obrigatório para dono e editor** no modo `piloto`, como dizem as regras do W08 e do W10; o plano dizia só dono (decisão 3). Quem tem a obrigação e ainda não cadastrou fica com a pendência `segundo_fator`.
 - **Chave de acesso** (passkey), que o W08 e o W10 mostram como alternativa, fica fora do lançamento (decisão 4).
 - **Entrada em dois passos:** senha certa numa conta com segundo fator não abre sessão; devolve um cookie de 5 minutos que só serve para `entrar-segundo-fator`. Cinco códigos errados invalidam esse cookie.
@@ -821,6 +821,7 @@ Do que a entrega 3 decide, além do texto da seção 8.1:
 - `senha-redefinir` de conta com o fator pede também `codigo` (403 `codigo_invalido` sem ele). O link de recuperação pedido por um dono (seção 8.2) não pede: ele retira o fator, que a pessoa cadastra de novo. A recuperação feita pelo operador, no terminal, também o retira.
 - A pessoa é avisada por e-mail a cada mudança do fator (ativado, removido, códigos novos), sem link.
 - A semente fica cifrada no banco, com a chave em `segredos/contas.chave`; os códigos de reserva e o bilhete do segundo passo ficam só como SHA-256. Remover a conta apaga o fator dela.
+- Os códigos de reserva têm 80 bits (`ABCD-EFGH-JKLM-NPQR`), e não os 50 da primeira versão: guardados como SHA-256 sem chave, 50 bits podiam ser percorridos a partir de uma cópia do banco. Não se usa HMAC com chave de arquivo porque a conferência do código de reserva não pode depender de arquivo que falte depois de uma restauração (ressalva R4 da revisão).
 - **Ainda não nesta parte:** a obrigação para dono e editor no `piloto` (a pendência `segundo_fator`), que entra num commit próprio porque muda todo cenário de teste do modo `piloto` e só pode ser integrada com a tela do Frontend.
 
 **Entrega 4a, teto por identificador, modo protegido e aparelho conhecido:** em `scripts/acesso.py` (`entrar`, `entrar_segundo_fator`) e no cookie `vlado_aparelho` de `scripts/rotas_contas.py`. Roda hoje `-p test_teto_entrada.py`. O comportamento é o da seção 8.2, com os números revistos pelo Revisor: 10 falhas em 1 hora, 1 hora de modo protegido, 20 aparelhos por conta e 20.000 contadores para identificadores sem conta. O que ela decide a mais:

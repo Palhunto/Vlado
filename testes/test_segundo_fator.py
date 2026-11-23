@@ -87,7 +87,9 @@ class ReservaTest(unittest.TestCase):
         codigos = fator.novos_codigos_de_reserva()
         self.assertEqual((len(codigos), len(set(codigos))), (10, 10))
         for codigo in codigos:
-            self.assertRegex(codigo, r'^[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}$')
+            self.assertRegex(codigo, r'^[A-HJ-NP-Z2-9]{4}(-[A-HJ-NP-Z2-9]{4}){3}$')
+            # 80 bits each: the store keeps a plain SHA-256, which a copy of it must not let anybody walk (R4).
+            self.assertGreaterEqual(len(codigo.replace('-', '')) * 5, 80)
         self.assertFalse(set(codigos) & set(fator.novos_codigos_de_reserva()))
 
     def test_o_que_a_pessoa_digita_vira_a_mesma_forma_e_o_armazenamento_guarda_so_o_resumo(self):
@@ -95,11 +97,12 @@ class ReservaTest(unittest.TestCase):
         resumo = fator.resumo_da_reserva(codigo)
         self.assertRegex(resumo, r'^[0-9a-f]{64}$')
         self.assertNotIn(codigo.replace('-', ''), resumo.upper())
-        for digitado in (codigo.lower(), codigo.replace('-', ''), f'  {codigo[:5]} {codigo[6:]} ', codigo.replace('-', ' - ')):
+        for digitado in (codigo.lower(), codigo.replace('-', ''), f'  {codigo[:4]} {codigo[5:]} ', codigo.replace('-', ' - ')):
             self.assertEqual(fator.resumo_da_reserva(digitado), resumo, digitado)
         outro = codigo[:-1] + ('A' if codigo[-1] != 'A' else 'B')
         self.assertNotEqual(fator.resumo_da_reserva(outro), resumo)
-        for invalido in ('', None, 'ABCDE-FGHJ', 'ABCDE-FGHJKL', 'ABCDE-FGHJ0', 'ABCDE-FGHJI', '287082', 5, 'A' * 41, ['x']):
+        for invalido in ('', None, 'ABCD-EFGH-JKLM-NPQ', 'ABCD-EFGH-JKLM-NPQRS', 'ABCD-EFGH-JKLM-NPQ0', 'ABCD-EFGH-JKLM-NPQI',
+                         'ABCDE-FGHJK', '287082', 5, 'A' * 41, ['x']):
             self.assertIsNone(fator.resumo_da_reserva(invalido), invalido)
 
 
