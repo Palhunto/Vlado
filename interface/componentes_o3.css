@@ -361,9 +361,10 @@ button[aria-disabled="true"]{cursor:progress}
 .conta-termos .conta-link:hover{color:var(--theme-primary-hover)}
 
 /* Pendência de termos novos (componentes.md#pendencia-termos; termos.js): a caixa de marcar de 20 px e o aviso da página, na família da pendência do fator */
-.termos-caixa{display:flex;gap:var(--espaco-2);align-items:flex-start;font-size:var(--text-base);line-height:1.5;cursor:pointer}
-.termos-caixa input{flex:none;width:20px;height:20px;margin:var(--espaco-1) 0 0;accent-color:var(--theme-accent)}
-.termos-caixa input[aria-invalid="true"]{outline:2px solid var(--theme-danger);outline-offset:2px}
+/* O label global é coluna e em negrito, e o input tem 44 px de altura mínima: a caixa de termos volta a ser linha, em peso normal, como a do convite (.entrar-termos) */
+.termos-pagina .termos-caixa{display:flex;flex-direction:row;gap:var(--espaco-3);align-items:flex-start;font-size:var(--text-base);font-weight:400;line-height:1.5;cursor:pointer}
+.termos-pagina .termos-caixa input{flex:none;width:var(--espaco-5);height:var(--espaco-5);min-height:0;margin:var(--espaco-1) 0 0;accent-color:var(--theme-accent)}
+.termos-pagina .termos-caixa input[aria-invalid="true"]{outline:2px solid var(--theme-danger);outline-offset:2px}
 .termos-erro,.termos-aviso{margin:0}
 .termos-erro[hidden],.termos-aviso[hidden],.termos-estado[hidden]{display:none}
 .termos-nao-aceitar{margin:0}
