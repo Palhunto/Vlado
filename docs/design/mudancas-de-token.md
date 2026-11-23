@@ -395,6 +395,10 @@ Razão de contraste WCAG 2.x (luminância relativa), calculada por `referencia/f
 | E44 ícone branco sobre a esmeralda, no escuro | 2,97:1 | A especificação usa traço escuro no escuro (E46, 5,50:1). |
 | E51 divisória sobre o fundo, no escuro | 1,81:1 | Divisória decorativa. Não exigido. |
 
+## 13. Texto de controle desabilitado: `--theme-disabled-text`
+
+*(22/11/2026, R2 da pré-entrega da Onda 3.)* No escuro, o botão desabilitado usava `--theme-muted` (`#a8b3a9`, 8,36:1 sobre `--theme-sidebar`) e parecia habilitado. O token novo `--theme-disabled-text` vale `--vlado-tinta-600` no claro, igual a `--theme-muted`, e `--vlado-tinta-500` (`#74837a`) no escuro: 4,55:1 sobre `--theme-sidebar`, contra 14,87:1 do texto habilitado. Controle desabilitado não tem piso de contraste no WCAG; aqui a medida serve para mostrar que ele fica legível e se distingue do habilitado. Aplicado pelo Frontend em `ccbd4a9` (`lancamento/frontend-o3`) e aceito pelo Design. Mudança em `tokens.css` passa pelo Design antes do commit.
+
 ## Ordem de aplicação (fase futura)
 
 1. QA entrega as capturas de regressão em 375, 768, 1024 e 1440 px nos dois temas.
