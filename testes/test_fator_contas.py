@@ -54,7 +54,11 @@ class ArmazenamentoTest(test_acesso.DuasRedacoes):
         self.assertEqual(acesso.ver_conta(self.root, self.rep_a)['segundo_fator'],
                          {'ativo': False, 'ativado_em': None, 'codigos_restantes': 0})  # nothing changed yet
         self.assertEqual(acesso.entrar(self.root, 'rep.a', SENHA)[2]['id'], self.rep_a)
-        for errado in ('000000', '', None, 'abcdef'):
+        for ausente in ('', None, '   '):  # no code is not a wrong code: asked for, and nothing counted
+            with self.assertRaises(acesso.CodigoNecessario):
+                acesso.confirmar_fator(self.root, self.rep_a, ausente)
+        self.assertEqual(self.linhas("SELECT 1 FROM tentativas WHERE chave LIKE '#fator|%'"), [])
+        for errado in ('000000', 'abcdef'):
             with self.assertRaises(acesso.CodigoInvalido):
                 acesso.confirmar_fator(self.root, self.rep_a, errado)
         codigos = acesso.confirmar_fator(self.root, self.rep_a, codigo_de(inicio['segredo']))
@@ -159,8 +163,10 @@ class ArmazenamentoTest(test_acesso.DuasRedacoes):
 
     def test_trocar_de_aparelho_pede_o_fator_atual_e_remover_pede_a_senha(self):
         segredo, reserva = cadastrar(self.root, self.rep_a)
-        with self.assertRaises(acesso.CodigoInvalido):
+        with self.assertRaises(acesso.CodigoNecessario):
             acesso.iniciar_fator(self.root, self.rep_a, SENHA)  # a session and the password are not enough for a new phone
+        with self.assertRaises(acesso.CodigoInvalido):
+            acesso.iniciar_fator(self.root, self.rep_a, SENHA, '000000')
         novo = acesso.iniciar_fator(self.root, self.rep_a, SENHA, reserva[0])['segredo']
         self.assertNotEqual(novo, segredo)
         self.assertIsNone(acesso.exigir_codigo(self.root, self.rep_a, reserva[1]))  # the old factor goes on until the new one is confirmed
@@ -201,9 +207,20 @@ class RedefinicaoComFatorTest(test_acesso.DuasRedacoes):
 
     def test_redefinir_por_email_pede_tambem_o_codigo(self):
         token, _ = acesso.pedir_redefinicao(self.root, 'pessoa@exemplo.test')
-        for codigo in (None, '', '000000'):
+        # The page asks first without a code. That is not a wrong code (reservation S1 of the review): the answer
+        # asks for it, nothing is counted and nothing goes to the audit log.
+        with test_acesso.patch.object(acesso.registro_acesso, 'registrar') as registrar:
+            for ausente in (None, '', '  '):
+                with self.assertRaises(acesso.CodigoNecessario) as pedido:
+                    acesso.redefinir_senha(self.root, token, NOVA, ausente)  # the mailbox alone is not enough
+                self.assertEqual((pedido.exception.status, pedido.exception.codigo), (403, 'fator_necessario'))
+        self.assertNotIn('fator_recusado', [c.args[0] for c in registrar.call_args_list])
+        self.assertEqual(self.linhas("SELECT 1 FROM tentativas WHERE chave LIKE '#fator|%'"), [])
+        with test_acesso.patch.object(acesso.registro_acesso, 'registrar') as registrar:
             with self.assertRaises(acesso.CodigoInvalido):
-                acesso.redefinir_senha(self.root, token, NOVA, codigo)  # the mailbox alone is not enough
+                acesso.redefinir_senha(self.root, token, NOVA, '000000')  # a code that came and is wrong: counted and recorded
+        self.assertEqual([c.args[0] for c in registrar.call_args_list].count('fator_recusado'), 1)
+        self.assertEqual(self.linhas("SELECT falhas FROM tentativas WHERE chave LIKE '#fator|%'"), [{'falhas': 1}])
         with self.assertRaises(acesso.PedeSegundoFator):
             acesso.entrar(self.root, 'pessoa@exemplo.test', SENHA)  # the password is still the old one
         self.assertEqual(acesso.redefinir_senha(self.root, token, NOVA, self.reserva[0])['id'], self.pessoa_a)
@@ -211,6 +228,15 @@ class RedefinicaoComFatorTest(test_acesso.DuasRedacoes):
             acesso.entrar(self.root, 'pessoa@exemplo.test', NOVA)  # the factor stays
         with self.assertRaises(acesso.CredenciaisInvalidas):
             acesso.entrar(self.root, 'pessoa@exemplo.test', SENHA)
+
+    def test_conta_sem_fator_redefine_sem_codigo_e_nada_e_registrado_como_recusa(self):
+        _, token, _ = acesso.convidar(self.root, self.a, self.dono_a, 'semfator@exemplo.test', 'leitor', [])
+        acesso.aceitar_convite(self.root, token, 'Sem Fator', SENHA)
+        token, _ = acesso.pedir_redefinicao(self.root, 'semfator@exemplo.test')
+        with test_acesso.patch.object(acesso.registro_acesso, 'registrar') as registrar:
+            self.assertEqual(acesso.redefinir_senha(self.root, token, NOVA)['email'], 'semfator@exemplo.test')
+        self.assertNotIn('fator_recusado', [c.args[0] for c in registrar.call_args_list])
+        self.assertEqual(self.linhas("SELECT 1 FROM tentativas WHERE chave LIKE '#fator|%'"), [])
 
     def test_recuperacao_pelo_operador_no_terminal_tambem_tira_o_fator(self):
         _, token = acesso.recuperar(self.root, self.pessoa_a, por='cli')
@@ -273,6 +299,9 @@ class ServidorTest(cenario.DuasRedacoes):
         self.assertIn('Max-Age=300', cookie)
         bilhete = cookie.split(';')[0]
         self.assertEqual(self.post((bilhete.replace('vlado_passo2', 'vlado_sessao'), 'x'), 'codex-status', {})[0], 401)  # not a session
+        for ausente in ({}, {'codigo': ''}) * 4:  # no code: asked for, as often as it takes, and the ticket is not spent
+            pedido = self.publico('entrar-segundo-fator', ausente, bilhete)
+            self.assertEqual((pedido[0], pedido[1]['codigo']), (403, 'fator_necessario'))
         errado = self.publico('entrar-segundo-fator', {'codigo': '000000'}, bilhete)
         self.assertEqual((errado[0], errado[1]['codigo']), (403, 'codigo_invalido'))
         sem_bilhete = self.publico('entrar-segundo-fator', {'codigo': reserva[0]})
@@ -299,7 +328,7 @@ class ServidorTest(cenario.DuasRedacoes):
     def test_codigos_novos_e_redefinicao_de_senha_com_o_codigo(self):
         segredo, reserva = self.cadastrar()
         sem_codigo = self.post(self.sessao, 'conta-fator-codigos', {'senha': SENHA})
-        self.assertEqual((sem_codigo[0], sem_codigo[1].get('codigo')), (403, 'codigo_invalido'))
+        self.assertEqual((sem_codigo[0], sem_codigo[1].get('codigo')), (403, 'fator_necessario'))
         status, corpo, _ = self.post(self.sessao, 'conta-fator-codigos', {'senha': SENHA, 'codigo': reserva[0]})
         self.assertEqual((status, corpo['estado'], len(corpo['codigos_de_reserva'])), (200, 'codigos_gerados', 10))
         novos = corpo['codigos_de_reserva']
@@ -307,7 +336,9 @@ class ServidorTest(cenario.DuasRedacoes):
             self.publico('senha-esqueci', {'email': self.email})
             correio.aguardar()
         token = [m for m in correio.caixa() if m['tipo'] == 'redefinicao'][0]['link'].rsplit('/', 1)[1]
-        for codigo in ({}, {'codigo': reserva[1]}, {'codigo': '000000'}):  # none, an old reserve code, a wrong one
+        pedido = self.publico('senha-redefinir', {'token': token, 'senha': NOVA})  # the page learns the account has a factor
+        self.assertEqual((pedido[0], pedido[1]['codigo']), (403, 'fator_necessario'))
+        for codigo in ({'codigo': reserva[1]}, {'codigo': '000000'}):  # an old reserve code, a wrong one
             recusa = self.publico('senha-redefinir', {'token': token, 'senha': NOVA, **codigo})
             self.assertEqual((recusa[0], recusa[1]['codigo']), (403, 'codigo_invalido'), codigo)
         self.assertEqual(self.publico('senha-redefinir', {'token': token, 'senha': NOVA, 'codigo': novos[0]})[0], 200)

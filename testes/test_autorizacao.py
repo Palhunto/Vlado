@@ -259,7 +259,9 @@ class AtivacaoTest(Http):
         self.assertEqual(self.publico('ativar', {'token': token, 'senha': 'curta'})[0], 400)
         status, headers, body = self.publico('ativar', {'token': token, 'senha': SENHA})
         self.assertEqual(status, 200, body)
-        self.assertNotIn('Set-Cookie', headers)
+        # No session; the only cookie is the mark of the browser that used the link (contract, 8.2: known device).
+        self.assertTrue(headers['Set-Cookie'].startswith('vlado_aparelho='))
+        self.assertNotIn('vlado_sessao', headers['Set-Cookie'])
         status, _, body = self.publico('ativar', {'token': token, 'senha': SENHA})
         self.assertEqual((status, body['codigo']), (400, 'ativacao_invalida'))
         self.assertEqual(self.publico('ativacao-consultar', {'token': token})[0], 400)

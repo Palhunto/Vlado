@@ -613,13 +613,20 @@ Esta seção fixa comportamento, não implementação.
   - Acrescenta-se um teto por identificador, somando todos os endereços: 10 falhas em 1 hora põem o identificador em modo protegido por 1 hora.
   - No modo protegido, toda tentativa recebe o mesmo 429, com o corpo `bloqueado` de hoje, haja ou não conta com aquele identificador. Quem manda 11 senhas erradas de dois endereços recebe a mesma sequência de respostas para um e-mail com conta e para um e-mail sem conta.
   - A única tentativa que atravessa o modo protegido é a que traz a marca de um aparelho que aquela conta já usou. Um identificador sem conta não tem aparelho conhecido, e quem ataca uma conta alheia não tem a marca dela: para ele os dois casos são iguais.
-  - O contador de um identificador sem conta é guardado e vence como o de uma conta: some quando o prazo acaba e nunca é despejado antes. Quem limita o crescimento da tabela é o teto por endereço (20 tentativas por minuto).
+  - A marca não desliga a contagem. A tentativa com marca conhecida conta num contador próprio daquela marca para aquela conta: cinco falhas a bloqueiam por 15 minutos, e enquanto isso ela vale como marca desconhecida.
+  - Uma tentativa feita durante o modo protegido não conta e não estende o prazo. A recusa sai sem conta de senha para ninguém, e por isso no mesmo tempo, com conta e sem conta.
+  - A entrada bem-sucedida do dono da conta não zera o contador do identificador: ele vence sozinho, e quem ataca não ganha fôlego novo a cada entrada da vítima.
+  - Nenhum contador sai antes do prazo. O de um identificador com conta é exato e dura a janela de uma hora. Os de identificadores sem conta ficam numa tabela de tamanho fixo, de 20.000 contadores, escolhidos por um HMAC do identificador com uma chave do servidor (segunda ressalva de P28, na forma revista pelo Revisor em 22/11/2026): todo identificador tem sempre um contador, a tabela não cresce e não existe estado "cheio" que diga algo a alguém. Dois identificadores sem conta podem cair no mesmo contador e herdar um o modo protegido do outro, o que não conta nada a ninguém. Identificador fora do formato de e-mail ou de login não cria contador.
   - O hash de senha continua sendo calculado para identificador sem conta, como hoje, para o tempo de resposta não distinguir os dois casos.
   - O e-mail de aviso de muitas tentativas só sai quando a conta existe, e quem ataca não o vê.
   - As falhas do código do segundo fator contam no mesmo teto. Elas só acontecem depois da senha certa, quando a existência da conta já não é segredo para quem tenta.
 
   Um bloqueio total permitiria a qualquer pessoa trancar o dono fora sabendo o e-mail dele; o modo protegido para a força bruta distribuída sem dar esse poder.
-- **Aparelho conhecido:** um cookie próprio, aleatório e de longa duração, cujo hash fica na conta. Serve ao modo protegido e ao aviso de novo acesso.
+- **Aparelho conhecido:** um cookie próprio (`vlado_aparelho`), aleatório, de um ano, `HttpOnly`, `SameSite=Lax`, `Path=/` e `Secure` no `piloto`, cujo hash fica na conta. Serve ao modo protegido e ao aviso de novo acesso.
+  - Só é posto no que prova quem a pessoa é: uma entrada que deu certo (depois do segundo passo, quando há) ou um link que só ela recebe. Uma recusa nunca o põe.
+  - A saída de quem foi trancado: usar o link de `senha-redefinir`, de `convite-aceitar` ou de `ativar` marca aquele navegador como aparelho conhecido da conta. Quem sabe o e-mail de alguém consegue manter a conta em modo protegido; o dono da caixa de e-mail sempre consegue entrar.
+  - Trocar ou redefinir a senha (`conta-senha-trocar`, `senha-redefinir`, inclusive pelo link de recuperação) esquece todos os aparelhos conhecidos da conta, menos o navegador que fez a ação: se a conta foi invadida, o aparelho do invasor tinha virado conhecido na entrada dele.
+  - Cada conta guarda até 20 aparelhos; passando disso, sai o usado há mais tempo.
 - **Recuperação entre administradores, com dupla confirmação.** Recuperar encerra as sessões, invalida senha e segundo fator e manda à pessoa um link para refazer os dois. Sempre há duas partes:
   - Alvo que não é dono: o dono pede e a própria pessoa confirma pelo link, que só ela recebe.
   - Alvo que é dono: outro dono pede e um terceiro dono confirma (`equipe-recuperar-confirmar`). Sem terceiro dono, quem confirma é o operador, pelo terminal.
@@ -689,7 +696,7 @@ O mesmo cuidado vale para todo texto que uma conta escreve e outra lê: nome de 
 
 ## 10. O que muda para os outros agentes
 
-**Arquivos de Contas** (escreve só neles): `scripts/acesso.py`, `scripts/rotas_contas.py`, os demais `scripts/rotas_*.py` e `scripts/interface_pesquisa.py` (nesta onda, pela tabela "Quem escreve onde"), e os módulos novos `scripts/autorizacao.py`, `scripts/correio.py`, `scripts/segundo_fator.py` e `scripts/rotas_equipe.py`. Testes em arquivos novos (`test_matriz_contas.py`, `test_isolamento_redacoes.py`, `test_migracao_contas.py`, `test_convites.py`, `test_redefinicao_senha.py`, `test_recuperacao.py`, `test_segundo_fator.py`, `test_fator_contas.py`, `test_sessoes_conta.py`, `test_equipe.py`, `test_ciclo_conta.py`, `test_correio.py`), mais `test_acesso.py` e `test_autorizacao.py`, que são de autorização.
+**Arquivos de Contas** (escreve só neles): `scripts/acesso.py`, `scripts/rotas_contas.py`, os demais `scripts/rotas_*.py` e `scripts/interface_pesquisa.py` (nesta onda, pela tabela "Quem escreve onde"), e os módulos novos `scripts/autorizacao.py`, `scripts/correio.py`, `scripts/segundo_fator.py` e `scripts/rotas_equipe.py`. Testes em arquivos novos (`test_matriz_contas.py`, `test_isolamento_redacoes.py`, `test_migracao_contas.py`, `test_convites.py`, `test_redefinicao_senha.py`, `test_recuperacao.py`, `test_segundo_fator.py`, `test_fator_contas.py`, `test_teto_entrada.py`, `test_sessoes_conta.py`, `test_equipe.py`, `test_ciclo_conta.py`, `test_correio.py`), mais `test_acesso.py` e `test_autorizacao.py`, que são de autorização.
 
 **Pedidos, um por dono de arquivo. Nenhum é feito por Contas sem o aval do Maestro.**
 
@@ -807,13 +814,22 @@ Do que a entrega 3 decide, além do texto da seção 8.1:
 
 - O cadastro tem dois tempos. `conta-fator-iniciar {senha}` devolve a semente uma vez, como texto (`segredo`) e como endereço `otpauth://`; nada muda até `conta-fator-confirmar {codigo}` provar que o aplicativo a tem, o que devolve os dez códigos de reserva, mostrados uma vez. Um cadastro não confirmado em 15 minutos recomeça. Quem já tem o fator e troca de aparelho manda também um código do fator atual (ou um de reserva) em `conta-fator-iniciar`; o fator antigo vale até o novo ser confirmado.
 - `conta-fator-codigos {senha, codigo}` gera dez códigos novos e os antigos param de valer. `conta-fator-remover {senha}` é negada a dono e editor pela matriz.
-- Um código errado responde 403 `codigo_invalido` e conta: cinco seguidos bloqueiam por 15 minutos o segundo fator daquela conta nas operações que o pedem (429), num contador separado do da senha de confirmação e do da entrada.
+- Um código que não veio não é um código errado: a resposta é 403 `fator_necessario`, nada conta e nada vai ao registro. A página de redefinir a senha, que não sabe se a conta tem o fator, pode perguntar primeiro sem ele. Vale em `senha-redefinir`, `conta-fator-iniciar` (com o fator ativo), `conta-fator-confirmar`, `conta-fator-codigos` e `entrar-segundo-fator`, onde o bilhete também não é gasto.
+- Um código enviado e errado responde 403 `codigo_invalido` e conta: cinco seguidos bloqueiam por 15 minutos o segundo fator daquela conta nas operações que o pedem (429), num contador separado do da senha de confirmação e do da entrada.
 - Entrada: com a senha certa numa conta que tem o fator, `entrar` responde `{estado: "segundo_fator"}` sem abrir sessão e manda o bilhete do segundo passo num cookie próprio (`vlado_passo2`, `HttpOnly`, 5 minutos), que não é uma sessão e só serve a `entrar-segundo-fator {codigo}`. Código do aplicativo ou de reserva; resposta igual à de `entrar`. Bilhete desconhecido, vencido, já usado ou morto por cinco códigos errados responde 401 `entrada_expirada`. Os códigos errados contam também no contador de tentativas da entrada daquele identificador e endereço.
 - Nem o código do aplicativo nem o de reserva vale duas vezes: o armazenamento guarda o último passo aceito e a data de uso de cada código de reserva.
 - `senha-redefinir` de conta com o fator pede também `codigo` (403 `codigo_invalido` sem ele). O link de recuperação pedido por um dono (seção 8.2) não pede: ele retira o fator, que a pessoa cadastra de novo. A recuperação feita pelo operador, no terminal, também o retira.
 - A pessoa é avisada por e-mail a cada mudança do fator (ativado, removido, códigos novos), sem link.
 - A semente fica cifrada no banco, com a chave em `segredos/contas.chave`; os códigos de reserva e o bilhete do segundo passo ficam só como SHA-256. Remover a conta apaga o fator dela.
-- **Ainda não nesta parte:** a obrigação para dono e editor no `piloto` (a pendência `segundo_fator`), que entra num commit próprio porque muda todo cenário de teste do modo `piloto` e só pode ser integrada com a tela do Frontend; o teto por identificador com o modo protegido e o aparelho conhecido; e o teto global dos contadores sem conta (segunda ressalva de P28).
+- **Ainda não nesta parte:** a obrigação para dono e editor no `piloto` (a pendência `segundo_fator`), que entra num commit próprio porque muda todo cenário de teste do modo `piloto` e só pode ser integrada com a tela do Frontend.
+
+**Entrega 4a, teto por identificador, modo protegido e aparelho conhecido:** em `scripts/acesso.py` (`entrar`, `entrar_segundo_fator`) e no cookie `vlado_aparelho` de `scripts/rotas_contas.py`. Roda hoje `-p test_teto_entrada.py`. O comportamento é o da seção 8.2, com os números revistos pelo Revisor: 10 falhas em 1 hora, 1 hora de modo protegido, 20 aparelhos por conta e 20.000 contadores para identificadores sem conta. O que ela decide a mais:
+
+- Os códigos errados do segundo passo da entrada contam no mesmo teto do identificador que as senhas erradas.
+- O modo protegido de uma conta vira o evento `login_protegido` na atividade da redação; o de um identificador sem conta vai só ao registro de auditoria, com a referência do identificador e nunca o texto.
+- A entrada de um aparelho que a conta nunca usou grava `aparelho_novo` na atividade, sem endereço, e avisa a pessoa no e-mail da conta (W08, regra 6). O primeiro aparelho de uma conta não gera aviso.
+- A resposta de `senha-redefinir` e de `ativar` passa a pôr o cookie do aparelho; a de `entrar`, `entrar-segundo-fator` e `convite-aceitar` põe a sessão e o aparelho.
+- Remover a conta, ou recuperá-la pelo terminal, esquece os aparelhos dela.
 
 **O que ainda não existe,** e onde o código difere do texto até lá:
 
@@ -823,7 +839,6 @@ Do que a entrega 3 decide, além do texto da seção 8.1:
 - A página (`GET /`), `GET /api/sessao` e `GET /api/integracao` também passam pelo portão: de uma redação suspensa, respondem 403 `redacao_suspensa` (a página, um aviso simples, sem dado nem token).
 - `data-papel` leva `admin` para o dono enquanto a interface não conhece os papéis novos; os outros papéis vão com o próprio nome. `GET /api/sessao` já devolve os valores novos e `capacidades`.
 - `pendencias` sai sempre vazia: segundo fator e termos entram com a seção 8.
-- Tentativas de entrada: vale o bloqueio por identificador e endereço de hoje. O teto por identificador, o modo protegido e o aparelho conhecido (seção 8.2) entram com a entrada em dois passos.
 - `lixeira-apagar` e `ia-config-salvar` ainda não pedem a senha (seção 5.15). As telas de hoje não a mandam, e pedir só no servidor deixaria o dono sem apagar de vez e sem gravar a chave. O pedido entra junto com o campo na interface, na mesma integração.
 - Chave de IA: numa instalação `piloto` com mais de uma redação, `ia-config-salvar` é recusada a todos e `ia-config` não mostra os quatro últimos caracteres da chave do serviço, até a chave própria de cada redação existir (seção 8.5).
 - O registro de auditoria descarta os códigos, motivos, papéis e eventos novos até as listas fechadas de `registro_acesso.py` os receberem (pedido à Plataforma, seção 10, em andamento). O portão já grava a recusa como `acesso_negado`, com código, motivo e o id da redação (seção 4.3); enquanto a lista da Plataforma não tiver esse evento, a linha não sai. As duas mudanças precisam entrar juntas na integração.

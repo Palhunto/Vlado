@@ -598,7 +598,8 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             # One year, subdomains included; no `preload` (hard to undo: see deploy/MONITORAMENTO.md).
             self.send_header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
         for key, value in (extra or {}).items():
-            self.send_header(key, value)
+            for cada in (value if isinstance(value, (list, tuple)) else (value,)):  # more than one Set-Cookie
+                self.send_header(key, cada)
         baixando = status == 200 and str((extra or {}).get('Content-Disposition', '')).startswith('attachment')
         try:
             self.end_headers()

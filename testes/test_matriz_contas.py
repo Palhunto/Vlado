@@ -243,10 +243,10 @@ class CelulasTest(cenario.DuasRedacoes):
             else:  # an item of the trash out of reach: the answer to an item that does not exist, byte for byte
                 self.assertEqual((status, bruto), inexistente[pedido.operacao], bruto[:200])
         else:
-            # The gate let it through. A sensitive operation may still ask the password of who does it: that is
-            # not a refusal of the role, and has its own code.
+            # The gate let it through. A sensitive operation may still ask the password of who does it, or the
+            # code of the second factor: that is not a refusal of the role, and each has its own code.
             self.assertNotIn(status, (401, 404, 500, 503), bruto[:200])
-            self.assertTrue(status != 403 or codigo == 'senha_necessaria', bruto[:200])
+            self.assertTrue(status != 403 or codigo in ('senha_necessaria', 'fator_necessario'), bruto[:200])
             self.assertNotIn(codigo, ('caso_indisponivel', 'conversa_indisponivel', 'operacao_proibida'), bruto[:200])
             self.assertNotIn('não liberada', str(corpo.get('erro')))
             if pedido.alcance == 'item':

@@ -112,6 +112,15 @@ MODELOS = {
         'en': ('The e-mail of your Vlado account was changed',
                'The e-mail of your Vlado account was changed to another address, and this one no longer signs in.\n\n'
                'If it was not you, tell whoever runs your newsroom now.\n')}),
+    'novo_acesso': ('novo_acesso', {
+        'pt': ('Novo acesso à sua conta no Vlado',
+               'A sua conta no Vlado acaba de ser acessada de um aparelho que ela ainda não tinha usado: {aparelho}.\n\n'
+               'Se foi você, não precisa fazer nada. Se não foi, troque a sua senha agora e avise quem administra a sua '
+               'redação.\n'),
+        'en': ('New sign-in to your Vlado account',
+               'Your Vlado account has just been signed in from a device it had not used before: {aparelho}.\n\n'
+               'If it was you, there is nothing to do. If it was not, change your password now and tell whoever runs '
+               'your newsroom.\n')}),
     'fator_alterado': ('fator_alterado', {
         'pt': ('O segundo fator da sua conta no Vlado foi alterado',
                'O segundo fator da sua conta no Vlado (o aplicativo autenticador ou os códigos de reserva) acaba de ser '
