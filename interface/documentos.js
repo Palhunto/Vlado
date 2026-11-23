@@ -143,14 +143,14 @@
 
   // Envio por arquivo para a apuração escolhida. Sem o envio em fluxo no servidor, o caminho é a tela de Nova apuração (envio em JSON).
   let ocupado = false;
-  async function enviar(arquivos, {caso, escopo, alvo, alvoRecibo, aoConcluir, aoIndisponivel, aoCriar}) {
+  async function enviar(arquivos, {caso, escopo, alvo, alvoRecibo, aoConcluir, aoIndisponivel, aoCriar, aoTerminar}) {
     if (ocupado) return null;
     ocupado = true;   // antes de qualquer espera: um segundo clique durante a consulta ao servidor não manda o lote duas vezes
     try {
       if (!window.Envio || !(await window.Envio.disponivel())) { aoIndisponivel?.(arquivos); return null; }
       // Sem "natureza": o servidor usa a que a apuração já tem.
       // `escopo` é da Nova apuração (novo: true, sem caso: o servidor escolhe o identificador); sem ele, o envio vai à apuração escolhida.
-      const resultado = await window.Envio.enviar({escopo: escopo || {novo: false, caso}, arquivos, alvo, alvoRecibo, aoCriar});
+      const resultado = await window.Envio.enviar({escopo: escopo || {novo: false, caso}, arquivos, alvo, alvoRecibo, aoCriar, aoTerminar});
       if (resultado.recebidos) { window.Envio.renderRecibo(alvoRecibo, resultado); await aoConcluir?.(resultado); }
       return resultado;
     } finally { ocupado = false; }

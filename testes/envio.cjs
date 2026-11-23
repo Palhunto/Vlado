@@ -235,6 +235,7 @@ async function abrirCadastro({fluxo}) {
     constructor() { this.ouvintes = {}; this.upload = {addEventListener() {}}; pedidos.push(this); }
     open() {} setRequestHeader() {} addEventListener(tipo, f) { this.ouvintes[tipo] = f; } send(corpo) { this.corpo = corpo; }
     responder(status, corpo) { this.status = status; this.responseText = JSON.stringify(corpo); this.ouvintes.load(); }
+    falharRede() { this.ouvintes.error(); }
   }
   const lote = {lote: 'L1', caso: 'alfa', estado: 'publicado', recibo: {recebidos: 2, novos: 2, duplicados: 0, corpus_id: 'c1'},
     arquivos: [{indice: 0, estado: 'pronto', extracao: 'extraido', paginas: 4}, {indice: 1, estado: 'pronto', extracao: 'sem_texto'}]};
@@ -472,7 +473,7 @@ test('se o servidor diz que a apuração nova não existe, o envio para e avisa:
   aceitar(mesa, 0, 'L1');
   await livre(mesa); await livre(mesa); await livre(mesa);
   assert.equal(mesa.pedidos.length, 2);
-  mesa.pedidos[1].responder(404, {estado: 'erro', erro: 'Caso não encontrado.'});
+  mesa.pedidos[1].responder(400, {estado: 'erro', erro: 'Caso inexistente; não cadastrar em outro caso automaticamente.'});
   const final = await promessa;
   assert.equal(mesa.pedidos.length, 2, 'o terceiro lote não foi enviado');
   assert.ok(final.erro, 'o resultado traz o erro');
@@ -480,4 +481,120 @@ test('se o servidor diz que a apuração nova não existe, o envio para e avisa:
   assert.match(resultado(segunda), /A apuração nova não foi criada: o primeiro envio não terminou\. Envie de novo\./);
   assert.match(resultado(terceira), /A apuração nova não foi criada/);
   assert.equal(final.recebidos, 0); assert.equal(final.pendentes, 3);
+});
+
+// --- P37 (decisão do dono, segunda rodada da Coruja) ---------------------------------------------------------------------------------------------
+const AVISO_INCERTO = 'Não sabemos se a apuração foi criada: a resposta do servidor não chegou. Confira a apuração na Visão geral antes de enviar de novo.';
+
+test('R1: o pedido do primeiro lote termina em erro de rede ou 502: para os lotes seguintes e avisa para conferir a Visão geral', async () => {
+  for (const falhar of [pedido => pedido.falharRede(), pedido => pedido.responder(502, {})]) {
+    const mesa = abrir();
+    const promessa = mesa.janela.Envio.enviar({escopo: {novo: true, titulo: 'T'}, arquivos: [arquivo('a.pdf', 40 * MB), arquivo('b.pdf', 40 * MB), arquivo('c.pdf', 40 * MB)], alvo: mesa.$('alvo')});
+    await livre(mesa);
+    falhar(mesa.pedidos[0]);
+    const final = await promessa;
+    assert.equal(mesa.pedidos.length, 1, 'nenhum lote seguinte foi enviado');
+    assert.equal(final.incerto, true); assert.equal(final.aviso_incerto, AVISO_INCERTO); assert.equal(final.recebidos, 0);
+    for (const linha of linhas(mesa)) assert.match(resultado(linha), /Não sabemos se a apuração foi criada/);
+    assert.equal(final.pendentes, 3);
+  }
+});
+
+test('R1 só vale para o PRIMEIRO lote de uma apuração nova: depois de aceito, um erro de rede no segundo não para os demais; e 503 (recusa clara) não é incerto', async () => {
+  const mesa = abrir({fila: id => ({lote: id, caso: CASO_DO_SERVIDOR, estado: 'publicado', recibo: {recebidos: 1, novos: 1, duplicados: 0}, arquivos: [{indice: 0, estado: 'pronto', extracao: 'extraido'}]})});
+  const promessa = mesa.janela.Envio.enviar({escopo: {novo: true, titulo: 'T'}, arquivos: [arquivo('a.pdf', 40 * MB), arquivo('b.pdf', 40 * MB), arquivo('c.pdf', 40 * MB)], alvo: mesa.$('alvo')});
+  await livre(mesa);
+  aceitar(mesa, 0, 'L1');
+  await livre(mesa); await livre(mesa); await livre(mesa);
+  mesa.pedidos[1].falharRede();
+  await livre(mesa); await livre(mesa);
+  assert.equal(mesa.pedidos.length, 3, 'o terceiro lote segue: a apuração já existe');
+  aceitar(mesa, 2, 'L3');
+  const final = await promessa;
+  assert.notEqual(final.incerto, true); assert.equal(final.lotes.length, 2);
+  const recusado = abrir();
+  const outra = recusado.janela.Envio.enviar({escopo: {novo: true, titulo: 'T'}, arquivos: [arquivo('a.pdf', 40 * MB), arquivo('b.pdf', 40 * MB)], alvo: recusado.$('alvo')});
+  await livre(recusado);
+  recusado.pedidos[0].responder(503, {});
+  await livre(recusado); await livre(recusado);
+  assert.equal(recusado.pedidos.length, 2, 'uma recusa clara do servidor não é "não sabemos": os outros lotes seguem');
+  recusado.pedidos[1].responder(503, {});
+  assert.notEqual((await outra).incerto, true, 'duas recusas claras: nunca houve dúvida sobre a apuração');
+});
+
+test('R2: o aviso "A apuração nova não foi criada" só aparece para a recusa que diz isso, não para qualquer 400', async () => {
+  const mesa = abrir({fila: id => ({lote: id, caso: CASO_DO_SERVIDOR, estado: 'falha', motivo: 'x', arquivos: []})});
+  const promessa = mesa.janela.Envio.enviar({escopo: {novo: true, titulo: 'T'}, arquivos: [arquivo('a.pdf', 40 * MB), arquivo('b.pdf', 40 * MB), arquivo('c.pdf', 40 * MB)], alvo: mesa.$('alvo')});
+  await livre(mesa);
+  aceitar(mesa, 0, 'L1');
+  await livre(mesa); await livre(mesa); await livre(mesa);
+  mesa.pedidos[1].responder(400, {estado: 'erro', erro: 'O nome do arquivo tem caracteres que a Mesa não aceita.'});   // outro 400
+  await livre(mesa); await livre(mesa);
+  assert.equal(mesa.pedidos.length, 3, 'o terceiro lote segue: esse 400 não diz que a apuração não existe');
+  const [, segunda] = linhas(mesa);
+  assert.doesNotMatch(resultado(segunda), /A apuração nova não foi criada/); assert.match(resultado(segunda), /O nome do arquivo tem caracteres/);
+  aceitar(mesa, 2, 'L3');
+  const final = await promessa;
+  assert.notEqual(final.incerto, true);
+  // e a recusa que diz isso, por código ou por texto, para o envio
+  for (const corpo of [{estado: 'erro', erro: 'Caso inexistente; não cadastrar em outro caso automaticamente.'}, {estado: 'indisponivel', codigo: 'caso_indisponivel', erro: 'Apuração indisponível para esta conta.'}]) {
+    const outro = abrir({fila: id => ({lote: id, caso: CASO_DO_SERVIDOR, estado: 'falha', motivo: 'x', arquivos: []})});
+    const envio = outro.janela.Envio.enviar({escopo: {novo: true, titulo: 'T'}, arquivos: [arquivo('a.pdf', 40 * MB), arquivo('b.pdf', 40 * MB), arquivo('c.pdf', 40 * MB)], alvo: outro.$('alvo')});
+    await livre(outro); aceitar(outro, 0, 'L1');
+    await livre(outro); await livre(outro); await livre(outro);
+    outro.pedidos[1].responder(corpo.codigo ? 404 : 400, corpo);
+    await envio;
+    assert.equal(outro.pedidos.length, 2, JSON.stringify(corpo));
+    assert.match(resultado(linhas(outro)[2]), /A apuração nova não foi criada/);
+  }
+});
+
+test('R3, Nova apuração: depois de um envio sem nada recebido e sem saber se a apuração nasceu, um reenvio pede confirmação com o aviso; cancelar não envia', async () => {
+  const {criarMesa: criar, Evento} = require('./dom_minimo.cjs');
+  const pedidos = [];
+  class XHR {
+    constructor() { this.ouvintes = {}; this.upload = {addEventListener() {}}; pedidos.push(this); }
+    open() {} setRequestHeader() {} addEventListener(tipo, f) { this.ouvintes[tipo] = f; } send(corpo) { this.corpo = corpo; }
+    falharRede() { this.ouvintes.error(); }
+  }
+  const mesa = criar({catalogo: [], api: () => ({}), preparar: janela => {
+    janela.XMLHttpRequest = XHR; janela.TextEncoder = TextEncoder;
+    const original = janela.fetch;
+    janela.fetch = async (endereco, opcoes) => (String(endereco) === '/api/integracao' ? {ok: true, json: async () => ({envio_fluxo: true})} : original(endereco, opcoes));
+  }});
+  await mesa.esperar(12);
+  mesa.$('inicio-nova').click(); await mesa.esperar(3);
+  mesa.$('nova-nome').value = 'Obra';
+  mesa.$('nova-form').dispatchEvent(new Evento('submit', {bubbles: true, cancelable: true})); await mesa.esperar(4);
+  const soltar = async () => { const e = new Evento('drop', {bubbles: true, cancelable: true}); e.dataTransfer = {files: [{name: 'a.pdf', size: 500}]}; mesa.$('documentos-zona').dispatchEvent(e); await mesa.esperar(8); };
+  await soltar();
+  assert.equal(pedidos.length, 1);
+  pedidos[0].falharRede(); await mesa.esperar(12);
+  assert.equal(mesa.$('nova-incerto').hidden, false, 'o aviso fica na tela');
+  assert.equal(mesa.$('nova-incerto').textContent, AVISO_INCERTO);
+  assert.equal(mesa.janela.NovaApuracao.ativa(), true, 'a apuração continua por criar');
+  await soltar();
+  const dialogo = mesa.doc.querySelector('dialog.dialogo');
+  assert.ok(dialogo, 'um reenvio pede confirmação'); assert.equal(pedidos.length, 1, 'nada foi enviado ainda');
+  assert.equal(dialogo.querySelector('.dialogo-titulo').textContent, 'Enviar de novo pode criar outra apuração');
+  assert.ok(dialogo.textContent.includes(AVISO_INCERTO));
+  [...dialogo.querySelectorAll('.dialogo-acoes button')][0].click(); await mesa.esperar(6);   // Cancelar
+  assert.equal(pedidos.length, 1); assert.equal(mesa.$('nova-incerto').hidden, false);
+  await soltar();
+  [...mesa.doc.querySelector('dialog.dialogo').querySelectorAll('.dialogo-acoes button')][1].click(); await mesa.esperar(10);   // Enviar mesmo assim
+  assert.equal(pedidos.length, 2, 'depois de ver o aviso, o reenvio segue');
+});
+
+test('R3, formulário de Cadastrar arquivos (até o passo 3): o mesmo cuidado depois de um envio de apuração nova que não se sabe se criou', async () => {
+  const mesa = await abrirCadastro({fluxo: true});
+  Object.defineProperty(mesa.$('cadastro-arquivos'), 'files', {value: [arquivo('a.pdf', 100)], configurable: true});
+  mesa.$('cadastro-caso').value = ''; mesa.$('cadastro-titulo-input').value = 'Apuração nova';
+  mesa.$('cadastro').requestSubmit(); await mesa.esperar(10);
+  mesa.pedidos[0].falharRede(); await mesa.esperar(14);
+  mesa.$('cadastro').requestSubmit(); await mesa.esperar(8);
+  const dialogo = mesa.doc.querySelector('dialog.dialogo');
+  assert.ok(dialogo, 'o reenvio pede confirmação'); assert.equal(mesa.pedidos.length, 1);
+  assert.ok(dialogo.textContent.includes(AVISO_INCERTO));
+  [...dialogo.querySelectorAll('.dialogo-acoes button')][0].click(); await mesa.esperar(6);
+  assert.equal(mesa.pedidos.length, 1, 'cancelar não envia'); assert.match(mesa.$('cadastro-erro').textContent, /Não sabemos se a apuração foi criada/);
 });

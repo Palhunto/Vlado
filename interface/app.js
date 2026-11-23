@@ -483,8 +483,11 @@ function encodeFile(file) {
 }
 // Envio em fluxo (W02, UX-05): cada arquivo com a própria barra e o próprio resultado, em lotes de até 50 MB. Só com um servidor que o anuncia
 // em /api/integracao (envio_fluxo); sem isso vale o envio em JSON de antes.
+let envioIncerto = '';   // o aviso do último envio de apuração nova que não se sabe se criou a apuração: um reenvio pode criar outra
 async function sendByStream(files, scope) {
   const envio = await Envio.enviar({escopo:scope, arquivos:files, alvo:$('cadastro-envio')});
+  if (!envio.recebidos && envio.incerto) envioIncerto = envio.aviso_incerto;
+  else if (envio.recebidos) envioIncerto = '';
   if (!envio.recebidos) throw envio.erro || new Error(envio.cancelado ? 'Envio cancelado. Nada foi cadastrado.' : 'Nenhum arquivo foi cadastrado. Confira o resultado de cada arquivo acima.');
   Envio.renderRecibo($('cadastro-recibo'), envio);
   return {caso_id:envio.caso_id, inventario:await api('inventario', {caso:envio.caso_id}), limitacao:Envio.comLimitacao(envio) || !!envio.pendentes};
@@ -504,6 +507,11 @@ $('cadastro').addEventListener('submit', async event => {
   // Apuração nova: sem `caso`. O identificador é escolhido pelo servidor (contrato de contas, 4.4; o portão recusa um escolhido aqui) e volta na
   // resposta (`caso_id`), de onde os lotes seguintes o tomam.
   const isNew = !$('cadastro-caso').value;
+  if (isNew && envioIncerto) {   // R3: um reenvio pode criar outra apuração; a pessoa vê o aviso e confirma antes
+    const ok = await Dialogo.confirmar({titulo:'Enviar de novo pode criar outra apuração', texto:envioIncerto, acao:'Enviar mesmo assim'});
+    if (!ok) { cadastroBusy = false; uploadError(envioIncerto); return; }
+    envioIncerto = '';
+  }
   const scope = {novo:isNew, ...(isNew ? {} : {caso:$('cadastro-caso').value}),
     titulo:$('cadastro-titulo-input').value, natureza:$('cadastro-natureza').value,
     ...(isNew ? window.FontesWeb?.escopoNovo() : {})};
@@ -826,6 +834,7 @@ window.NovaApuracao = (() => {
   let dados = null;      // o que o passo 1 coletou: {nome, natureza, modo_fontes, dominio_permitido?}
   let etapa = null;      // 1, 2 ou 3 enquanto a linha de etapas vale (ela segue até o recibo ser conferido, já com a apuração criada)
   let liberado = false;  // a saída foi confirmada: o clique que a pediu segue
+  let incerto = null;    // o aviso, enquanto não se sabe se a apuração nasceu num envio que não terminou: um reenvio pode criar outra
 
   const fontes = () => [...document.querySelectorAll('input[name="nova-fontes"]')].find(opcao => opcao.checked)?.value || 'somente_documental';
   function desenharEtapas() {
@@ -895,9 +904,9 @@ window.NovaApuracao = (() => {
     desenharEtapas(); titular();
   }
   function encerrar() {
-    fluxo = null; dados = null; etapa = null;
+    fluxo = null; dados = null; etapa = null; incerto = null;
     delete document.body.dataset.nova;
-    $('nova-aviso').hidden = true;
+    $('nova-aviso').hidden = true; $('nova-incerto').hidden = true;
     preencher(null); limpar(); desenharEtapas();
   }
   const preenchido = () => fluxo === 'passo2' || !!$('nova-nome').value.trim() || !!$('nova-site').value.trim();
@@ -920,6 +929,12 @@ window.NovaApuracao = (() => {
   }
   async function enviar(arquivos, extra = {}) {
     if (fluxo !== 'passo2' || !dados) return null;
+    // R3: depois de um envio que não se sabe se criou a apuração, a pessoa vê o aviso e confirma antes de um reenvio criar outra.
+    if (incerto) {
+      const ok = await window.Dialogo.confirmar({titulo: 'Enviar de novo pode criar outra apuração', texto: incerto, acao: 'Enviar mesmo assim'});
+      if (!ok) return null;
+      incerto = null; $('nova-incerto').hidden = true;
+    }
     const escopo = {novo: true, titulo: dados.nome, natureza: dados.natureza, modo_fontes: dados.modo_fontes,
       ...(dados.dominio_permitido ? {dominio_permitido: dados.dominio_permitido} : {})};
     return window.Documentos.enviar(arquivos, {escopo, alvo: $('documentos-envio'), alvoRecibo: $('documentos-recibo'),
@@ -933,7 +948,12 @@ window.NovaApuracao = (() => {
         await extra.depoisDeCriar?.(caso);
       },
       aoConcluir: async resultado => { etapa = 3; desenharEtapas(); await extra.aoConcluir?.(resultado); },
-      aoIndisponivel: extra.aoIndisponivel});
+      aoIndisponivel: extra.aoIndisponivel,
+      aoTerminar: resultado => {
+        if (fluxo === 'passo2' && resultado && !resultado.recebidos && resultado.incerto) {
+          incerto = resultado.aviso_incerto; $('nova-incerto').textContent = incerto; $('nova-incerto').hidden = false;
+        }
+      }});
   }
 
   $('nova-form').addEventListener('submit', evento => { evento.preventDefault(); continuar(); });

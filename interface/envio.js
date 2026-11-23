@@ -199,7 +199,7 @@
         const falha = new Error(pedido.status === 429 || pedido.status === 503
           ? t('A Mesa está atendendo muitos envios agora. Aguarde alguns segundos e tente de novo.')
           : mensagemDe(corpo));
-        falha.status = pedido.status; rejeitar(falha);
+        falha.status = pedido.status; falha.corpo = corpo; falha.codigo = corpo?.codigo; rejeitar(falha);
       });
       pedido.addEventListener('error', () => rejeitar(erroDeRede()));
       pedido.addEventListener('abort', () => { const falha = new Error('abortado'); falha.abortado = true; rejeitar(falha); });
@@ -224,7 +224,7 @@
     }
   }
 
-  async function enviar({escopo, arquivos, alvo, alvoRecibo, aoCriar}) {
+  async function enviar({escopo, arquivos, alvo, alvoRecibo, aoCriar, aoTerminar}) {
     const ctx = {linhas: [], cancelado: false, cancelarEnvio: null, redesenhar: () => ui.desenhar(), aoVerRecibo: null};
     ctx.linhas = Array.from(arquivos).map(arquivo => ({arquivo, nome: arquivo.name, bytes: arquivo.size, estado: 'aguardando', fracao: 0}));
     for (const linha of ctx.linhas) {
@@ -254,12 +254,22 @@
           lote = await postarLote(manifesto, linhas, ctx);
         } catch (falha) {
           const cancelou = falha.abortado || ctx.cancelado;
-          // O servidor diz que a apuração nova não existe (o primeiro lote não chegou a criá-la): para e avisa, em vez de seguir com os outros lotes.
-          const semApuracao = !!casoAceito && !resultado.lotes.length && [400, 404].includes(falha.status);
-          for (const linha of linhas) { linha.estado = cancelou ? 'cancelado' : 'nao-enviado'; linha.motivo = cancelou ? '' : semApuracao ? t('A apuração nova não foi criada: o primeiro envio não terminou. Envie de novo.') : falha.message; }
+          // O pedido do primeiro lote de uma apuração nova terminou em erro de rede ou 502/504: a tela não sabe se o servidor aceitou (e criou a apuração).
+          // Para os lotes seguintes e avisa para conferir a Visão geral antes de enviar de novo, porque um reenvio pode criar OUTRA apuração.
+          const incerto = !cancelou && !!escopo.novo && !escopo.caso && !casoAceito && (falha.rede === true || [502, 504].includes(falha.status));
+          // Só a recusa que diz que a apuração nova não existe (o primeiro lote não chegou a criá-la): para e avisa. Outra recusa não diz isso.
+          const semApuracao = !cancelou && !!casoAceito && !resultado.lotes.length && [400, 404].includes(falha.status)
+            && (/^Caso inexistente/i.test(falha.message || '') || ['caso_inexistente', 'caso_indisponivel'].includes(falha.codigo));
+          const parada = incerto ? t('Não sabemos se a apuração foi criada: a resposta do servidor não chegou. Confira a apuração na Visão geral antes de enviar de novo.')
+            : semApuracao ? t('A apuração nova não foi criada: o primeiro envio não terminou. Envie de novo.') : '';
+          for (const linha of linhas) { linha.estado = cancelou ? 'cancelado' : 'nao-enviado'; linha.motivo = cancelou ? '' : parada || falha.message; }
           ui.desenhar();
           if (cancelou) { ctx.cancelado = true; break; }
-          if (semApuracao) { resultado.erro = falha; for (const resto of lotes.slice(lotes.indexOf(linhas) + 1).flat()) { resto.estado = 'nao-enviado'; resto.motivo = t('A apuração nova não foi criada: o primeiro envio não terminou. Envie de novo.'); } ui.desenhar(); break; }
+          if (incerto || semApuracao) {
+            resultado.erro = falha; if (incerto) { resultado.incerto = true; resultado.aviso_incerto = parada; }
+            for (const resto of lotes.slice(lotes.indexOf(linhas) + 1).flat()) { resto.estado = 'nao-enviado'; resto.motivo = parada; }
+            ui.desenhar(); break;
+          }
           resultado.erro = falha;
           continue;
         }
@@ -304,6 +314,7 @@
     await fazer(lotesPlanejados);
     ui.mostrarAcoes([]);
     resultado.cancelado = ctx.cancelado;
+    try { aoTerminar?.(resultado); } catch { /* a tela que quer saber do fim não derruba o envio */ }
     resultado.naoCadastrados = ctx.linhas.filter(l => ['nao-enviado', 'cancelado', 'recusado', 'falha', 'sem-acompanhamento'].includes(l.estado)).length;
     resultado.aConferir = ctx.linhas.filter(l => l.estado === 'pronto' && (['erro', 'sem_texto', 'pendente', 'parcial'].includes(l.extracao) || l.passouPorOcr)).length;
     resultado.pendentes = resultado.naoCadastrados + resultado.aConferir;
