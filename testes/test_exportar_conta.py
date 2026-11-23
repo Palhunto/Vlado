@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import sqlite3
 import sys
+import time
 import unittest
 from unittest.mock import patch
 
@@ -152,11 +153,19 @@ class ExportarTest(cenario.DuasRedacoes):
             self.assertEqual(self.post(sessao, 'conta-termos-aceitar', {'versao': 'v-exporta'})[0], 200)
             self.assertEqual(self.exportar(sessao)[0], 403)  # the factor alone, still pending
 
+    @staticmethod
+    def downloads(registrar):
+        return [c for c in registrar.call_args_list if c.args[:2] == ('download', 'ok')]
+
     def test_o_download_fica_no_registro_de_acesso(self):
         sessao, _ = self.nova()
         with patch.object(acesso.registro_acesso, 'registrar', wraps=acesso.registro_acesso.registrar) as registrar:
             self.assertEqual(self.exportar(sessao)[0], 200)
-        downloads = [c for c in registrar.call_args_list if c.args[:2] == ('download', 'ok')]
+            # The server audits after the body is written: the client may read it first. Wait, inside the patch.
+            limite = time.monotonic() + 5
+            while not self.downloads(registrar) and time.monotonic() < limite:
+                time.sleep(0.02)
+        downloads = self.downloads(registrar)
         self.assertEqual(len(downloads), 1)
         self.assertEqual(downloads[0].kwargs.get('tipo'), 'exportacao')
 
