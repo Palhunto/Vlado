@@ -195,7 +195,8 @@ class ArmazenamentoTest(test_acesso.DuasRedacoes):
         acesso.remover_fator(self.root, self.rep_a, SENHA)
         self.assertEqual(acesso.entrar(self.root, 'rep.a', SENHA)[2]['id'], self.rep_a)  # one step again
         self.assertEqual(self.linhas('SELECT 1 FROM fatores') + self.linhas('SELECT 1 FROM codigos_reserva'), [])
-        self.assertIn('fator_removido', self.tipos())
+        self.assertEqual(self.linhas("SELECT tipo, conta, por FROM eventos WHERE tipo LIKE 'fator_removido%'"),
+                         [{'tipo': 'fator_removido', 'conta': self.rep_a, 'por': self.rep_a}])  # her own doing
 
     def test_remover_a_conta_leva_o_fator_e_desativar_mata_o_bilhete(self):
         cadastrar(self.root, self.rep_a)
@@ -300,14 +301,18 @@ class RedefinicaoComFatorTest(test_acesso.DuasRedacoes):
         self.assertEqual(self.linhas('SELECT 1 FROM fatores') + self.linhas('SELECT 1 FROM codigos_reserva'), [])
         acesso.ativar(self.root, token, NOVA)
         self.assertEqual(acesso.entrar(self.root, 'pessoa@exemplo.test', NOVA)[2]['id'], self.pessoa_a)  # one step
-        self.assertIn('fator_removido', self.tipos())
+        # An event of its own, by the operator: not the `fator_removido` of who takes away the own factor.
+        self.assertEqual(self.linhas("SELECT tipo, conta, por FROM eventos WHERE tipo LIKE 'fator_removido%'"),
+                         [{'tipo': 'fator_removido_na_recuperacao', 'conta': self.pessoa_a, 'por': 'cli'}])
 
     def test_recuperacao_pedida_pelo_dono_tira_o_fator_que_a_pessoa_perdeu(self):
         feito = acesso.pedir_recuperacao(self.root, self.a, self.dono_a, self.pessoa_a, SENHA, com_envio=True)
         self.assertEqual(acesso.redefinir_senha(self.root, feito['token'], NOVA)['id'], self.pessoa_a)  # no code asked
         self.assertEqual(acesso.entrar(self.root, 'pessoa@exemplo.test', NOVA)[2]['id'], self.pessoa_a)  # one step: she enrols again
         self.assertFalse(acesso.ver_conta(self.root, self.pessoa_a)['segundo_fator']['ativo'])
-        self.assertIn('fator_removido', self.tipos())
+        # The screen tells it apart from the person removing the own factor: the type is another one.
+        self.assertEqual(self.linhas("SELECT tipo, conta, por FROM eventos WHERE tipo LIKE 'fator_removido%'"),
+                         [{'tipo': 'fator_removido_na_recuperacao', 'conta': self.pessoa_a, 'por': self.pessoa_a}])
 
 
 class ServidorTest(cenario.DuasRedacoes):
