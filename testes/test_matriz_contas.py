@@ -135,12 +135,13 @@ class ContratoTest(unittest.TestCase):
             self.assertEqual(autorizacao.MATRIZ[operacao].resolvedor, frozenset({'nenhum'}))
 
     def test_capacidades_saem_da_matriz(self):
-        def de(papel):  # the mode with accounts that refuses nothing of its own: the cells alone
+        def de(papel):  # the mode with accounts that refuses almost nothing of its own: the cells, less the terms
             return autorizacao.capacidades(None, 'local-contas', {'papel': papel})
         self.assertIn('redacao-revisar', de('editor'))
         self.assertNotIn('redacao-revisar', de('reporter'))
         self.assertNotIn('cadastrar', de('editor'))
-        self.assertEqual(set(de('convidado')), set(interface_pesquisa.OPERACOES_CONVIDADO) | set(interface_pesquisa.CONTA_PROPRIA))
+        self.assertEqual(set(de('convidado')), set(interface_pesquisa.OPERACOES_CONVIDADO)
+                         | set(interface_pesquisa.CONTA_PROPRIA) - {'conta-termos-aceitar'})  # no terms in the installed Mesa
         self.assertIn('equipe-papel', de('dono'))
         for papel in ('editor', 'reporter', 'leitor', 'convidado'):
             self.assertFalse([o for o in de(papel) if o.startswith('equipe-')], papel)
@@ -362,7 +363,7 @@ class CelulasTest(cenario.DuasRedacoes):
         piloto = set(autorizacao.capacidades(self.root, 'piloto', contas['dono']))
         instalada = set(autorizacao.capacidades(self.root, 'local-contas', contas['dono']))
         self.assertEqual(instalada - piloto, {'codex-desligar', 'conta-fator-remover'})
-        self.assertEqual(piloto - instalada, set())
+        self.assertEqual(piloto - instalada, {'conta-termos-aceitar'})  # terms of service only in the hosted mode
 
     def test_as_contas_antigas_respondem_como_operacao_inexistente_a_todos_os_papeis(self):
         # Withdrawn with the invitation by e-mail (P30): the same 404 of an operation that never existed, to the

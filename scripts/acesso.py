@@ -109,7 +109,7 @@ BALDES = 20000  # counters of identifiers WITHOUT an account: a table of fixed s
 APARELHOS_MAX = 20  # known devices kept for each account (the least recently used goes first)
 CHAVE_BALDE = '#balde|'  # the ceiling of an identifier, with an account or without: one of BALDES counters, by HMAC
 CHAVE_MARCA = '#marca|'  # failures with a known device mark: the mark does not switch the ceiling off
-ESQUEMA = 7  # PRAGMA user_version of the store; `_ATUALIZACOES` takes an older store up to it
+ESQUEMA = 8  # PRAGMA user_version of the store; `_ATUALIZACOES` takes an older store up to it
 ESPERA_BD_S = 10
 NOME_PADRAO_REDACAO = 'Redação'
 CREDENCIAIS = 'Login ou senha incorretos.'
@@ -222,6 +222,8 @@ CREATE TABLE entradas (
 CREATE TABLE aparelhos (
     conta TEXT NOT NULL REFERENCES contas(id), resumo TEXT NOT NULL, criado_em TEXT NOT NULL, ultimo_uso TEXT NOT NULL,
     PRIMARY KEY (conta, resumo));
+CREATE TABLE termos_aceites (conta TEXT NOT NULL REFERENCES contas(id), versao TEXT NOT NULL, aceito_em TEXT NOT NULL, ip TEXT);
+CREATE INDEX termos_por_conta ON termos_aceites (conta, aceito_em);
 """
 # From each older version of the store to the next one (applied in order, each in one transaction).
 _ATUALIZACOES = {1: ('ALTER TABLE contas ADD COLUMN idioma TEXT',
@@ -254,7 +256,10 @@ _ATUALIZACOES = {1: ('ALTER TABLE contas ADD COLUMN idioma TEXT',
                      ' chave TEXT NOT NULL, criada_em TEXT NOT NULL, expira_em TEXT NOT NULL,'
                      ' falhas INTEGER NOT NULL DEFAULT 0, cliente TEXT, aparelho TEXT)'),
                  6: ('CREATE TABLE aparelhos (conta TEXT NOT NULL REFERENCES contas(id), resumo TEXT NOT NULL,'
-                     ' criado_em TEXT NOT NULL, ultimo_uso TEXT NOT NULL, PRIMARY KEY (conta, resumo))',)}
+                     ' criado_em TEXT NOT NULL, ultimo_uso TEXT NOT NULL, PRIMARY KEY (conta, resumo))',),
+                 7: ('CREATE TABLE termos_aceites (conta TEXT NOT NULL REFERENCES contas(id), versao TEXT NOT NULL,'
+                     ' aceito_em TEXT NOT NULL, ip TEXT)',
+                     'CREATE INDEX termos_por_conta ON termos_aceites (conta, aceito_em)')}
 
 
 class RegistroIlegivel(ValueError):
@@ -316,6 +321,11 @@ class SenhaIncorreta(Recusada):
 class UltimoDono(Recusada):
     """The newsroom would be left without an active dono."""
     status, codigo, motivo = 400, 'ultimo_dono', 'ultimo_dono'
+
+
+class TermosDesatualizados(Recusada):
+    """The version of the terms sent is not the one in force (or none came while there is one)."""
+    status, codigo, motivo = 400, 'termos_desatualizados', 'validacao'
 
 
 class ConviteDuplicado(Recusada):
@@ -1467,6 +1477,7 @@ def remover(root: Path, cid, por: str, organizacao: str, senha=None, ip=None) ->
         _sem_fator(tx, cid)
         tx.ex('DELETE FROM aparelhos WHERE conta = ?', cid)
         tx.ex('DELETE FROM participacoes WHERE conta = ?', cid)
+        tx.ex('UPDATE termos_aceites SET ip = NULL WHERE conta = ?', cid)  # the proof stays: id, version, date (P41 b)
         _sem_responsabilidade(tx, cid)
         tx.ex('DELETE FROM uso_diario WHERE conta = ?', cid)
         _limpar_tentativas(tx, conta)
@@ -1713,28 +1724,92 @@ def _convite_recusado(exc: ConviteInvalido) -> None:
     registro_acesso.registrar('ativacao_falha', 'falha', motivo=exc.motivo, acesso_operacao='aceitar')
 
 
-def consultar_convite(root: Path, token) -> dict:
-    """What the acceptance page shows (read-only): newsroom, e-mail, role, who invited, until when. The e-mail comes
-    from the invitation and is not changed on acceptance. `termos_versao` is None until the terms exist."""
+# --- terms of service with a version (contract of accounts, 8.4 and the delivery 4b-1) ---------------------------
+
+TERMOS_VERSAO = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{0,31}')
+TERMOS_ENDERECO = re.compile(r'https://[^\s"<>\\]{1,490}')
+TERMOS_NOVOS = 'Os termos de uso mudaram. Leia a versão em vigor e aceite-a para continuar.'
+
+
+def termos_vigentes() -> dict | None:
+    """The terms in force, from whoever runs the service: `VLADO_TERMOS_VERSAO` and `VLADO_TERMOS_ENDERECO` (the text
+    is the Documentation's and lives at that address; the server never serves it). None without a version: nobody
+    has the pending item and the acceptance takes no version, as before. A version without a valid address, or a
+    malformed one, raises ValueError: the server refuses to start rather than ask to accept what nobody can read."""
+    versao = os.environ.get('VLADO_TERMOS_VERSAO', '').strip()
+    endereco = os.environ.get('VLADO_TERMOS_ENDERECO', '').strip()
+    if not versao:
+        if endereco:
+            raise ValueError('VLADO_TERMOS_ENDERECO definido sem VLADO_TERMOS_VERSAO.')
+        return None
+    if not TERMOS_VERSAO.fullmatch(versao):
+        raise ValueError('VLADO_TERMOS_VERSAO inválida: até 32 letras, dígitos, ponto, hífen ou sublinhado.')
+    if not TERMOS_ENDERECO.fullmatch(endereco):
+        raise ValueError('VLADO_TERMOS_ENDERECO ausente ou inválido: o endereço https:// do texto dos termos.')
+    return {'versao': versao, 'endereco': endereco}
+
+
+def _ultimo_aceite(tx: _Tx, cid: str):
+    return tx.um('SELECT versao, aceito_em FROM termos_aceites WHERE conta = ? ORDER BY aceito_em DESC, rowid DESC LIMIT 1',
+                 cid)
+
+
+def _aceitar(tx: _Tx, cid: str, versao: str, momento: datetime, ip: str | None) -> None:
+    """One row per acceptance; nothing is ever rewritten (only the address goes, when the account is deleted)."""
+    tx.ex('INSERT INTO termos_aceites (conta, versao, aceito_em, ip) VALUES (?, ?, ?, ?)', cid, versao, _iso(momento), ip)
+    _evento(tx, 'termos_aceitos', cid, cid, momento, versao=versao)
+
+
+def _versao_aceita(termos_versao, termos: dict | None) -> str | None:
+    """The version an acceptance may carry: the one in force, or None when there are no terms."""
+    if termos is None:
+        if termos_versao is not None:
+            raise ValueError('Versão dos termos desconhecida.')
+        return None
+    if termos_versao != termos['versao']:
+        raise TermosDesatualizados(TERMOS_NOVOS)
+    return termos_versao
+
+
+def aceitar_termos(root: Path, cid, versao, termos: dict | None, ip: str | None = None) -> dict:
+    """`conta-termos-aceitar`: the person accepts the version in force. Accepting the one already accepted writes
+    nothing. Returns `{versao, aceito_em}` of the last acceptance. Without terms in force, any version is not the one
+    in force: the same refusal, one code for the page."""
+    if termos is None:
+        raise TermosDesatualizados('Não há termos de uso a aceitar neste serviço.')
+    _versao_aceita(versao, termos)
+    with _bd(root, escrever=True) as tx:
+        conta = _conta(tx, cid)
+        ultimo = _ultimo_aceite(tx, conta['id'])
+        if not ultimo or ultimo['versao'] != termos['versao']:
+            _aceitar(tx, conta['id'], termos['versao'], agora(), ip)
+        return dict(_ultimo_aceite(tx, conta['id']))
+
+
+def consultar_convite(root: Path, token, termos: dict | None = None) -> dict:
+    """What the acceptance page shows (read-only): newsroom, e-mail, role, who invited, until when, and the terms in
+    force (`termos`, from `termos_vigentes` where the service has them). The e-mail comes from the invitation and is
+    not changed on acceptance."""
     try:
         with _bd(root) as tx:
             convite = _por_convite(tx, token, agora())
             contexto = _contexto_do_convite(tx, convite)
             return {'redacao': contexto['redacao'], 'email': convite['email'], 'papel': convite['papel'],
                     'convidado_por': contexto['convidado_por'], 'expira_em': convite['expira_em'],
-                    'idioma': convite['idioma'] or IDIOMAS[0], 'termos_versao': None}
+                    'idioma': convite['idioma'] or IDIOMAS[0], 'termos_versao': termos['versao'] if termos else None,
+                    'termos_endereco': termos['endereco'] if termos else None}
     except ConviteInvalido as exc:
         _convite_recusado(exc)
         raise
 
 
 def aceitar_convite(root: Path, token, nome, senha, termos_versao=None, ip: str | None = None, cliente='web',
-                    aparelho=None, marca=None) -> tuple[str, str, dict]:
+                    aparelho=None, marca=None, termos: dict | None = None) -> tuple[str, str, dict]:
     """Accept an invitation: the account is born with the invitation's e-mail, role and participations, and its
-    first session opens. Returns what `entrar` returns. The link works once."""
+    first session opens. Returns what `entrar` returns. The link works once. Where the service has terms
+    (`termos`), `termos_versao` must be the one in force, and the acceptance is written with the account."""
     nome, senha = _validar_nome(nome), _validar_senha(senha)
-    if termos_versao is not None:
-        raise ValueError('Versão dos termos desconhecida.')  # the terms come with their own delivery
+    versao = _versao_aceita(termos_versao, termos)
     try:
         with _bd(root) as tx:
             _por_convite(tx, token, agora())  # refuse before spending time on the hash
@@ -1757,6 +1832,8 @@ def aceitar_convite(root: Path, token, nome, senha, termos_versao=None, ip: str 
             tx.ex("UPDATE convites SET estado = 'aceito', token_sha256 = NULL, encerrado_em = ?, conta = ? WHERE id = ?",
                   _iso(momento), cid, convite['id'])
             _evento(tx, 'convite_aceito', cid, cid, momento, papel=convite['papel'])
+            if versao is not None:
+                _aceitar(tx, cid, versao, momento, ip)
             sid, csrf = _abrir_sessao(tx, cid, momento, cliente, aparelho, ip)
             _registrar_aparelho(tx, cid, marca, momento)  # the browser that accepted is the account's first known device
             return sid, csrf, _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid), momento)
@@ -2764,7 +2841,7 @@ def _auditar_falha(motivo: str, cid: str | None, login: str, cliente, ip: str | 
                               cliente=_cliente(cliente), ip=ip)
 
 
-def sessao(root: Path, sid, ip: str | None = None, obrigar_fator: bool = False) -> dict | None:
+def sessao(root: Path, sid, ip: str | None = None, obrigar_fator: bool = False, termos: str | None = None) -> dict | None:
     """The calling account, re-read on every request (deactivation, role, participations and quota apply at once).
     `ip` is kept as the session's last address, at most once a minute, with its last use.
 
@@ -2772,7 +2849,9 @@ def sessao(root: Path, sid, ip: str | None = None, obrigar_fator: bool = False) 
     the account answers for: outside the local mode no caller ever has "every case".
 
     `obrigar_fator` is the hosted mode: a dono or an editor without an active second factor carries the pending
-    item `segundo_fator`, and the gate lets the session reach only what resolves it (contract, 4.2 and 8.2)."""
+    item `segundo_fator`, and the gate lets the session reach only what resolves it (contract, 4.2 and 8.2).
+    `termos` is the version of the terms in force in the hosted mode: an account whose last acceptance is another
+    one carries `termos`, which comes first (contract, 8.4)."""
     if not isinstance(sid, str) or not SID.fullmatch(sid):
         return None  # malformed ids never touch the store
     momento, chave = agora(), _hash(sid)
@@ -2788,8 +2867,10 @@ def sessao(root: Path, sid, ip: str | None = None, obrigar_fator: bool = False) 
             if not conta or not conta['ativa'] or not conta['senha_hash']:
                 return None
             casos, responsavel = _alcance(tx, conta)
-            pendencias = (['segundo_fator'] if obrigar_fator and conta['papel'] in FATOR_OBRIGATORIO
-                          and not tx.um('SELECT 1 FROM fatores WHERE conta = ? AND ativo = 1', conta['id']) else [])
+            ultimo = _ultimo_aceite(tx, conta['id']) if termos else None
+            pendencias = ['termos'] if termos and (not ultimo or ultimo['versao'] != termos) else []
+            pendencias += (['segundo_fator'] if obrigar_fator and conta['papel'] in FATOR_OBRIGATORIO
+                           and not tx.um('SELECT 1 FROM fatores WHERE conta = ? AND ativo = 1', conta['id']) else [])
             tocar = (momento - _data(registro['ultimo_uso'])).total_seconds() >= ULTIMO_USO_SEGUNDOS
             principal = {'conta': conta['id'], 'nome': conta['nome'], 'login': conta['login'], 'email': conta['email'],
                          'papel': conta['papel'],
@@ -2857,16 +2938,22 @@ def confirmar_senha(root: Path, cid, senha, ip: str | None = None) -> None:
     raise SenhaIncorreta(SENHA_INCORRETA)
 
 
-def ver_conta(root: Path, cid) -> dict:
-    """The own profile: name, e-mail, login, role, language, newsroom and when the password was set. The second
-    factor and the terms come with their own deliveries."""
+def ver_conta(root: Path, cid, termos: dict | None = None) -> dict:
+    """The own profile: name, e-mail, login, role, language, newsroom, when the password was set, the second factor,
+    the last acceptance of the terms (`termos`) and, where the service has them, the terms in force
+    (`termos_vigente`)."""
     with _bd(root) as tx:
         conta = _conta(tx, cid)
         redacao = tx.um('SELECT id, nome FROM organizacoes WHERE id = ?', conta['organizacao'])
         return {'conta': {'id': conta['id'], 'nome': conta['nome'], 'email': conta['email'], 'login': conta['login'],
                           'papel': conta['papel'], 'idioma': conta['idioma'] or IDIOMAS[0],
                           'senha_definida_em': conta['senha_definida_em'], 'criada_em': conta['criada_em']},
-                'organizacao': dict(redacao), 'segundo_fator': _estado_do_fator(tx, cid), 'termos': None}
+                'organizacao': dict(redacao), 'segundo_fator': _estado_do_fator(tx, cid),
+                'termos': _dict_ou_none(_ultimo_aceite(tx, conta['id'])), 'termos_vigente': dict(termos) if termos else None}
+
+
+def _dict_ou_none(linha):
+    return dict(linha) if linha else None
 
 
 def atualizar_perfil(root: Path, cid, *, nome=None, idioma=None) -> dict:
