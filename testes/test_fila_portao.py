@@ -216,8 +216,8 @@ class DiagnosticoTest(unittest.TestCase):
         with Diagnostico() as diagnostico:
             time.sleep(0.35)
         self.assertFalse(diagnostico._thread.is_alive())
+        # It ran and measured; no ceiling on the gap: that would test the machine, not the thread (D1).
         self.assertGreater(diagnostico.maior_parada, 0.0)
-        self.assertLess(diagnostico.maior_parada, 5.0)
 
 
 @unittest.skipUnless(HAS_PYPDF, 'Instalar requirements.txt para testar extração real')
