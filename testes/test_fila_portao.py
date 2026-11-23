@@ -23,6 +23,11 @@ lenta para cadastrar): com o teto de 6 s o limite é 12 s, e o 2·T_ref só cont
 fila travasse a Mesa, o tempo saltaria para perto do tempo do arquivo longo (15 s ou mais). Os dois
 tempos saem na saída do teste.
 
+**Diagnóstico na falha.** Durante as sessões, uma thread do processo do teste (onde a Mesa também roda)
+só dorme 0,1 s de cada vez e anota a maior parada que viu, as faltas de página do processo e a memória
+livre da máquina (mínima e máxima). Nada disso decide nada: vai só na mensagem quando um pedido passa do
+limite, para dizer se o processo inteiro parou (a máquina) ou se só os pedidos esperaram (a Mesa).
+
 **Pular só sem CPU, medida fora da Mesa.** Lentidão nunca pula por si: uma Mesa que regrida e fique
 lenta falha. Quando um tempo passa do limite (``T_ref`` acima de ``TETO_REF``, ou um pedido acima do
 seu limite), uma sonda à parte, de prioridade normal, pede ``SONDA_CPU`` s de CPU: se não os tem em
@@ -41,8 +46,10 @@ tem 0,06 s em 10,7 s.
 Dados sintéticos; sem rede nem modelo.
 """
 import base64
+import ctypes
 import http.client
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -91,6 +98,126 @@ while time.process_time() - base < pedido and time.monotonic() - inicio < prazo:
     pass
 print(f'{time.monotonic() - inicio:.2f} {time.process_time() - base:.2f}')
 """
+
+
+def faltas_de_pagina():
+    """Page faults of this process so far (Windows: all of them; POSIX: the major ones, from disk), or None."""
+    if os.name == 'nt':
+        class Contadores(ctypes.Structure):
+            _fields_ = [('cb', ctypes.c_ulong), ('PageFaultCount', ctypes.c_ulong)] + [
+                (nome, ctypes.c_size_t) for nome in ('PeakWorkingSetSize', 'WorkingSetSize', 'QuotaPeakPagedPoolUsage',
+                                                     'QuotaPagedPoolUsage', 'QuotaPeakNonPagedPoolUsage',
+                                                     'QuotaNonPagedPoolUsage', 'PagefileUsage', 'PeakPagefileUsage')]
+        contadores = Contadores()
+        contadores.cb = ctypes.sizeof(Contadores)
+        k32 = ctypes.windll.kernel32
+        k32.GetCurrentProcess.restype = ctypes.c_void_p
+        if not ctypes.windll.psapi.GetProcessMemoryInfo(ctypes.c_void_p(k32.GetCurrentProcess()), ctypes.byref(contadores),
+                                                        contadores.cb):
+            return None
+        return contadores.PageFaultCount
+    try:
+        import resource
+        return resource.getrusage(resource.RUSAGE_SELF).ru_majflt
+    except (ImportError, OSError):
+        return None
+
+
+def memoria_livre_mb():
+    """Free physical memory of the machine in MB (Linux: MemAvailable), or None."""
+    if os.name == 'nt':
+        class Estado(ctypes.Structure):
+            _fields_ = [('dwLength', ctypes.c_ulong), ('dwMemoryLoad', ctypes.c_ulong)] + [
+                (nome, ctypes.c_ulonglong) for nome in ('ullTotalPhys', 'ullAvailPhys', 'ullTotalPageFile',
+                                                        'ullAvailPageFile', 'ullTotalVirtual', 'ullAvailVirtual',
+                                                        'ullAvailExtendedVirtual')]
+        estado = Estado()
+        estado.dwLength = ctypes.sizeof(Estado)
+        if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(estado)):
+            return None
+        return estado.ullAvailPhys >> 20
+    try:
+        with open('/proc/meminfo', encoding='ascii') as info:
+            for linha in info:
+                if linha.startswith('MemAvailable:'):
+                    return int(linha.split()[1]) >> 10
+    except OSError:
+        pass
+    return None
+
+
+class Diagnostico:
+    """What the process and the machine did while the sessions ran; only for the failure message.
+
+    A thread that only sleeps ``PASSO`` s at a time notes the longest gap between two wake-ups: a
+    gap far above ``PASSO`` means the whole process stood still (no thread of it ran), not that
+    the requests waited for something of the Mesa."""
+    PASSO = 0.1
+    AMOSTRA = 0.5  # free memory and page faults are read at most this often
+
+    def __init__(self):
+        self.parar = threading.Event()
+        self.maior_parada = 0.0
+        self.faltas_inicio = self.faltas_fim = faltas_de_pagina()
+        self.memoria = []
+        self._anterior = self._amostra = None
+        self._thread = threading.Thread(target=self._rodar, daemon=True, name='diagnostico_portao')
+
+    def anotar(self, agora):
+        """One wake-up at ``agora`` (monotonic seconds)."""
+        if self._anterior is not None:
+            self.maior_parada = max(self.maior_parada, agora - self._anterior)
+        self._anterior = agora
+        if self._amostra is None or agora - self._amostra >= self.AMOSTRA:
+            self._amostra = agora
+            livre = memoria_livre_mb()
+            if livre is not None:
+                self.memoria.append(livre)
+            self.faltas_fim = faltas_de_pagina()
+
+    def _rodar(self):
+        while not self.parar.is_set():
+            self.anotar(time.monotonic())
+            time.sleep(self.PASSO)
+        self.anotar(time.monotonic())
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, *erro):
+        self.parar.set()
+        self._thread.join(5)
+
+    def texto(self):
+        faltas = ('?' if self.faltas_inicio is None or self.faltas_fim is None
+                  else str(self.faltas_fim - self.faltas_inicio))
+        memoria = f'entre {min(self.memoria)} e {max(self.memoria)} MB' if self.memoria else '?'
+        return (f'durante as sessões, no processo do teste: maior parada de uma thread que só dorme '
+                f'{self.PASSO:.1f} s de cada vez {self.maior_parada:.2f} s; faltas de página {faltas}; '
+                f'memória livre da máquina {memoria}')
+
+
+class DiagnosticoTest(unittest.TestCase):
+    """The failure message's diagnostic, fed with chosen wake-up times (no Mesa)."""
+
+    def test_maior_parada_e_texto(self):
+        diagnostico = Diagnostico()
+        for agora in (10.0, 10.1, 10.2, 24.2, 24.3):  # the process stood still for 14 s
+            diagnostico.anotar(agora)
+        self.assertAlmostEqual(diagnostico.maior_parada, 14.0)
+        texto = diagnostico.texto()
+        self.assertIn('maior parada de uma thread que só dorme 0.1 s de cada vez 14.00 s', texto)
+        self.assertRegex(texto, r'faltas de página (\d+|\?); memória livre da máquina (entre \d+ e \d+ MB|\?)$')
+        if os.name == 'nt':  # both counters exist on the machines the gate runs on
+            self.assertNotIn('?', texto)
+
+    def test_roda_e_para(self):
+        with Diagnostico() as diagnostico:
+            time.sleep(0.35)
+        self.assertFalse(diagnostico._thread.is_alive())
+        self.assertGreater(diagnostico.maior_parada, 0.0)
+        self.assertLess(diagnostico.maior_parada, 5.0)
 
 
 @unittest.skipUnless(HAS_PYPDF, 'Instalar requirements.txt para testar extração real')
@@ -215,16 +342,18 @@ class PortaoFilaTest(unittest.TestCase):
         self.assertLess(avulso, LIMITE, 'o cadastro esperou a extração longa')
         tempos, erros = [], []
         sessoes = [threading.Thread(target=self.sessao, args=(n, tempos, erros), daemon=True) for n in range(SESSOES)]
-        for sessao in sessoes:
-            sessao.start()
-        for sessao in sessoes:
-            sessao.join(120)
+        with Diagnostico() as diagnostico:  # only for the message below: it decides nothing
+            for sessao in sessoes:
+                sessao.start()
+            for sessao in sessoes:
+                sessao.join(120)
         self.assertEqual(erros, [])
         self.assertEqual(len(tempos), SESSOES * 6)
         lentos = sorted((t for t in tempos if t[0] >= (limite_cadastros if t[2] == 'cadastro' else LIMITE)), reverse=True)
         if lentos:
             self.lento('normal', f'pedidos acima do limite com a extração longa em curso: {lentos} '
-                                 f'(T_ref = {referencia:.2f} s, limite dos cadastros {limite_cadastros:.2f} s)')
+                                 f'(T_ref = {referencia:.2f} s, limite dos cadastros {limite_cadastros:.2f} s; '
+                                 f'{diagnostico.texto()})')
         # The long file was still being read the whole time (otherwise the check proves nothing).
         estado = self.pedir('GET', f'/api/fila?lote={lote}')[1]['lote']
         self.assertEqual((estado['estado'], estado['arquivos'][0]['estado']), ('processando', 'extraindo'),
