@@ -1,51 +1,11 @@
-"""Testes do medidor de contraste WCAG (testes/contraste_wcag.py).
+"""Testes do medidor de contraste WCAG (testes/contraste_wcag.py) que não precisam de navegador: a matemática e o relatório.
 
-A matemática roda sempre. A parte que mede no navegador usa uma página sintética de razões conhecidas e PULA se o Playwright
-ou o Chromium não estiver instalado (ficam fora da imagem da Mesa; ver testes/requirements-teste.txt). A medição das telas
-da Mesa roda à mão: `python testes/contraste_wcag.py medir`.
+Os testes que provam no navegador que o medidor reprova (página sintética de razões conhecidas) ficam em
+test_contraste_wcag_navegador.py, na suíte lenta. A medição das telas da Mesa roda à mão: `python testes/contraste_wcag.py medir`.
 """
 import unittest
 
 import contraste_wcag as cw
-
-try:
-    from playwright.sync_api import sync_playwright
-    PLAYWRIGHT = True
-except ImportError:   # pragma: no cover - depende do ambiente
-    PLAYWRIGHT = False
-
-PAGINA = """<!doctype html><meta charset="utf-8"><style>
-body{margin:0;background:#ffffff;font:16px Arial}
-p{margin:8px}
-#ok{color:#767676}                 /* 4,54:1 sobre branco: passa */
-#baixo{color:#777777}              /* 4,48:1: reprova (texto comum) */
-#grande{color:#777777;font-size:24px}   /* 4,48:1, mas texto grande: passa em 3:1 */
-#escuro{background:#202020;color:#8a8a8a}   /* ~4,6:1 sobre #202020: passa */
-#translucido{color:rgba(0,0,0,.5)}  /* preto a 50% sobre branco = #808080, 3,95:1: reprova */
-#grad{background:linear-gradient(90deg,#ffffff,#000000);color:#555555}   /* 7,5:1 no branco, 2,9:1 no preto da ponta: reprova */
-#foto{background-image:url(data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==);color:#000}
-#desativado[disabled]{color:#cccccc}
-.a:focus-visible{outline:3px solid #ffffff;outline-offset:2px}   /* branco sobre branco: reprova */
-.b:focus-visible{outline:3px solid #000000;outline-offset:2px}   /* passa */
-.d{background:#ffffff;color:#000}.d:focus-visible{outline:3px solid #ffffff;outline-offset:-3px}   /* anel por dentro: vale o fundo do próprio botão (branco): reprova */
-.e{background:#ffffff;color:#000}.e:focus-visible{outline:3px solid #000000;outline-offset:-3px}  /* por dentro, preto sobre branco: passa, mesmo ao lado de um vizinho preto */
-.vizinho{display:inline-block;background:#000;width:80px;height:30px;vertical-align:top}
-.c:focus-visible{outline:none}                                 /* sem indicador nenhum: reprova */
-</style>
-<p id="ok">Texto com contraste suficiente</p>
-<p id="baixo">Texto abaixo do mínimo</p>
-<p id="grande">Texto grande</p>
-<p id="escuro">Texto claro sobre fundo escuro</p>
-<p id="translucido">Texto translúcido</p>
-<p id="grad">Texto sobre gradiente</p>
-<p id="foto">Texto sobre imagem</p>
-<button id="desativado" disabled>Desativado</button>
-<svg width="300" height="40"><rect width="300" height="40" fill="#ffffff"/><text id="svgt" x="10" y="25" fill="#222222">Texto SVG sobre retângulo claro</text></svg>
-<button class="d">Anel interno branco</button><span class="vizinho"></span><button class="e">Anel interno preto</button><span class="vizinho"></span>
-<p><select id="contexto-caso" style="border:0;background:transparent;color:#222222"><option>Vila Serena</option></select>
-<select id="sem-excecao" style="border:0;background:transparent;color:#222222"><option>Outro campo</option></select></p>
-<button class="a">Foco branco</button><button class="b">Foco preto</button><button class="c">Sem foco</button>
-"""
 
 
 class MatematicaTest(unittest.TestCase):
@@ -70,6 +30,19 @@ class MatematicaTest(unittest.TestCase):
         self.assertTrue(cw.reprovado({'r': 4.499, 'min': 4.5}))
         self.assertFalse(cw.reprovado({'r': 4.5, 'min': 4.5}))
         self.assertTrue(cw.reprovado({'r': 0, 'min': 3, 'falha_tipo': 'sem contorno de foco'}))
+
+    def test_foco_so_por_sublinhado_mede_a_cor_do_sublinhado(self):
+        sem = {l: ['rgb(0, 0, 0)', '0px', 'none'] for l in ('Top', 'Right', 'Bottom', 'Left')}
+        base = {'cat': 'foco', 's': 'a', 't': 'x', 'adj': ['#ffffff'], 'proprio': ['#ffffff']}
+        sem_deco = {'bg': 'rgba(0, 0, 0, 0)', 'bordas': sem, 'deco': 'none', 'decoCor': 'rgb(240, 240, 240)', 'cor': 'rgb(20, 20, 20)', 'sombra': 'none'}
+        com_deco = {**sem_deco, 'deco': 'underline'}
+        r = cw.indicador_alternativo(base, com_deco, sem_deco, lambda css: '#f0f0f0' if '240' in css else '#141414')
+        self.assertTrue(cw.reprovado(r), 'sublinhado quase branco sobre branco não pode passar')
+        self.assertLess(r['r'], 1.2)
+        com_deco_escuro = {**com_deco, 'decoCor': 'rgb(20, 20, 20)'}
+        r = cw.indicador_alternativo(base, com_deco_escuro, sem_deco, lambda css: '#f0f0f0' if '240' in css else '#141414')
+        self.assertFalse(cw.reprovado(r))
+        self.assertGreater(r['r'], 15)
 
     def test_foco_sem_contorno_mede_a_mudanca(self):
         base = {'cat': 'foco', 's': 'a', 't': 'x', 'adj': ['#ffffff'], 'proprio': ['#ffffff']}
@@ -99,91 +72,6 @@ class RelatorioTest(unittest.TestCase):
         self.assertIn('P34', md)
         self.assertIn('pior seta: 15.90:1', md)
         self.assertIn('Nenhuma reprovação.', md)
-
-
-@unittest.skipUnless(PLAYWRIGHT, 'Playwright não instalado (testes/requirements-teste.txt)')
-class NavegadorTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        try:
-            cls.pw = sync_playwright().start()
-            cls.navegador = cls.pw.chromium.launch(args=['--force-color-profile=srgb', '--disable-gpu'])
-        except Exception as exc:   # noqa: BLE001 - Chromium ausente
-            if hasattr(cls, 'pw'):
-                cls.pw.stop()
-            raise unittest.SkipTest(f'Chromium indisponível: {str(exc)[:120]}')
-        pagina = cls.navegador.new_page(viewport={'width': 600, 'height': 600})
-        pagina.set_content(PAGINA)
-        pagina.evaluate(cw.JS_PREPARO)
-        cls.texto = pagina.evaluate(cw.JS_TEXTO, cw.EXCECOES_CAMPO)
-        cls.pagina = pagina
-        cls.problemas = []
-        cls.focos = cw.medir_tela(pagina, 'sintetica', cls.problemas)['focos']
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.navegador.close()
-        cls.pw.stop()
-
-    def item(self, seletor_final):
-        achados = [i for i in self.texto['itens'] if i['s'].endswith(seletor_final)]
-        self.assertTrue(achados, f'sem medida para {seletor_final}: {self.texto["itens"]}')
-        return achados[0]
-
-    def test_limite_4_5(self):
-        self.assertFalse(cw.reprovado(self.item('p#ok')))
-        self.assertTrue(cw.reprovado(self.item('p#baixo')))
-
-    def test_texto_grande_usa_3(self):
-        i = self.item('p#grande')
-        self.assertEqual(i['min'], 3)
-        self.assertFalse(cw.reprovado(i))
-
-    def test_texto_svg_nao_e_medido_contra_o_proprio_preenchimento(self):
-        i = self.item('text#svgt')
-        self.assertEqual(i['bg'], '#ffffff')
-        self.assertFalse(cw.reprovado(i))
-
-    def test_excecao_p34_mede_a_seta_e_nao_a_borda(self):
-        seta = [i for i in self.texto['itens'] if i['cat'] == 'seta']
-        self.assertEqual([i['s'] for i in seta], ['select#contexto-caso'])
-        self.assertEqual(seta[0]['excecao'], 'P34')
-        self.assertFalse(cw.reprovado(seta[0]))
-        self.assertFalse([i for i in self.texto['itens'] if i['cat'] == 'campo' and i['s'].endswith('select#contexto-caso')])
-        # sem a exceção, o mesmo campo sem caixa reprova no contorno
-        sem = [i for i in self.texto['itens'] if i['cat'] == 'campo' and i['s'].endswith('select#sem-excecao')]
-        self.assertEqual(len(sem), 1)
-        self.assertTrue(cw.reprovado(sem[0]))
-
-    def test_fundo_escuro(self):
-        self.assertFalse(cw.reprovado(self.item('p#escuro')))
-
-    def test_texto_translucido_compoe_com_o_fundo(self):
-        i = self.item('p#translucido')
-        self.assertEqual(i['fg'], '#808080')
-        self.assertTrue(cw.reprovado(i))
-
-    def test_gradiente_vale_a_pior_parada(self):
-        i = self.item('p#grad')
-        self.assertTrue(cw.reprovado(i))
-        self.assertEqual(i['bg'], '#000000')
-
-    def test_imagem_de_fundo_nao_e_medida_mas_e_contada(self):
-        self.assertFalse([i for i in self.texto['itens'] if i['s'].endswith('p#foto')])
-        self.assertEqual(self.texto['por_motivo'].get('fundo com imagem'), 1)
-
-    def test_desativado_e_isento(self):
-        self.assertFalse([i for i in self.texto['itens'] if 'desativado' in i['s']])
-        self.assertGreaterEqual(self.texto['isentos'], 1)
-
-    def test_foco(self):
-        por_rotulo = {f['t']: f for f in self.focos}
-        self.assertTrue(cw.reprovado(por_rotulo['Foco branco']))
-        self.assertFalse(cw.reprovado(por_rotulo['Foco preto']))
-        self.assertTrue(cw.reprovado(por_rotulo['Sem foco']))
-        self.assertTrue(cw.reprovado(por_rotulo['Anel interno branco']))
-        self.assertFalse(cw.reprovado(por_rotulo['Anel interno preto']))
-        self.assertEqual(self.problemas, [])
 
 
 if __name__ == '__main__':

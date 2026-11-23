@@ -184,7 +184,7 @@ JS_PREPARO = r"""() => {
   const visivel = (e) => { try { return e.checkVisibility({checkOpacity: true, checkVisibilityCSS: true}); } catch (x) { return true; } };
   const snap = (e) => { const c = getComputedStyle(e), b = {};
     for (const l of ['Top', 'Right', 'Bottom', 'Left']) b[l] = [c['border' + l + 'Color'], c['border' + l + 'Width'], c['border' + l + 'Style']];
-    return {bg: c.backgroundColor, bordas: b, deco: c.textDecorationLine, cor: c.color, sombra: c.boxShadow}; };
+    return {bg: c.backgroundColor, bordas: b, deco: c.textDecorationLine, decoCor: c.textDecorationColor, cor: c.color, sombra: c.boxShadow}; };
   window.__vc = {snap, cor, razao, hex, sobre, opacidade, camadas, compor, fundoNoPonto, desc, visivel, lum, base};
   return true;
 }"""
@@ -412,8 +412,12 @@ def indicador_alternativo(item: dict, snap_foco: dict, snap_sem: dict | None, co
         novo, velho = cor_em_hex(snap_foco['bg']), cor_em_hex(snap_sem['bg'])
         if novo and velho:
             candidatos.append(('fundo', novo, razao(parse_hex(novo), parse_hex(velho)), parse_hex(velho)))
-    if mudou_deco:
-        candidatos.append(('sublinhado', '', 21.0, None))
+    if mudou_deco and vizinhos:
+        # O sublinhado é desenhado na sua própria cor (text-decoration-color; sem ela, a do texto): mede-se essa cor contra o que o cerca.
+        hexa = cor_em_hex(snap_foco.get('decoCor') or snap_foco['cor'])
+        if hexa:
+            pior = min(vizinhos, key=lambda v: razao(parse_hex(hexa), v))
+            candidatos.append(('sublinhado', hexa, razao(parse_hex(hexa), pior), pior))
     if not candidatos:
         resultado.update(falha_tipo='sem contorno de foco', r=0.0, fg='', bg='', tipo='nenhum')
         return resultado

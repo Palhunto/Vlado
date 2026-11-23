@@ -18,3 +18,5 @@ test_fila_portao
 # Portão do WCAG AA nos dois temas (Onda 3): mede as 14 telas da linha de base em 375 e 1440 px; cerca de 15 min, só com Playwright e Chromium.
 # Sem eles pula; com VLADO_EXIGIR_PLAYWRIGHT=1 (o CI) falha.
 test_portao_contraste
+# O medidor reprova de verdade? (página sintética de razões conhecidas, no navegador). Pula sem Playwright; com VLADO_EXIGIR_PLAYWRIGHT=1 falha.
+test_contraste_wcag_navegador
