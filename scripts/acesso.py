@@ -109,7 +109,7 @@ BALDES = 20000  # counters of identifiers WITHOUT an account: a table of fixed s
 APARELHOS_MAX = 20  # known devices kept for each account (the least recently used goes first)
 CHAVE_BALDE = '#balde|'  # the ceiling of an identifier, with an account or without: one of BALDES counters, by HMAC
 CHAVE_MARCA = '#marca|'  # failures with a known device mark: the mark does not switch the ceiling off
-ESQUEMA = 8  # PRAGMA user_version of the store; `_ATUALIZACOES` takes an older store up to it
+ESQUEMA = 9  # PRAGMA user_version of the store; `_ATUALIZACOES` takes an older store up to it
 ESPERA_BD_S = 10
 NOME_PADRAO_REDACAO = 'Redação'
 CREDENCIAIS = 'Login ou senha incorretos.'
@@ -156,7 +156,8 @@ CREATE TABLE contas (
     nome TEXT NOT NULL, login TEXT UNIQUE, email TEXT UNIQUE, ativa INTEGER NOT NULL DEFAULT 1,
     senha_hash TEXT, senha_definida_em TEXT, cota_diaria INTEGER, teto_mensal_brl TEXT,
     criada_em TEXT NOT NULL, criada_por TEXT NOT NULL, migrada_de_convite INTEGER NOT NULL DEFAULT 0,
-    ativacao_sha256 TEXT, ativacao_expira_em TEXT, ativacao_motivo TEXT, idioma TEXT, excluida_em TEXT);
+    ativacao_sha256 TEXT, ativacao_expira_em TEXT, ativacao_motivo TEXT, idioma TEXT, excluida_em TEXT,
+    ultimo_acesso TEXT, aviso_inatividade_em TEXT);
 CREATE INDEX contas_por_organizacao ON contas (organizacao);
 CREATE INDEX contas_por_ativacao ON contas (ativacao_sha256);
 CREATE TABLE casos (
@@ -259,7 +260,12 @@ _ATUALIZACOES = {1: ('ALTER TABLE contas ADD COLUMN idioma TEXT',
                      ' criado_em TEXT NOT NULL, ultimo_uso TEXT NOT NULL, PRIMARY KEY (conta, resumo))',),
                  7: ('CREATE TABLE termos_aceites (conta TEXT NOT NULL REFERENCES contas(id), versao TEXT NOT NULL,'
                      ' aceito_em TEXT NOT NULL, ip TEXT)',
-                     'CREATE INDEX termos_por_conta ON termos_aceites (conta, aceito_em)')}
+                     'CREATE INDEX termos_por_conta ON termos_aceites (conta, aceito_em)'),
+                 # The last sign-in (4b-4). An account of before counts from the migration, never from its creation:
+                 # an old store must not wake up with every account already past the 180 days.
+                 8: ('ALTER TABLE contas ADD COLUMN ultimo_acesso TEXT',
+                     'ALTER TABLE contas ADD COLUMN aviso_inatividade_em TEXT',
+                     "UPDATE contas SET ultimo_acesso = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE excluida_em IS NULL")}
 
 
 class RegistroIlegivel(ValueError):
@@ -321,6 +327,11 @@ class SenhaIncorreta(Recusada):
 class UltimoDono(Recusada):
     """The newsroom would be left without an active dono."""
     status, codigo, motivo = 400, 'ultimo_dono', 'ultimo_dono'
+
+
+class NomeDivergente(Recusada):
+    """The name typed to confirm the deletion of the own account is not the account's (it is not a wrong password)."""
+    status, codigo, motivo = 400, 'nome_confirmacao_divergente', 'validacao'
 
 
 class TermosDesatualizados(Recusada):
@@ -926,8 +937,10 @@ def _eh_conta(tx: _Tx, quem) -> bool:
 
 
 def _donos_ativos(tx: _Tx, organizacao: str, exceto: str | None = None) -> int:
-    return tx.um("SELECT COUNT(*) AS total FROM contas WHERE organizacao = ? AND papel = 'dono' AND ativa = 1 AND id IS NOT ?",
-                 organizacao, exceto)['total']
+    """The donos who can run the newsroom: active and with a password. One waiting for a recovery, or for the first
+    password, does not count (Y2 of the review of 4b-3): the last dono who can sign in is never the one to leave."""
+    return tx.um("SELECT COUNT(*) AS total FROM contas WHERE organizacao = ? AND papel = 'dono' AND ativa = 1"
+                 ' AND senha_hash IS NOT NULL AND excluida_em IS NULL AND id IS NOT ?', organizacao, exceto)['total']
 
 
 def _cancelar_convites_de(tx: _Tx, cid: str, momento: datetime | None = None) -> None:
@@ -1055,6 +1068,12 @@ def definir_situacao_redacao(root: Path, organizacao, situacao, por='operador') 
     with _bd(root, escrever=True) as tx:
         if not isinstance(organizacao, str) or not tx.um('SELECT 1 FROM organizacoes WHERE id = ?', organizacao):
             raise ValueError('Redação não encontrada.')
+        antes = tx.um('SELECT situacao FROM organizacoes WHERE id = ?', organizacao)['situacao']
+        if situacao == 'ativa' and antes != 'ativa':
+            # The dates of inactivity only run in an active newsroom (4b-4; B1 of the review): while it was suspended
+            # nobody could sign in, so its people start again from the return, as a reactivated account does.
+            tx.ex('UPDATE contas SET ultimo_acesso = ?, aviso_inatividade_em = NULL WHERE organizacao = ?'
+                  ' AND excluida_em IS NULL', _iso(agora()), organizacao)
         tx.ex('UPDATE organizacoes SET situacao = ? WHERE id = ?', situacao, organizacao)
         _evento(tx, 'redacao_' + {'ativa': 'reativada', 'suspensa': 'suspensa', 'encerrada': 'encerrada'}[situacao],
                 None, por, organizacao=organizacao)
@@ -1304,22 +1323,28 @@ def desativar(root: Path, cid, por='cli', organizacao: str | None = None, *, con
         conta = _conta(tx, cid, organizacao)
         if confirmar and conta['papel'] == 'dono' and not confirmada:
             raise SenhaNecessaria(SENHA_NECESSARIA)
-        if conta['papel'] == 'dono' and conta['ativa'] and not _donos_ativos(tx, conta['organizacao'], exceto=cid):
+        if _ultimo_dono(tx, conta):
             raise UltimoDono('Não é possível desativar o último administrador ativo.')
-        # An old link must not come back to life after reactivation.
-        tx.ex('UPDATE contas SET ativa = 0, ativacao_sha256 = NULL, ativacao_expira_em = NULL, ativacao_motivo = NULL'
-              ' WHERE id = ?', cid)
-        _derrubar_sessoes(tx, cid)
-        _sem_responsabilidade(tx, cid)
-        _cancelar_convites_de(tx, cid)
-        _evento(tx, 'conta_desativada', cid, por)
+        _desativar(tx, cid, por, 'conta_desativada', agora())
         return _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid))
+
+
+def _desativar(tx: _Tx, cid: str, por: str, tipo: str, momento: datetime) -> None:
+    # An old link must not come back to life after reactivation.
+    tx.ex('UPDATE contas SET ativa = 0, ativacao_sha256 = NULL, ativacao_expira_em = NULL, ativacao_motivo = NULL'
+          ' WHERE id = ?', cid)
+    _derrubar_sessoes(tx, cid)
+    _sem_responsabilidade(tx, cid)
+    _cancelar_convites_de(tx, cid, momento)
+    _evento(tx, tipo, cid, por, momento)
 
 
 def reativar(root: Path, cid, por='cli', organizacao: str | None = None) -> dict:
     with _bd(root, escrever=True) as tx:
         conta = _conta(tx, cid, organizacao)
-        tx.ex('UPDATE contas SET ativa = 1 WHERE id = ?', cid)
+        # The count of inactivity starts again from the reactivation: an account reactivated after the sweep
+        # deactivated it must not be deactivated again by the next one.
+        tx.ex('UPDATE contas SET ativa = 1, ultimo_acesso = ?, aviso_inatividade_em = NULL WHERE id = ?', _iso(agora()), cid)
         _limpar_tentativas(tx, conta)
         _evento(tx, 'conta_reativada', cid, por)
         return _publico(tx, tx.um('SELECT * FROM contas WHERE id = ?', cid))
@@ -1468,25 +1493,82 @@ def remover(root: Path, cid, por: str, organizacao: str, senha=None, ip=None) ->
         _conta(tx, cid, organizacao)  # an unknown account is refused before the password is asked
     confirmar_senha(root, por, senha, ip)
     with _bd(root, escrever=True) as tx:
-        conta = _conta(tx, cid, organizacao)
-        momento = agora()
-        if conta['papel'] == 'dono' and conta['ativa'] and not _donos_ativos(tx, organizacao, exceto=cid):
+        return _apagar_conta(tx, _conta(tx, cid, organizacao), por, agora())
+
+
+def _ultimo_dono(tx: _Tx, conta) -> bool:
+    return conta['papel'] == 'dono' and bool(conta['ativa']) and not _donos_ativos(tx, conta['organizacao'], exceto=conta['id'])
+
+
+def _apagar_conta(tx: _Tx, conta, por: str, momento: datetime) -> dict:
+    """What removing a person and deleting the own account both do (contract, 8.4: the same effect): only the id
+    stays, with the situation `excluida`. The last active dono of a newsroom is refused, checked inside the same
+    transaction that deletes."""
+    cid = conta['id']
+    if _ultimo_dono(tx, conta):
+        raise UltimoDono(ULTIMO_DONO)
+    _derrubar_sessoes(tx, cid)
+    _cancelar_convites_de(tx, cid, momento)
+    _sem_fator(tx, cid)
+    tx.ex('DELETE FROM aparelhos WHERE conta = ?', cid)
+    tx.ex('DELETE FROM participacoes WHERE conta = ?', cid)
+    tx.ex('UPDATE termos_aceites SET ip = NULL WHERE conta = ?', cid)  # the proof stays: id, version, date (P41 b)
+    _sem_responsabilidade(tx, cid)
+    tx.ex('DELETE FROM uso_diario WHERE conta = ?', cid)
+    _limpar_tentativas(tx, conta)
+    tx.ex('DELETE FROM tentativas WHERE chave = ?', CHAVE_CONFIRMACAO + cid)
+    tx.ex("UPDATE contas SET ativa = 0, nome = '', login = NULL, email = NULL, senha_hash = NULL, senha_definida_em = NULL,"
+          ' cota_diaria = NULL, teto_mensal_brl = NULL, idioma = NULL, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
+          ' ativacao_motivo = NULL, excluida_em = ? WHERE id = ?', _iso(momento), cid)
+    _evento(tx, 'conta_excluida', cid, por, momento)
+    return {'id': cid, 'situacao': 'excluida'}
+
+
+def excluir_conta(root: Path, cid, nome, senha, ip=None) -> dict:
+    """`conta-excluir`: the person deletes the own account (contract, 8.4 and the delivery 4b-3), with the same
+    effect as `equipe-remover`. The order is the one agreed with the Frontend: the typed name first (the account's
+    current name, ignoring the ends' spaces and the case; a wrong one is not a wrong password), then the last dono,
+    so that an impossible deletion never spends an attempt, then the password."""
+    with _bd(root) as tx:
+        conta = _conta(tx, cid)
+        digitado = nome.strip().casefold() if isinstance(nome, str) and len(nome) <= 400 else None
+        if not digitado or digitado != (conta['nome'] or '').strip().casefold():
+            raise NomeDivergente('O nome digitado não é o da conta.')
+        if _ultimo_dono(tx, conta):
             raise UltimoDono(ULTIMO_DONO)
-        _derrubar_sessoes(tx, cid)
-        _cancelar_convites_de(tx, cid, momento)
-        _sem_fator(tx, cid)
-        tx.ex('DELETE FROM aparelhos WHERE conta = ?', cid)
-        tx.ex('DELETE FROM participacoes WHERE conta = ?', cid)
-        tx.ex('UPDATE termos_aceites SET ip = NULL WHERE conta = ?', cid)  # the proof stays: id, version, date (P41 b)
-        _sem_responsabilidade(tx, cid)
-        tx.ex('DELETE FROM uso_diario WHERE conta = ?', cid)
-        _limpar_tentativas(tx, conta)
-        tx.ex('DELETE FROM tentativas WHERE chave = ?', CHAVE_CONFIRMACAO + cid)
-        tx.ex("UPDATE contas SET ativa = 0, nome = '', login = NULL, email = NULL, senha_hash = NULL, senha_definida_em = NULL,"
-              ' cota_diaria = NULL, teto_mensal_brl = NULL, idioma = NULL, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
-              ' ativacao_motivo = NULL, excluida_em = ? WHERE id = ?', _iso(momento), cid)
-        _evento(tx, 'conta_excluida', cid, por, momento)
-        return {'id': cid, 'situacao': 'excluida'}
+    confirmar_senha(root, cid, senha, ip)
+    with _bd(root, escrever=True) as tx:
+        return _apagar_conta(tx, _conta(tx, cid), cid, agora())
+
+
+# What the Mesa shows as the author of something made by an account that no longer exists (contract, 8.4 and
+# decision 10). The records keep the old name; only the output changes, here, in one place.
+CONTA_EXCLUIDA = 'Conta excluída'
+
+
+def nomes_publicos(root: Path, ids, organizacao: str) -> dict:
+    """The name to show for each account id: its name, `CONTA_EXCLUIDA` for a deleted account, and nothing for what
+    is not an account (a fixed label of the system, an old login) or is an account of another newsroom than
+    `organizacao`: a name never tells one newsroom who is in another. The newsroom is required (Y1 of the review):
+    a caller that forgets it gets an error, never the names of every newsroom."""
+    if not isinstance(organizacao, str) or not organizacao:
+        raise ValueError('A redação de quem vai ver os nomes é obrigatória.')
+    pedidos = sorted({i for i in ids if isinstance(i, str) and ID_CONTA.fullmatch(i)})
+    if not pedidos:
+        return {}
+    with _bd(root) as tx:
+        linhas = tx.todos(f'SELECT id, nome, organizacao, excluida_em FROM contas WHERE id IN ({", ".join("?" * len(pedidos))})',
+                          *pedidos)
+    return {c['id']: _nome_para_mostrar(c) for c in linhas if c['organizacao'] == organizacao}
+
+
+def nome_publico(root: Path, cid, organizacao: str) -> str | None:
+    """One id of `nomes_publicos`."""
+    return nomes_publicos(root, [cid], organizacao).get(cid)
+
+
+def _nome_para_mostrar(conta) -> str:
+    return CONTA_EXCLUIDA if conta['excluida_em'] else conta['nome']
 
 
 def _valor_do_teto(valor) -> str | None:
@@ -1543,8 +1625,8 @@ def atividade(root: Path, organizacao: str, limite: int = 50, antes=None) -> dic
     with _bd(root) as tx:
         # At most MAX_EVENTOS rows: the window of each newsroom.
         linhas = tx.todos('SELECT em, tipo, conta, por FROM eventos WHERE organizacao = ? ORDER BY n', organizacao)
-        nomes = {c['id']: c['nome'] for c in tx.todos(
-            'SELECT id, nome FROM contas WHERE organizacao = ? AND excluida_em IS NULL', organizacao)}
+        nomes = {c['id']: _nome_para_mostrar(c) for c in tx.todos(  # a deleted one shows as `CONTA_EXCLUIDA`
+            'SELECT id, nome, excluida_em FROM contas WHERE organizacao = ?', organizacao)}
         fim = len(linhas) if antes is None else min(antes - 1, len(linhas))
         inicio = max(0, fim - limite)
         return {'eventos': [{'em': l['em'], 'tipo': l['tipo'], 'conta': l['conta'], 'por': l['por'],
@@ -1842,10 +1924,31 @@ def aceitar_convite(root: Path, token, nome, senha, termos_versao=None, ip: str 
         raise
 
 
-def manutencao(root: Path) -> dict:
+def manutencao(root: Path, avisar: bool = True) -> dict:
     """The daily sweep (`acesso.py manutencao`, and once when the server starts): closes the invitations past their
-    date and prunes the newsrooms' activity older than ATIVIDADE_DIAS (what leaves goes to the audit log, as when
-    the window is full). Inactive accounts come with the life cycle."""
+    date, prunes the newsrooms' activity older than ATIVIDADE_DIAS (what leaves goes to the audit log, as when the
+    window is full), and runs the dates of the inactive accounts (contract, 8.4 and the delivery 4b-4). With `avisar`,
+    it also sends the warnings of inactivity (`avisar_inativas`), each one outside the store's transaction; the
+    server's start leaves them to a thread of its own, so that a slow mail server never holds the start."""
+    resultado = _varrer(root)
+    if avisar:
+        avisos = avisar_inativas(root)
+        resultado['contas_avisadas'] = avisos['contas_avisadas']
+        resultado['para_o_operador'] += avisos['para_o_operador']
+    return resultado
+
+
+INATIVIDADE_DIAS = 180  # without a sign-in: the account is warned by e-mail (contract, 8.4)
+DESATIVACAO_DIAS = 30  # after the warning was delivered, without a sign-in: the account is deactivated, not deleted
+FALHAS_SEGUIDAS_DE_ENVIO = 3  # the mail server refused this many in a row: the rest of the sweep does not try
+
+
+def _redacao_ativa(tx: _Tx, organizacao) -> bool:
+    """The dates of inactivity only run in an active newsroom: in a suspended one nobody can sign in."""
+    return bool(tx.um("SELECT 1 FROM organizacoes WHERE id = ? AND situacao = 'ativa'", organizacao))
+
+
+def _varrer(root: Path) -> dict:
     with _bd(root, escrever=True) as tx:
         momento = agora()
         vencidos = _vencer_convites(tx, momento)
@@ -1859,7 +1962,116 @@ def manutencao(root: Path) -> dict:
         recuperacoes = tx.ex("UPDATE recuperacoes SET estado = 'expirada', encerrada_em = ? WHERE estado = 'pendente'"
                              ' AND expira_em <= ?', _iso(momento), _iso(momento)).rowcount
         tx.ex('DELETE FROM links WHERE expira_em <= ?', _iso(momento))
-        return {'convites_vencidos': vencidos, 'eventos_podados': podados, 'recuperacoes_vencidas': recuperacoes}
+        operador, desativadas, excluidas = [], 0, 0
+        # Warned DESATIVACAO_DIAS ago and no sign-in since (a sign-in clears the warning): deactivated, not deleted.
+        # The last active dono of a newsroom is never deactivated: it goes to the operator's list instead.
+        for conta in tx.todos('SELECT * FROM contas WHERE ativa = 1 AND excluida_em IS NULL AND aviso_inatividade_em <= ?'
+                              ' ORDER BY criada_em, rowid', _iso(momento - timedelta(days=DESATIVACAO_DIAS))):
+            if not _redacao_ativa(tx, conta['organizacao']):
+                continue
+            if _ultimo_dono(tx, conta):
+                operador.append(_ao_operador(conta, 'ultimo_dono'))
+                continue
+            _desativar(tx, conta['id'], 'manutencao', 'conta_desativada_por_inatividade', momento)
+            desativadas += 1
+        # Created and never given a password, the activation past its date: it leaves as `equipe-remover` leaves.
+        # Never an account waiting for a recovery: it had a password, and its person may still come back.
+        for conta in tx.todos("SELECT * FROM contas WHERE ativa = 1 AND excluida_em IS NULL AND senha_hash IS NULL"
+                              " AND senha_definida_em IS NULL AND ativacao_expira_em <= ?"
+                              " AND ativacao_motivo IS NOT 'recuperacao' ORDER BY criada_em, rowid", _iso(momento)):
+            if not _redacao_ativa(tx, conta['organizacao']):  # Z1 of the review: nothing runs in a suspended newsroom
+                continue
+            try:
+                _apagar_conta(tx, conta, 'manutencao', momento)
+                excluidas += 1
+            except UltimoDono:
+                operador.append(_ao_operador(conta, 'ultimo_dono'))
+        return {'convites_vencidos': vencidos, 'eventos_podados': podados, 'recuperacoes_vencidas': recuperacoes,
+                'contas_avisadas': 0, 'contas_desativadas': desativadas, 'contas_excluidas': excluidas,
+                'para_o_operador': operador}
+
+
+def _ao_operador(conta, motivo: str) -> dict:
+    """One line of the operator's list: ids and a fixed reason, never a name or an address."""
+    return {'conta': conta['id'], 'redacao': conta['organizacao'], 'motivo': motivo}
+
+
+def avisar_inativas(root: Path) -> dict:
+    """The warning of the accounts without a sign-in for INATIVIDADE_DIAS (e-mail `conta_inativa`, no link). The
+    DESATIVACAO_DIAS only count from a warning the `smtp` transport delivered (ressalva B3 and observation F1): with
+    `tela` or `simulado`, without an address, or with the delivery failing, nothing is counted and the account goes
+    to the operator's list, and the next sweep tries again. The last active dono is warned too, with a message of
+    its own: it is never deactivated. Each message is sent outside the store's transaction."""
+    with _trinco_sem_espera(Path(str(caminho_bd(root)) + '.avisos')) as meu:
+        if not meu:  # another sweep (the server's start, the daily job) is sending them now (Z3 of the review)
+            return {'contas_avisadas': 0, 'para_o_operador': []}
+        return _avisar_inativas(root)
+
+
+@contextmanager
+def _trinco_sem_espera(caminho: Path):
+    """An exclusive lock across processes that never waits: True when this one holds it, False when another does."""
+    trava = Path(str(caminho) + '.lock')
+    trava.parent.mkdir(parents=True, exist_ok=True)
+    with open(trava, 'a+b') as stream:
+        try:
+            if os.name == 'nt':
+                import msvcrt
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            if os.name == 'nt':
+                import msvcrt
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(stream, fcntl.LOCK_UN)
+
+
+def _avisar_inativas(root: Path) -> dict:
+    import correio  # here: the store loads without the mail module (the operator's tools)
+    momento = agora()
+    with _bd(root) as tx:
+        contas = [(dict(c), _ultimo_dono(tx, c)) for c in tx.todos(
+            'SELECT * FROM contas WHERE ativa = 1 AND excluida_em IS NULL AND senha_hash IS NOT NULL'
+            ' AND aviso_inatividade_em IS NULL AND COALESCE(ultimo_acesso, criada_em) <= ? ORDER BY criada_em, rowid',
+            _iso(momento - timedelta(days=INATIVIDADE_DIAS))) if _redacao_ativa(tx, c['organizacao'])]
+    try:
+        transporte = correio.transporte()
+    except ValueError:
+        transporte = None
+    operador, avisadas, falhas = [], 0, 0
+    for conta, ultimo_dono in contas:
+        if not conta['email']:
+            operador.append(_ao_operador(conta, 'sem_email'))
+            continue
+        if transporte != 'smtp':
+            operador.append(_ao_operador(conta, 'sem_envio'))
+            continue
+        if falhas >= FALHAS_SEGUIDAS_DE_ENVIO:
+            operador.append(_ao_operador(conta, 'envio_falhou'))
+            continue
+        try:
+            correio.enviar('conta_inativa_dono' if ultimo_dono else 'conta_inativa', conta['email'], conta['idioma'],
+                           {'dias': INATIVIDADE_DIAS, 'prazo': DESATIVACAO_DIAS}, conta=conta['id'], por='smtp')
+        except (correio.FalhaDeEnvio, ValueError):
+            falhas += 1
+            operador.append(_ao_operador(conta, 'envio_falhou'))
+            continue
+        falhas = 0
+        with _bd(root, escrever=True) as tx:  # unless the person signed in while the message was on its way
+            avisadas += tx.ex('UPDATE contas SET aviso_inatividade_em = ? WHERE id = ? AND aviso_inatividade_em IS NULL'
+                              ' AND ultimo_acesso IS ?', _iso(agora()), conta['id'], conta['ultimo_acesso']).rowcount
+    return {'contas_avisadas': avisadas, 'para_o_operador': operador}
 
 
 # --- password reset by e-mail (senha-esqueci, senha-redefinir) ------------------------------------
@@ -2252,8 +2464,9 @@ def _link_de_recuperacao(tx: _Tx, conta, momento: datetime) -> str:
 
 
 def _recuperacao_publica(tx: _Tx, linha) -> dict:
-    nomes = {c['id']: c['nome'] for c in tx.todos('SELECT id, nome FROM contas WHERE id IN (?, ?) AND excluida_em IS NULL',
-                                                  linha['conta'], linha['pedida_por'])}
+    nomes = {c['id']: _nome_para_mostrar(c) for c in tx.todos('SELECT id, nome, excluida_em FROM contas WHERE id IN (?, ?)'
+                                                               ' AND organizacao = ?', linha['conta'], linha['pedida_por'],
+                                                               linha['organizacao'])}
     return {'id': linha['id'], 'conta': linha['conta'], 'conta_nome': nomes.get(linha['conta']),
             'pedida_por': linha['pedida_por'], 'pedida_por_nome': nomes.get(linha['pedida_por']),
             'pedida_em': linha['pedida_em'], 'expira_em': linha['expira_em'], 'estado': linha['estado']}
@@ -2745,6 +2958,8 @@ def _abrir_sessao(tx: _Tx, cid: str, momento: datetime, cliente, aparelho, ip: s
           _hash(sid), secrets.token_hex(8), cid, csrf, _iso(momento),
           _iso(momento + timedelta(hours=SESSAO_HORAS)), _iso(momento), _cliente(cliente),
           _aparelho(aparelho), _ip_valido(ip), _ip_valido(ip))
+    # Signing in again resets the inactivity count, and the warning with it (contract, 4b-4).
+    tx.ex('UPDATE contas SET ultimo_acesso = ?, aviso_inatividade_em = NULL WHERE id = ?', _iso(momento), cid)
     tx.depois.append(lambda: registro_acesso.registrar('login_ok', 'ok', cid, momento, cliente=_cliente(cliente), ip=ip))
     return sid, csrf
 
@@ -2956,6 +3171,96 @@ def _dict_ou_none(linha):
     return dict(linha) if linha else None
 
 
+# --- export of the own data (`conta-exportar`, contract of accounts, 8.4 and the delivery 4b-2) ---------------------
+
+FORMATO_EXPORTACAO, VERSAO_EXPORTACAO = 'vlado-meus-dados', 1
+# What the file does not carry yet, as fixed codes the page translates (ressalva E4): the list of what the person
+# created, which lives in other modules' files, and the accesses in the audit log, which is the Platform's.
+EXPORTACAO_INCOMPLETA = ('itens_criados', 'registro_de_acesso')
+# Who did an event, when it was not an account: the fixed labels this module writes in `por`.
+POR_SISTEMA = frozenset({'operador', 'manutencao', 'migracao', 'migracao_contas', 'primeiro_acesso', 'primeiro_admin'})
+
+
+def _quem(tx: _Tx, valor, cid: str) -> str | None:
+    """The other side of an event, as the export shows it (ressalva B1): the person, a fixed label of the system, or
+    just "another account", never its id nor its name."""
+    if valor is None:
+        return None
+    if valor == cid:
+        return 'voce'
+    if valor in POR_SISTEMA and not tx.um('SELECT 1 FROM contas WHERE id = ?', valor):
+        return valor
+    return 'outra_conta'
+
+
+EXPORTACOES_POR_JANELA, EXPORTACAO_JANELA_S = 5, 3600  # per account (X1 of the review): a file, not a feed
+_EXPORTACOES: dict[str, deque] = {}
+
+
+def _limite_de_exportacao(cid: str, momento: datetime) -> None:
+    with _IPS_TRAVA:
+        fila = _EXPORTACOES.setdefault(cid, deque())
+        while fila and (momento - fila[0]).total_seconds() >= EXPORTACAO_JANELA_S:
+            fila.popleft()
+        if len(fila) >= EXPORTACOES_POR_JANELA:
+            registro_acesso.registrar('admin_recusada', 'falha', cid, motivo='bloqueado')
+            raise Bloqueado(BLOQUEADO)
+        fila.append(momento)
+        if len(_EXPORTACOES) > 10000:
+            for chave in [k for k, f in _EXPORTACOES.items() if not f or (momento - f[-1]).total_seconds() >= EXPORTACAO_JANELA_S]:
+                _EXPORTACOES.pop(chave, None)
+
+
+def exportar_conta(root: Path, cid) -> dict:
+    """`conta-exportar`: what the store keeps about the person, for the person (contract, 8.4). Nothing of anybody
+    else, and never a secret: no password hash, token, ticket, seed, reserve code, csrf, session id or cookie, device
+    mark or its summary, nor AI key. The content of the cases is the newsroom's and leaves by their own export.
+    At most EXPORTACOES_POR_JANELA files an hour per account (429 `bloqueado`)."""
+    if isinstance(cid, str):
+        _limite_de_exportacao(cid, agora())
+    with _bd(root) as tx:
+        conta = _conta(tx, cid)
+        cid, momento = conta['id'], agora()
+        redacao = tx.um('SELECT id, nome FROM organizacoes WHERE id = ?', conta['organizacao'])
+        eventos = [{'em': e['em'], 'tipo': e['tipo'], 'conta': _quem(tx, e['conta'], cid), 'por': _quem(tx, e['por'], cid)}
+                   for e in tx.todos(  # the newsroom's own window, by its index (X1 of the review)
+                       'SELECT em, tipo, conta, por FROM eventos WHERE organizacao = ? AND (conta = ? OR por = ?)'
+                       ' AND em > ? ORDER BY n', conta['organizacao'], cid, cid,
+                       _iso(momento - timedelta(days=ATIVIDADE_DIAS)))]
+        return {
+            'formato': FORMATO_EXPORTACAO, 'versao': VERSAO_EXPORTACAO, 'gerado_em': _iso(momento),
+            'conta': {'id': cid, 'nome': conta['nome'], 'email': conta['email'], 'login': conta['login'],
+                      'papel': conta['papel'], 'idioma': conta['idioma'] or IDIOMAS[0], 'situacao': _situacao(conta),
+                      'criada_em': conta['criada_em'], 'senha_definida_em': conta['senha_definida_em'],
+                      'cota_diaria': conta['cota_diaria'], 'teto_mensal_brl': conta['teto_mensal_brl'],
+                      'ultimo_acesso': conta['ultimo_acesso'], 'aviso_inatividade_em': conta['aviso_inatividade_em']},
+            'redacao': dict(redacao),
+            'segundo_fator': _estado_do_fator(tx, cid),
+            'termos': [dict(t) for t in tx.todos('SELECT versao, aceito_em, ip FROM termos_aceites WHERE conta = ?'
+                                                 ' ORDER BY aceito_em, rowid', cid)],
+            'sessoes': [dict(s) for s in tx.todos(
+                'SELECT criada_em, ultimo_uso, expira_em, cliente, aparelho, ip_criacao, ip_ultimo FROM sessoes'
+                ' WHERE conta = ? AND expira_em > ? ORDER BY criada_em', cid, _iso(momento))],
+            'aparelhos': [dict(a) for a in tx.todos('SELECT criado_em, ultimo_uso FROM aparelhos WHERE conta = ?'
+                                                    ' ORDER BY criado_em', cid)],
+            'participacoes': _participacoes(tx, cid),
+            'eventos': eventos,
+            'incompleto': list(EXPORTACAO_INCOMPLETA),
+        }
+
+
+def idioma_gravado(root: Path, cid) -> str | None:
+    """The language the account chose, as stored: 'pt', 'en', or None when it never chose one (P42: the page then
+    follows the browser's Accept-Language). Only this column of the own account, which the caller takes from the
+    session; an unknown or deleted account, or a value outside IDIOMAS, is None, never an error."""
+    if not isinstance(cid, str) or not ID_CONTA.fullmatch(cid):
+        return None
+    with _bd(root) as tx:
+        linha = tx.um('SELECT idioma FROM contas WHERE id = ? AND excluida_em IS NULL', cid)
+    valor = linha['idioma'] if linha else None
+    return valor if valor in IDIOMAS else None
+
+
 def atualizar_perfil(root: Path, cid, *, nome=None, idioma=None) -> dict:
     """The person changes the own name and the language of the e-mails; nothing else is theirs to change here."""
     if nome is None and idioma is None:
@@ -3143,7 +3448,7 @@ def _principal() -> int:
     atribui.add_argument('--responsavel', help='Id de uma conta dono ou repórter da redação')
     migra = sub.add_parser('migrar', help='Leva o acesso.json para o armazenamento novo')
     migra.add_argument('--simular', action='store_true', help='Só mostra o relatório; não grava nada')
-    sub.add_parser('manutencao', help='Varredura diária: vence convites e poda a atividade antiga')
+    sub.add_parser('manutencao', help='Varredura diária: vence convites, poda a atividade antiga e cuida das contas inativas')
     args = parser.parse_args()
     if args.comando in ('criar-admin', 'criar-conta', 'recuperar'):
         if args.comando == 'criar-admin':
