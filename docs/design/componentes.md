@@ -1158,7 +1158,7 @@ Respostas:
 **Excluir a conta** (E4b-3, `conta-excluir {senha, nome}`). É a variante [com senha](#dialogo-senha) destrutiva, com o campo do nome antes do da senha, como em "Apagar definitivamente".
 
 - **Título:** "Excluir a sua conta?"
-- **Texto, antes dos campos** (decisão 10 do contrato): "Você sai da Mesa agora e não entra mais com esta conta. Suas notas, revisões e conversas ficam com a redação, e a Mesa passa a mostrar o autor como «Conta excluída». O seu nome continua gravado nos registros já feitos e nos backups, que não podem ser reescritos."
+- **Texto, antes dos campos** (decisão 10 do contrato; o texto depende da definição de quem responde pela LGPD, a D6, que está com o dono do projeto, e muda se ela mudar): "Você sai da Mesa agora e não entra mais com esta conta. Suas notas, revisões e conversas ficam com a redação, e a Mesa passa a mostrar o autor como «Conta excluída». O seu nome continua gravado nos registros já feitos e nos backups, que não podem ser reescritos."
 - **Campos:** "Digite o seu nome, «Ana Lima», para confirmar" (16/400, só o nome em 600), depois "Sua senha".
 - **Ação:** "Excluir a conta" (destrutiva, "Excluindo…"), habilitada só com o nome conferido e a senha preenchida.
 
@@ -1180,10 +1180,10 @@ Respostas:
 - **Texto:** "Para continuar usando o Vlado, leia e aceite os termos de uso e a política de privacidade do teste (versão 2026-12-01)." (`termos_vigente.versao`). Abaixo, o [link](#link) "Ler os termos", aberto em outra aba, para `termos_vigente.endereco`.
 - **Caixa de marcar:** "Li e aceito os termos de uso e a política de privacidade do teste." Sem marcar, ao enviar: "Falta aceitar os termos. Marque a caixa para continuar."
 - **Ação:** principal grande "Aceitar e abrir a Mesa" (`conta-termos-aceitar {versao}`; sem senha). Depois, a pendência do fator, se houver, ou `/`.
-- **Quem não quer aceitar** (ressalva B2 do contrato): abaixo da ação, em 14 `--theme-muted`, "Prefere não aceitar? Você pode baixar seus dados ou excluir a conta.". "Baixar seus dados" e "excluir a conta" são [links](#link): o primeiro baixa o arquivo, como em Minha conta; o segundo abre o [diálogo de excluir](#excluir-conta).
+- **Quem não quer aceitar** (ressalva B2 do contrato): abaixo da ação, em 14 `--theme-muted`, "Prefere não aceitar? Você pode baixar seus dados ou excluir a conta.". "Baixar seus dados" e "excluir a conta" são [links](#link): o primeiro baixa o arquivo, como em Minha conta; o segundo abre o [diálogo de excluir](#excluir-conta). Os dois só aparecem quando `pendencias` não traz `segundo_fator`. Com a pendência do fator, o servidor recusa as duas operações (403 `pendencia_de_conta`), e no lugar dos links fica "Depois de cadastrar o segundo fator, você poderá baixar seus dados ou excluir a conta." (B1 da Coruja sobre `b7eee49`).
 - **Sair:** o link "Sair", no pé do cartão.
 - **Respostas:** `termos_desatualizados` relê a página com a versão nova e mostra "Os termos mudaram enquanto você lia. Confira a versão nova e marque de novo."; as demais vão à caixa de aviso.
-- A sessão só alcança `conta-ver`, `conta-termos-aceitar`, `conta-exportar` e `conta-excluir` (contrato, 12).
+- A sessão só alcança `conta-ver`, `conta-termos-aceitar`, `conta-exportar` e `conta-excluir` (contrato, 12); as duas últimas, só sem a pendência do fator.
 
 **Contas inativas** (E4b-4) são só do servidor: o aviso de 180 dias sai por e-mail, com texto de Contas, e a Mesa não tem tela para isso. O que a pessoa vê é a conta desativada, como qualquer outra, e a linha da atividade acima.
 
