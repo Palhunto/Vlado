@@ -133,6 +133,29 @@ def listar(root, case, *, estado='', responsavel='', texto=''):
     return {'caso': case, 'resultados': result, 'total': len(result)}
 
 
+def itens_da_conta(root, conta, casos):
+    """What the account did in the follow-ups, for its own data export (E4b-2b of Contas; Viga, with the Maestro's
+    consent): ``[{tipo, caso, criado_em, id}]``, only in ``casos`` (those it reaches, as the caller says):
+    ``diligencia`` for one it created (its first event is of this account; id: the follow-up's) and
+    ``resposta_diligencia`` for each answer it registered (id: ``<follow-up>:<event sequence>``). The person named
+    as responsible is an assignment, not authorship, and does not count. Never the action, the contact, the
+    observation or a name. Cases in the trash stay out. A follow-up that cannot be read raises ValueError or
+    OSError (the export says it is incomplete)."""
+    casos, _ = lixeira.casos_da_exportacao(root, conta, casos)
+    itens = []
+    for case in casos:
+        for item in listar(root, case)['resultados']:
+            for event in item['historico']:
+                if event.get('conta_id') != conta or event.get('origem_autoria') != caderno.AUTORIA_CONTA:
+                    continue
+                if event['sequencia'] == 1:
+                    itens.append({'tipo': 'diligencia', 'caso': case, 'criado_em': event['em_utc'], 'id': item['id']})
+                elif event['operacao'] == 'responder':
+                    itens.append({'tipo': 'resposta_diligencia', 'caso': case, 'criado_em': event['em_utc'],
+                                  'id': f"{item['id']}:{event['sequencia']}"})
+    return itens
+
+
 def salvar(root, data, operation='criar', conta=None):
     fields = {'caso', 'requisicao_id', 'autor', 'observacao'}
     fields |= ({'origem', 'acao', 'responsavel', 'prazo', *CAMPOS_CONTATO} if operation == 'criar'

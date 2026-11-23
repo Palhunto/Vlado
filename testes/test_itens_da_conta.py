@@ -17,11 +17,15 @@ import apuracao  # noqa: E402
 import caderno  # noqa: E402
 import codex_apuracao  # noqa: E402
 import conferencia_redacao as redacao  # noqa: E402
+import diligencias  # noqa: E402
+import evidencias  # noqa: E402
+import hipoteses  # noqa: E402
 import lixeira  # noqa: E402
 import revisao_humana as human  # noqa: E402
 import test_caderno as notebook_fixture  # module imports: their TestCases are not re-collected here
 import test_conferencia_redacao as conferencia_fixture
 import test_custo_redacoes as redacoes
+import test_diligencias as diligencias_fixture
 
 CONTA = {'id': '0123456789abcdef', 'nome': 'Marina Sintética'}
 OUTRA = {'id': 'fedcba9876543210', 'nome': 'Outra Pessoa Sintética'}
@@ -172,6 +176,75 @@ class ConferenciaRedacaoTest(conferencia_fixture.Fontes, Comum, unittest.TestCas
 
     def test_entradas_invalidas(self):
         self.conferir_entradas(redacao.itens_da_conta)
+
+
+class DiligenciasTest(Comum, unittest.TestCase):
+    def setUp(self):
+        self.fx = diligencias_fixture.DiligenciasTest(); self.fx.setUp(); self.addCleanup(self.fx.doCleanups)
+        self.root = self.fx.root
+
+    def test_criadas_e_respostas_da_conta_nunca_o_responsavel(self):
+        minha = diligencias.salvar(self.root, self.fx.create(responsavel=OUTRA['nome']), 'criar', CONTA)
+        alheia = diligencias.salvar(self.root, self.fx.create(acao='De outra pessoa', responsavel=CONTA['nome']),
+                                    'criar', OUTRA)
+        corpo, _ = self.fx.response(alheia)
+        respondida = diligencias.salvar(self.root, corpo, 'responder', CONTA)
+        diligencias.salvar(self.root, self.fx.update(minha), 'atualizar', OUTRA)  # an update is not an item
+        diligencias.salvar(self.root, self.fx.create(acao='Sem conta'))
+        itens = diligencias.itens_da_conta(self.root, CONTA['id'], ['alpha'])
+        self.assertEqual(sorted((i['tipo'], i['id']) for i in itens),
+                         sorted([('diligencia', minha['id']), ('resposta_diligencia', f"{alheia['id']}:2")]))
+        self.conferir_forma([i for i in itens if i['tipo'] == 'diligencia'], 'diligencia')
+        self.conferir_forma([i for i in itens if i['tipo'] == 'resposta_diligencia'], 'resposta_diligencia')
+        self.assertEqual(respondida['historico'][1]['em_utc'],
+                         next(i['criado_em'] for i in itens if i['tipo'] == 'resposta_diligencia'))
+        self.assertNotIn('RESPOSTA_DILIGENCIA', str(itens))
+        self.assertEqual([(i['tipo'], i['id']) for i in diligencias.itens_da_conta(self.root, OUTRA['id'], ['alpha'])],
+                         [('diligencia', alheia['id'])])
+        lixeira.adicionar(self.root, 'caso', 'alpha', 'Alpha')
+        self.assertEqual(diligencias.itens_da_conta(self.root, CONTA['id'], ['alpha']), [])
+
+    def test_entradas_invalidas(self):
+        self.conferir_entradas(diligencias.itens_da_conta)
+
+
+class QuadrosTest(Comum, unittest.TestCase):
+    def setUp(self):
+        self.fx, _ = Ambiente.copia_completa(); self.addCleanup(self.fx.cleanup)
+        self.root = self.fx.root
+
+    def base(self, **fields):
+        return {'caso': 'alpha', 'requisicao_id': uuid.uuid4().hex, 'autor': 'Nome do cliente', **fields}
+
+    def test_registros_que_a_conta_criou_nos_quadros(self):
+        minha = hipoteses.salvar(self.root, self.base(enunciado='Hipótese sintética H'), conta=CONTA)
+        alheia = hipoteses.salvar(self.root, self.base(enunciado='Hipótese de outra pessoa'), conta=OUTRA)
+        hipoteses.salvar(self.root, self.base(id=alheia['id'], anterior_sha256=alheia['sha256'],
+                                              enunciado='Editada pela conta'), 'atualizar', CONTA)  # still not hers
+        hipoteses.salvar(self.root, self.base(enunciado='Sem conta'))
+        itens = evidencias.itens_da_conta(self.root, CONTA['id'], ['alpha'])
+        self.assertEqual(itens, [{'tipo': 'hipoteses', 'caso': 'alpha', 'criado_em': minha['historico'][0]['em_utc'],
+                                  'id': minha['id']}])
+        self.conferir_forma(itens, 'hipoteses')
+        self.assertNotIn('Hipótese', str(itens))
+        self.assertEqual([i['id'] for i in evidencias.itens_da_conta(self.root, OUTRA['id'], ['alpha'])], [alheia['id']])
+        lixeira.adicionar(self.root, 'caso', 'alpha', 'Alpha')
+        self.assertEqual(evidencias.itens_da_conta(self.root, CONTA['id'], ['alpha']), [])
+
+    def test_todos_os_quadros_sem_a_conferencia_da_redacao(self):
+        import importlib
+        nomes = {v.nome for n in evidencias.QUADROS for v in vars(importlib.import_module(n)).values()
+                 if isinstance(v, evidencias.Colecao)}
+        self.assertEqual(nomes, {'perguntas', 'hipoteses', 'linha_do_tempo', 'entidades', 'relacoes', 'tabelas'})
+
+    def test_registro_divergente_levanta(self):
+        with mock.patch.object(hipoteses.COLECAO, 'listar', return_value=[{'id': 'H' + 'a' * 32, 'divergente': True,
+                                                                           'historico': [], 'estado': None}]):
+            with self.assertRaises(ValueError):
+                evidencias.itens_da_conta(self.root, CONTA['id'], ['alpha'])
+
+    def test_entradas_invalidas(self):
+        self.conferir_entradas(evidencias.itens_da_conta)
 
 
 class ConversasTest(redacoes.Redacoes, unittest.TestCase):

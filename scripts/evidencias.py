@@ -417,6 +417,22 @@ class Colecao:
         return {'caso': case, 'colecao': self.nome, 'id': identifier, 'sha256': previous, 'estado': state,
                 'historico': events, 'divergente': False}
 
+    def itens_da_conta(self, root, conta, casos):
+        """Records of this collection the account created (its first event is of this account), for its own data
+        export (E4b-2b of Contas; Viga, with the Maestro's consent): ``[{tipo: <collection>, caso, criado_em, id}]``,
+        only in ``casos`` (those it reaches, as the caller says). Never the content or a name. Cases in the trash stay
+        out. A record whose history cannot be read raises ValueError (whose actions it holds is unknown)."""
+        casos, _ = lixeira.casos_da_exportacao(root, conta, casos)
+        itens = []
+        for case in casos:
+            for record in self.listar(root, case):
+                if record.get('divergente'):
+                    raise ValueError(f'Registro ilegível em {self.rotulo}.')
+                first = record['historico'][0]
+                if first.get('conta_id') == conta and first.get('origem_autoria') == caderno.AUTORIA_CONTA:
+                    itens.append({'tipo': self.nome, 'caso': case, 'criado_em': first['em_utc'], 'id': record['id']})
+        return itens
+
     def listar(self, root, case):
         """Todos os itens; um item com histórico divergente vem marcado, sem estado, e não derruba os demais."""
         folder = self.pasta(root, case)
@@ -490,3 +506,21 @@ class Colecao:
                     staged_folder = staging / identifier; staged_folder.mkdir()
                     staged.rename(staged_folder / filename); staged_folder.rename(records)
             return self.detalhe(root, case, identifier)
+
+
+# The evidence boards built on Colecao (the newsroom check, conferencia_redacao, gives its own items).
+QUADROS = ('entrevistas', 'hipoteses', 'linha_tempo', 'mapa_relacoes', 'tabelas_apuracao')
+
+
+def itens_da_conta(root, conta, casos):
+    """The records the account created in every evidence board (``Colecao.itens_da_conta`` of each), for its own
+    data export (E4b-2b of Contas). The board modules are imported here, at call time: they import this one."""
+    import importlib
+    itens, vistas = [], set()
+    for nome in QUADROS:
+        modulo = importlib.import_module(nome)
+        for colecao in (v for v in vars(modulo).values() if isinstance(v, Colecao)):
+            if colecao.nome not in vistas:  # a board imported by another module counts once
+                vistas.add(colecao.nome)
+                itens.extend(colecao.itens_da_conta(root, conta, casos))
+    return itens
