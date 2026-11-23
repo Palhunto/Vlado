@@ -540,8 +540,9 @@
     const item = faixa.querySelector(ativo);
     if (item && faixa.clientWidth > 0 && faixa.scrollWidth > faixa.clientWidth) {
       const dentro = faixa.getBoundingClientRect(), caixa = item.getBoundingClientRect(), folga = folgaDe(faixa);
-      if (caixa.left < dentro.left + folga) faixa.scrollLeft += caixa.left - dentro.left - folga;
-      else if (caixa.right > dentro.right - folga) faixa.scrollLeft += caixa.right - dentro.right + folga;
+      // O destino é sempre o ponto de encaixe das pílulas (o início do item, com o scroll-padding de --espaco-4 do CSS): assim o scroll-snap proximity não desfaz a rolagem
+      // (Q5e); nas pontas o navegador limita ao que a faixa alcança, e o item segue inteiro.
+      if (caixa.left < dentro.left + folga || caixa.right > dentro.right - folga) faixa.scrollLeft += caixa.left - dentro.left - folga;
     }
     marcar(faixa);
   }
