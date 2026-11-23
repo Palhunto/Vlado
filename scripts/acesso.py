@@ -124,6 +124,9 @@ CONVITE_INVALIDO = 'Convite inválido, cancelado ou vencido. Peça um novo a que
 CONVITE_INEXISTENTE = 'Convite não encontrado.'
 LINK_INVALIDO = 'Link inválido, usado ou vencido. Peça outro em Esqueci a senha.'
 CODIGO_INVALIDO = 'Código incorreto.'
+FATOR_INDISPONIVEL = ('O código do aplicativo não pode ser conferido neste servidor agora. Se você tem um código de '
+                      'reserva, use-o, e avise quem administra o serviço.')
+CADASTRO_INDISPONIVEL = 'O cadastro do segundo fator está indisponível neste servidor. Avise quem administra o serviço.'
 CODIGO_NECESSARIO = 'Digite o código do aplicativo autenticador, ou um código de reserva.'
 ENTRADA_EXPIRADA = 'A entrada expirou. Digite o login e a senha de novo.'
 CHAVE_CONFIRMACAO = '#senha|'  # attempt counter of the password asked again; `#` never starts a login
@@ -344,6 +347,13 @@ class CodigoNecessario(Recusada):
     """The operation needs the second factor and no code came. Not a wrong code: nothing is counted nor recorded
     (a page may ask first without it, to learn that the account has a factor)."""
     status, codigo, motivo = 403, 'fator_necessario', 'validacao'
+
+
+class FatorIndisponivel(Recusada):
+    """The second factor cannot be checked or enrolled here: the key of the seeds is missing, or is not the one
+    they were stored with (a restore without `segredos/`). Not the person's mistake: nothing is counted. A reserve
+    code still works, as it needs neither the seed nor the key."""
+    status, codigo, motivo = 503, 'fator_indisponivel', 'erro'
 
 
 class PedeSegundoFator(Exception):
@@ -1874,16 +1884,53 @@ def _usar_codigo(tx: _Tx, root: Path, cid: str, codigo, momento: datetime) -> st
     fator = tx.um('SELECT semente, ultimo_passo FROM fatores WHERE conta = ? AND ativo = 1', cid)
     if not fator:
         return None
-    passo = segundo_fator.conferir(segundo_fator.decifrar(root, fator['semente'], cid), codigo, momento, fator['ultimo_passo'])
+    # The reserve code first, by its shape: it is checked against its own hash and needs neither the seed nor the
+    # key of the seeds, so it still lets the person in when that key is missing (a restore without `segredos/`).
+    resumo = segundo_fator.resumo_da_reserva(codigo)
+    if resumo:
+        if tx.ex('UPDATE codigos_reserva SET usado_em = ? WHERE conta = ? AND resumo = ? AND usado_em IS NULL',
+                 _iso(momento), cid, resumo).rowcount:
+            _evento(tx, 'codigo_reserva_usado', cid, cid, momento)
+            return 'reserva'
+        return None
+    passo = segundo_fator.conferir(_semente_do_fator(root, fator['semente'], cid), codigo, momento, fator['ultimo_passo'])
     if passo is not None:
         tx.ex('UPDATE fatores SET ultimo_passo = ? WHERE conta = ?', passo, cid)
         return 'totp'
-    resumo = segundo_fator.resumo_da_reserva(codigo)
-    if resumo and tx.ex('UPDATE codigos_reserva SET usado_em = ? WHERE conta = ? AND resumo = ? AND usado_em IS NULL',
-                        _iso(momento), cid, resumo).rowcount:
-        _evento(tx, 'codigo_reserva_usado', cid, cid, momento)
-        return 'reserva'
     return None
+
+
+def _semente_do_fator(root: Path, guardada, cid: str) -> bytes:
+    """The seed of an account, opened. When it does not open (the key file is missing or is another one) that is
+    told to the operator in the audit log and to the person as FatorIndisponivel: not a wrong code."""
+    try:
+        return segundo_fator.decifrar(root, guardada, cid)
+    except (segundo_fator.ChaveIlegivel, segundo_fator.SementeIlegivel) as exc:
+        registro_acesso.registrar('fator_indisponivel', 'falha', cid,
+                                  motivo='chave_ausente' if isinstance(exc, segundo_fator.ChaveIlegivel) else 'semente_ilegivel')
+        raise FatorIndisponivel(FATOR_INDISPONIVEL) from exc
+
+
+def conferir_chave_do_fator(root: Path) -> str | None:
+    """For the start of the server: the warning for the operator when accounts have a second factor and the key of
+    their seeds is missing, unreadable or another one (a restore without `segredos/`), or None. It also goes to
+    the audit log. Nothing is made or repaired here."""
+    with _bd(root) as tx:
+        ativos = tx.todos('SELECT conta, semente FROM fatores WHERE ativo = 1 ORDER BY conta')
+    if not ativos:
+        return None
+    try:
+        segundo_fator.decifrar(root, ativos[0]['semente'], ativos[0]['conta'])
+        return None
+    except segundo_fator.ChaveIlegivel:
+        motivo, defeito = 'chave_ausente', 'não está nesta instalação, ou está ilegível'
+    except segundo_fator.SementeIlegivel:
+        motivo, defeito = 'semente_ilegivel', 'não é a que cifrou as sementes guardadas'
+    registro_acesso.lembrar_raiz(root)
+    registro_acesso.registrar('fator_indisponivel', 'falha', motivo=motivo)
+    return (f'ATENÇÃO: {len(ativos)} conta(s) têm segundo fator e a chave das sementes (segredos/contas.chave) {defeito}. '
+            'Os códigos do aplicativo não serão aceitos, só os códigos de reserva. Restaure o arquivo a partir da cópia '
+            'guardada com os segredos (deploy/BACKUP.md). Não crie outro: as sementes já cadastradas não abririam com ele.')
 
 
 def _fator_recusado(tx: _Tx, cid: str, momento: datetime, ip: str | None) -> None:
@@ -1921,10 +1968,18 @@ def iniciar_fator(root: Path, cid: str, senha, codigo=None, ip: str | None = Non
     confirmar_senha(root, cid, senha, ip)
     with _bd(root) as tx:
         ativo = bool(tx.um('SELECT 1 FROM fatores WHERE conta = ? AND ativo = 1', cid))
+        algum = bool(tx.um('SELECT 1 FROM fatores WHERE ativo = 1 LIMIT 1'))
     if ativo:
         exigir_codigo(root, cid, codigo, ip)
     semente = segundo_fator.nova_semente()
-    cifrada = segundo_fator.cifrar(root, semente, cid)
+    try:
+        # The key file is only made while no account has a factor. If one has and the file is gone (a restore
+        # without `segredos/`), a new key would leave every stored seed unreadable for good: nobody enrols until
+        # the operator puts the file back.
+        cifrada = segundo_fator.cifrar(root, semente, cid, criar_chave=not algum)
+    except segundo_fator.ChaveIlegivel as exc:
+        registro_acesso.registrar('fator_indisponivel', 'falha', cid, motivo='chave_ausente', ip=ip)
+        raise FatorIndisponivel(CADASTRO_INDISPONIVEL) from exc
     with _bd(root, escrever=True) as tx:
         conta, momento = _conta(tx, cid), agora()
         tx.ex('INSERT INTO fatores (conta, criado_em, pendente, pendente_em) VALUES (?, ?, ?, ?) ON CONFLICT (conta) DO UPDATE'
@@ -1947,7 +2002,7 @@ def confirmar_fator(root: Path, cid: str, codigo, ip: str | None = None) -> list
             raise ValueError('Comece de novo o cadastro do segundo fator.')
         bloqueado = _bloqueado(tx, chave, momento)
         if not bloqueado:
-            passo = segundo_fator.conferir(segundo_fator.decifrar(root, fator['pendente'], cid), codigo, momento)
+            passo = segundo_fator.conferir(_semente_do_fator(root, fator['pendente'], cid), codigo, momento)
             if passo is not None:
                 tx.ex('UPDATE fatores SET semente = pendente, pendente = NULL, pendente_em = NULL, ativo = 1, ativado_em = ?,'
                       ' ultimo_passo = ? WHERE conta = ?', _iso(momento), passo, cid)

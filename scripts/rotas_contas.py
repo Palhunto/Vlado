@@ -458,6 +458,8 @@ class RotasContas:
             self._json(429, {'estado': 'bloqueado', 'codigo': 'bloqueado', 'erro': str(exc)})
         except acesso.EntradaExpirada as exc:
             self._json(401, {'estado': 'credenciais', 'codigo': 'entrada_expirada', 'erro': str(exc)})
+        except acesso.FatorIndisponivel as exc:  # the key of the seeds is missing: not the person's mistake
+            self._json(503, {'estado': 'indisponivel', 'codigo': 'fator_indisponivel', 'erro': str(exc)})
         except acesso.CodigoNecessario as exc:  # no code came: asked for, and nothing counted
             self._json(403, {'estado': 'proibido', 'codigo': 'fator_necessario', 'erro': str(exc)})
         except acesso.CodigoInvalido as exc:  # the second factor, in the second step or in a reset by e-mail

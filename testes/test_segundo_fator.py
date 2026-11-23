@@ -119,7 +119,7 @@ class SementeCifradaTest(unittest.TestCase):
 
     def test_semente_cifrada_so_abre_com_a_chave_e_na_conta_dela(self):
         semente = fator.nova_semente()
-        guardada = fator.cifrar(self.root, semente, CONTA)
+        guardada = fator.cifrar(self.root, semente, CONTA, criar_chave=True)
         self.assertEqual(fator.decifrar(self.root, guardada, CONTA), semente)
         self.assertNotEqual(guardada, fator.cifrar(self.root, semente, CONTA))  # a new nonce each time
         self.assertNotIn(fator.em_base32(semente), guardada)
@@ -131,7 +131,7 @@ class SementeCifradaTest(unittest.TestCase):
                 fator.decifrar(self.root, estragada, CONTA)
 
     def test_a_chave_fica_em_segredos_fora_da_pasta_das_contas_e_nao_e_trocada_em_silencio(self):
-        guardada = fator.cifrar(self.root, b'x' * 20, CONTA)
+        guardada = fator.cifrar(self.root, b'x' * 20, CONTA, criar_chave=True)
         arquivo = self.root / 'segredos' / 'contas.chave'
         self.assertEqual(fator.arquivo_da_chave(self.root), arquivo)
         self.assertTrue(re.fullmatch(r'[0-9a-f]{64}\n', arquivo.read_text(encoding='ascii')))
@@ -146,11 +146,34 @@ class SementeCifradaTest(unittest.TestCase):
         self.assertEqual(arquivo.read_text(encoding='ascii'), 'estragada\n')  # left as it was, for who restores it
 
     def test_quem_copia_so_o_banco_nao_gera_codigos(self):
-        guardada = fator.cifrar(self.root, SEMENTE_DA_RFC, CONTA)
+        guardada = fator.cifrar(self.root, SEMENTE_DA_RFC, CONTA, criar_chave=True)
         outra_instalacao = tempfile.TemporaryDirectory()
         self.addCleanup(outra_instalacao.cleanup)
+        outra = Path(outra_instalacao.name)
+        with self.assertRaises(fator.ChaveAusente):
+            fator.decifrar(outra, guardada, CONTA)  # no key there, and reading a seed never makes one
+        self.assertFalse(fator.chave_presente(outra))
+        fator.cifrar(outra, b'z' * 20, OUTRA, criar_chave=True)
         with self.assertRaises(fator.SementeIlegivel):
-            fator.decifrar(Path(outra_instalacao.name), guardada, CONTA)  # another key: the seed does not open
+            fator.decifrar(outra, guardada, CONTA)  # another key: the seed does not open
+
+    def test_chave_que_sumiu_nao_e_refeita_em_silencio(self):
+        # Reservation R2 of the review: after a restore without `segredos/`, a new key made in silence would leave
+        # every stored seed unreadable for good. Only the caller who knows no seed is stored may ask for one.
+        with self.assertRaises(fator.ChaveAusente):
+            fator.cifrar(self.root, b'x' * 20, CONTA)
+        self.assertFalse(fator.chave_presente(self.root))
+        self.assertFalse((self.root / 'segredos').exists())
+        guardada = fator.cifrar(self.root, b'x' * 20, CONTA, criar_chave=True)
+        arquivo = fator.arquivo_da_chave(self.root)
+        original = arquivo.read_bytes()
+        arquivo.unlink()
+        for acao in (lambda: fator.cifrar(self.root, b'y' * 20, CONTA), lambda: fator.decifrar(self.root, guardada, CONTA)):
+            with self.assertRaises(fator.ChaveAusente):  # even with the key still in the memory of the process
+                acao()
+        self.assertFalse(arquivo.exists())
+        arquivo.write_bytes(original)  # the operator restores the file: every seed opens again
+        self.assertEqual(fator.decifrar(self.root, guardada, CONTA), b'x' * 20)
 
 
 if __name__ == '__main__':

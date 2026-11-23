@@ -238,6 +238,48 @@ class RedefinicaoComFatorTest(test_acesso.DuasRedacoes):
         self.assertNotIn('fator_recusado', [c.args[0] for c in registrar.call_args_list])
         self.assertEqual(self.linhas("SELECT 1 FROM tentativas WHERE chave LIKE '#fator|%'"), [])
 
+    def test_sem_a_chave_das_sementes_o_codigo_de_reserva_ainda_entra_e_nenhuma_chave_nasce_em_silencio(self):
+        # Reservation R2 of the review: a restore of the common backup brings the store without `segredos/`.
+        arquivo = fator.arquivo_da_chave(self.root)
+        self.assertIsNone(acesso.conferir_chave_do_fator(self.root))  # the key is there and opens the seeds
+        arquivo.unlink()
+        fator._CHAVES.clear()  # the server started again after the restore
+        aviso = acesso.conferir_chave_do_fator(self.root)
+        self.assertIn('segredos/contas.chave', aviso)
+        self.assertIn('1 conta(s)', aviso)
+        with test_acesso.patch.object(acesso.registro_acesso, 'registrar') as registrar:
+            with self.assertRaises(acesso.FatorIndisponivel) as recusa:
+                acesso.exigir_codigo(self.root, self.pessoa_a, codigo_de(self.segredo))  # the right code of the app
+        self.assertEqual((recusa.exception.status, recusa.exception.codigo), (503, 'fator_indisponivel'))
+        self.assertEqual([(c.args[0], c.kwargs.get('motivo')) for c in registrar.call_args_list],
+                         [('fator_indisponivel', 'chave_ausente')])  # told to the operator, and not counted as a wrong code
+        self.assertEqual(self.linhas("SELECT 1 FROM tentativas WHERE chave LIKE '#fator|%'"), [])
+        with self.assertRaises(acesso.PedeSegundoFator) as passo:
+            acesso.entrar(self.root, 'pessoa@exemplo.test', SENHA)
+        with self.assertRaises(acesso.FatorIndisponivel):
+            acesso.entrar_segundo_fator(self.root, passo.exception.bilhete, codigo_de(self.segredo, 1))
+        # The reserve code needs neither the seed nor the key: the person still gets in, with the same ticket.
+        self.assertEqual(acesso.entrar_segundo_fator(self.root, passo.exception.bilhete, self.reserva[0])[2]['id'], self.pessoa_a)
+        acesso.exigir_codigo(self.root, self.pessoa_a, self.reserva[1])
+        # Nobody enrols meanwhile, and no other key is made: it would leave the stored seeds unreadable for good.
+        with self.assertRaises(acesso.FatorIndisponivel):
+            acesso.iniciar_fator(self.root, self.dono_a, SENHA)
+        self.assertFalse(arquivo.exists())
+        # With another key in the place of the right one the seeds do not open either, and the warning says so.
+        fator.cifrar(self.root, b'x' * 20, self.dono_a, criar_chave=True)
+        self.assertIn('não é a que cifrou', acesso.conferir_chave_do_fator(self.root))
+        with self.assertRaises(acesso.FatorIndisponivel):
+            acesso.exigir_codigo(self.root, self.pessoa_a, codigo_de(self.segredo, 2))
+
+    def test_sem_nenhum_fator_cadastrado_a_chave_que_falta_e_criada_no_primeiro_cadastro(self):
+        acesso.recuperar(self.root, self.pessoa_a, por='cli')  # the operator takes the only factor away
+        fator.arquivo_da_chave(self.root).unlink()
+        fator._CHAVES.clear()
+        self.assertIsNone(acesso.conferir_chave_do_fator(self.root))  # nothing would be lost: nothing to warn about
+        segredo, _ = cadastrar(self.root, self.dono_a)
+        self.assertTrue(fator.chave_presente(self.root))
+        acesso.exigir_codigo(self.root, self.dono_a, codigo_de(segredo, 1))
+
     def test_recuperacao_pelo_operador_no_terminal_tambem_tira_o_fator(self):
         _, token = acesso.recuperar(self.root, self.pessoa_a, por='cli')
         self.assertEqual(self.linhas('SELECT 1 FROM fatores') + self.linhas('SELECT 1 FROM codigos_reserva'), [])

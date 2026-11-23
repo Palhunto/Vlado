@@ -896,7 +896,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
         except acesso.Bloqueado as exc:  # too many wrong passwords on a sensitive operation
             self._json(429, {'estado': 'bloqueado', 'codigo': 'bloqueado', 'erro': str(exc)})
         except acesso.Recusada as exc:  # a refusal with its own status and code (password asked again, last dono)
-            self._json(exc.status, {'estado': 'proibido' if exc.status == 403 else 'erro', 'codigo': exc.codigo,
+            self._json(exc.status, {'estado': {403: 'proibido', 503: 'indisponivel'}.get(exc.status, 'erro'), 'codigo': exc.codigo,
                                     'erro': str(exc)})
         except (ValueError, OSError, KeyError, TypeError, sqlite3.Error) as exc:
             if operation in DOWNLOADS:
@@ -1033,6 +1033,9 @@ def main():
         if server.com_contas:
             try:  # the daily sweep also runs at the start: invitations past their date, old activity
                 acesso.manutencao(server.root)
+                aviso = acesso.conferir_chave_do_fator(server.root)
+                if aviso:  # second factors enrolled and the key of their seeds is not here: the operator must know
+                    print(aviso, file=sys.stderr, flush=True)
             except (ValueError, OSError):
                 pass  # an unreadable store answers 503 to each request; it does not stop the start
         print(f'Mesa de apuração ({args.modo}): {server.origin}', flush=True)
