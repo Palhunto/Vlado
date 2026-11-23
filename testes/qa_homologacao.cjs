@@ -26,7 +26,7 @@ function py(pedido) {
 
 const verificacoes = [], erros = [], pulados = [];
 const marcar = (fluxo, texto) => { verificacoes.push({fluxo, verificacao: texto}); console.log(`ok [${fluxo}] ${texto}`); };
-const ocultar = texto => Object.values(contas).reduce((t, c) => t.split(c.senha).join('***'), String(texto)).replace(/\/ativar\/[A-Za-z0-9_-]+/g, '/ativar/***');
+const ocultar = texto => Object.values(contas).reduce((t, c) => t.split(c.senha).join('***'), String(texto)).replace(/\/(ativar|redefinir)\/[A-Za-z0-9_-]+/g, '/$1/***');
 const sha = async arquivo => crypto.createHash('sha256').update(await fs.readFile(arquivo)).digest('hex');
 const semRolagem = page => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
@@ -49,13 +49,59 @@ async function formularioPronto(page) {
   await page.locator('#entrar-secao:not([hidden])').waitFor();
   await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'entrar-login', null, {timeout: 30000});
 }
-async function entrar(page, conta) {
+// --- segundo fator (contas-o2 9e79e25): no piloto, dono e editor entram numa página da pendência até cadastrar o fator ----------------------------
+// O código do aplicativo é calculado aqui, a partir da chave que a tela mostra (RFC 6238: HMAC-SHA1, passo de 30 s, 6 dígitos), como faria a pessoa com o celular.
+function totp(segredo, desvio = 0) {
+  const alfabeto = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = '';
+  for (const c of segredo.replace(/=+$/, '')) bits += alfabeto.indexOf(c).toString(2).padStart(5, '0');
+  const bytes = Buffer.from(bits.match(/.{8}/g).map(b => parseInt(b, 2)));
+  const contador = Buffer.alloc(8); contador.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 1000 / 30) + desvio));
+  const h = crypto.createHmac('sha1', bytes).update(contador).digest();
+  const o = h[19] & 0xf;
+  return String(((h[o] & 0x7f) << 24 | h[o + 1] << 16 | h[o + 2] << 8 | h[o + 3]) % 1000000).padStart(6, '0');
+}
+const fatores = new Map();   // login -> {segredo, codigos}: o que a tela mostrou no cadastro, para os logins seguintes
+// Depois de entrar: se o servidor levou à página da pendência (/conta/segundo-fator), faz os três passos do cadastro. Devolve true se cadastrou.
+async function cadastrarFatorSeExigido(page, conta) {
+  const exigido = await page.waitForURL(url => url.pathname === '/conta/segundo-fator', {timeout: 10000}).then(() => true, () => false);
+  if (!exigido) return false;
+  const secao = '#pendencia-secao';
+  await page.locator(`${secao}:not([hidden]) h1`).waitFor();
+  await page.fill(`${secao} input[type="password"]`, conta.senha);
+  await page.click(`${secao} .fator-principal`);
+  await page.locator(`${secao} svg`).waitFor();
+  const segredo = (await page.textContent(`${secao} .fator-chave`)).replace(/\s+/g, '');
+  assert.match(segredo, /^[A-Z2-7]{32}$/);
+  await page.fill(`${secao} input[type="text"]`, totp(segredo));
+  await page.click(`${secao} .fator-principal`);
+  await page.locator(`${secao} .fator-codigos`).waitFor();
+  const codigos = await page.locator(`${secao} .fator-codigo`).allTextContents();
+  assert.equal(codigos.length, 10);
+  fatores.set(conta.login, {segredo, codigos});
+  await page.click(`${secao} .fator-guardei`);
+  await page.locator(secao).filter({hasText: 'Segundo fator ativado.'}).waitFor();
+  await Promise.all([page.waitForURL(url => url.pathname !== '/conta/segundo-fator', {timeout: 20000}), page.getByRole('button', {name: 'Abrir a Mesa'}).click()]);
+  return true;
+}
+// `fator`: a conta ainda não tem o segundo fator e o piloto o exige (dono e editor): cadastra pela página da pendência. Com o fator já cadastrado,
+// o Entrar pede o código do aplicativo num segundo passo (#fator-codigo), calculado da chave guardada no cadastro (a janela seguinte, como o teste do Vitral).
+async function entrar(page, conta, {fator = false} = {}) {
   await page.goto(origin + '/entrar');
   await formularioPronto(page);
   await page.fill('#entrar-login', conta.login);
   await page.fill('#entrar-senha', conta.senha);
   await page.click('#entrar-enviar');
-  await page.waitForURL(url => !url.pathname.startsWith('/entrar'), {timeout: 30000});
+  const passo = await Promise.race([
+    page.waitForURL(url => !url.pathname.startsWith('/entrar'), {timeout: 30000}).then(() => 'entrou', () => 'nada'),
+    page.locator('#fator-secao:not([hidden])').waitFor({timeout: 30000}).then(() => 'codigo', () => 'nada')]);
+  if (passo === 'codigo') {
+    const guardado = fatores.get(conta.login);
+    assert.ok(guardado, 'o Entrar pediu o código do aplicativo de uma conta que o roteiro não cadastrou: ' + conta.login);
+    await page.fill('#fator-codigo', totp(guardado.segredo, 1));
+    await Promise.all([page.waitForURL(url => !url.pathname.startsWith('/entrar'), {timeout: 30000}), page.click('#fator-enviar')]);
+  } else assert.equal(passo, 'entrou', 'o login não terminou em 30 s');
+  if (fator) await cadastrarFatorSeExigido(page, conta);
 }
 // Same-origin call with the page's own CSRF token: what any script in that browser could do.
 const chamar = (page, operacao, dados) => page.evaluate(async ([operacao, dados]) => {
@@ -112,6 +158,39 @@ const documentosDaLista = page => page.locator('#mesa-acervo-lista tbody tr').ev
     leitura: celula?.dataset.leitura || '', texto: celula?.textContent.trim() || ''};
 }));
 
+// --- Equipe (Minha conta > Equipe) ------------------------------------------------------------------------------------------------------------
+async function abrirEquipe(page) {
+  await page.goto(origin + '/?area=configuracoes');
+  await page.locator('#conta-aba-equipe').waitFor({timeout: 30000});
+  await page.click('#conta-aba-equipe');
+  await page.locator('tr', {hasText: 'Gerenciar'}).first().waitFor({timeout: 30000});
+}
+// Abre o painel "Gerenciar" da pessoa (apurações, teto e acesso; #equipe-gerenciar-<id da conta>) e o devolve.
+async function gerenciar(page, conta) {
+  const painel = page.locator('#equipe-gerenciar-' + conta.id);
+  if (!await painel.count()) await page.locator('tr', {hasText: conta.nome}).getByRole('button', {name: 'Gerenciar'}).click();
+  await painel.waitFor();
+  return painel;
+}
+// As operações sensíveis pedem a senha de quem age num diálogo (#dialogo-senha de conta.js): preenche e confirma, se ele aparecer.
+async function confirmarSeSenhaPedida(page, senha) {
+  const caixa = page.locator('dialog.dialogo[open]').last();
+  if (!await caixa.waitFor({timeout: 5000}).then(() => true, () => false)) return false;
+  const campo = caixa.locator('input[type="password"]');
+  if (await campo.count()) await campo.fill(senha);
+  await caixa.locator('.dialogo-acoes button:not(.secondary)').click();
+  await caixa.waitFor({state: 'hidden'});
+  return true;
+}
+// A coluna "Apurações" da linha da pessoa passa a ter (e a não ter) os casos pedidos.
+async function esperarApuracoesDa(page, nome, {tem, naoTem}) {
+  await page.waitForFunction(([nome, tem, naoTem]) => {
+    const linha = [...document.querySelectorAll('tr')].find(l => l.innerText.includes(nome));
+    const texto = linha ? linha.innerText : '';
+    return texto.includes('Caso sintético ' + tem) && !texto.includes('Caso sintético ' + naoTem);
+  }, [nome, tem, naoTem], {timeout: 30000});
+}
+
 (async () => {
   await fs.mkdir(output, {recursive: true});
   await fs.mkdir(shots, {recursive: true});
@@ -144,7 +223,7 @@ const documentosDaLista = page => page.locator('#mesa-acervo-lista tbody tr').ev
     assert.equal(new URL(admin.url()).pathname, '/entrar');
     marcar('acesso', 'Senha errada e login inexistente mostram o mesmo erro genérico ("E-mail ou login e senha não conferem. Confira e tente de novo.").');
 
-    await entrar(admin, contas.admin);
+    await entrar(admin, contas.admin, {fator: true});
     await admin.locator('#mesa-ambiente:not([hidden])').waitFor();
     assert.equal(await admin.locator('#mesa-ambiente').innerText(), 'Homologação — dados sintéticos');
     assert.equal(await admin.locator('body').getAttribute('data-papel'), 'admin');
@@ -348,10 +427,72 @@ const documentosDaLista = page => page.locator('#mesa-acervo-lista tbody tr').ev
     marcar('papeis', 'Convidado B não vê o caso X nem a conversa de A; fetch direto a codex-eventos/codex-original com a conversa de A, codex-listar do caso X, apuracao-exportar e apuracao-notas são recusados.');
     await b.screenshot({path: path.join(shots, 'convidado-b.png')});
 
-    // A tela "Contas de acesso" e as chamadas contas-* saíram (P30; Tranca 1be9d53, Lume 599e9e2). Os passos que dependiam
-    // dela (retirar o caso X de A, desativar B, recuperar o acesso de A e ver as sessões caírem) voltam pela Equipe e pelo
-    // Convidar do Vitral quando entrarem; até lá a homologação cobre só o lado de quem recebe o acesso (A e B acima).
-    // As sessões de A, B e do celular terminam sem passo de encerramento: cada contexto se fecha com o navegador.
+    // ---------------------------------------------------------------- 4. Equipe (Minha conta > Equipe): o dono retira, desativa e recupera
+    // A tela "Contas de acesso" saiu (P30); o que ela fazia vive na Equipe (W09). As operações sensíveis pedem a senha de quem age (#dialogo-senha).
+    atual = admin;
+    await abrirEquipe(admin);
+    let painel = await gerenciar(admin, contas.a);
+    await painel.getByRole('button', {name: 'Incluir', exact: true}).click();
+    await admin.locator('tr', {hasText: 'Convidada A'}).filter({hasText: 'Caso sintético beta'}).waitFor();
+    painel = await gerenciar(admin, contas.a);
+    await painel.locator('li, div', {hasText: 'Caso sintético alpha'}).getByRole('button', {name: 'Retirar'}).first().click();
+    await confirmarSeSenhaPedida(admin, contas.admin.senha);
+    await esperarApuracoesDa(admin, 'Convidada A', {tem: 'beta', naoTem: 'alpha'});
+    const depoisDeRetirar = {
+      'codex-eventos da conversa do caso X': await chamar(a, 'codex-eventos', {conversa: conversaA, cursor: 0}),
+      'codex-original da conversa do caso X': await chamar(a, 'codex-original', {conversa: conversaA, referencia: referenciaA}),
+      'codex-perguntar no caso X': await chamar(a, 'codex-perguntar', {caso: 'alpha', pergunta: 'Ainda posso?'}),
+    };
+    for (const [nome, r] of Object.entries(depoisDeRetirar)) assert.ok([400, 403, 404].includes(r.status), `${nome}: ${JSON.stringify(r)}`);
+    assert.equal(depoisDeRetirar['codex-perguntar no caso X'].status, 404);
+    assert.equal(depoisDeRetirar['codex-perguntar no caso X'].codigo, 'caso_indisponivel');
+    assert.equal(depoisDeRetirar['codex-eventos da conversa do caso X'].codigo, 'conversa_indisponivel');
+    resultado.recusas_apos_retirar_caso = depoisDeRetirar;
+    await a.reload();
+    await a.locator('#codex-caso option[value="beta"]').waitFor({state: 'attached'});
+    assert.equal(await a.locator('#codex-caso option[value="alpha"]').count(), 0);
+    marcar('papeis', 'Dono retira o caso X de A pela Equipe (Gerenciar > Retirar); a próxima ação de A no caso X (eventos, original, pergunta) é recusada e o caso some da lista.');
+
+    painel = await gerenciar(admin, contas.b);
+    await painel.getByRole('button', {name: 'Desativar', exact: true}).click();
+    assert.match(await admin.locator('dialog.dialogo[open] .dialogo-titulo').innerText(), /Desativar a conta de Convidado B\?/);
+    await confirmarSeSenhaPedida(admin, contas.admin.senha);
+    await admin.locator('tr', {hasText: 'Convidado B'}).filter({hasText: /desativad/i}).waitFor();
+    const bDepois = await chamar(b, 'codex-listar', {caso: 'beta'});
+    assert.ok([401, 403].includes(bDepois.status), JSON.stringify(bDepois));
+    assert.equal(await sessao(b), 401);
+    marcar('papeis', `Dono desativa B pela Equipe (com a senha dele); a próxima requisição de B recebe ${bDepois.status} e /api/sessao 401.`);
+
+    // Recuperar acesso (Gerenciar > Acesso): pede a senha de quem age e manda à pessoa, por e-mail, um link para criar a senha nova; nada muda na conta
+    // até ela usar o link (contas sem e-mail só se recuperam pelo terminal, e a Equipe diz isso). O link vem do correio simulado, só pelo Python.
+    painel = await gerenciar(admin, contas.a);
+    await painel.getByRole('button', {name: 'Recuperar acesso'}).click();
+    assert.match(await admin.locator('dialog.dialogo[open] .dialogo-titulo').innerText(), /Recuperar o acesso de Convidada A\?/);
+    await confirmarSeSenhaPedida(admin, contas.admin.senha);
+    const {link} = await py({cmd: 'link_recuperacao', para: contas.a.email});
+    assert.match(link, /\/redefinir\/[A-Za-z0-9_-]{20,}$/);
+    assert.equal(await sessao(a), 200, 'pedir a recuperação não encerra as sessões: nada muda até o link ser usado');
+    assert.equal(await sessao(cel), 200);
+    await admin.screenshot({path: path.join(shots, 'equipe-admin.png'), fullPage: true});
+    const ctxRec = await contexto(browser);
+    const rec = atual = await pagina(ctxRec, 'recuperação de A');
+    abertas.push(rec);
+    await rec.goto(link);
+    await rec.locator('#redefinir-form:not([hidden])').waitFor();
+    const senhaNovaA = 'nova-' + crypto.randomBytes(12).toString('hex');
+    contas.a_nova = {senha: senhaNovaA};   // para o ocultar() também cobrir a senha nova
+    await rec.fill('#redefinir-senha', senhaNovaA);
+    await rec.click('#redefinir-enviar');
+    await rec.locator('#redefinir-pronto:not([hidden])').waitFor();
+    assert.equal(await sessao(a), 401);
+    assert.equal(await sessao(cel), 401);
+    await a.reload();
+    await a.waitForURL(url => url.pathname === '/entrar');
+    marcar('papeis', 'Dono pede a recuperação de A pela Equipe (com a senha dele); nada muda até A usar o link do e-mail; ao usá-lo, as sessões abertas de A (desktop e celular) caem (401) e o recarregamento leva A para /entrar.');
+    await entrar(a, {login: contas.a.login, senha: senhaNovaA});
+    assert.equal(await sessao(a), 200);
+    marcar('papeis', 'A entra com a senha nova.');
+    atual = admin;
 
     assert.deepEqual(erros, []);
     Object.assign(resultado, {estado: 'aprovado', caso_reportagem: caso, verificacoes, erros_js: erros, pulados});
