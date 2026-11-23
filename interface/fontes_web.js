@@ -8,7 +8,14 @@
   const MODO_WEB = 'documentos_web';
   let caso = '', sequencia = 0, ocupado = false;
 
-  function erro(mensagem = '') {
+  // O erro da captura (página de outro site, endereço inválido) vai ao campo do endereço, com o texto do servidor; a leitura de uma captura usa o aviso solto.
+  function erro(mensagem = '', campo = false) {
+    if (el('fontes-web-url')._estadoErro) window.Estados?.limparErroCampo(el('fontes-web-url'));
+    if (campo && mensagem && window.Estados) {
+      el('fontes-web-erro').hidden = true;
+      el('fontes-web-url').closest('label').after(window.Estados.erroCampo(el('fontes-web-url'), mensagem));
+      return;
+    }
     el('fontes-web-erro').textContent = mensagem;
     el('fontes-web-erro').hidden = !mensagem;
   }
@@ -33,20 +40,26 @@
       : {modo_fontes: 'somente_documental'};
   }
 
+  // A data da captura, no idioma da Mesa e na hora de quem lê (o servidor guarda em UTC).
+  function dataDa(iso) {
+    const quando = new Date(iso);
+    if (!iso || Number.isNaN(quando.getTime())) return '';
+    try { return new Intl.DateTimeFormat(window.I18N?.idioma?.() === 'en' ? 'en' : 'pt-BR', {dateStyle: 'medium', timeStyle: 'short'}).format(quando); } catch { return String(iso); }
+  }
+  // Uma linha por captura: o título ou o endereço, a data e "Ler", que abre o texto logo abaixo.
   function linhaCaptura(item) {
     const row = document.createElement('li');
     const titulo = document.createElement('strong');
-    titulo.textContent = `${item.id} · ${item.url_final}`;
+    titulo.textContent = item.titulo_pagina || item.url_final;
     titulo.setAttribute('translate', 'no');
     const meta = document.createElement('span');
     meta.className = 'small';
-    meta.textContent = ' ' + t('Acesso em {data} · HTTP {status} · SHA-256 {hash}…',
-      {data: item.acessado_em_utc, status: item.status_http, hash: String(item.sha256).slice(0, 12)});
+    meta.textContent = ` ${dataDa(item.acessado_em_utc)}`;
     const abrir = document.createElement('button');
     abrir.type = 'button';
-    abrir.className = 'secondary';
-    abrir.textContent = t('Abrir texto capturado');
-    abrir.setAttribute('aria-label', t('Abrir texto capturado de {id}', {id: item.id}));
+    abrir.className = 'docs-ler';
+    abrir.textContent = t('Ler');
+    abrir.setAttribute('aria-label', t('Ler a página {id}', {id: item.titulo_pagina || item.url_final}));
     abrir.addEventListener('click', () => ler(item.id));
     row.append(titulo, meta, ' ', abrir);
     return row;
@@ -58,9 +71,7 @@
       const data = await api('fontes-web-listar', {caso: alvo});
       if (atual !== sequencia || alvo !== caso) return;
       el('fontes-web-lista').replaceChildren(...data.capturas.map(linhaCaptura));
-      el('fontes-web-status').textContent = data.capturas.length
-        ? t('{n} página(s) capturada(s) nesta apuração.', {n: data.capturas.length})
-        : t('Nenhuma página capturada ainda.');
+      el('fontes-web-status').textContent = data.capturas.length ? '' : t('Nenhuma página capturada ainda.');
     } catch (failure) { if (atual === sequencia) erro(failure.message); }
   }
 
@@ -82,8 +93,9 @@
     if (!bloco || bloco.modo !== MODO_WEB) { el('fontes-web').hidden = true; caso = ''; return; }
     if (caso !== inventario.caso_id) el('fontes-web-leitura').hidden = true;
     caso = inventario.caso_id;
-    el('fontes-web-dominio').textContent = t('Site permitido: {dominio}. Páginas de outros sites são recusadas.',
-      {dominio: bloco.dominio_permitido});
+    // "Páginas de prefeitura.sp.gov.br": o domínio é dado da apuração e não se traduz.
+    const dominio = document.createElement('span'); dominio.textContent = bloco.dominio_permitido; dominio.setAttribute('translate', 'no');
+    el('fontes-web-titulo').replaceChildren(t('Páginas de'), ' ', dominio);
     el('fontes-web').hidden = false;
     erro();
     listar();
@@ -109,7 +121,7 @@
         el('fontes-web-status').textContent = t('Captura {id} registrada. Corpus: {corpus}.',
           {id: data.captura.id, corpus: data.corpus_id});
       } catch (failure) {
-        erro(failure.message);
+        erro(failure.message, true);
         el('fontes-web-status').textContent = t('Nada foi registrado.');
       } finally {
         ocupado = false;

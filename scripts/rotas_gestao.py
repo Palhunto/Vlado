@@ -24,21 +24,36 @@ OPERACOES = ('ambiente', *IA_OPERACOES, *LIXEIRA, *GERENCIAR, 'continuidade-resu
 class RotasGestao:
     """Mixin of the request handler: uses its ``server``."""
 
+    def _senha_de_novo(self, data, principal):
+        """Where accounts exist, saving the AI key and deleting for good ask the password of who does it again
+        (contrato de contas, 5.15): a session left open, or hostile content shown in the Mesa, cannot run them.
+        Without it 403 ``senha_necessaria``; a wrong one 403 ``senha_atual_incorreta`` and counts; five in a row 429."""
+        acesso.confirmar_senha(self.server.root, principal.get('conta'), data.get('senha'), self._ip())
+
     def _gestao(self, operation, data, principal, concedido=None):
         if operation == 'ambiente':
             return self.server.ambiente
         if operation == 'ia-config':
             return resumo_inferencia(self.server.root)
         if operation == 'ia-config-salvar':
+            if self.server.com_contas:  # the password goes in the same body and never reaches the settings
+                self._senha_de_novo(data, principal)
+                data = {campo: valor for campo, valor in data.items() if campo != 'senha'}
             return salvar_inferencia(self.server.root, data)
         if operation == 'lixeira-alcance':
             return lixeira.alcance(self.server.root, data.get('item'))
         if operation == 'lixeira-apagar':
+            # The name first (a typing slip is not a wrong password), then the password, both outside the lock.
+            esperado = apagamento.nome_para_confirmar(self.server.root, data.get('item'))
+            nome = data.get('nome')
+            if not isinstance(nome, str) or nome.strip().casefold() != str(esperado).strip().casefold():
+                raise ValueError('Digite o nome do item exatamente como mostrado para confirmar.')
+            if self.server.com_contas:
+                self._senha_de_novo(data, principal)
             # Under the locks only the check and the quarantine (quick); the files go in the background.
             with self.server.cadastro_lock:
                 esperado = apagamento.nome_para_confirmar(self.server.root, data.get('item'))
-                nome = data.get('nome')
-                if not isinstance(nome, str) or nome.strip().casefold() != str(esperado).strip().casefold():
+                if nome.strip().casefold() != str(esperado).strip().casefold():
                     raise ValueError('Digite o nome do item exatamente como mostrado para confirmar.')
                 resultado = lixeira.apagar_definitivamente(
                     self.server.root, data.get('item'), data.get('confirmacao'),

@@ -31,16 +31,19 @@ test('abrir Cadastro reverifica o extrator de PDF e mostra o aviso quando ele fi
   assert.match(mesa.$('pdf-ambiente-aviso').textContent, /extrator de PDF está indisponível/);
 });
 
-test('cada abertura de Cadastro consulta o ambiente, e outras áreas não', async () => {
+test('cada abertura de Cadastro e de Documentos consulta o ambiente (o aviso do extrator mora nas duas), e as outras áreas não', async () => {
   const {mesa, chamadas} = await abrir(() => ({extracao_pdf: {disponivel: true}, ocr: {disponivel: true}}));
   const base = chamadas.length;
-  mesa.janela.showArea('documentos');
+  mesa.janela.showArea('inicio');
   await mesa.esperar(4);
   assert.equal(chamadas.length, base, 'outra área não consulta');
+  mesa.janela.showArea('documentos');
+  await mesa.esperar(4);
+  assert.equal(chamadas.length, base + 1, 'Documentos tem o cartão do extrator (R4)');
   mesa.janela.showArea('cadastro');
   await mesa.esperar(4);
   mesa.janela.showArea('inicio');
   mesa.janela.showArea('cadastro');
   await mesa.esperar(4);
-  assert.equal(chamadas.length, base + 2);
+  assert.equal(chamadas.length, base + 3);
 });

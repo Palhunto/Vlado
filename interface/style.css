@@ -546,6 +546,10 @@ h1,h2,h3{font-optical-sizing:auto}
   background:var(--paper);
 }
 .finding-choice .human-review-actions button{flex-direction:row;width:auto;margin:0}
+/* R1 da pré-entrega do Design: o cartão de achado cresce com o conteúdo. Na coluna com altura máxima e rolagem (1024 e 1440 px), o cartão com overflow:hidden
+   encolhia como item flexível e cortava o pé, onde fica o "Conferir". Ele não encolhe: a lista é que rola. */
+.findings-list>.finding-choice{flex:none}
+.finding-choice .human-review-actions button{min-height:44px;padding:0 var(--espaco-4)}   /* o botão secundário do desenho: 44 de altura, preenchimento 0 16 */
 .human-review-note{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--soft);padding:12px 14px;border-radius:var(--raio-cartao)}
 .human-review-dialog{width:min(1120px,calc(100% - 32px));padding:28px;max-height:calc(100% - 40px)}
 .human-review-dialog .section-heading{align-items:start}
@@ -873,7 +877,8 @@ button:active:not(:disabled){transform:translateY(1px)}
 .danger:hover{background:var(--soft);color:var(--theme-danger)}
 .recusa{background:var(--white);border-color:var(--theme-input-line);color:var(--theme-danger);font-weight:400}
 .recusa:hover{background:var(--soft)}
-button:disabled,button:disabled:hover{background:var(--theme-sidebar);border-color:var(--line);color:var(--muted);font-weight:400;cursor:not-allowed}
+/* Indisponível (componentes.md#botao): no escuro o texto do desabilitado é mais apagado que o do habilitado (R2 da pré-entrega: com o texto muted ele parecia habilitado). */
+button:disabled,button:disabled:hover{background:var(--theme-sidebar);border-color:var(--line);color:var(--theme-disabled-text);font-weight:400;cursor:not-allowed}
 /* Campo de texto (docs/design/componentes.md#campo): borda de controle, fundo da superfície, 16 px. */
 input,select,textarea{font-size:var(--text-base);border-color:var(--theme-input-line);background:var(--white);color:var(--ink)}
 ::placeholder{color:var(--muted);opacity:1}
@@ -1732,7 +1737,6 @@ body[data-papel="convidado"] #mesa-etapas{
   display:none;
 }
 body[data-modo="piloto"] #codex-desligar{display:none}
-#acesso-link{width:100%;font-family:var(--fonte-mono)}
 /* While "Conexão e opções" is open, the question composer must not cover the settings form. */
 #area-codex:has(#codex-conexao[open]) #codex-form{position:static;max-height:none}
 /* Citation chip: the cited page, one click from the original. Inline, so no 44px box. */
@@ -2607,3 +2611,74 @@ ins.comparar-incluido,p.comparar-incluido{
 @media (prefers-reduced-motion:reduce) {
   .quadros-abas [role=tab]{transition:none}
 }
+
+/* Papéis e estados da Mesa inteira (Sessao em app.js; docs/design/componentes.md#estados) */
+[data-sem-capacidade]{display:none!important}
+.estado-bloco.estado-aviso{background:var(--theme-warning-bg);border-color:var(--theme-warning-line)}
+.estado-aviso .estado-titulo{color:var(--theme-warning)}
+.estado-suspensa .estado-titulo{margin:0}
+.estado-sinal-texto{flex:none;width:var(--espaco-4);text-align:center;font-weight:700}
+body[data-suspensa] #conteudo>:not(.estado-suspensa),body[data-suspensa] .sidebar,body[data-suspensa] #mesa-menu,
+body[data-suspensa] .persistent-context,body[data-suspensa] #mesa-configuracoes,body[data-suspensa] #mesa-versao{display:none!important}
+
+/* Nova apuração (docs/design/componentes.md#nova-apuracao): o passo 1 e a tela Documentos no modo "apuração por criar". Só tokens. */
+.nova-etapas{display:flex;flex-wrap:wrap;gap:var(--espaco-4);margin:0 0 var(--espaco-4);font-size:var(--text-md);color:var(--theme-muted)}
+.nova-etapa b{font-weight:600}
+.nova-etapa[aria-current=step]{color:var(--theme-text);font-weight:600}
+.nova-etapa-celular{display:none}
+.nova-cartao{display:flex;flex-direction:column;gap:var(--espaco-4);max-width:720px;padding:var(--espaco-6);background:var(--theme-surface);border:1px solid var(--theme-line);border-radius:var(--raio-cartao)}
+.nova-cartao fieldset{display:flex;flex-direction:column;gap:var(--espaco-2);margin:0;padding:0;border:0;min-width:0}
+.nova-cartao legend{padding:0;margin:0 0 var(--espaco-2);font-weight:600}
+.nova-opcao{flex-direction:row;align-items:flex-start;gap:var(--espaco-3);font-weight:400}
+.nova-opcao input{flex:none;width:var(--espaco-5);height:var(--espaco-5);min-height:0;margin-top:var(--espaco-1)}
+.nova-opcao-texto{display:flex;flex-direction:column;gap:var(--espaco-1)}
+.nova-acoes{display:flex;justify-content:flex-end;gap:var(--espaco-3)}
+.nova-aviso{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--espaco-2) var(--espaco-4);margin:0 0 var(--espaco-3);color:var(--theme-muted)}
+.nova-aviso p{margin:0}
+.nova-voltar{min-height:var(--espaco-6);padding:0;border:0;background:none;color:var(--theme-accent);font-size:var(--text-md);font-weight:600;text-decoration:underline}
+.nova-voltar:hover{background:none;color:var(--theme-primary-hover)}
+body[data-nova-etapas] #mesa-etapas{display:none}
+body[data-nova="passo2"] #area-documentos :is(.mesa-tabs,.docs-topo,.mesa-acervo-toolbar,#mesa-acervo-lista,.mesa-acervo-next,#mesa-acervo-status,#mesa-acervo-erro){display:none}
+@media (max-width:719px) {
+  .nova-etapas .nova-etapa{display:none}
+  .nova-etapa-celular{display:inline}
+  .nova-acoes{flex-direction:column-reverse}
+  .nova-acoes button{width:100%}
+  .nova-cartao{padding:var(--espaco-4)}
+}
+
+/* Documentos: avisos do preparo de PDF e páginas do site (docs/design/componentes.md, "O que vem de Cadastrar arquivos"). Só tokens. */
+.docs-avisos{display:flex;flex-direction:column;gap:var(--espaco-2);margin:0 0 var(--espaco-3)}
+.docs-avisos:not(:has(.estado-bloco:not([hidden]))){display:none}
+.docs-avisos .estado-bloco{margin:0}
+.docs-paginas{margin:var(--espaco-4) 0 0}
+.docs-paginas h2{margin:0}
+.docs-paginas form{display:flex;flex-direction:column;gap:var(--espaco-3)}
+.docs-paginas form>.campo-erro{margin-top:calc(var(--espaco-1) - var(--espaco-3))}
+.docs-paginas-lista-titulo{margin:var(--espaco-3) 0 0;font-size:var(--text-base);font-weight:600}
+.docs-paginas-lista{display:flex;flex-direction:column;gap:var(--espaco-2);margin:0;padding:0;list-style:none}
+.docs-ler{min-height:var(--espaco-6);padding:0;border:0;background:none;color:var(--theme-accent);font-size:var(--text-md);font-weight:600;text-decoration:underline}
+.docs-ler:hover{background:none;color:var(--theme-primary-hover)}
+body[data-nova="passo2"] #area-documentos :is(.docs-avisos,.docs-paginas){display:none}
+.nova-incerto{margin:0 0 var(--espaco-3);padding:var(--espaco-3) var(--espaco-4);border:1px solid var(--theme-warning-line);border-radius:var(--raio-controle);background:var(--theme-warning-bg);color:var(--theme-warning)}
+
+/* Portão AA (docs/design/componentes.md#foco-aa). Só tokens.
+   (a) O anel dos itens da barra lateral e das abas que NÃO são o item selecionado entra 1 px na borda do próprio item, porque com o afastamento de 2 px o
+   ocre caía sobre o verde do vizinho selecionado (1,62:1 no claro). O intervalo de 4 px entre os itens é condição: com 3 px ou menos o medidor lê o vizinho.
+   O item selecionado mantém o afastamento padrão. */
+:is(.areas,.mesa-tabs,.notebook-tabs,.quadros-abas) :is(a,button,[role=tab]):not([aria-pressed=true],[aria-current],[aria-selected=true]):focus-visible{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:-1px}
+/* (b) Editor do Caderno (Vditor): a área de edição ocupa o cartão inteiro e o cartão corta, então o anel é interno (mudancas-de-token.md, item 2). */
+#apuracao-vditor .vditor-reset:focus{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:calc(-1 * var(--foco-largura) - 2px)}
+/* O painel de busca e substituição do editor (.vditor-panel) fica fora da barra: os botões e os campos dele têm o mesmo anel (o campo só mudava o fundo, 1,16:1). */
+#apuracao-vditor :is(.vditor-toolbar,.vditor-panel) :is(button,.vditor-tooltipped):focus-visible,#apuracao-vditor .vditor-panel input:focus-visible{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:0}
+/* (c) Seletor de apuração do topo, sem caixa como no canvas (P34): o que o identifica é o rótulo, o nome e a seta, todos em --theme-text; o fundo ao passar o mouse só reforça. */
+.persistent-context select{color:var(--theme-text)}
+.persistent-context select:hover{background:var(--theme-soft)}
+
+/* Nova apuração: o erro de campo vem primeiro, a 4 px do campo, e o apoio depois (componentes.md#nova-apuracao). A dica "Páginas de <domínio>" não vira flex (o espaço é do texto). */
+.nova-cartao>.campo-erro,.nova-cartao>.nova-dica{margin-top:calc(var(--espaco-1) - var(--espaco-4))}
+.nova-dica{margin-bottom:0}
+#nova-site-campo{display:flex;flex-direction:column}
+#nova-site-campo[hidden]{display:none}
+#nova-site-campo>.nova-dica{margin-top:var(--espaco-1)}
+.docs-paginas .estado-titulo{display:block}

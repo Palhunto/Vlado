@@ -9,10 +9,12 @@
   const desktop = matchMedia('(min-width:1024px)');
   // Guests work only in "Ask the AI"; the server enforces access, this keeps the screen honest.
   const guest = document.body.dataset.papel === 'convidado';
+  // O perfil antigo só pergunta; os demais papéis veem as áreas que as capacidades da sessão alcançam (Sessao, app.js).
   window.limitarNavegacaoConvidado = () => {
-    if (!guest) return;
     for (const item of document.querySelector('.areas').children) {
-      if (['A','BUTTON'].includes(item.tagName) && item.id !== 'ver-codex') item.hidden = true;
+      if (!['A','BUTTON'].includes(item.tagName)) continue;
+      const area = item.id.replace('ver-', '');
+      if (guest ? item.id !== 'ver-codex' : window.Sessao && !window.Sessao.areaPermitida(area)) item.hidden = true;
     }
   };
   window.limitarNavegacaoConvidado();
@@ -145,7 +147,7 @@
   registrarGanchoArea({
     antes: name => {
       if (!$('area-' + name)) name = 'inicio';
-      if (guest) name = 'codex';
+      if (guest && name !== 'configuracoes') name = 'codex';   // o perfil antigo só pergunta, salvo a página da própria conta
       area = name;
       return name;
     },
@@ -162,10 +164,9 @@
   $('caderno-aba-notas').addEventListener('click',()=>showArea('apuracao'));
   $('caderno-aba-trechos').addEventListener('click',()=>showArea('caderno'));
   $('achados-texto').closest('label').after($('achados-documento').closest('label'));
-  $('inicio-nova').addEventListener('click',()=>{
-    showArea('cadastro'); $('cadastro-caso').value=''; toggleNewCase(); $('cadastro-titulo-input').focus();
-  });
-  $('inicio-adicionar').addEventListener('click',()=>{showArea('cadastro');$('cadastro-arquivos').focus();});
+  // "Nova apuração" abre o passo 1; "Adicionar documentos" leva a Documentos com a apuração escolhida (R4: a área Cadastrar arquivos sai).
+  $('inicio-nova').addEventListener('click',()=>window.NovaApuracao.abrir());
+  $('inicio-adicionar').addEventListener('click',()=>{ if (!current) { notice('Escolha a apuração que deseja receber os documentos.'); $('contexto-caso').focus(); return; } showArea('documentos'); });
   $('inicio-retomar').addEventListener('click',()=>{
     if (!current) { notice('Escolha a apuração que deseja retomar.'); $('contexto-caso').focus(); }
     else showArea('codex');
