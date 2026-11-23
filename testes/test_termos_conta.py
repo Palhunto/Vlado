@@ -116,7 +116,7 @@ class TermosTest(cenario.DuasRedacoes):
 
     def test_quem_nao_aceita_ainda_sai_e_leva_os_proprios_dados(self):
         # Ressalva B2: with the terms pending, exporting and deleting the own account are not refused by the pending
-        # item (until their deliveries they answer as operations that do not exist yet); with the second factor
+        # item (an empty body is refused by their own checks, never by the pending item); with the second factor
         # pending, they are.
         sessao, _ = self.nova()
         with com_termos('v1'):
@@ -189,7 +189,8 @@ class MigracaoTest(unittest.TestCase):
             acesso.criar_redacao(root, 'Redação')  # a fresh store, then taken back to version 7
             con = sqlite3.connect(acesso.caminho_bd(root))
             try:
-                con.executescript('DROP INDEX termos_por_conta; DROP TABLE termos_aceites; PRAGMA user_version = 7;')
+                con.executescript('ALTER TABLE contas DROP COLUMN ultimo_acesso; ALTER TABLE contas DROP COLUMN aviso_inatividade_em;'
+                                  ' DROP INDEX termos_por_conta; DROP TABLE termos_aceites; PRAGMA user_version = 7;')
             finally:
                 con.close()
             self.assertEqual(acesso.listar_redacoes(root)[0]['nome'], 'Redação')

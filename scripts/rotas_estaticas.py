@@ -255,13 +255,14 @@ class RotasEstaticas:
     """Mixin of the request handler: uses its ``_send``, ``_json``, ``_principal`` and ``server``."""
 
     def _idioma_da_conta(self, principal) -> str | None:
-        """The language of the account of this session, read with Contas' approval (``acesso.ver_conta``, only this
-        field): ``None`` without session or account, or when the store cannot be read: the page never fails for it."""
+        """The language the account of this session saved (``acesso.idioma_gravado``, with Contas' approval, only this
+        column): ``None`` when it never chose one (the browser's language then counts, B1 da Coruja), without session or
+        account, or when the store cannot be read: the page never fails for it."""
         conta = principal.get('conta') if isinstance(principal, dict) else None
         if not isinstance(conta, str):
             return None
         try:
-            idioma = acesso.ver_conta(self.server.root, conta)['conta']['idioma']
+            idioma = acesso.idioma_gravado(self.server.root, conta)
         except (ValueError, OSError):
             return None
         return idioma if idioma in IDIOMAS_DA_PAGINA else None

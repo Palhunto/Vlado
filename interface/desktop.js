@@ -515,11 +515,12 @@
   });
 })();
 
-// Faixa que rola para o lado (docs/design/componentes.md#faixa-que-rola, Q5): a linha de etapas e as pílulas dos quadros, quando passam da largura. Só a faixa rola (scrollLeft,
+// Faixa que rola para o lado (docs/design/componentes.md#faixa-que-rola, Q5): a linha de etapas, as pílulas dos quadros e as abas do Caderno, de Documentos e de Minha conta, quando passam da largura. Só a faixa rola (scrollLeft,
 // nunca a página), sem animação, até o item ativo caber inteiro com a folga de --espaco-4; `data-rola` (fim, inicio, ambos) diz de que lado ainda há conteúdo e o CSS esmaece
-// esse lado; sem estouro, sem atributo. O item ativo é o que a faixa já marca (aria-current ou aria-selected): ela é observada, então quem a desenha ou troca o item não muda.
+// esse lado; sem estouro, sem atributo. O item ativo é o que a faixa já marca (aria-current, aria-selected ou aria-pressed): ela é observada, então quem a desenha ou troca o item não muda.
 (() => {
-  const ativo = '[aria-current],[aria-selected="true"]';
+  const ativo = '[aria-current],[aria-selected="true"],[aria-pressed="true"]';
+  const faixas = new WeakSet();
   const folgaDe = faixa => { const valor = parseFloat(getComputedStyle(faixa).getPropertyValue('--espaco-4')); return Number.isFinite(valor) ? valor : 16; };
   function marcar(faixa) {
     const resto = faixa.scrollWidth - faixa.clientWidth, esq = faixa.scrollLeft;
@@ -536,14 +537,23 @@
     marcar(faixa);
   }
   function observar(faixa) {
-    if (!faixa) return;
+    if (!faixa || faixas.has(faixa)) return;
+    faixas.add(faixa);
     let largura = 0;
     faixa.addEventListener('scroll', () => marcar(faixa), {passive: true});
-    if (typeof MutationObserver === 'function') new MutationObserver(() => trazerOAtivo(faixa)).observe(faixa, {childList: true, subtree: true, attributes: true, attributeFilter: ['aria-current', 'aria-selected']});
+    if (typeof MutationObserver === 'function') new MutationObserver(() => trazerOAtivo(faixa)).observe(faixa, {childList: true, subtree: true, attributes: true, attributeFilter: ['aria-current', 'aria-selected', 'aria-pressed']});
     // Ao aparecer (a área estava escondida) ou ao mudar de largura a faixa recalcula; só ao aparecer ela traz o ativo de novo.
     if (typeof ResizeObserver === 'function') new ResizeObserver(() => { const apareceu = largura === 0; largura = faixa.clientWidth; if (apareceu) trazerOAtivo(faixa); else marcar(faixa); }).observe(faixa);
     trazerOAtivo(faixa);
   }
-  observar(document.getElementById('mesa-etapas'));
-  observar(document.getElementById('quadros-abas'));
+  const SELETOR = '#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs';
+  document.querySelectorAll(SELETOR).forEach(observar);
+  // As abas de Minha conta nascem depois (conta.js): quem entra na página com a classe das abas também é observado.
+  if (typeof MutationObserver === 'function' && document.body) {
+    new MutationObserver(registros => registros.forEach(r => r.addedNodes.forEach(no => {
+      if (no.nodeType !== 1) return;
+      if (no.matches(SELETOR)) observar(no);
+      no.querySelectorAll?.(SELETOR).forEach(observar);
+    }))).observe(document.body, {childList: true, subtree: true});
+  }
 })();
