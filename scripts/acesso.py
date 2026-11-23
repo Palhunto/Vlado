@@ -103,8 +103,7 @@ PROTECAO_JANELA_MINUTOS = 60
 PROTECAO_MINUTOS = 60  # ... put it in protected mode for this long
 BALDES = 20000  # counters of identifiers WITHOUT an account: a table of fixed size, so it never fills nor grows
 APARELHOS_MAX = 20  # known devices kept for each account (the least recently used goes first)
-CHAVE_IDENTIFICADOR = '#id|'  # the ceiling of an identifier that has an account
-CHAVE_BALDE = '#balde|'  # and of the ones that have none, by HMAC of the identifier
+CHAVE_BALDE = '#balde|'  # the ceiling of an identifier, with an account or without: one of BALDES counters, by HMAC
 CHAVE_MARCA = '#marca|'  # failures with a known device mark: the mark does not switch the ceiling off
 ESQUEMA = 7  # PRAGMA user_version of the store; `_ATUALIZACOES` takes an older store up to it
 ESPERA_BD_S = 10
@@ -2466,13 +2465,13 @@ def _registrar_falha(tx: _Tx, chave: str, cid: str | None, momento: datetime) ->
 
 def _podar_tentativas(tx: _Tx, momento: datetime) -> None:
     """Forget stale counters. An active block is never evicted, and neither is a counter before its time: the
-    per-identifier ones (exact, or in the fixed table of the identifiers without an account) live for their whole
-    window, and are bounded by the number of accounts and by BALDES; the others live BLOQUEIO_MINUTOS, and only
+    per-identifier ones (the fixed table of BALDES counters) live for their whole window; the others live
+    BLOQUEIO_MINUTOS, and only
     the per-address counters of the sign-in, which an attacker can multiply, have a ceiling."""
     agora_ = _iso(momento)
     curto, longo = _iso(momento - timedelta(minutes=BLOQUEIO_MINUTOS)), _iso(momento - timedelta(minutes=PROTECAO_JANELA_MINUTOS))
     ativo = '(bloqueado_ate IS NOT NULL AND bloqueado_ate > ?)'
-    do_identificador = f"(chave LIKE '{CHAVE_IDENTIFICADOR}%' OR chave LIKE '{CHAVE_BALDE}%')"
+    do_identificador = f"chave LIKE '{CHAVE_BALDE}%'"
     tx.ex(f"DELETE FROM tentativas WHERE NOT {ativo} AND coalesce(em, '') <= ? AND NOT {do_identificador}", agora_, curto)
     tx.ex(f"DELETE FROM tentativas WHERE NOT {ativo} AND coalesce(em, '') <= ? AND {do_identificador}", agora_, longo)
     excesso = tx.um("SELECT COUNT(*) AS total FROM tentativas WHERE chave NOT LIKE '#%'")['total'] - MAX_TENTATIVAS_GUARDADAS
@@ -2481,13 +2480,14 @@ def _podar_tentativas(tx: _Tx, momento: datetime) -> None:
               " AND chave NOT LIKE '#%' ORDER BY coalesce(em, '') LIMIT ?)", agora_, excesso)
 
 
-def _chave_do_identificador(tx: _Tx, login: str, cid: str | None, criar: bool = False) -> str:
-    """Where the failures of an identifier, from every address, are counted. With an account: its own counter.
-    Without one: one of BALDES counters, chosen by a keyed hash of the identifier, so every identifier always has
-    a counter, the table never grows and there is no "full" state to tell anything. Two identifiers without an
-    account may share a counter, and then share its protected mode: that tells nobody anything."""
-    if cid:
-        return CHAVE_IDENTIFICADOR + login
+def _chave_do_identificador(tx: _Tx, login: str, criar: bool = False) -> str:
+    """Where the failures of an identifier, from every address, are counted: one of BALDES counters, chosen by a
+    keyed hash of the identifier. The same for an identifier with an account and for one without: every identifier
+    always has a counter, the table never grows and there is no "full" state. Two identifiers may share a counter,
+    and then share its protected mode. An exact counter for the ones with an account would tell them apart: its
+    protected mode would never spread to a neighbour, and a few tens of thousands of requests would confirm that
+    one person has an account (B1 of the review). What is counted on the account itself (the codes of the second
+    factor, the password asked again) only starts after the right password, when its existence is no secret."""
     segredo = _meta(tx, 'chave_dos_baldes')
     if not segredo:
         if not criar:
@@ -2501,7 +2501,7 @@ def _chave_do_identificador(tx: _Tx, login: str, cid: str | None, criar: bool = 
 def _falha_do_identificador(tx: _Tx, login: str, cid: str | None, momento: datetime) -> None:
     """Count a failure of the identifier, whatever the address: PROTECAO_FALHAS inside the window start the
     protected mode. While it lasts nothing counts and nothing extends it."""
-    chave = _chave_do_identificador(tx, login, cid, criar=True)
+    chave = _chave_do_identificador(tx, login, criar=True)
     linha = tx.um('SELECT falhas, bloqueado_ate, em FROM tentativas WHERE chave = ?', chave)
     falhas, ate, inicio = (linha['falhas'], linha['bloqueado_ate'], linha['em']) if linha else (0, None, None)
     if ate and _data(ate) > momento:
@@ -2655,7 +2655,7 @@ def entrar(root: Path, login, senha, ip: str | None = None, cliente='web', apare
                  if valido else None)
         cid = conta['id'] if conta else None
         conhecida = bool(cid and _marca_conhecida(tx, cid, marca, momento))
-        protegido = valido and not conhecida and _bloqueado(tx, _chave_do_identificador(tx, login, cid), momento)
+        protegido = valido and not conhecida and _bloqueado(tx, _chave_do_identificador(tx, login), momento)
         bloqueado = valido and _bloqueado(tx, chave, momento)
         guardado = conta['senha_hash'] if conta and conta['ativa'] else None
     if bloqueado or protegido:

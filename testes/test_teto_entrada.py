@@ -4,12 +4,13 @@ segunda ressalva de P28), no armazenamento.
 Todo contador é do identificador digitado, exista a conta ou não. Dez falhas de um identificador em uma hora, de
 quaisquer endereços, o põem em modo protegido por uma hora: toda tentativa recebe a mesma recusa, sem conta de
 senha para ninguém, salvo a que traz a marca de um aparelho que aquela conta já usou. A marca atravessa o modo
-protegido, mas não desliga a contagem. Identificador sem conta conta numa tabela de tamanho fixo. As regras no
+protegido, mas não desliga a contagem. Todo identificador, com conta ou sem, conta numa tabela de tamanho fixo. As regras no
 armazenamento; o cookie da marca, pelo servidor (``ServidorTest``). Sem modelo e sem rede.
 """
 import http.client
 import json
 from pathlib import Path
+import re
 import secrets
 import sys
 import unittest
@@ -62,17 +63,18 @@ class ModoProtegidoTest(Base):
         hasher.verify.assert_not_called()
         self.assertEqual(self.tentar('dona.a', SENHA), 'entrou')  # another identifier is not touched
         chaves = {l['chave'] for l in self.linhas("SELECT chave FROM tentativas WHERE bloqueado_ate IS NOT NULL")}
-        self.assertIn(acesso.CHAVE_IDENTIFICADOR + 'rep.a', chaves)  # an account: its own counter
-        self.assertEqual(len([c for c in chaves if c.startswith(acesso.CHAVE_BALDE)]), 1)  # none: one of the fixed table
-        self.assertNotIn('ninguem.aqui', ' '.join(chaves))  # and the identifier typed is not kept in it
+        # The two of them in the same fixed table, and the identifier typed is not kept in it.
+        self.assertTrue(chaves and all(re.fullmatch(r'#balde\|\d+', c) for c in chaves), chaves)
+        for texto in ('ninguem.aqui', 'rep.a', self.rep_a):
+            self.assertNotIn(texto, ' '.join(chaves))
         self.assertIn('login_protegido', self.tipos())
 
     def test_tentativa_durante_o_modo_protegido_nao_conta_nem_estende_e_a_protecao_acaba_em_uma_hora(self):
         self.falhar('rep.a', acesso.PROTECAO_FALHAS)
-        ate = self.linhas('SELECT bloqueado_ate FROM tentativas WHERE chave = ?', acesso.CHAVE_IDENTIFICADOR + 'rep.a')[0]
+        ate, = self.linhas("SELECT bloqueado_ate FROM tentativas WHERE chave LIKE '#balde|%'")
         with self.depois(minutes=30):
             self.assertEqual(self.falhar('rep.a', 6), ['Bloqueado'] * 6)
-        self.assertEqual(self.linhas('SELECT bloqueado_ate FROM tentativas WHERE chave = ?', acesso.CHAVE_IDENTIFICADOR + 'rep.a')[0], ate)
+        self.assertEqual(self.linhas("SELECT bloqueado_ate FROM tentativas WHERE chave LIKE '#balde|%'"), [ate])
         with self.depois(minutes=acesso.PROTECAO_MINUTOS, seconds=1):
             self.assertEqual(self.tentar('rep.a'), 'CredenciaisInvalidas')  # an ordinary refusal again
             self.assertEqual(self.tentar('rep.a', SENHA), 'entrou')
@@ -92,7 +94,24 @@ class ModoProtegidoTest(Base):
         self.assertEqual(self.linhas('SELECT chave FROM tentativas'), [])
         self.assertEqual(self.tentar(None), 'CredenciaisInvalidas')
 
-    def test_identificadores_sem_conta_contam_numa_tabela_de_tamanho_fixo(self):
+    def test_identificador_com_conta_leva_o_vizinho_de_balde_igual_a_um_sem_conta(self):
+        # B1 of the review: with an exact counter for the identifiers that have an account, their protected mode
+        # never spread to a neighbour of bucket, and the ones without an account did: enough requests told that one
+        # person has an account. Every identifier counts in the bucket of its HMAC.
+        vistos = {}
+        for atacado, horas in (('rep.a', 0), ('ninguem.aqui', 3)):  # the second one after the first protection ended
+            with patch.object(acesso, 'BALDES', 1), self.depois(hours=horas):  # one bucket: everybody is a neighbour
+                sequencia = self.falhar(atacado, acesso.PROTECAO_FALHAS)
+                vizinhos = [self.tentar('rep.b', SENHA), self.tentar('outro.ninguem'), self.tentar('rep.b@exemplo.test', SENHA)]
+                vistos[atacado] = (sequencia, vizinhos)
+        self.assertEqual(vistos['rep.a'], vistos['ninguem.aqui'])
+        self.assertEqual(vistos['rep.a'], (['CredenciaisInvalidas'] * acesso.PROTECAO_FALHAS, ['Bloqueado'] * 3))
+        chaves = [l['chave'] for l in self.linhas("SELECT chave FROM tentativas WHERE chave LIKE '#%'")]
+        self.assertEqual(chaves, ['#balde|0'])  # one counter for all of them, and none of an account
+
+    def test_todo_identificador_conta_numa_tabela_de_tamanho_fixo(self):
+        navegador = marca()
+        self.assertEqual(self.tentar('rep.a', SENHA, marca=navegador), 'entrou')
         with patch.object(acesso, 'BALDES', 3):
             respostas = [self.tentar(f'ninguem{numero}@exemplo.test') for numero in range(120)]
             self.assertEqual(set(respostas), {'CredenciaisInvalidas', 'Bloqueado'})
@@ -101,12 +120,13 @@ class ModoProtegidoTest(Base):
             baldes = self.linhas("SELECT chave, bloqueado_ate FROM tentativas WHERE chave LIKE '#balde|%'")
             self.assertEqual({b['chave'] for b in baldes}, {'#balde|0', '#balde|1', '#balde|2'})  # 120 identifiers, three counters
             self.assertTrue(all(b['bloqueado_ate'] for b in baldes))
-            # A collision only makes an identifier without an account inherit the protected mode of another.
+            # A collision makes an identifier inherit the protected mode of another, with an account or without.
             self.assertEqual(self.tentar('nunca.tentado@exemplo.test'), 'Bloqueado')
-            # An identifier WITH an account keeps its exact counter, whatever happens to the fixed table.
-            self.assertEqual(self.tentar('rep.a'), 'CredenciaisInvalidas')
-            self.assertEqual(self.tentar('rep.a', SENHA), 'entrou')
-        self.assertEqual(len(self.linhas("SELECT 1 FROM tentativas WHERE chave LIKE '#id|%'")), 1)
+            self.assertEqual(self.tentar('rep.a'), 'Bloqueado')
+            self.assertEqual(self.tentar('rep.a', SENHA), 'Bloqueado')
+            # The way through is the same as ever: a device the account already used.
+            self.assertEqual(self.tentar('rep.a', SENHA, marca=navegador), 'entrou')
+        self.assertEqual(self.linhas("SELECT 1 FROM tentativas WHERE chave LIKE '#id|%'"), [])
         self.assertNotIn('ninguem', ' '.join(l['chave'] for l in self.linhas('SELECT chave FROM tentativas WHERE chave LIKE ?', '#%')))
 
     def test_nenhum_contador_sai_antes_do_prazo(self):
@@ -114,15 +134,17 @@ class ModoProtegidoTest(Base):
         ha = lambda minutos: acesso._iso(agora - test_acesso.timedelta(minutes=minutos))  # noqa: E731
         futuro = acesso._iso(agora + test_acesso.timedelta(minutes=30))
         acesso.listar(self.root)
-        for chave, em, ate in (('#id|vivo', ha(30), None), ('#id|vencido', ha(61), None), ('#balde|7', ha(59), None),
-                               ('#balde|8', ha(200), futuro), ('ana|198.51.100.7', ha(16), None), ('bia|198.51.100.7', ha(5), None),
+        # Buckets above BALDES: counters the sign-in of this test cannot land on.
+        for chave, em, ate in (('#balde|900005', ha(30), None), ('#balde|900006', ha(61), None), ('#balde|900007', ha(59), None),
+                               ('#balde|900008', ha(200), futuro), ('ana|198.51.100.7', ha(16), None), ('bia|198.51.100.7', ha(5), None),
                                ('#senha|' + 'a' * 16, ha(16), None), ('#marca|x|y', ha(3), None)):
             self.gravar('INSERT INTO tentativas (chave, falhas, bloqueado_ate, em) VALUES (?, 1, ?, ?)', chave, ate, em)
         with patch.object(acesso, 'MAX_TENTATIVAS_GUARDADAS', 1):
             self.assertEqual(self.tentar('rep.a'), 'CredenciaisInvalidas')  # any failure prunes
         chaves = {l['chave'] for l in self.linhas('SELECT chave FROM tentativas')}
-        self.assertLessEqual({'#id|vivo', '#balde|7', '#balde|8', '#marca|x|y', '#id|rep.a'}, chaves)
-        self.assertFalse({'#id|vencido', 'ana|198.51.100.7', '#senha|' + 'a' * 16} & chaves)
+        self.assertLessEqual({'#balde|900005', '#balde|900007', '#balde|900008', '#marca|x|y'}, chaves)
+        self.assertEqual(len([c for c in chaves if c.startswith('#balde|')]), 4)  # those three and the one of this failure
+        self.assertFalse({'#balde|900006', 'ana|198.51.100.7', '#senha|' + 'a' * 16} & chaves)
         # The ceiling of the table is only for the per-address counters, which an attacker can multiply.
         self.assertEqual(len([c for c in chaves if not c.startswith('#')]), 1)
 
