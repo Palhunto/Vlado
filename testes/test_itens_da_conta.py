@@ -3,6 +3,7 @@
 Each gives ``[{tipo, caso, criado_em, id}]``, only in the cases passed, only what that account created, never a
 title, a text or a name, without what is in the trash. Synthetic data, through the real writers of each module.
 """
+import json
 from pathlib import Path
 import sys
 import unittest
@@ -81,6 +82,15 @@ class NotasTest(Comum, unittest.TestCase):
         lixeira.adicionar(self.root, 'caso', 'alpha', 'Alpha')
         self.assertEqual(apuracao.itens_da_conta(self.root, CONTA['id'], ['alpha']), [])
 
+    def test_nota_antiga_sem_data_da_valueerror(self):
+        self.nota(CONTA)
+        ultima = sorted((self.root / 'casos/alpha/apuracao/revisoes').glob('*.json'))[-1]
+        estado = ler_json(ultima)
+        del estado['notas'][0]['criado_em_utc']  # an old note, without the field
+        ultima.write_text(json.dumps(estado), encoding='utf-8')
+        with self.assertRaises(ValueError):
+            apuracao.itens_da_conta(self.root, CONTA['id'], ['alpha'])
+
     def test_entradas_invalidas(self):
         self.conferir_entradas(apuracao.itens_da_conta)
 
@@ -105,6 +115,15 @@ class CadernoTest(Comum, unittest.TestCase):
     def test_registro_ilegivel_levanta(self):
         meu = caderno.salvar(self.root, self.fx.request(), CONTA)['registro']
         (self.root / f'casos/alpha/caderno/registros/{meu["id"]}.json').write_bytes(b'{ilegivel')
+        with self.assertRaises(ValueError):
+            caderno.itens_da_conta(self.root, CONTA['id'], ['alpha'])
+
+    def test_registro_antigo_sem_data_da_valueerror(self):
+        meu = caderno.salvar(self.root, self.fx.request(), CONTA)['registro']
+        caminho = self.root / f'casos/alpha/caderno/registros/{meu["id"]}.json'
+        entrada = ler_json(caminho)
+        del entrada['criado_em_utc']
+        caminho.write_text(json.dumps(entrada), encoding='utf-8')
         with self.assertRaises(ValueError):
             caderno.itens_da_conta(self.root, CONTA['id'], ['alpha'])
 
@@ -141,6 +160,15 @@ class RevisaoHumanaTest(Comum, unittest.TestCase):
         lixeira.adicionar(self.root, 'conversa', 'alpha', 'Conversa', conversa=uuid.uuid4().hex, rodadas=['R001'])
         self.assertEqual(human.itens_da_conta(self.root, CONTA['id'], ['alpha']), [])
 
+    def test_evento_antigo_sem_data_da_valueerror(self):
+        self.marcar(CONTA, 'precisa_de_ajuste')
+        [caminho] = (self.root / 'execucoes/alpha/R001/saidas/revisao_humana').glob('*/eventos/*.json')
+        evento = ler_json(caminho)
+        del evento['em_utc']
+        caminho.write_text(json.dumps(evento), encoding='utf-8')
+        with self.assertRaises(ValueError):
+            human.itens_da_conta(self.root, CONTA['id'], ['alpha'])
+
     def test_entradas_invalidas(self):
         self.conferir_entradas(human.itens_da_conta)
 
@@ -174,6 +202,16 @@ class ConferenciaRedacaoTest(conferencia_fixture.Fontes, Comum, unittest.TestCas
             with self.assertRaises(ValueError):
                 redacao.itens_da_conta(self.root, CONTA['id'], ['alpha'])
 
+    def test_registro_de_forma_antiga_da_valueerror(self):
+        sem_data = {'id': 'C' + 'a' * 32, 'historico': [{'conta_id': CONTA['id'], 'sequencia': 1,
+                                                          'origem_autoria': caderno.AUTORIA_CONTA}]}
+        sem_sequencia = {'id': 'C' + 'a' * 32, 'historico': [{'conta_id': CONTA['id'],
+                                                               'origem_autoria': caderno.AUTORIA_CONTA}]}
+        for forma in ([sem_data], [sem_sequencia], [None]):
+            with self.subTest(forma=forma), mock.patch.object(redacao, 'listar', return_value=forma):
+                with self.assertRaises(ValueError):
+                    redacao.itens_da_conta(self.root, CONTA['id'], ['alpha'])
+
     def test_entradas_invalidas(self):
         self.conferir_entradas(redacao.itens_da_conta)
 
@@ -203,6 +241,14 @@ class DiligenciasTest(Comum, unittest.TestCase):
                          [('diligencia', alheia['id'])])
         lixeira.adicionar(self.root, 'caso', 'alpha', 'Alpha')
         self.assertEqual(diligencias.itens_da_conta(self.root, CONTA['id'], ['alpha']), [])
+
+    def test_diligencia_de_forma_antiga_da_valueerror(self):
+        sem_data = {'resultados': [{'id': 'G' + 'a' * 32, 'historico': [{'conta_id': CONTA['id'], 'sequencia': 1,
+                                                                          'origem_autoria': caderno.AUTORIA_CONTA}]}]}
+        for forma in (sem_data, {'resultados': [None]}):
+            with self.subTest(forma=forma), mock.patch.object(diligencias, 'listar', return_value=forma):
+                with self.assertRaises(ValueError):
+                    diligencias.itens_da_conta(self.root, CONTA['id'], ['alpha'])
 
     def test_entradas_invalidas(self):
         self.conferir_entradas(diligencias.itens_da_conta)
@@ -242,6 +288,15 @@ class QuadrosTest(Comum, unittest.TestCase):
                                                                            'historico': [], 'estado': None}]):
             with self.assertRaises(ValueError):
                 evidencias.itens_da_conta(self.root, CONTA['id'], ['alpha'])
+
+    def test_registro_de_forma_antiga_da_valueerror(self):
+        sem_data = {'id': 'H' + 'a' * 32, 'historico': [{'conta_id': CONTA['id'],
+                                                          'origem_autoria': caderno.AUTORIA_CONTA}]}
+        for registro in ({'id': 'H' + 'a' * 32, 'historico': []}, sem_data, None):
+            with self.subTest(registro=registro), \
+                    mock.patch.object(hipoteses.COLECAO, 'listar', return_value=[registro]):
+                with self.assertRaises(ValueError):
+                    evidencias.itens_da_conta(self.root, CONTA['id'], ['alpha'])
 
     def test_entradas_invalidas(self):
         self.conferir_entradas(evidencias.itens_da_conta)
@@ -286,6 +341,55 @@ class ConversasTest(redacoes.Redacoes, unittest.TestCase):
             codex_apuracao.conversas_sem_criador(self.root, 'alpha')
         lixeira.adicionar(self.root, 'conversa', 'alpha', 'Conversa', conversa=identificador)
         self.assertIsNone(codex_apuracao.conversas_sem_criador(self.root, ['alpha']))  # in the trash: not counted
+
+    def conversa_feita(self, conta):
+        identificador = self.manager.perguntar(self.pergunta(), conta=conta)['conversa']
+        redacoes.esperar(lambda: self.manager.contexts[identificador]['meta'].get('turn_id'))
+        self.manager.cancelar(identificador)
+        redacoes.aguardar_fim(self.manager, identificador)
+        return identificador
+
+    def test_conversa_antiga_sem_data_da_valueerror(self):
+        identificador = self.conversa_feita(self.bia)
+        caminho = self.root / f'conversas/{identificador}/conversa.json'
+        meta = ler_json(caminho)
+        del meta['criada_em_utc']
+        caminho.write_text(json.dumps(meta), encoding='utf-8')
+        with self.assertRaises(ValueError):
+            codex_apuracao.itens_da_conta(self.root, self.bia, ['alpha'])
+        del meta['criada_por']
+        caminho.write_text(json.dumps(meta), encoding='utf-8')
+        with self.assertRaises(ValueError):
+            codex_apuracao.conversas_sem_criador(self.root, ['alpha'])
+
+    def test_le_so_as_conversas_dos_casos_pelo_indice(self):
+        identificador = self.conversa_feita(self.bia)
+        self.assertTrue((self.root / f'conversas/.por_caso/alpha/{identificador}').is_file())  # written at creation
+        self.assertEqual(len(codex_apuracao.itens_da_conta(self.root, self.bia, ['alpha'])), 1)
+        (self.root / 'casos/outra').mkdir(parents=True, exist_ok=True)
+        estranha = uuid.uuid4().hex  # a conversation of another case that cannot be read
+        (self.root / f'conversas/{estranha}').mkdir()
+        (self.root / f'conversas/{estranha}/conversa.json').write_bytes(b'{ilegivel')
+        codex_apuracao.indexar_conversa(self.root, 'outra', estranha)
+        self.assertEqual(len(codex_apuracao.itens_da_conta(self.root, self.bia, ['alpha'])), 1)  # never read
+        self.assertIsNone(codex_apuracao.conversas_sem_criador(self.root, ['alpha']))
+        with self.assertRaises(ValueError):
+            codex_apuracao.itens_da_conta(self.root, self.bia, ['outra'])
+
+    def test_as_de_antes_do_indice_sao_indexadas_na_primeira_exportacao(self):
+        identificador = self.conversa_feita(self.bia)
+        indice = self.root / 'conversas/.por_caso'
+        for marca in sorted(indice.rglob('*'), reverse=True):  # as an installation from before the index
+            marca.rmdir() if marca.is_dir() else marca.unlink()
+        indice.rmdir()
+        self.assertEqual([i['id'] for i in codex_apuracao.itens_da_conta(self.root, self.bia, ['alpha'])],
+                         [identificador])
+        self.assertTrue((indice / '.completo').is_file())
+        self.assertTrue((indice / f'alpha/{identificador}').is_file())
+
+    def test_marca_de_conversa_apagada_e_pulada(self):
+        codex_apuracao.indexar_conversa(self.root, 'alpha', uuid.uuid4().hex)  # its files are gone for good
+        self.assertEqual(codex_apuracao.itens_da_conta(self.root, self.bia, ['alpha']), [])
 
     def test_conversa_ilegivel_levanta(self):
         pasta = self.root / f'conversas/{uuid.uuid4().hex}'

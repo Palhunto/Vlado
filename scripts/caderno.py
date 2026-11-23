@@ -202,6 +202,7 @@ def listar(root, case, *, texto='', limite=20, deslocamento=0):
         'proximo_deslocamento': deslocamento + limite if deslocamento + limite < total else None}
 
 
+@lixeira.leitura_da_exportacao
 def itens_da_conta(root, conta, casos):
     """Notebook records the account created, for its own data export (E4b-2b of Contas; Viga, with the Maestro's
     consent): ``[{tipo: 'registro_caderno', caso, criado_em, id}]``, only in ``casos`` (those it reaches, as the
@@ -219,8 +220,7 @@ def itens_da_conta(root, conta, casos):
             if not isinstance(entry, dict) or entry.get('id') != path.stem or entry.get('caso_id') != case:
                 raise ValueError('Registro do caderno inválido.')
             if entry.get('origem_autoria') == AUTORIA_CONTA and entry.get('conta_id') == conta:
-                itens.append({'tipo': 'registro_caderno', 'caso': case, 'criado_em': entry.get('criado_em_utc'),
-                              'id': entry['id']})
+                itens.append(lixeira.item_exportado('registro_caderno', case, entry.get('criado_em_utc'), entry.get('id')))
     return itens
 
 

@@ -218,6 +218,7 @@ def listar_notas(root, case):
     return {'caso': case, 'revisao_caderno': state['revisao'], 'notas': notas}
 
 
+@lixeira.leitura_da_exportacao
 def itens_da_conta(root, conta, casos):
     """Notes the account created, for its own data export (E4b-2b of Contas; Viga, with the Maestro's consent):
     ``[{tipo: 'nota', caso, criado_em, id}]``, only in ``casos`` (those it reaches, as the caller says) and only
@@ -226,9 +227,11 @@ def itens_da_conta(root, conta, casos):
     casos, _ = lixeira.casos_da_exportacao(root, conta, casos)
     itens = []
     for case in casos:
-        for note in listar(root, case)['notas']:
-            if isinstance(note, dict) and (note.get('criado_por') or {}).get('conta_id') == conta:
-                itens.append({'tipo': 'nota', 'caso': case, 'criado_em': note['criado_em_utc'], 'id': note['id']})
+        for note in listar(root, case).get('notas') or []:
+            if not isinstance(note, dict):
+                raise ValueError('Nota fora do esperado.')
+            if (note.get('criado_por') or {}).get('conta_id') == conta:
+                itens.append(lixeira.item_exportado('nota', case, note.get('criado_em_utc'), note.get('id')))
     return itens
 
 

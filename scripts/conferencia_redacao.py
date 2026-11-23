@@ -341,6 +341,7 @@ def listar(root, case):
     return result
 
 
+@lixeira.leitura_da_exportacao
 def itens_da_conta(root, conta, casos):
     """What the account created in the newsroom check, for its own data export (E4b-2b of Contas; Viga, with the
     Maestro's consent): ``[{tipo, caso, criado_em, id}]``, only in ``casos`` (those it reaches, as the caller says):
@@ -354,14 +355,17 @@ def itens_da_conta(root, conta, casos):
         for record in listar(root, case):
             if record.get('divergente'):
                 raise ValueError('Registro da conferência da redação ilegível.')
-            for event in record['historico']:
+            for event in record.get('historico') or []:
                 if event.get('conta_id') != conta or event.get('origem_autoria') != caderno.AUTORIA_CONTA:
                     continue
-                if event['sequencia'] == 1:
-                    itens.append({'tipo': 'conferencia', 'caso': case, 'criado_em': event['em_utc'], 'id': record['id']})
-                if (event['estado'].get('revisao') or {}).get('sequencia') == event['sequencia']:
-                    itens.append({'tipo': 'revisao_afirmacao', 'caso': case, 'criado_em': event['em_utc'],
-                                  'id': f"{record['id']}:{event['sequencia']}"})
+                sequencia = event.get('sequencia')
+                if type(sequencia) is not int or sequencia < 1:
+                    raise ValueError('Evento da conferência da redação fora do esperado.')
+                if sequencia == 1:
+                    itens.append(lixeira.item_exportado('conferencia', case, event.get('em_utc'), record.get('id')))
+                if ((event.get('estado') or {}).get('revisao') or {}).get('sequencia') == sequencia:
+                    itens.append(lixeira.item_exportado('revisao_afirmacao', case, event.get('em_utc'),
+                                                        f"{record.get('id')}:{sequencia}"))
     return itens
 
 

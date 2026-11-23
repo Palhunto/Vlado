@@ -59,6 +59,7 @@ def _historico(run, revision, origin):
     return events, previous
 
 
+@lixeira.leitura_da_exportacao
 def itens_da_conta(root, conta, casos):
     """Human review marks the account made, for its own data export (E4b-2b of Contas; Viga, with the Maestro's
     consent): ``[{tipo: 'revisao', caso, criado_em, id}]`` (id: the event's), only in ``casos`` (those it reaches,
@@ -79,8 +80,7 @@ def itens_da_conta(root, conta, casos):
                 if not isinstance(item, dict) or item.get('caso_id') != case or item.get('rodada') != run.name:
                     raise ValueError('Histórico de revisão humana inválido.')
                 if item.get('origem') == ORIGEM_CONTA and item.get('conta_id') == conta:
-                    itens.append({'tipo': 'revisao', 'caso': case, 'criado_em': item.get('em_utc'),
-                                  'id': item.get('evento_id')})
+                    itens.append(lixeira.item_exportado('revisao', case, item.get('em_utc'), item.get('evento_id')))
     return itens
 
 

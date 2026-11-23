@@ -133,6 +133,7 @@ def listar(root, case, *, estado='', responsavel='', texto=''):
     return {'caso': case, 'resultados': result, 'total': len(result)}
 
 
+@lixeira.leitura_da_exportacao
 def itens_da_conta(root, conta, casos):
     """What the account did in the follow-ups, for its own data export (E4b-2b of Contas; Viga, with the Maestro's
     consent): ``[{tipo, caso, criado_em, id}]``, only in ``casos`` (those it reaches, as the caller says):
@@ -144,15 +145,18 @@ def itens_da_conta(root, conta, casos):
     casos, _ = lixeira.casos_da_exportacao(root, conta, casos)
     itens = []
     for case in casos:
-        for item in listar(root, case)['resultados']:
-            for event in item['historico']:
+        for item in listar(root, case).get('resultados') or []:
+            for event in item.get('historico') or []:
                 if event.get('conta_id') != conta or event.get('origem_autoria') != caderno.AUTORIA_CONTA:
                     continue
-                if event['sequencia'] == 1:
-                    itens.append({'tipo': 'diligencia', 'caso': case, 'criado_em': event['em_utc'], 'id': item['id']})
-                elif event['operacao'] == 'responder':
-                    itens.append({'tipo': 'resposta_diligencia', 'caso': case, 'criado_em': event['em_utc'],
-                                  'id': f"{item['id']}:{event['sequencia']}"})
+                sequencia = event.get('sequencia')
+                if type(sequencia) is not int or sequencia < 1:
+                    raise ValueError('Evento da diligência fora do esperado.')
+                if sequencia == 1:
+                    itens.append(lixeira.item_exportado('diligencia', case, event.get('em_utc'), item.get('id')))
+                elif event.get('operacao') == 'responder':
+                    itens.append(lixeira.item_exportado('resposta_diligencia', case, event.get('em_utc'),
+                                                        f"{item.get('id')}:{sequencia}"))
     return itens
 
 

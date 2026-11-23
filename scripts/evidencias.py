@@ -417,6 +417,7 @@ class Colecao:
         return {'caso': case, 'colecao': self.nome, 'id': identifier, 'sha256': previous, 'estado': state,
                 'historico': events, 'divergente': False}
 
+    @lixeira.leitura_da_exportacao
     def itens_da_conta(self, root, conta, casos):
         """Records of this collection the account created (its first event is of this account), for its own data
         export (E4b-2b of Contas; Viga, with the Maestro's consent): ``[{tipo: <collection>, caso, criado_em, id}]``,
@@ -426,11 +427,12 @@ class Colecao:
         itens = []
         for case in casos:
             for record in self.listar(root, case):
-                if record.get('divergente'):
+                historico = record.get('historico')
+                if record.get('divergente') or not historico:
                     raise ValueError(f'Registro ilegível em {self.rotulo}.')
-                first = record['historico'][0]
+                first = historico[0]
                 if first.get('conta_id') == conta and first.get('origem_autoria') == caderno.AUTORIA_CONTA:
-                    itens.append({'tipo': self.nome, 'caso': case, 'criado_em': first['em_utc'], 'id': record['id']})
+                    itens.append(lixeira.item_exportado(self.nome, case, first.get('em_utc'), record.get('id')))
         return itens
 
     def listar(self, root, case):
@@ -512,6 +514,7 @@ class Colecao:
 QUADROS = ('entrevistas', 'hipoteses', 'linha_tempo', 'mapa_relacoes', 'tabelas_apuracao')
 
 
+@lixeira.leitura_da_exportacao
 def itens_da_conta(root, conta, casos):
     """The records the account created in every evidence board (``Colecao.itens_da_conta`` of each), for its own
     data export (E4b-2b of Contas). The board modules are imported here, at call time: they import this one."""

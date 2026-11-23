@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import functools
 import re
 import uuid
 
@@ -50,6 +51,25 @@ def validar(tipo, caso, conversa=None, rodada=None):
 
 
 ID_CONTA = r'[0-9a-f]{16}'  # acesso: secrets.token_hex(8)
+
+
+def leitura_da_exportacao(funcao):
+    """For each ``itens_da_conta``: old data, or data of an unexpected shape, gives ValueError (the export says the
+    part is incomplete), never a KeyError or a TypeError out of a field read."""
+    @functools.wraps(funcao)
+    def lida(*args, **kwargs):
+        try:
+            return funcao(*args, **kwargs)
+        except (KeyError, TypeError, IndexError, AttributeError) as exc:
+            raise ValueError(f'Dado fora do esperado ao exportar os itens ({type(exc).__name__}).') from exc
+    return lida
+
+
+def item_exportado(tipo, caso, criado_em, identificador):
+    """One item of ``itens_da_conta``; a missing or malformed date or id gives ValueError."""
+    if not isinstance(criado_em, str) or not criado_em or not isinstance(identificador, str) or not identificador:
+        raise ValueError(f'Item fora do esperado ao exportar ({tipo}).')
+    return {'tipo': tipo, 'caso': caso, 'criado_em': criado_em, 'id': identificador}
 
 
 def casos_da_exportacao(root, conta, casos):
