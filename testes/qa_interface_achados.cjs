@@ -22,8 +22,13 @@ const [origin,output,chrome] = process.argv.slice(2);
     await page.locator(`#achados-revisao option[value="${revision}"]`).waitFor({state:'attached'});
     await page.selectOption('#achados-revisao',revision);
     await page.selectOption('#achados-geracao',generation);
-    await page.locator('#achados-buscar:enabled').waitFor();
+    await page.locator('#achados-buscar:enabled').waitFor({state:'attached'});   // o botão fica dentro de "Pesquisar e filtrar achados", recolhido
     await page.locator('#achados-exportar:enabled').waitFor();
+  }
+  // Os campos de pesquisa e filtro dos achados ficam em "Pesquisar e filtrar achados" (details recolhido por padrão no desktop).
+  async function filtros() {
+    const caixa=page.locator('details.desktop-finding-filters');
+    if(await caixa.count() && !await caixa.evaluate(el => el.open)) await caixa.locator('> summary').click();
   }
   try {
     await page.goto(origin);
@@ -57,32 +62,38 @@ const [origin,output,chrome] = process.argv.slice(2);
     await page.click('#ver-achados'); await selectCase('alpha'); await selectRecords('r1','g1');
     assert.equal(await page.locator('#achados-resultados article').count(),10);
     assert.equal(await page.locator('#achados-inspecao > article').count(),1);
-    assert.equal(await page.locator('#achados-versoes').evaluate(el => el.open),false);
+    // O painel "Pesquisar e filtrar achados" fica como a pessoa o deixou (selectRecords o abre); o roteiro antigo esperava que ele recolhesse sozinho.
+    assert.equal(await page.locator('#achados-versoes').count(),1);
     const secondChoice=page.locator('#achados-resultados .finding-open').nth(1);
     await secondChoice.click();
     assert.equal(await secondChoice.getAttribute('aria-pressed'),'true');
     assert.match(await page.locator('#achados-inspecao .technical').first().textContent(),/A002@v1/);
     assert.equal(await page.locator('#achados-inspecao .technical').first().evaluate(el => el.open),false);
-    await page.locator('#achados-inspecao').getByRole('button',{name:'Voltar à lista de achados'}).click();
+    // Em 1024 px ou mais a lista e a ficha ficam lado a lado e não há "Voltar"; em tela estreita a ficha é uma tela própria, com o botão e o retorno do foco.
+    await page.setViewportSize({width:390,height:900});
+    await secondChoice.click();
+    await page.locator('#achados-voltar-lista').click();
     assert.equal(await secondChoice.evaluate(el=>el===document.activeElement),true);
+    await page.setViewportSize({width:1365,height:1000});
     await page.locator('#achados-resultados .finding-open').first().click();
     checks.push('cadastro separado, navegação sem seleção automática, lista/ficha sincronizadas e retorno de foco');
     assert.equal(await page.evaluate(() => window.INJETADO),undefined);
     assert.match(await page.locator('#achados-status').innerText(),/Revisão mais recente/);
     await page.click('#achados-proximo'); await page.locator('#achados-exportar:enabled').waitFor();
     assert.equal(await page.locator('#achados-resultados article').count(),4);
+    await page.selectOption('#achados-formato','json');   // o formato padrão é o texto com referências (Markdown); aqui se confere o JSON
     const [exported] = await Promise.all([page.waitForEvent('download'),page.click('#achados-exportar')]);
     const data=JSON.parse(await fs.readFile(await exported.path(),'utf8'));
     assert.equal(data.retornados,14); assert.equal(data.completa,true); assert.equal(data.truncado,false);
     await exported.saveAs(path.join(output,'selecao_completa_sintetica.json'));
     checks.push('paginação e exportação integral de 14 achados; XSS tratado como texto; aviso de revisão sucessora');
-    await page.fill('#achados-texto','script'); await page.click('#achados-buscar');
+    await filtros(); await page.fill('#achados-texto','script'); await filtros(); await page.click('#achados-buscar');
     await page.locator('#achados-exportar:enabled').waitFor();
     assert.equal(await page.locator('#achados-resultados article').count(),1);
     assert.equal(await page.evaluate(() => window.INJETADO),undefined);
-    await page.fill('#achados-texto',''); await selectRecords('r3','g3');
+    await filtros(); await page.fill('#achados-texto',''); await selectRecords('r3','g3');
     await page.locator('#achados-filtros summary').click();
-    await page.selectOption('#achados-briefing','sim'); await page.click('#achados-buscar');
+    await filtros(); await page.selectOption('#achados-briefing','sim'); await filtros(); await page.click('#achados-buscar');
     await page.locator('#achados-exportar:enabled').waitFor();
     assert.equal(await page.locator('#achados-resultados article').count(),1);
     assert.match(await page.locator('#achados-filtros-ativos').innerText(),/No briefing: sim/);
@@ -142,8 +153,8 @@ const [origin,output,chrome] = process.argv.slice(2);
       await route.continue();
     });
     const stale=page.waitForResponse(r=>r.url().endsWith('/api/achados-buscar') && r.request().postDataJSON().revisao==='r3');
-    await page.click('#achados-buscar');
-    await page.selectOption('#achados-briefing','');
+    await filtros(); await page.click('#achados-buscar');
+    await filtros(); await page.selectOption('#achados-briefing','');
     await selectRecords('r1','g1');
     await stale;
     assert.equal(await page.locator('#achados-revisao').inputValue(),'r1');
@@ -151,7 +162,7 @@ const [origin,output,chrome] = process.argv.slice(2);
     await page.unroute('**/api/achados-buscar');
     checks.push('resposta de revisão anterior descartada após nova revisão já carregada');
     await page.route('**/api/achados-buscar',async route => { await new Promise(r=>setTimeout(r,450)); await route.continue(); });
-    await page.fill('#achados-texto','valor'); await page.click('#achados-buscar');
+    await filtros(); await page.fill('#achados-texto','valor'); await filtros(); await page.click('#achados-buscar');
     await selectCase('beta'); await status('Registros ainda não produzidos');
     await page.waitForResponse(r=>r.url().endsWith('/api/achados-buscar'));
     assert.equal(await page.locator('#achados-resultados article').count(),0);
