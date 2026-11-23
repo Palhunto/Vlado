@@ -73,6 +73,10 @@ EVENTOS = frozenset({
     # convite, e-mail, redefinição e troca de e-mail (E3); segundo fator, entrada em dois passos e ciclo de vida (E4)
     'convite_expirado', 'redefinicao_pedida', 'email_troca_pedida', 'email_trocado', 'email_enviado', 'email_falhou',
     'aparelho_novo', 'login_protegido', 'fator_codigos_gerados', 'conta_inativa_avisada',
+    # segundo fator (E4): bloqueado por tentativas (atividade); indisponível, sem a chave ou com a semente ilegível
+    'fator_bloqueado', 'fator_indisponivel',
+    # o segundo fator retirado ao terminar uma recuperação (pelo link de redefinição ou pelo terminal)
+    'fator_removido_na_recuperacao',
     # downloads
     'download',
     # pedido recusado por excesso de pedidos em curso do mesmo endereço (429, CONF-03)
@@ -86,7 +90,9 @@ MOTIVOS = frozenset({'credenciais', 'bloqueado', 'limite_ip', 'expirada', 'inati
                      'sem_participacao', 'outra_redacao', 'inexistente', 'redacao_suspensa', 'senha_incorreta',
                      'ultimo_dono',
                      # convite e e-mail (E3); segundo fator e ciclo de vida (E4)
-                     'link_expirado', 'email_em_uso', 'limite', 'codigo_invalido', 'protegido', 'pendencia'})
+                     'link_expirado', 'email_em_uso', 'limite', 'codigo_invalido', 'protegido', 'pendencia',
+                     # por que o segundo fator ficou indisponível (fator_indisponivel)
+                     'chave_ausente', 'semente_ilegivel'})
 TIPOS_DOWNLOAD = frozenset({'original', 'exportacao'})
 CODIGOS = frozenset({'operacao_proibida', 'caso_nao_liberado', 'campos_nao_permitidos', 'servico_nao_encerravel',
                      'caso_indisponivel', 'conversa_indisponivel', 'lote_inexistente', 'redacao_suspensa',
@@ -94,10 +100,15 @@ CODIGOS = frozenset({'operacao_proibida', 'caso_nao_liberado', 'campos_nao_permi
                      'ultimo_dono', 'senha_necessaria',
                      # convite e e-mail (E3); segundo fator (E4)
                      'convite_duplicado', 'limite_de_convites', 'transporte_indisponivel', 'codigo_invalido',
-                     'fator_necessario'})
+                     'fator_necessario',
+                     # recusas da E3 (recuperacao_pelo_operador vai em admin_recusada; os outros dois, por paridade
+                     # com as respostas, mesmo que hoje não cheguem ao registro como código)
+                     'recuperacao_pelo_operador', 'link_invalido', 'senha_invalida',
+                     # segundo fator indisponível (E4); o padrão de acesso.Recusada, que pode chegar em admin_recusada
+                     'fator_indisponivel', 'requisicao_invalida'})
 # Qual e-mail saiu ou falhou (email_enviado, email_falhou): só o tipo, nunca o endereço nem o texto.
 MENSAGENS = frozenset({'convite', 'redefinicao', 'novo_acesso', 'senha_trocada', 'fator_alterado', 'recuperacao',
-                       'muitas_tentativas', 'email_novo', 'conta_inativa'})
+                       'muitas_tentativas', 'email_novo', 'conta_inativa', 'fator_bloqueado'})
 # Nomes de operação da API: lista fechada que o servidor registra ao importar (permitir_operacoes). Um nome fora dela
 # (um texto qualquer em forma de nome) é descartado.
 OPERACOES_PERMITIDAS: set = set()

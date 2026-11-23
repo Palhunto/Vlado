@@ -32,12 +32,14 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-PADROES = {'paginas': 3000, 'megapixels': 150, 'memoria_mb': 2048, 'cpu_s': 7200}
+# cpu_leitura_visual_s: CPU seconds one page image may take (the model's visual reading): above it the page is
+# too heavy; a busy server that gives the process no CPU is told apart by the Mesa's own clock limit.
+PADROES = {'paginas': 3000, 'megapixels': 150, 'memoria_mb': 2048, 'cpu_s': 7200, 'cpu_leitura_visual_s': 60}
 FAIXAS = {'paginas': (1, 1_000_000), 'megapixels': (1, 10_000), 'memoria_mb': (64, 1_048_576),
-          'cpu_s': (1, 30 * 24 * 3600), 'nucleos': (1, 4096)}
+          'cpu_s': (1, 30 * 24 * 3600), 'nucleos': (1, 4096), 'cpu_leitura_visual_s': (1, 24 * 3600)}
 VARIAVEIS = {'paginas': 'VLADO_EXTRACAO_TETO_PAGINAS', 'megapixels': 'VLADO_EXTRACAO_TETO_MEGAPIXELS',
              'memoria_mb': 'VLADO_EXTRACAO_TETO_MEMORIA_MB', 'cpu_s': 'VLADO_EXTRACAO_TETO_CPU_S',
-             'nucleos': 'VLADO_EXTRACAO_NUCLEOS'}
+             'nucleos': 'VLADO_EXTRACAO_NUCLEOS', 'cpu_leitura_visual_s': 'VLADO_LEITURA_VISUAL_TETO_CPU_S'}
 DPI_PAGINA = 300  # the resolution OCR rasterizes a page at
 LADO_VISUAL = 2000  # pixels of the longest side of a page image sent to the model
 PROFUNDIDADE_FORMULARIOS = 8

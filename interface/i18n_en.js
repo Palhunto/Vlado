@@ -1342,6 +1342,7 @@ window.VLADO_I18N_EN = {
     operacao_proibida: "This account cannot use this operation.",
     servico_nao_encerravel: "The hosted service cannot be stopped from the interface.",
     caso_nao_liberado: "This investigation is not released for your account.",
+    caso_inexistente: "This investigation does not exist; documents are never added to another investigation automatically.",
     campos_nao_permitidos: "Guests can only send the question and the conversation.",
     convite_invalido: "Invalid, expired or revoked invitation.",
     cota_diaria_esgotada: "Daily limit of {cota} question(s) reached. Try again tomorrow.",
