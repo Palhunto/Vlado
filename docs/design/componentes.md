@@ -949,6 +949,7 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 - **Quando aparece:** se, nesta visita à Documentos, houve um envio e o recibo dele está pronto, "Perguntar aos documentos" abre Perguntar com o recibo recolhido acima da caixa da pergunta (`#codex-recibo-alerta`). Sem envio nesta visita, Perguntar abre sem ele, como hoje pela barra lateral.
 - **Forma:** o aviso em linha da Mesa (`.notice`), um `<details>` fechado. O resumo é "Recibo do último envio · confira as limitações antes de perguntar". Aberto, mostra o mesmo cartão do recibo da Documentos ("Recibo do lote: 3 de 3 arquivos", novos e duplicados, "Detalhes técnicos"), sem repetir ids.
 - **Quando some:** ao enviar a primeira pergunta, como hoje, ou ao trocar de apuração.
+- **Visita:** enquanto a página não é recarregada; recarregar zera. Combinado com o Lume em 22/11/2026, que o fez junto com o passo 3 da R4.
 
 <a id="nova-apuracao"></a>
 
