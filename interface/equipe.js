@@ -136,8 +136,8 @@
     if (gasto.esgotada) bloco.append(no('span', 'equipe-uso-esgotada', `! ${valor} · ${t('esgotada')}`));
     else bloco.append(no('span', 'conta-texto', valor));
     if (pessoa.teto_mensal_brl) bloco.append(no('span', 'conta-apoio', t('teto {valor}', {valor: reais(pessoa.teto_mensal_brl, {centavos: false})})));
-    // O que a chave própria da redação pagou por esta pessoa: linha à parte, sem somar ao valor de cima (P40); só quando houve gasto.
-    if (Number(pessoa.gasto_chave_propria_brl) > 0 && mostrarChavePropria()) bloco.append(no('span', 'conta-apoio equipe-uso-propria', t('{valor} com a chave própria', {valor: reais(pessoa.gasto_chave_propria_brl)})));
+    // O que a chave própria da redação pagou por esta pessoa, "dos quais": o valor de cima já inclui essa parte, porque o teto da pessoa vale para as duas chaves (P40); só quando houve gasto.
+    if (Number(pessoa.gasto_chave_propria_brl) > 0 && mostrarChavePropria()) bloco.append(no('span', 'conta-apoio equipe-uso-propria', t('dos quais {valor} com a chave própria', {valor: reais(pessoa.gasto_chave_propria_brl)})));
     return bloco;
   }
   function botaoGerenciar(pessoa) {

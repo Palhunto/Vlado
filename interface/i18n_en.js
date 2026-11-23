@@ -1210,7 +1210,7 @@ window.VLADO_I18N_EN = {
     "Fonte indisponível": "Source unavailable",
     "Diagrama do mapa. A lista ao lado traz as mesmas ligações.": "Map diagram. The list alongside has the same links.",
     "Pessoas e organizações, com as ligações de cada uma": "People and organisations, with each one's links",
-    "{valor} com a chave própria": "{valor} on the newsroom’s own key",
+    "dos quais {valor} com a chave própria": "of which {valor} on the newsroom’s own key",
     "Chave própria da redação": "Newsroom’s own key",
     "Pago pela chave da redação: não entra na cota do serviço.": "Paid by the newsroom’s key: not part of the service quota.",
     "Pessoa": "Person",
