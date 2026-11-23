@@ -308,3 +308,15 @@ test('a Mesa volta à página da pendência quando uma operação responde 403 p
   await assert.rejects(mesa.avaliar("api('inventario', {caso: 'x'})"));
   assert.deepEqual(trocas, ['/conta/segundo-fator']);
 });
+
+test('a pendência de termos leva a /conta/termos, e vem antes da do segundo fator quando as duas existem', async () => {
+  for (const [pendencias, destino] of [[['termos'], '/conta/termos'], [['termos', 'segundo_fator'], '/conta/termos'], [['segundo_fator', 'termos'], '/conta/termos']]) {
+    const trocas = [];
+    const mesa = criarMesa({scripts: require('./contas_apoio.cjs').SCRIPTS, modo: 'piloto', api: op => (op === 'conta-ver' ? recusa('pendencia_de_conta', 'Há uma pendência.', 'proibido') : undefined),
+      preparar: janela => { janela.location.replace = d => trocas.push(d); }});
+    await esperar(mesa);
+    mesa.janela.fetch = async () => ({ok: false, json: async () => ({estado: 'proibido', codigo: 'pendencia_de_conta', pendencias, erro: 'Há uma pendência.'})});
+    await assert.rejects(mesa.avaliar("api('inventario', {caso: 'x'})"));
+    assert.deepEqual(trocas, [destino], pendencias.join(','));
+  }
+});

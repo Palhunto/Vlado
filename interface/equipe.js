@@ -617,9 +617,9 @@
     for (const pedido of pedidos) {
       const item = no('li', 'equipe-recuperacao'); item.dataset.recuperacao = pedido.id;
       const texto = no('div', 'conta-rotulo');
-      const nome = no('span', 'conta-texto'); nome.append(pedido.conta_nome ? dado(pedido.conta_nome) : t('uma conta removida'));
+      const nome = no('span', 'conta-texto'); nome.append(pedido.conta_nome ? nomeDaConta(pedido.conta_nome) : t('uma conta removida'));
       const detalhe = no('span', 'conta-apoio');
-      detalhe.append(modelar(t('pedido por {por} em {pedida} · vence em {vence}'), {por: pedido.pedida_por_nome ? dado(pedido.pedida_por_nome) : t('um dono'), pedida: data(pedido.pedida_em), vence: data(pedido.expira_em)}));
+      detalhe.append(modelar(t('pedido por {por} em {pedida} · vence em {vence}'), {por: pedido.pedida_por_nome ? nomeDaConta(pedido.pedida_por_nome) : t('um dono'), pedida: data(pedido.pedida_em), vence: data(pedido.expira_em)}));
       texto.append(nome, detalhe);
       const parte = !!quemSou && (pedido.pedida_por === quemSou || pedido.conta === quemSou);
       let acao;
@@ -700,9 +700,12 @@
     redacao_criada: 'A redação foi criada', redacao_suspensa: 'A redação foi suspensa por quem administra o serviço',
     redacao_reativada: 'A redação foi reativada por quem administra o serviço', redacao_encerrada: 'A redação foi encerrada por quem administra o serviço',
   };
+  // O servidor manda "Conta excluída" no lugar do nome de uma conta que a própria pessoa excluiu (null fica para o rótulo do sistema): é texto da Mesa, e se traduz.
+  const CONTA_EXCLUIDA = 'Conta excluída';
+  const nomeDaConta = nome => (nome === CONTA_EXCLUIDA ? document.createTextNode(t(CONTA_EXCLUIDA)) : dado(nome));
   function nomeDe(evento, lado) {
     const nome = evento[`${lado}_nome`], id = evento[lado];
-    if (nome) return dado(nome);
+    if (nome) return nomeDaConta(nome);
     if (lado === 'por' && !(typeof id === 'string' && ID_CONTA.test(id))) return t('Quem administra o serviço');
     return t('uma conta removida');
   }

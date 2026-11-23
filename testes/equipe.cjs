@@ -341,6 +341,9 @@ test('Atividade: cada tipo que o servidor grava tem frase (nenhum cai em "Ação
   assert.equal(texto(Equipe.frase({...base, tipo: 'conta_criada', por: null, por_nome: null})), 'Quem administra o serviço criou a conta de Rui Castro');
   assert.equal(texto(Equipe.frase({...base, tipo: 'papel_alterado', por: 'f'.repeat(16), por_nome: null})), 'uma conta removida mudou o papel de Rui Castro');
   assert.equal(texto(Equipe.frase({...base, tipo: 'caso_atribuido', conta: null, conta_nome: null, por: 'operador', por_nome: null})), 'Quem administra o serviço atribuiu uma apuração a uma pessoa');
+  // O servidor manda "Conta excluída" no lugar do nome de quem excluiu a própria conta (9bb59c7 da contas-o2); null fica para o rótulo do sistema.
+  assert.equal(texto(Equipe.frase({...base, tipo: 'senha_trocada', conta_nome: 'Conta excluída'})), 'Conta excluída trocou a senha');
+  assert.equal(texto(Equipe.frase({...base, tipo: 'papel_alterado', por_nome: 'Conta excluída'})), 'Conta excluída mudou o papel de Rui Castro');
   const hostil = Equipe.frase({...base, tipo: 'conta_criada', conta_nome: '<img src=x onerror=alert(1)>'});
   assert.equal(hostil.querySelector('img'), null, 'o nome entra como texto');
 });
@@ -444,11 +447,18 @@ test('P40: em inglês, a linha da chave própria sai em inglês', async () => {
   await f.mesa.esperar(20);
   assert.equal(texto(f.mesa.doc.querySelector('.equipe-chave-propria')), 'Newsroom’s own keyR$ 3,25');
   assert.ok(texto(f.mesa.doc.querySelector('[data-cartao="gasto"]')).includes('Paid by the newsroom’s key: not part of the service quota.'));
-  assert.ok(texto(linhaDe(f.mesa, ID.rui)).includes('of which R$ 3,25 on the newsroom’s own key'));
+  assert.ok(texto(linhaDe(f.mesa, ID.rui)).includes('of which R$ 3,25 with the newsroom’s own key'));
 });
 
 test('P40: o "dos quais" qualifica o valor e fica colado a ele, antes do teto (ressalva do Traço)', async () => {
   const f = await abrirEquipe(com([ANA(), RUI({gasto_chave_propria_brl: '3.25', teto_mensal_brl: '30.00'})], {gasto_chave_propria_brl: '3.25'}));
   const uso = celulas(linhaDe(f.mesa, ID.rui))[3];
   assert.deepEqual([...uso.querySelectorAll('span')].map(s => texto(s)), ['R$ 18,40', 'dos quais R$ 3,25 com a chave própria', 'teto R$ 30'], 'valor, depois o dos quais, depois o teto');
+});
+
+test('em inglês, "Conta excluída" vira "Deleted account" na atividade; o nome de uma pessoa continua como veio', async () => {
+  const {mesa} = await abrirEquipe({...com([ANA(), RUI()]), idioma: 'en'});
+  const {Equipe} = mesa.janela;
+  assert.equal(texto(Equipe.frase({tipo: 'senha_trocada', conta: ID.rui, por: ID.rui, conta_nome: 'Conta excluída', por_nome: 'Conta excluída'})), 'Deleted account changed the password');
+  assert.equal(texto(Equipe.frase({tipo: 'senha_trocada', conta: ID.rui, por: ID.rui, conta_nome: 'Rui Castro', por_nome: 'Rui Castro'})), 'Rui Castro changed the password');
 });

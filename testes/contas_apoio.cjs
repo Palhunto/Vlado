@@ -3,7 +3,7 @@
 // do servidor nos formatos de testes/test_sessoes_conta.py e testes/test_equipe.py, e pequenos auxiliares. Não tem testes.
 const {criarMesa, Evento, PILHA} = require('./dom_minimo.cjs');
 
-const SCRIPTS = PILHA.flatMap(nome => (nome === 'gerenciar.js' ? [nome, 'fator.js', 'conta.js', 'equipe.js'] : [nome]));
+const SCRIPTS = PILHA.flatMap(nome => (nome === 'gerenciar.js' ? [nome, 'fator.js', 'dados_conta.js', 'conta.js', 'equipe.js'] : [nome]));
 const DIA = 86400000;
 const ID = {ana: 'a'.repeat(16), rui: 'b'.repeat(16), cora: 'c'.repeat(16), davi: 'd'.repeat(16), eva: 'e'.repeat(16)};
 const CAPACIDADES_DONO = ['conta-ver', 'conta-atualizar', 'conta-sessoes', 'equipe-listar', 'equipe-atividade', 'equipe-convidar', 'equipe-convite-reenviar', 'equipe-convite-cancelar', 'equipe-recuperar', 'equipe-recuperar-confirmar', 'conta-fator-iniciar', 'conta-fator-confirmar', 'conta-fator-codigos', 'ia-config'];

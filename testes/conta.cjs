@@ -208,14 +208,6 @@ test('Seu uso neste mês: "R$ 18,40 de R$ 50", medidor com aria-label; esgotada 
   assert.ok(cartao(sem.mesa, 'uso').hidden, 'sem a rota, o cartão some');
 });
 
-test('Seus dados: só o caminho por pessoa, sem botões; para o dono, "fale com quem administra o serviço"', async () => {
-  const reporter = abrir({papel: 'reporter'}); await esperar(reporter.mesa);
-  assert.equal(texto(cartao(reporter.mesa, 'dados').querySelector('p')), 'Exportar seus dados e excluir sua conta ainda não estão na Mesa. Para pedir, fale com o dono da redação.');
-  assert.equal(cartao(reporter.mesa, 'dados').querySelector('button'), null);
-  const dono = abrir(); await esperar(dono.mesa);
-  assert.ok(texto(cartao(dono.mesa, 'dados')).includes('fale com quem administra o serviço.'));
-});
-
 test('cada cartão carrega sozinho: se um falha, o erro do serviço fica no lugar dele e os outros seguem', async () => {
   const {mesa} = abrir({api: op => (op === 'conta-sessoes' ? recusa('erro', 'Falha ao ler as sessões.') : undefined)});
   await esperar(mesa);

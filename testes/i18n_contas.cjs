@@ -1,5 +1,5 @@
 'use strict';
-// Todo texto de interface das telas de Contas (conta.js, equipe.js, fator.js e o diálogo com senha de dialogo.js) tem a tradução em inglês em i18n_en.js, sem depender de chave herdada
+// Todo texto de interface das telas de Contas (conta.js, equipe.js, fator.js, dados_conta.js e o diálogo com senha de dialogo.js) tem a tradução em inglês em i18n_en.js, sem depender de chave herdada
 // de outra tela (a "Recuperar acesso" da tela antiga de Contas de acesso sumiu com ela e derrubou um teste em inglês). O teste lê o fonte atrás das formas em que a Mesa passa um texto à
 // interface (t('…'), botao('…'), titulo/texto/acao/ocupado/rotulo/apoio: '…', mensagens de erro de campo) e as frases da atividade da Equipe, e exige a chave no dicionário.
 const test = require('node:test');
@@ -39,7 +39,7 @@ function literaisDe(arquivo) {
   }
   return achados;
 }
-const ARQUIVOS = ['conta.js', 'equipe.js', 'fator.js'];
+const ARQUIVOS = ['conta.js', 'equipe.js', 'fator.js', 'dados_conta.js', 'termos.js'];
 
 test('todo texto de interface de conta.js, equipe.js e fator.js tem a tradução em inglês no dicionário', () => {
   const textos = dicionario().textos;

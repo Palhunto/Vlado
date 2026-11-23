@@ -261,7 +261,7 @@
     carregar(nuvem.perfil, () => api('conta-ver', {}), desenharPerfilESeguranca);
     carregarSessoes();
     carregarUso();
-    desenharDados();
+    desenharDados(null);  // até conta-ver chegar, o cartão mostra só o texto dos dados
   }
 
   // Perfil e Entrada e segurança vêm da mesma resposta (`conta-ver`).
@@ -269,6 +269,7 @@
     perfilAtual = resposta;
     desenharPerfil(resposta);
     desenharSeguranca(resposta);
+    desenharDados(resposta);
   }
   function desenharPerfil(resposta, editando = false) {
     const {conta, organizacao} = resposta;
@@ -590,11 +591,40 @@
   }
 
   // Seus dados: o caminho por pessoa; exportar e excluir ainda não existem (exceções declaradas).
-  function desenharDados() {
-    const dono = perfilAtual?.conta?.papel === 'dono' || dadosDaSessao?.conta?.papel === 'dono';
-    nuvem.dados.corpo.replaceChildren(no('p', 'conta-texto', t(dono
-      ? 'Exportar seus dados e excluir sua conta ainda não estão na Mesa. Para pedir, fale com quem administra o serviço.'
-      : 'Exportar seus dados e excluir sua conta ainda não estão na Mesa. Para pedir, fale com o dono da redação.')));
+  // Seus dados (E4b): os termos de uso (só no piloto e com versão vigente), exportar o que o Vlado guarda sobre a pessoa e excluir a conta. O cartão fica em todas as contas;
+  // a última dona ou o último dono só descobre a recusa ao tentar, com a razão.
+  function desenharDados(resposta) {
+    if (!resposta) { nuvem.dados.corpo.replaceChildren(); return; }
+    const partes = [];
+    const vigente = resposta.termos_vigente;
+    if (vigente?.versao) {
+      // O dia abreviado já termina em ponto ("22 de nov."): o ponto da frase não se repete.
+      const aceite = resposta.termos?.aceito_em ? t('Termos de uso: versão {versao}, aceita em {dia}.', {versao: vigente.versao, dia: dia(resposta.termos.aceito_em)}).replace(/\.\.$/, '.') : t('Termos de uso: versão {versao}.', {versao: vigente.versao});
+      const linhaDosTermos = no('p', 'conta-texto conta-termos'); linhaDosTermos.append(aceite);
+      const endereco = window.DadosConta?.endereco(vigente.endereco);
+      if (endereco) {
+        const ler = document.createElement('a'); ler.href = endereco; ler.target = '_blank'; ler.rel = 'noopener noreferrer'; ler.className = 'conta-link'; ler.textContent = t('Ler os termos');
+        linhaDosTermos.append(' ', ler);
+      }
+      partes.push(linhaDosTermos);
+    }
+    partes.push(no('p', 'conta-texto', t('Baixe um arquivo com o que o Vlado guarda sobre você: perfil, aceites dos termos, sessões, participações e a atividade dos últimos 90 dias. O conteúdo das apurações é da redação e não entra.')));
+    const exportar = botao('Exportar meus dados', 'secondary conta-exportar', () => exportarDados(exportar));
+    const excluir = botao('Excluir a conta', 'danger conta-excluir', () => excluirConta(excluir));
+    const acoes = no('div', 'conta-acoes'); acoes.append(exportar, excluir);
+    partes.push(acoes);
+    nuvem.dados.corpo.replaceChildren(...partes);
+  }
+  async function exportarDados(controle) {
+    const restaurar = window.Estados.ocupado(controle, 'Preparando o arquivo…');
+    try {
+      const feito = await window.DadosConta.exportar();
+      restaurar();
+      estado(feito.incompleto.length ? `${t('Arquivo baixado.')} ${t('Ainda não traz: {itens}.', {itens: feito.incompleto.map(item => t(item)).join('; ')})}` : t('Arquivo baixado.'));
+    } catch (falha) { restaurar(); estado(falha.message, {erro: true}); }
+  }
+  async function excluirConta(gatilho) {
+    await window.DadosConta.excluir({nome: perfilAtual?.conta?.nome || dadosDaSessao?.conta?.nome || '', gatilho});
   }
 
   window.Conta = {abrir, registrarAba, abaAtiva: () => abaAtual, estado, titulo, dia, textoDoServidor, vistaDoLink, sensivel, recusaDaSenha, no, botao, dado, apoio, cartao, carregar, linha, data, reais, rotuloPapel,
