@@ -16,7 +16,7 @@ ARQUIVO = Path(__file__).resolve().parent / 'fixtures' / 'capacidades_por_papel.
 
 class CapacidadesFixtureTest(unittest.TestCase):
     def test_o_arquivo_e_a_lista_do_servidor_para_cada_papel(self):
-        esperado = {papel: autorizacao.capacidades({'papel': papel}) for papel in autorizacao.PAPEIS}
+        esperado = {papel: autorizacao.capacidades(None, 'local-contas', {'papel': papel}) for papel in autorizacao.PAPEIS}
         self.assertEqual(json.loads(ARQUIVO.read_text(encoding='utf-8')), esperado,
                          'refaça testes/fixtures/capacidades_por_papel.json com autorizacao.capacidades de cada papel')
 
