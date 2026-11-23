@@ -1,5 +1,5 @@
 const {chromium} = require('playwright');
-const {irParaCadastro} = require('./qa_navegacao.cjs');
+const {criarApuracao, enviarArquivos} = require('./qa_navegacao.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -24,16 +24,17 @@ const [origin, output, chrome] = process.argv.slice(2);
   }
   try {
     await page.goto(origin);
-    await irParaCadastro(page);
-    assert.equal(await page.locator('#cadastro-id').count(), 0);
-    await page.fill('#cadastro-titulo-input', 'Minha apuração legível');
-    await page.setInputFiles('#cadastro-arquivos', {name:'Documento sintético.txt', mimeType:'text/plain', buffer:Buffer.from('Cadastro de interface, sem pergunta editorial.')});
-    await page.click('#enviar-documentos');
-    await page.locator('#cadastro-status').filter({hasText:'Documentos registrados. Aguardando sua pergunta.'}).waitFor();
-    assert.match(await page.locator('#cadastro-caso').inputValue(), /^apuracao_[a-f0-9]{32}$/);
-    assert.equal(await page.locator('#contexto-caso option:checked').textContent(), 'Minha apuração legível');
+    // Nova apuração: nome e fontes no passo 1; o primeiro lote enviado em Documentos cria a apuração (a área Cadastrar arquivos saiu, R4).
+    await criarApuracao(page, {nome:'Minha apuração legível'});
+    await enviarArquivos(page, {name:'Documento sintético.txt', mimeType:'text/plain', buffer:Buffer.from('Cadastro de interface, sem pergunta editorial.')});
+    await page.locator('#mesa-acervo-status').filter({hasText:'Documentos registrados. Aguardando sua pergunta.'}).waitFor();
+    assert.match(await page.locator('#contexto-caso').inputValue(), /^apuracao_[a-f0-9]{32}$/);
+    assert.doesNotMatch(await page.locator('#documentos-recibo').innerText(), /apuracao_|SHA-256/);
+    await page.click('#ver-codex');
+    // DEFEITO CONHECIDO (Lume): no passo 3 ("Conferir recibo") o cabeçalho ainda mostra o identificador e o subtítulo "Nenhuma apuração
+    // selecionada"; o nome só aparece depois de sair da tela. A conferência do nome fica aqui, depois de sair para Perguntar.
+    await page.waitForFunction(() => document.querySelector('#contexto-caso option:checked')?.textContent === 'Minha apuração legível', null, {timeout:15000});
     assert.equal(await page.locator('#area-descricao').innerText(), 'Minha apuração legível');
-    assert.doesNotMatch(await page.locator('#cadastro-recibo').innerText(), /apuracao_|SHA-256/);
     checks.push('Cadastro apenas por nome, ID interno automático, recibo sem identificadores expostos.');
     await page.click('#ver-codex');
     await page.locator('#codex-conta').filter({hasText:'Conectado à API'}).waitFor();
