@@ -81,9 +81,11 @@ class ArmazenamentoTest(test_acesso.DuasRedacoes):
             with self.assertRaisesRegex(ValueError, 'Comece de novo'):
                 acesso.confirmar_fator(self.root, self.rep_a, codigo_de(segredo, momento=acesso.agora()))
         segredo = acesso.iniciar_fator(self.root, self.rep_a, SENHA)['segredo']
-        for _ in range(acesso.FALHAS_BLOQUEIO):
+        for _ in range(acesso.FALHAS_BLOQUEIO - 1):
             with self.assertRaises(acesso.CodigoInvalido):
                 acesso.confirmar_fator(self.root, self.rep_a, '000000')
+        with self.assertRaises(acesso.FatorBloqueado):  # the fifth in a row starts the block, and says who to tell
+            acesso.confirmar_fator(self.root, self.rep_a, '000000')
         with self.assertRaises(acesso.Bloqueado):
             acesso.confirmar_fator(self.root, self.rep_a, codigo_de(segredo))  # even the right one, while blocked
         self.assertFalse(acesso.ver_conta(self.root, self.rep_a)['segundo_fator']['ativo'])
@@ -137,9 +139,11 @@ class ArmazenamentoTest(test_acesso.DuasRedacoes):
         with self.assertRaises(acesso.PedeSegundoFator) as passo:
             acesso.entrar(self.root, 'rep.a', SENHA, ip='203.0.113.9')
         bilhete = passo.exception.bilhete
-        for _ in range(acesso.ENTRADA_FALHAS):
+        for _ in range(acesso.ENTRADA_FALHAS - 1):
             with self.assertRaises(acesso.CodigoInvalido):
                 acesso.entrar_segundo_fator(self.root, bilhete, '000000', ip='203.0.113.9')
+        with self.assertRaises(acesso.FatorBloqueado):  # the fifth: the factor of the account is blocked too (R1)
+            acesso.entrar_segundo_fator(self.root, bilhete, '000000', ip='203.0.113.9')
         with self.assertRaises(acesso.EntradaExpirada):
             acesso.entrar_segundo_fator(self.root, bilhete, codigo_de(segredo, 1), ip='203.0.113.9')  # dead at the fifth
         with self.assertRaises(acesso.Bloqueado):  # and the wrong codes counted on the sign-in counter of that address

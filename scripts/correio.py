@@ -121,6 +121,17 @@ MODELOS = {
                'Your Vlado account has just been signed in from a device it had not used before: {aparelho}.\n\n'
                'If it was you, there is nothing to do. If it was not, change your password now and tell whoever runs '
                'your newsroom.\n')}),
+    'fator_bloqueado': ('fator_bloqueado', {
+        'pt': ('O segundo fator da sua conta no Vlado foi bloqueado por alguns minutos',
+               'O código do segundo fator da sua conta no Vlado foi digitado errado cinco vezes seguidas, e por isso ele '
+               'fica bloqueado por {minutos} minutos.\n\nSe foi você, espere esse tempo e tente de novo. Se não foi, '
+               'alguém pode ter a sua senha ou o acesso ao seu e-mail: troque a senha assim que entrar e avise quem '
+               'administra a sua redação.\n'),
+        'en': ('The second factor of your Vlado account was blocked for a few minutes',
+               'The second-factor code of your Vlado account was typed wrong five times in a row, so it is blocked for '
+               '{minutos} minutes.\n\nIf it was you, wait that long and try again. If it was not, somebody may have '
+               'your password or access to your e-mail: change the password as soon as you sign in and tell whoever '
+               'runs your newsroom.\n')}),
     'fator_alterado': ('fator_alterado', {
         'pt': ('O segundo fator da sua conta no Vlado foi alterado',
                'O segundo fator da sua conta no Vlado (o aplicativo autenticador ou os códigos de reserva) acaba de ser '

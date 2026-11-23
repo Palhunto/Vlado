@@ -224,13 +224,49 @@ class SegundoPassoTest(Base):
         self.codigo = lambda desvio=0: fator.codigo_do_passo(semente, fator.passo_de(acesso.agora()) + desvio)
         acesso.confirmar_fator(self.root, self.rep_a, self.codigo())
 
+    def bilhete(self):
+        with self.assertRaises(acesso.PedeSegundoFator) as passo:
+            acesso.entrar(self.root, 'rep.a', SENHA, ip=self.ip())  # the password is right every time
+        return passo.exception.bilhete
+
+    def errar(self, vezes):
+        """The names of what `vezes` wrong codes raised, each with a new ticket and from a new address."""
+        nomes = []
+        for _ in range(vezes):
+            with self.assertRaises(ValueError) as recusa:
+                acesso.entrar_segundo_fator(self.root, self.bilhete(), '000000', ip=self.ip())
+            nomes.append(type(recusa.exception).__name__)
+        return nomes
+
+    def test_codigo_errado_conta_na_conta_de_qualquer_endereco_e_o_quinto_bloqueia_e_avisa(self):
+        # Reservation R1 of the review: with the password leaked and many addresses, the wrong codes were counted
+        # only per identifier and address, and eight addresses gave forty guesses in a row. They count on the account.
+        with self.assertRaises(acesso.CodigoInvalido):
+            acesso.entrar_segundo_fator(self.root, self.bilhete(), '000000', ip=self.ip())
+        self.assertEqual(self.errar(3), ['CodigoInvalido'] * 3)
+        with self.assertRaises(acesso.FatorBloqueado) as quinto:
+            acesso.entrar_segundo_fator(self.root, self.bilhete(), '000000', ip=self.ip())
+        self.assertEqual((quinto.exception.aviso['id'], set(quinto.exception.aviso)), (self.rep_a, {'id', 'email', 'nome', 'idioma'}))
+        self.assertEqual(self.tipos().count('fator_bloqueado'), 1)
+        self.assertEqual(self.errar(35), ['Bloqueado'] * 35)  # the other 35 of the forty: not even tried
+        self.assertEqual(self.tipos().count('fator_bloqueado'), 1)  # told once, not at every attempt
+        bilhete = self.bilhete()
+        for certo in (self.codigo(1), ):  # blocked for the right code too, from anywhere, and the ticket is not spent
+            with self.assertRaises(acesso.Bloqueado):
+                acesso.entrar_segundo_fator(self.root, bilhete, certo, ip=self.ip())
+        with self.assertRaises(acesso.Bloqueado):
+            acesso.exigir_codigo(self.root, self.rep_a, self.codigo(1))  # the same counter of the operations that ask the code
+        self.assertEqual(self.linhas('SELECT falhas FROM entradas WHERE id_sha256 = ?', acesso._hash(bilhete)), [{'falhas': 0}])
+        self.assertEqual(self.linhas('SELECT 1 FROM sessoes WHERE conta = ?', self.rep_a), [])
+        with self.depois(minutes=acesso.BLOQUEIO_MINUTOS + 1):
+            self.assertEqual(acesso.entrar_segundo_fator(self.root, self.bilhete(), self.codigo(1), ip=self.ip())[2]['id'], self.rep_a)
+        self.assertEqual(self.linhas('SELECT 1 FROM tentativas WHERE chave = ?', acesso.CHAVE_FATOR + self.rep_a), [])
+
     def test_codigos_errados_do_segundo_fator_contam_no_mesmo_teto_do_identificador(self):
-        for _ in range(acesso.PROTECAO_FALHAS):
-            with self.assertRaises(acesso.PedeSegundoFator) as passo:
-                acesso.entrar(self.root, 'rep.a', SENHA, ip=self.ip())  # the password is right every time
-            with self.assertRaises(acesso.CodigoInvalido):
-                acesso.entrar_segundo_fator(self.root, passo.exception.bilhete, '000000')
-        self.assertEqual(self.tentar('rep.a', SENHA), 'Bloqueado')  # ten wrong codes: protected, like ten wrong passwords
+        self.assertEqual(self.errar(5), ['CodigoInvalido'] * 4 + ['FatorBloqueado'])
+        with self.depois(minutes=acesso.BLOQUEIO_MINUTOS + 1):  # the block of the factor ended; the hour of the identifier did not
+            self.assertEqual(self.errar(5), ['CodigoInvalido'] * 4 + ['FatorBloqueado'])
+            self.assertEqual(self.tentar('rep.a', SENHA), 'Bloqueado')  # ten wrong codes: protected, like ten wrong passwords
 
     def test_o_aparelho_so_fica_conhecido_depois_do_segundo_passo(self):
         navegador = marca()
@@ -316,6 +352,33 @@ class ServidorTest(cenario.DuasRedacoes):
         atividade = self.post('dono', 'equipe-atividade', {'limite': 200})[1]['eventos']
         self.assertIn(('aparelho_novo', self.conta), {(e['tipo'], e['conta']) for e in atividade})
         self.assertNotIn('127.0.0.1', json.dumps(atividade))  # the dono sees "a new device", never the address
+
+
+    def test_cinco_codigos_errados_no_segundo_passo_bloqueiam_o_fator_e_a_pessoa_e_avisada_por_email(self):
+        env = patch.dict(test_acesso.os.environ, {'VLADO_SEGREDOS': ''})
+        env.start()
+        self.addCleanup(env.stop)
+        segredo = acesso.iniciar_fator(self.root, self.conta, SENHA)['segredo']
+        semente = fator.base64.b32decode(segredo + '=' * (-len(segredo) % 8))
+        acesso.confirmar_fator(self.root, self.conta, fator.codigo_do_passo(semente, fator.passo_de(acesso.agora())))
+        respostas = []
+        with correio.usar('simulado'):
+            correio.limpar_caixa()
+            for _ in range(5):
+                _, _, cookies = self.pedir_tudo('entrar', {'login': self.email, 'senha': SENHA})
+                bilhete = cookies[0].split(';')[0]
+                status, corpo, _ = self.pedir_tudo('entrar-segundo-fator', {'codigo': '000000'}, [bilhete])
+                respostas.append((status, corpo.get('codigo')))
+            certo = fator.codigo_do_passo(semente, fator.passo_de(acesso.agora()) + 1)
+            bloqueado = self.pedir_tudo('entrar-segundo-fator', {'codigo': certo}, [bilhete])
+            correio.aguardar()
+        self.assertEqual(respostas, [(403, 'codigo_invalido')] * 4 + [(429, 'bloqueado')])
+        self.assertEqual((bloqueado[0], bloqueado[2]), (429, []))  # the right code too, and no cookie of any kind
+        avisos = [m for m in correio.caixa() if m['tipo'] == 'fator_bloqueado']
+        self.assertEqual([m['para'] for m in avisos], [self.email])  # told once, at the account's own address
+        self.assertNotIn('http', avisos[0]['corpo'])
+        atividade = self.post('dono', 'equipe-atividade', {'limite': 200})[1]['eventos']
+        self.assertIn(('fator_bloqueado', self.conta), {(e['tipo'], e['conta']) for e in atividade})
 
 
 if __name__ == '__main__':

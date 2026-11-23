@@ -278,6 +278,15 @@ class Bloqueado(ValueError):
     """Too many attempts for this login (15 min) or from this address (per minute)."""
 
 
+class FatorBloqueado(Bloqueado):
+    """The fifth wrong code in a row just blocked the second factor of an account, whatever the addresses the
+    codes came from. `aviso` is who is told, at the account's own address."""
+
+    def __init__(self, aviso: dict):
+        super().__init__(BLOQUEADO)
+        self.aviso = aviso
+
+
 class AtivacaoInvalida(ValueError):
     """Unknown, used or expired activation link."""
 
@@ -1937,6 +1946,24 @@ def _fator_recusado(tx: _Tx, cid: str, momento: datetime, ip: str | None) -> Non
     tx.depois.append(lambda: registro_acesso.registrar('fator_recusado', 'falha', cid, momento, motivo='codigo_invalido', ip=ip))
 
 
+def _falha_do_fator(tx: _Tx, cid: str, momento: datetime, ip: str | None) -> dict | None:
+    """A wrong code of the second factor, counted on the account, whatever the address or the ticket it came
+    with: the fifth in a row blocks the factor of the account for 15 minutes, in the sign-in and in every
+    operation that asks it. After the right password the existence of the account is no secret, so counting on
+    it tells nothing. Returns who to tell when this failure starts the block (event `fator_bloqueado`)."""
+    _fator_recusado(tx, cid, momento, ip)
+    if not _registrar_falha(tx, CHAVE_FATOR + cid, None, momento):
+        return None
+    _evento(tx, 'fator_bloqueado', cid, None, momento)
+    return _destinatario(tx.um('SELECT * FROM contas WHERE id = ?', cid))
+
+
+def _recusa_do_codigo(aviso: dict | None, bloqueado: bool) -> Exception:
+    if aviso:
+        return FatorBloqueado(aviso)
+    return Bloqueado(BLOQUEADO) if bloqueado else CodigoInvalido(CODIGO_INVALIDO)
+
+
 def _sem_codigo(codigo) -> bool:
     return not isinstance(codigo, str) or not codigo.strip()
 
@@ -1948,7 +1975,7 @@ def exigir_codigo(root: Path, cid: str, codigo, ip: str | None = None) -> None:
     CodigoInvalido or Bloqueado."""
     if _sem_codigo(codigo):
         raise CodigoNecessario(CODIGO_NECESSARIO)
-    chave, bloqueado = CHAVE_FATOR + cid, False
+    chave, bloqueado, aviso = CHAVE_FATOR + cid, False, None
     with _bd(root, escrever=True) as tx:
         momento = agora()
         bloqueado = _bloqueado(tx, chave, momento)
@@ -1956,9 +1983,8 @@ def exigir_codigo(root: Path, cid: str, codigo, ip: str | None = None) -> None:
             if _usar_codigo(tx, root, cid, codigo, momento):
                 tx.ex('DELETE FROM tentativas WHERE chave = ?', chave)
                 return
-            _registrar_falha(tx, chave, None, momento)
-            _fator_recusado(tx, cid, momento, ip)
-    raise Bloqueado(BLOQUEADO) if bloqueado else CodigoInvalido(CODIGO_INVALIDO)
+            aviso = _falha_do_fator(tx, cid, momento, ip)
+    raise _recusa_do_codigo(aviso, bloqueado)
 
 
 def iniciar_fator(root: Path, cid: str, senha, codigo=None, ip: str | None = None) -> dict:
@@ -1993,7 +2019,7 @@ def confirmar_fator(root: Path, cid: str, codigo, ip: str | None = None) -> list
     before, if any, is replaced) and ten new reserve codes are returned, to be shown once."""
     if _sem_codigo(codigo):
         raise CodigoNecessario(CODIGO_NECESSARIO)
-    chave, codigos, bloqueado = CHAVE_FATOR + cid, segundo_fator.novos_codigos_de_reserva(), False
+    chave, codigos, bloqueado, aviso = CHAVE_FATOR + cid, segundo_fator.novos_codigos_de_reserva(), False, None
     with _bd(root, escrever=True) as tx:
         momento = agora()
         fator = tx.um('SELECT pendente, pendente_em FROM fatores WHERE conta = ?', cid)
@@ -2010,9 +2036,8 @@ def confirmar_fator(root: Path, cid: str, codigo, ip: str | None = None) -> list
                 tx.ex('DELETE FROM tentativas WHERE chave = ?', chave)
                 _evento(tx, 'fator_ativado', cid, cid, momento)
                 return codigos
-            _registrar_falha(tx, chave, None, momento)
-            _fator_recusado(tx, cid, momento, ip)
-    raise Bloqueado(BLOQUEADO) if bloqueado else CodigoInvalido(CODIGO_INVALIDO)
+            aviso = _falha_do_fator(tx, cid, momento, ip)
+    raise _recusa_do_codigo(aviso, bloqueado)
 
 
 def _novos_codigos(tx: _Tx, cid: str, codigos: list[str], momento: datetime) -> None:
@@ -2048,9 +2073,12 @@ def remover_fator(root: Path, cid: str, senha, ip: str | None = None) -> None:
 
 def entrar_segundo_fator(root: Path, bilhete, codigo, ip: str | None = None, marca=None) -> tuple[str, str, dict]:
     """The second step of the sign-in: the ticket `entrar` gave and a code of the authenticator (or a reserve
-    code). Returns what `entrar` returns. A wrong code counts on the ticket, which dies at the fifth, and on the
-    same counter of the sign-in; an unknown, expired or dead ticket is EntradaExpirada. A code that did not come
-    is asked for (CodigoNecessario) and leaves the ticket as it was."""
+    code). Returns what `entrar` returns. A wrong code counts on the ticket, which dies at the fifth, on the
+    counters of the sign-in (identifier and address, and the identifier alone) and on the account: five wrong
+    codes in a row, from any addresses and with any tickets, block the second factor of the account for 15
+    minutes (FatorBloqueado on the fifth, Bloqueado while it lasts, when nothing is tried, counted or spent).
+    An unknown, expired or dead ticket is EntradaExpirada. A code that did not come is asked for
+    (CodigoNecessario) and leaves the ticket as it was."""
     if _sem_codigo(codigo):
         raise CodigoNecessario(CODIGO_NECESSARIO)
     momento = agora()
@@ -2059,7 +2087,7 @@ def entrar_segundo_fator(root: Path, bilhete, codigo, ip: str | None = None, mar
     except Bloqueado:
         registro_acesso.registrar_limite_ip('login_falha', ip, _rede(ip), acesso_operacao='segundo_fator')
         raise
-    errou = False
+    errou, bloqueado, aviso = False, False, None
     with _bd(root, escrever=True) as tx:
         entrada = (tx.um('SELECT * FROM entradas WHERE id_sha256 = ?', _hash(bilhete))
                    if isinstance(bilhete, str) and SID.fullmatch(bilhete) else None)
@@ -2068,19 +2096,24 @@ def entrar_segundo_fator(root: Path, bilhete, codigo, ip: str | None = None, mar
             tx.ex('DELETE FROM entradas WHERE id_sha256 = ?', entrada['id_sha256'])
         elif entrada:
             cid = conta['id']
-            if _usar_codigo(tx, root, cid, codigo, momento):
+            if _bloqueado(tx, CHAVE_FATOR + cid, momento):
+                bloqueado = True
+            elif _usar_codigo(tx, root, cid, codigo, momento):
                 tx.ex('DELETE FROM entradas WHERE conta = ?', cid)
-                tx.ex('DELETE FROM tentativas WHERE chave = ?', entrada['chave'])
+                tx.ex('DELETE FROM tentativas WHERE chave IN (?, ?)', entrada['chave'], CHAVE_FATOR + cid)
                 return _sessao_aberta(tx, conta, momento, entrada['cliente'], entrada['aparelho'], ip, marca)
-            errou = True
-            if entrada['falhas'] + 1 >= ENTRADA_FALHAS:
-                tx.ex('DELETE FROM entradas WHERE id_sha256 = ?', entrada['id_sha256'])
             else:
-                tx.ex('UPDATE entradas SET falhas = falhas + 1 WHERE id_sha256 = ?', entrada['id_sha256'])
-            _registrar_falha(tx, entrada['chave'], cid, momento)
-            _falha_do_identificador(tx, entrada['chave'].split('|', 1)[0], cid, momento)  # the same ceilings as the password
-            _fator_recusado(tx, cid, momento, ip)
-    raise CodigoInvalido(CODIGO_INVALIDO) if errou else EntradaExpirada(ENTRADA_EXPIRADA)
+                errou = True
+                if entrada['falhas'] + 1 >= ENTRADA_FALHAS:
+                    tx.ex('DELETE FROM entradas WHERE id_sha256 = ?', entrada['id_sha256'])
+                else:
+                    tx.ex('UPDATE entradas SET falhas = falhas + 1 WHERE id_sha256 = ?', entrada['id_sha256'])
+                _registrar_falha(tx, entrada['chave'], cid, momento)
+                _falha_do_identificador(tx, entrada['chave'].split('|', 1)[0], cid, momento)  # the same ceilings as the password
+                aviso = _falha_do_fator(tx, cid, momento, ip)  # and the account's own, whatever the address
+    if errou or bloqueado:
+        raise _recusa_do_codigo(aviso, bloqueado)
+    raise EntradaExpirada(ENTRADA_EXPIRADA)
 
 
 # --- recovery asked by a dono (equipe-recuperar, equipe-recuperar-confirmar) ----------------------

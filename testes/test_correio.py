@@ -153,7 +153,11 @@ class ModelosTest(Base):
                 self.assertNotIn('http', correio.montar(tipo, idioma, {})[1])
         # What goes to the audit log is the kind of message, out of a closed list.
         self.assertEqual({rotulo for rotulo, _ in correio.MODELOS.values()},
-                         {'convite', 'redefinicao', 'recuperacao', 'email_novo', 'senha_trocada', 'fator_alterado', 'novo_acesso'})
+                         {'convite', 'redefinicao', 'recuperacao', 'email_novo', 'senha_trocada', 'fator_alterado', 'novo_acesso',
+                          'fator_bloqueado'})
+        bloqueio = correio.montar('fator_bloqueado', 'pt', {'minutos': 15})[1]
+        self.assertIn('bloqueado por 15 minutos', bloqueio)
+        self.assertNotIn('http', bloqueio)
         aviso = correio.montar('novo_acesso', 'pt', {'aparelho': 'Firefox · Linux'})[1]
         self.assertIn('Firefox Linux', aviso)  # the device, as two words of closed lists, and nothing to click
         self.assertNotIn('http', aviso)

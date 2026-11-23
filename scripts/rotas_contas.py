@@ -87,6 +87,15 @@ def _trocar_email(root, conta, data, ip, origem):
     return {'estado': 'confirmacao_enviada'}
 
 
+def avisar_bloqueio_do_fator(root, exc):
+    """Five wrong codes in a row blocked the second factor of an account: the person is told, at the account's own
+    address. In the sign-in the code is only asked after the right password, so somebody else may have it."""
+    aviso = getattr(exc, 'aviso', None)
+    if aviso and aviso.get('email'):
+        correio.enviar_depois('fator_bloqueado', aviso['email'], aviso['idioma'], {'minutos': acesso.BLOQUEIO_MINUTOS},
+                              conta=aviso['id'], raiz=root)
+
+
 def _fator(root, operation, conta, data, ip):
     """``conta-fator-*``: the own second factor. The seed and the reserve codes go out once, in the answer of the
     operation that makes them, and never again; the person is told by e-mail of every change."""
@@ -455,6 +464,7 @@ class RotasContas:
         except acesso.RegistroIlegivel:
             self._json(503, {'estado': 'indisponivel', 'erro': 'Registro de acesso indisponível. Avise a administração.'})
         except acesso.Bloqueado as exc:
+            avisar_bloqueio_do_fator(self.server.root, exc)
             self._json(429, {'estado': 'bloqueado', 'codigo': 'bloqueado', 'erro': str(exc)})
         except acesso.EntradaExpirada as exc:
             self._json(401, {'estado': 'credenciais', 'codigo': 'entrada_expirada', 'erro': str(exc)})
