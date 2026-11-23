@@ -415,8 +415,15 @@ test('P40: o gasto com a chave própria da redação aparece em linha separada n
   assert.ok(texto(cartao).includes('Pago pela chave da redação: não entra na cota do serviço.'));
   assert.ok(!texto(cartao).includes('R$ 27,75'), 'nada de soma');
   assert.equal(cartao.querySelector('.mesa-medidor').getAttribute('aria-label'), '16% da cota usada', 'o medidor segue só a cota do serviço');
-  const zero = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}));
-  assert.equal(texto(zero.mesa.doc.querySelector('.equipe-chave-propria')), 'Chave própria da redaçãoR$ 0,00', 'sempre presente, "0.00" sem gasto');
+  const comChave = op => (op === 'ia-config' ? {chaves: {anthropic: {configurada: true, origem: 'redacao', final: 'abcd'}, openai: {configurada: false, origem: null, final: null}}} : undefined);
+  const zero = await abrirEquipe({...com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}), api: (op, d) => (op === 'equipe-listar' ? equipeListar([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}) : comChave(op))});
+  assert.equal(texto(zero.mesa.doc.querySelector('.equipe-chave-propria')), 'Chave própria da redaçãoR$ 0,00', 'com chave própria e sem gasto: "0.00"');
+  const semChave = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}));
+  assert.ok(semChave.mesa.doc.querySelector('.equipe-chave-propria') === null, 'sem chave própria na redação (e sem gasto com ela), nada aparece');
+  const doServico = await abrirEquipe({...com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}), api: (op, d) => (op === 'equipe-listar' ? equipeListar([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}) : op === 'ia-config' ? {chaves: {anthropic: {configurada: true, origem: 'servico', final: null}}} : undefined)});
+  assert.ok(doServico.mesa.doc.querySelector('.equipe-chave-propria') === null, 'só a chave do serviço: nada aparece');
+  const falhou = await abrirEquipe({...com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}), api: (op) => (op === 'equipe-listar' ? equipeListar([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}) : op === 'ia-config' ? recusa('operacao_proibida', 'Não permitido.', 'proibido') : undefined)});
+  assert.ok(falhou.mesa.doc.querySelector('.equipe-chave-propria') === null, 'ia-config falhou: sem chave própria');
   const nulo = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: null}));
   assert.ok(nulo.mesa.doc.querySelector('.equipe-chave-propria') === null, 'o razão não pôde ser lido: sem a linha');
   const semGasto = await abrirEquipe(com([ANA(), RUI()], {gasto: null, gasto_chave_propria_brl: null}));
