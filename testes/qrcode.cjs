@@ -88,3 +88,12 @@ test('Fator.qrSvg: SVG em linha, um <path> só com módulos quadrados inteiros, 
   assert.ok(/^M4,4/.test(filhos[1].getAttribute('d')) || /M4,4h1v1h-1z/.test(filhos[1].getAttribute('d')), 'os módulos começam depois da zona de silêncio de 4');
   assert.ok(![...mesa.doc.querySelectorAll('*')].some(e => /localStorage|sessionStorage/.test(e.outerHTML || '')), 'nada guardado');
 });
+
+test('o manifesto traz o comando exato da compilação (compilador e opções) e os passos para refazê-la e conferir os hashes', () => {
+  const manifesto = JSON.parse(fs.readFileSync(path.join(PASTA, 'manifesto.json'), 'utf8'));
+  assert.equal(manifesto.build.compilador, 'typescript@5.6.3 (npm)');
+  assert.equal(manifesto.build.comando, 'npx --yes -p typescript@5.6.3 tsc --strict --lib DOM,DOM.Iterable,ES6 --target ES6 --outDir saida qrcodegen.ts');
+  assert.ok(manifesto.build.passos.some(p => p.includes(manifesto.commit)), 'o download é do commit fixo');
+  assert.ok(manifesto.build.passos.some(p => p.includes('sha256sum')), 'os passos mandam conferir os hashes');
+  assert.match(manifesto.source_sha256, /^[0-9a-f]{64}$/);
+});

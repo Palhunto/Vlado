@@ -597,7 +597,7 @@
       : 'Exportar seus dados e excluir sua conta ainda não estão na Mesa. Para pedir, fale com o dono da redação.')));
   }
 
-  window.Conta = {abrir, registrarAba, estado, titulo, dia, textoDoServidor, vistaDoLink, sensivel, recusaDaSenha, no, botao, dado, apoio, cartao, carregar, linha, data, reais, rotuloPapel,
+  window.Conta = {abrir, registrarAba, abaAtiva: () => abaAtual, estado, titulo, dia, textoDoServidor, vistaDoLink, sensivel, recusaDaSenha, no, botao, dado, apoio, cartao, carregar, linha, data, reais, rotuloPapel,
     capacidade, sessao, atualizarAbas};
 
   // O perfil da barra aparece para qualquer conta (não só para o dono) e leva a Minha conta.

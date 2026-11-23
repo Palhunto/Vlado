@@ -389,3 +389,15 @@ test('em inglês: título, cabeçalhos, estados e frases da atividade saem em in
   assert.ok(texto(painelEquipe(mesa)).includes('1 person still has the old guest profile'));
   assert.equal(celulas(linhaDe(mesa, ID.cora))[1].querySelector('option').textContent, 'Guest (old profile)');
 });
+
+test('a carga da Equipe que chega depois de a pessoa voltar a Minha conta não sobrescreve o título nem põe o Convidar de volta (B1 do Traço)', async () => {
+  let liberar;
+  const lenta = new Promise(resolver => { liberar = resolver; });
+  const f = abrir({api: op => (op === 'equipe-listar' ? lenta.then(() => equipeListar([ANA(), RUI()])) : undefined)});
+  await esperar(f.mesa);
+  f.mesa.$('conta-aba-equipe').click(); await f.mesa.esperar(6);
+  f.mesa.$('conta-aba-conta').click(); await f.mesa.esperar(6);
+  liberar(); await esperar(f.mesa);
+  assert.equal(f.mesa.$('area-titulo').textContent, 'Minha conta', 'o título segue sendo o da aba ativa');
+  assert.ok(f.mesa.doc.querySelector('.equipe-acao-titulo') === null, 'o Convidar não volta ao título de Minha conta');
+});

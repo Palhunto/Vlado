@@ -47,6 +47,8 @@
   }
   const convites = () => lista?.convites || [];
   function titulo() {
+    // A carga da lista chega depois: se a pessoa já trocou de aba, o título (e o botão Convidar) não são mais da Equipe.
+    if (window.Conta.abaAtiva() !== 'equipe') return;
     const n = pessoas().length, p = convites().length;
     const contagem = n ? (n === 1 ? t('1 pessoa') : t('{n} pessoas', {n})) : '';
     const pendentes = p ? (p === 1 ? t('1 convite pendente') : t('{n} convites pendentes', {n: p})) : '';
