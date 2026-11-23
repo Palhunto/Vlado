@@ -66,14 +66,35 @@ class PaginasTest(cenario.DuasRedacoes):
     def test_mesa_navegador_pt_br_abre_em_portugues_no_piloto(self):
         self.assertEqual(self.idioma_da('/', 'pt-BR,pt;q=0.9', quem='leitor'), 'pt')
 
+    def gravar_idioma(self, quem, idioma):
+        """O idioma que a conta gravou (``None``: nunca escolheu, como as contas do terminal, do primeiro acesso, da migração
+        e do convite sem idioma); restaurado ao fim do teste, porque as contas do cenário valem para a classe toda."""
+        cid = self.ids[quem]
+
+        def volta():
+            with acesso._bd(self.root, escrever=True) as tx:
+                tx.ex('UPDATE contas SET idioma = NULL WHERE id = ?', cid)
+        self.addCleanup(volta)
+        if idioma is not None:
+            with acesso._bd(self.root, escrever=True) as tx:
+                tx.ex('UPDATE contas SET idioma = ? WHERE id = ?', idioma, cid)
+
     def test_conta_com_idioma_en_abre_em_ingles_mesmo_com_navegador_pt(self):
-        acesso.atualizar_perfil(self.root, self.ids['leitor'], idioma='en')
-        self.addCleanup(acesso.atualizar_perfil, self.root, self.ids['leitor'], idioma='pt')
+        self.gravar_idioma('leitor', 'en')
         self.assertEqual(self.idioma_da('/', 'pt-BR,pt;q=0.9', quem='leitor'), 'en')
         self.assertEqual(self.idioma_da('/', None, quem='leitor'), 'en')
 
-    def test_conta_em_portugues_vence_o_navegador_em_ingles(self):
+    def test_conta_que_escolheu_portugues_vence_o_navegador_em_ingles(self):
+        self.gravar_idioma('convidado', 'pt')
         self.assertEqual(self.idioma_da('/', 'en-US,en;q=0.9', quem='convidado'), 'pt')
+
+    def test_conta_sem_idioma_gravado_segue_o_navegador_no_entrar_e_na_mesa(self):
+        # B1 da Coruja: quem nunca escolheu idioma não vira pt; vale o Accept-Language, como no Entrar sem sessão
+        self.gravar_idioma('reporter2', None)
+        for accept, esperado in (('en-US,en;q=0.9', 'en'), ('pt-BR,pt;q=0.9', 'pt'), ('fr-FR', 'en')):
+            with self.subTest(accept=accept):
+                self.assertEqual(self.idioma_da('/entrar', accept), esperado)
+                self.assertEqual(self.idioma_da('/', accept, quem='reporter2'), esperado)
 
     def test_a_pagina_nao_muda_de_idioma_entre_o_entrar_e_a_mesa(self):
         # sem escolha no navegador, a mesma pessoa (conta em pt, navegador pt-BR) vê o mesmo idioma nas duas páginas
@@ -82,8 +103,7 @@ class PaginasTest(cenario.DuasRedacoes):
                 self.assertEqual(self.idioma_da('/entrar', accept), self.idioma_da('/', accept, quem='editor'))
 
     def test_a_pagina_de_pendencia_com_sessao_usa_o_idioma_da_conta(self):
-        acesso.atualizar_perfil(self.root, self.ids['reporter'], idioma='en')
-        self.addCleanup(acesso.atualizar_perfil, self.root, self.ids['reporter'], idioma='pt')
+        self.gravar_idioma('reporter', 'en')
         self.assertEqual(self.idioma_da('/conta/segundo-fator', 'pt-BR', quem='reporter'), 'en')
         self.assertEqual(self.idioma_da('/conta/segundo-fator', 'pt-BR'), 'pt', 'sem sessão, o navegador')
 
