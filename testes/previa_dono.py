@@ -17,7 +17,7 @@ fator) e uma apuração. Nada de chave de API: a Mesa não pergunta ao agente e 
 
 --pasta        onde criar os dados (nova ou vazia; padrão: uma pasta nova no temporário do sistema)
 --local-vazio  a Mesa instalada sem nenhuma conta, para ver o Primeiro acesso
---so-verificar sobe, confere que cada servidor responde e sai (sem esperar)
+--so-verificar sobe, prova o que a prévia promete (servidores no ar, nada do projeto lido, chave recusada, portas só nossas) e sai
 """
 from __future__ import annotations
 
@@ -76,14 +76,69 @@ def conferir_pasta(pasta: Path) -> Path:
 
 
 def preparar(pasta: Path) -> Path:
+    """A pasta de dados a partir do modelo do programa. preparar_dados copia, SE FALTAR, casos/catalogo.json e casos/README.md do PROJETO: os dois nascem aqui, vazios,
+    antes dele (que não sobrescreve), para que nenhum arquivo de casos/ do projeto seja lido (a verificação confere)."""
     import vlado_lancador
+    (pasta / 'casos').mkdir(parents=True, exist_ok=True)
+    (pasta / 'casos' / 'catalogo.json').write_text('{\n  "casos": []\n}\n', encoding='utf-8')
+    (pasta / 'casos' / 'README.md').write_text('Casos sintéticos da prévia do dono.\n', encoding='utf-8')
     vlado_lancador.preparar_dados(pasta, RAIZ)
-    # O catálogo de modelo vem do projeto: se houver apuração real nele, nada disto serve.
-    import comum
-    catalogo = pasta / 'casos' / 'catalogo.json'
-    if catalogo.is_file() and comum.ler_json(catalogo).get('casos'):
-        raise SystemExit('Recusado: o catálogo copiado do projeto não está vazio; isto parece um ambiente real.')
     return pasta
+
+
+# --- nada do projeto é lido; nenhuma chave é salva --------------------------------------------------------------------------------------------------------------------
+
+PROTEGIDAS = tuple(os.path.normcase(str(RAIZ / nome)) for nome in ('casos', 'acesso', 'segredos'))
+ABERTOS_DO_PROJETO: list[str] = []
+MENSAGEM_SEM_CHAVE = 'Esta prévia não aceita chave de API.'
+
+
+def vigiar_leituras() -> None:
+    """Registra todo acesso a casos/, acesso/ ou segredos/ do PROJETO, daqui até o fim (hook de auditoria do Python): open, as cópias (no Windows copy2 usa _winapi.CopyFile2 e não chama
+    open) e a listagem de pastas."""
+    eventos = ('open', '_winapi.CopyFile2', 'shutil.copyfile', 'shutil.copytree', 'os.listdir', 'os.scandir')
+
+    def gancho(evento, argumentos):
+        if evento not in eventos or not argumentos or not isinstance(argumentos[0], (str, bytes, os.PathLike)):
+            return
+        try:
+            caminho = os.path.normcase(os.path.abspath(os.fsdecode(argumentos[0])))
+        except (OSError, ValueError, TypeError):
+            return
+        if any(caminho == base or caminho.startswith(base + os.sep) for base in PROTEGIDAS):
+            ABERTOS_DO_PROJETO.append(caminho)
+    sys.addaudithook(gancho)
+
+
+def recusar_chaves() -> None:
+    """Salvar uma chave de API é recusado em qualquer rota (ia-config-salvar do piloto e do local-contas passam por segredos.salvar_chave): uma chave real colada nunca chega
+    ao provedor nem fica na pasta. Abrir o painel e ver continua valendo."""
+    import segredos
+
+    def recusar(*_args, **_kwargs):
+        raise ValueError(MENSAGEM_SEM_CHAVE)
+    segredos.salvar_chave = recusar
+
+
+# --- portas só nossas ------------------------------------------------------------------------------------------------------------------------------------------------
+
+def exclusiva(soquete: socket.socket) -> None:
+    """No Windows, SO_EXCLUSIVEADDRUSE impede que outro processo escute a mesma porta (SO_REUSEADDR deixaria)."""
+    if hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
+        soquete.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+
+
+def conferir_portas(*portas: int) -> None:
+    """Para com aviso, antes de semear, se alguma porta já está em uso."""
+    for porta in portas:
+        teste = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            exclusiva(teste)
+            teste.bind(('127.0.0.1', porta))
+        except OSError:
+            raise SystemExit(f'A porta {porta} já está em uso por outro processo. Feche o que a usa (ou a prévia anterior) e tente de novo; nada foi criado.') from None
+        finally:
+            teste.close()
 
 
 def semear_casos(pasta: Path, com_beta: bool) -> None:
@@ -179,7 +234,7 @@ def gerar_certificado(pasta: Path) -> tuple[Path, Path]:
 
 class Retransmissor(socketserver.ThreadingTCPServer):
     """TLS na porta de fora, bytes crus para o servidor na porta de dentro (só 127.0.0.1)."""
-    allow_reuse_address = True
+    allow_reuse_address = False  # no Windows isso deixaria outro processo escutar a mesma porta
     daemon_threads = True
 
     def __init__(self, porta: int, destino: int, certificado: Path, chave: Path):
@@ -187,6 +242,10 @@ class Retransmissor(socketserver.ThreadingTCPServer):
         self.contexto = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         self.contexto.load_cert_chain(str(certificado), str(chave))
         super().__init__(('127.0.0.1', porta), _Ponte)
+
+    def server_bind(self):
+        exclusiva(self.socket)
+        super().server_bind()
 
 
 class _Ponte(socketserver.BaseRequestHandler):
@@ -249,6 +308,65 @@ def responde(porta: int, tls: bool, caminho: str = '/entrar') -> int:
         con.close()
 
 
+def chamar(porta: int, operacao: str, dados: dict, sessao: tuple[str, str] | None = None) -> tuple[int, dict, dict]:
+    """POST /api/<operacao> no local-contas (http); devolve (status, corpo, cabeçalhos)."""
+    import json
+    con = http.client.HTTPConnection('127.0.0.1', porta, timeout=20)
+    cabecalhos = {'Content-Type': 'application/json', 'Origin': f'http://127.0.0.1:{porta}'}
+    if sessao:
+        cabecalhos.update({'Cookie': sessao[0], 'X-Session-Token': sessao[1]})
+    try:
+        con.request('POST', f'/api/{operacao}', json.dumps(dados), cabecalhos)
+        resposta = con.getresponse()
+        bruto = resposta.read()
+        return resposta.status, (json.loads(bruto) if bruto else {}), dict(resposta.getheaders())
+    finally:
+        con.close()
+
+
+def verificar(pasta: Path, dados_piloto: Path, dados_local: Path, piloto: dict, local: dict | None, alfa: str) -> bool:
+    """O que --so-verificar prova: os dois servidores respondem; nenhum arquivo de casos/, acesso/ ou segredos/ do projeto foi aberto; salvar chave é recusado
+    (de ponta a ponta no local-contas, na função do piloto) e nada fica na pasta; as portas são só nossas."""
+    import rotas_gestao
+    resultados = {'piloto /entrar': responde(PORTA_PILOTO, True) == 200, 'local-contas /entrar': responde(PORTA_LOCAL, False) == 200}
+    resultados['nenhum arquivo de casos/, acesso/ ou segredos/ do projeto aberto'] = not ABERTOS_DO_PROJETO
+    chave_falsa = 'sk-ant-api03-' + 'PREVIA' * 8
+    # R2 no piloto: a função que a rota chama
+    try:
+        provedor = rotas_gestao.resumo_da_redacao(dados_piloto, alfa)['provedor']
+        rotas_gestao.salvar_chave_da_redacao(dados_piloto, alfa, piloto['dona']['id'], {'provedor': provedor, 'chave': chave_falsa})
+        resultados['piloto recusa salvar chave'] = False
+    except ValueError as erro:
+        resultados['piloto recusa salvar chave'] = str(erro) == MENSAGEM_SEM_CHAVE
+    # R2 no local-contas, de ponta a ponta (a senha, o provedor e a chave no mesmo pedido, como a Mesa faz)
+    if local:
+        conta = local['dono_l']
+        status, corpo, cabecalhos = chamar(PORTA_LOCAL, 'entrar', {'login': conta['login'], 'senha': conta['senha']})
+        sessao = (cabecalhos['Set-Cookie'].split(';')[0], corpo['csrf'])
+        provedor = chamar(PORTA_LOCAL, 'ia-config', {}, sessao)[1].get('provedor')
+        status, corpo, _ = chamar(PORTA_LOCAL, 'ia-config-salvar', {'provedor': provedor, 'chave': chave_falsa, 'senha': conta['senha']}, sessao)
+        resultados['local-contas recusa salvar chave com a mensagem clara'] = status >= 400 and MENSAGEM_SEM_CHAVE in str(corpo.get('erro', ''))
+    achados = [str(arquivo.relative_to(pasta)) for arquivo in pasta.rglob('*') if arquivo.is_file() and chave_falsa.encode() in arquivo.read_bytes()]
+    resultados['a chave colada não ficou em nenhum arquivo da pasta'] = not achados
+    # R3: com os servidores no ar, outro processo não escuta as mesmas portas (nem com SO_REUSEADDR)
+    for porta in (PORTA_PILOTO, PORTA_LOCAL):
+        intruso = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            intruso.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            intruso.bind(('127.0.0.1', porta))
+            intruso.listen(1)
+            resultados[f'porta {porta} só nossa'] = False
+        except OSError:
+            resultados[f'porta {porta} só nossa'] = True
+        finally:
+            intruso.close()
+    for nome, ok in resultados.items():
+        print(f"  {'OK    ' if ok else 'FALHOU'} {nome}")
+    if ABERTOS_DO_PROJETO:
+        print('  abertos do projeto:', *ABERTOS_DO_PROJETO, sep='\n    ')
+    return all(resultados.values())
+
+
 def imprimir(piloto: dict, local: dict | None, pasta: Path) -> None:
     def contas(titulo, grupo):
         print(f'\n{titulo}')
@@ -288,6 +406,8 @@ def main() -> int:
     for saida in (sys.stdout, sys.stderr):  # o terminal do Windows é cp1252: os acentos saem em UTF-8
         if hasattr(saida, 'reconfigure'):
             saida.reconfigure(encoding='utf-8')
+    vigiar_leituras()  # desde já: nenhum arquivo de casos/, acesso/ ou segredos/ do projeto pode ser aberto
+    conferir_portas(PORTA_PILOTO, PORTA_LOCAL)
     pasta = conferir_pasta(args.pasta or Path(tempfile.mkdtemp(prefix='vlado_previa_dono_')))
     # Tudo da prévia mora na pasta; nada de e-mail de verdade, de chave de verdade nem de proxy.
     os.environ.update({'VLADO_ACESSO': '', 'VLADO_SEGREDOS': '', 'VLADO_CONFIAR_PROXY': '', 'VLADO_AMBIENTE': 'homologacao', 'VLADO_CORREIO': 'tela',
@@ -295,7 +415,16 @@ def main() -> int:
     for variavel in ('ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY'):
         os.environ.pop(variavel, None)
     import acesso
-    from interface_pesquisa import Servidor
+    import interface_pesquisa
+    recusar_chaves()
+
+    class Servidor(interface_pesquisa.Servidor):
+        """O servidor do projeto, com a porta só nossa (SO_EXCLUSIVEADDRUSE no Windows)."""
+        allow_reuse_address = False
+
+        def server_bind(self):
+            exclusiva(self.socket)
+            super().server_bind()
 
     dados_piloto, dados_local = pasta / 'piloto', pasta / 'local'
     for destino in (dados_piloto, dados_local):
@@ -321,16 +450,24 @@ def main() -> int:
         local = criar_contas(dados_local, redacao_local, LOCAL)
 
     certificado, chave = gerar_certificado(pasta)
-    servidor_piloto = Servidor(('127.0.0.1', 0), dados_piloto, modo='piloto', origem=ORIGEM_PILOTO)
-    servidor_local = Servidor(('127.0.0.1', PORTA_LOCAL), dados_local, modo='local-contas')
-    ponte = Retransmissor(PORTA_PILOTO, servidor_piloto.server_port, certificado, chave)
+    criados = []
+    try:
+        servidor_piloto = Servidor(('127.0.0.1', 0), dados_piloto, modo='piloto', origem=ORIGEM_PILOTO)
+        criados.append(servidor_piloto)
+        servidor_local = Servidor(('127.0.0.1', PORTA_LOCAL), dados_local, modo='local-contas')
+        criados.append(servidor_local)
+        ponte = Retransmissor(PORTA_PILOTO, servidor_piloto.server_port, certificado, chave)
+        criados.append(ponte)
+    except OSError as erro:  # a porta foi tomada entre a conferência e agora
+        for criado in criados:
+            criado.server_close()
+        raise SystemExit(f'Não foi possível abrir as portas {PORTA_PILOTO} e {PORTA_LOCAL} ({erro}). Feche o processo que as usa e tente de novo.') from None
     fios = [subir(servidor_piloto), subir(servidor_local), subir(ponte)]
     try:
         imprimir(contas_piloto, local, pasta)
         if args.so_verificar:
-            estados = {'piloto /entrar': responde(PORTA_PILOTO, True), 'local-contas /entrar': responde(PORTA_LOCAL, False)}
-            print('Verificação:', estados, flush=True)
-            return 0 if all(valor == 200 for valor in estados.values()) else 1
+            print('Verificação:', flush=True)
+            return 0 if verificar(pasta, dados_piloto, dados_local, contas_piloto, local, alfa) else 1
         while all(fio.is_alive() for fio in fios):
             time.sleep(1)
     except KeyboardInterrupt:
