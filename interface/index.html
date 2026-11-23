@@ -41,6 +41,7 @@
   <script src="/piloto.js?v=__V:piloto.js__" defer></script>
   <script src="/gerenciar.js?v=__V:gerenciar.js__" defer></script>
   <script src="/fator.js?v=__V:fator.js__" defer></script>
+  <script src="/dados_conta.js?v=__V:dados_conta.js__" defer></script>
   <script src="/conta.js?v=__V:conta.js__" defer></script>
   <script src="/equipe.js?v=__V:equipe.js__" defer></script>
   <script src="/experiencia.js?v=__V:experiencia.js__" defer></script>
@@ -50,7 +51,7 @@
 <body data-idioma-padrao="__IDIOMA_PADRAO__" data-papel="__PAPEL__" data-modo="__MODO__">
   <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
   <p id="mesa-ambiente" class="env-banner" role="note" hidden></p>
-  <header class="app-header"><button id="mesa-menu" type="button" class="secondary" aria-label="Abrir navegação" aria-expanded="false" aria-controls="mesa-sidebar">☰</button><span class="brand mobile-brand">Vlado<span>.</span></span><label class="persistent-context"><span>Apuração</span><select id="contexto-caso"><option value="">Escolha uma apuração</option></select></label><span id="mesa-cota-cabecalho" class="mesa-cota-cabecalho" role="img" hidden></span><span id="mesa-versao" class="header-note">Documentos, achados e fontes</span><button id="mesa-idioma" class="secondary" type="button" translate="no" aria-label="Switch to English">English</button><button id="mesa-configuracoes" class="secondary" type="button" data-requer="ia-config" hidden>Configurações</button><button id="mesa-sair" class="secondary" type="button" hidden>Sair</button><button id="mesa-tema" class="secondary" type="button" aria-label="Ativar modo claro">Modo claro</button></header>
+  <header class="app-header"><button id="mesa-menu" type="button" class="secondary" aria-label="Abrir navegação" aria-expanded="false" aria-controls="mesa-sidebar">☰</button><span class="brand mobile-brand">Vlado<span>.</span></span><label class="persistent-context"><span>Apuração</span><select id="contexto-caso"><option value="">Escolha uma apuração</option></select></label><span id="mesa-cota-cabecalho" class="mesa-cota-cabecalho" role="img" hidden></span><span id="mesa-versao" class="header-note">Documentos, achados e fontes</span><button id="mesa-idioma" class="secondary" type="button" translate="no" aria-label="Switch to English">English</button><button id="mesa-configuracoes" class="secondary" type="button" aria-pressed="false" data-requer="ia-config" hidden>Configurações</button><button id="mesa-sair" class="secondary" type="button" hidden>Sair</button><button id="mesa-tema" class="secondary" type="button" aria-label="Ativar modo claro">Modo claro</button></header>
   <div class="app-layout">
   <aside class="sidebar" id="mesa-sidebar">
     <a class="brand sidebar-brand" href="/?area=inicio" data-mesa-area="inicio">Vlado<span>.</span></a>
@@ -92,17 +93,7 @@
         <div class="section-heading"><h2 id="codex-titulo">Conversa com os documentos</h2><p id="codex-conta" class="connection-status" role="status" aria-live="polite">Verificando conexão…</p></div>
         <details id="codex-conexao" class="connection-options"><summary>Conexão e opções</summary>
         <div class="actions"><button id="codex-conectar" type="button" class="secondary">Verificar conexão</button><button id="codex-desligar" data-requer="codex-desligar" type="button" class="secondary" title="Encerra o serviço local e interrompe as execuções ativas">Encerrar serviço</button></div>
-        <form id="ia-config" class="ia-config" autocomplete="off" data-somente-admin>
-          <h3>Provedor e chave da API</h3>
-          <label>Provedor<select id="ia-provedor"><option value="anthropic">Anthropic (Claude)</option><option value="openai">OpenAI (GPT)</option></select></label>
-          <label>Modelo (opcional)<input id="ia-modelo" type="text" maxlength="100" spellcheck="false" placeholder="Padrão: claude-sonnet-5-5"></label>
-          <p class="small">Deixe em branco para usar o modelo padrão do provedor.</p>
-          <label>Chave da API<input id="ia-chave" type="password" maxlength="300" spellcheck="false" autocomplete="new-password" placeholder="Cole a chave da API"></label>
-          <p id="ia-chave-estado" class="small" role="status" aria-live="polite"></p>
-          <p class="small">A chave é salva no servidor e nunca volta ao navegador. Deixe o campo vazio para manter a chave atual.</p>
-          <div class="actions"><button id="ia-salvar" type="submit">Salvar provedor e chave</button><button id="ia-remover" type="button" class="secondary" hidden>Remover chave salva</button></div>
-          <p id="ia-config-mensagem" class="small" role="status" aria-live="polite"></p>
-        </form>
+        <p id="ia-resumo-linha" class="small ia-resumo" hidden><span id="ia-resumo"></span> <a id="ia-alterar" href="/?area=configuracoes" data-requer="ia-config">Alterar em Configurações</a></p>
         <p class="small">Processamento online pela API do provedor escolhido, cobrado por uso.</p>
         <div id="codex-conexao-tecnica"></div></details>
         <details id="codex-acervo" class="codex-scope" open><summary id="codex-acervo-resumo">Escolher apuração e conversa</summary>
@@ -209,8 +200,19 @@
         <div class="actions nova-acoes"><button id="nova-cancelar" type="button" class="secondary">Cancelar</button><button id="nova-continuar" type="submit">Continuar para documentos</button></div>
       </form>
     </section>
-    <section id="area-configuracoes" aria-labelledby="configuracoes-titulo" hidden>
-      <div class="panel"><h2 id="configuracoes-titulo">Configurações</h2><p class="small">O provedor e a chave da IA ficam em Perguntar, em Conexão e opções.</p></div>
+    <section id="area-configuracoes" aria-labelledby="area-titulo" hidden>
+      <div class="panel" id="ia-painel"><h2 id="ia-titulo" tabindex="-1">Provedor e chave da IA</h2>
+            <form id="ia-config" class="ia-config" autocomplete="off" data-somente-admin>
+              <label>Provedor<select id="ia-provedor"><option value="anthropic">Anthropic (Claude)</option><option value="openai">OpenAI (GPT)</option></select></label>
+              <label>Modelo (opcional)<input id="ia-modelo" type="text" maxlength="100" spellcheck="false" placeholder="Padrão: claude-sonnet-5-5"></label>
+              <p class="small">Deixe em branco para usar o modelo padrão do provedor.</p>
+              <label>Chave da API<input id="ia-chave" type="password" maxlength="300" spellcheck="false" autocomplete="new-password" placeholder="Cole a chave da API"></label>
+              <p id="ia-chave-estado" class="small" role="status" aria-live="polite"></p>
+              <p class="small">A chave é salva no servidor e nunca volta ao navegador. Deixe o campo vazio para manter a chave atual.</p>
+              <div class="actions"><button id="ia-salvar" type="submit">Salvar provedor e chave</button><button id="ia-remover" type="button" class="secondary" hidden>Remover chave salva</button></div>
+              <p id="ia-config-mensagem" class="small" role="status" aria-live="polite"></p>
+            </form>
+      </div>
     </section>
     <section id="area-gerenciar" aria-labelledby="gerenciar-titulo" hidden>
       <div class="panel">

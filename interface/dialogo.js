@@ -29,6 +29,8 @@
 // enviado e nada é limpo. Uma falha com `silencioso: true` não mostra mensagem do diálogo (quem lançou já a pôs junto ao campo).
 // `ctx.trocarPor({titulo, texto, acao, semCancelar, montar(corpo)})`, chamado de `executar`, troca o formulário por outra vista sem fechar (o link do convite, que
 // só aparece uma vez): a ação fecha (devolve true), Esc também, e `semCancelar` tira o botão de cancelar; o que a vista mostrou some quando o diálogo fecha.
+// `rotuloDoNome` troca a frase "Digite «{nome}» para confirmar" do campo do nome (variante 'campo'); uma falha com `campoNome: true` põe a mensagem junto ao campo do nome, que recebe o foco
+// (o nome que não confere em "Excluir a conta"; o servidor o confere antes da senha).
 // `semAcoes: true` tira os botões do diálogo (quem o usa traz os próprios, como o cadastro do segundo fator, em vários passos): `ctx.fechar(valor)` o fecha e `ctx.travar(true)` faz o Esc
 // deixar de fechar (o passo dos códigos de reserva, que não voltam).
 // Clique no véu não fecha (decisão do dono, P12.5). Esc fecha como "Cancelar". O foco fica preso e, ao fechar, volta a `gatilho`.
@@ -95,7 +97,7 @@
       const linhaEstado = no('p', 'dialogo-nota'); linhaEstado.hidden = true; linhaEstado.setAttribute('role', 'status'); linhaEstado.setAttribute('aria-live', 'polite');
       if (opcoes.preparar) partes.push(corpo, linhaEstado);
 
-      let campo = null, nomeEsperado = opcoes.nome ?? null, fraseDoCampo = null;
+      let campo = null, nomeEsperado = opcoes.nome ?? null, fraseDoCampo = null, erroDoNome = null;
       if (variante === 'campo') {
         const rotulo = no('label', 'dialogo-campo');
         fraseDoCampo = no('span');
@@ -104,11 +106,14 @@
         campo.setAttribute('spellcheck', 'false'); campo.setAttribute('translate', 'no');
         rotulo.append(fraseDoCampo, campo);
         partes.push(rotulo);
+        erroDoNome = no('p', 'dialogo-erro-nome'); erroDoNome.hidden = true; erroDoNome.id = `${id}-erro-nome`;
+        campo.setAttribute('aria-describedby', erroDoNome.id);
+        partes.push(erroDoNome);
       }
       // "Digite «nome» para confirmar": o nome é dado e não se traduz; sem nome ainda (vem do servidor), só a frase.
       function rotularCampo() {
         if (!fraseDoCampo) return;
-        const [antes, depois] = t('Digite «{nome}» para confirmar').split('{nome}');
+        const [antes, depois] = t(opcoes.rotuloDoNome || 'Digite «{nome}» para confirmar').split('{nome}');
         const nome = no('strong', '', nomeEsperado ?? ''); nome.setAttribute('translate', 'no');
         fraseDoCampo.replaceChildren(antes, nome, depois ?? '');
       }
@@ -276,6 +281,7 @@
         if (estado === 'resultado') { fechar(true); return; }
         if (estado !== 'aberto' || bloqueado || !nomeConfere() || !camposCompletos()) return;  // bloqueado: nem o Enter no campo envia mais um pedido
         limparErrosDeCampo();
+        if (erroDoNome) { erroDoNome.hidden = true; campo.removeAttribute('aria-invalid'); }
         const brutas = opcoes.validar ? opcoes.validar(valores(), ctx) : {};
         if (brutas === false) return;  // quem validou já mostrou os próprios erros
         const recusas = Object.entries(brutas || {}).filter(([chave]) => entradas.has(chave));
@@ -301,6 +307,9 @@
           atualizar();
           if (falha?.silencioso) return;  // quem lançou já pôs a mensagem junto ao campo
           // Recusa de um campo (senha incorreta): a mensagem vai junto ao campo, que é limpo e recebe o foco; as demais vão junto às ações.
+          if (falha?.campoNome && campo) {  // o nome que não confere: a mensagem junto ao campo do nome, que recebe o foco
+            erroDoNome.textContent = falha.message ? t(falha.message) : ''; erroDoNome.hidden = !falha.message; campo.setAttribute('aria-invalid', 'true'); campo.focus(); return;
+          }
           if (falha?.campo && entradas.has(falha.campo)) { erroCampo(falha.campo, falha.message || 'Não deu para concluir. Tente de novo.', {limpar: true}); return; }
           // Qualquer outra recusa também leva a senha embora: ela não fica no campo entre uma tentativa e outra.
           for (const {entrada} of entradas.values()) entrada.value = '';

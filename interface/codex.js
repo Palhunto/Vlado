@@ -285,6 +285,12 @@
       $('codex-conta').classList.toggle('connected', data.autenticado);
       if (authenticated !== data.autenticado) $('codex-conexao').open = !data.autenticado;
       authenticated = data.autenticado;
+      // A linha de Conexão e opções diz o provedor e o modelo reais, para qualquer papel (codex-status vai a todos); sem eles a linha fica escondida, nunca com um texto fixo.
+      const resumo = $('ia-resumo');
+      if (resumo && resumo.dataset.fonte !== 'ia-config' && data.provedor && data.modelo) {
+        resumo.textContent = `IA: ${{anthropic: 'Anthropic (Claude)', openai: 'OpenAI (GPT)'}[data.provedor] || data.provedor}, modelo ${data.modelo}.`;
+        $('ia-resumo-linha').hidden = false;
+      }
       $('codex-conexao-tecnica').replaceChildren(Leitura.tecnicos(`Integração: ${data.versao || 'versão não informada'} · Provedor: ${provider} · Modelo configurado: ${data.modelo || 'não informado'}`));
     } catch (error) { $('codex-conta').textContent = 'API indisponível.'; fail(error.message); }
   }

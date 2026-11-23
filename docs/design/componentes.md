@@ -51,6 +51,10 @@ Cada componente tem uma âncora própria, para os critérios de aceite apontarem
 
 Serifa = `--fonte-titulo` *(novo)*, Source Serif 4. Sem serifa = `--fonte-interface` *(novo)*, Source Sans 3. Nenhum texto de interface abaixo de 14 px; nenhum campo abaixo de 16 px. Texto de leitura com até 70 caracteres por linha (UX-10).
 
+<a id="apostrofo"></a>
+
+**Apóstrofo e aspas no inglês** (decisão do Design, 23/11/2026, sobre o cruzamento do Lume com o Vitral no ensaio da nona rodada). O texto em inglês da interface (`i18n_en.js`, em textos e em padrões) usa o apóstrofo curvo `’` (U+2019), como as aspas curvas “ ” que o arquivo já usa no lugar das «» do português. O apóstrofo reto `'` fica só em código, identificador e valor de atributo. "Chave própria da redação" é "Newsroom’s own key", e "dos quais {valor} com a chave própria" é "of which {valor} with the newsroom’s own key". O "with" é porque a chave paga o gasto. "On" leria como gasto com a compra da chave. As variantes do mesmo texto (com a cota usada e com a cota esgotada) seguem igual.
+
 ### Espaço, raio e alvo
 
 - Espaços do canvas: 4, 8, 12, 16, 24, 32 e 48 px na escala. **Decisão do dono (P11.8):** preenchimento, intervalo e margem fora da grade de 4 px arredondam para cima na implementação: 6 → 8, 10 → 12, 14 → 16, 18 → 20, 22 → 24 (e 2 → 4, 42 → 44). As tabelas desta especificação mostram a medida do canvas; o Frontend aplica o arredondamento, e a conferência aceita essa diferença como regra, não como divergência.
@@ -251,12 +255,12 @@ Onde: cabeçalho dos quadros. Linha com intervalo de 4. Cada aba é `<a>`: altur
 
 <a id="faixa-que-rola"></a>
 
-**Faixa que rola para o lado** (Q5 da Coruja, 23/11/2026). Vale para as pílulas dos quadros e para a linha de etapas (`#mesa-etapas`) abaixo de 720 px, as duas faixas da Mesa que rolam por dentro. A 320 px, a linha de etapas do Caderno deixava o passo atual, "4 Caderno", fora da vista. Nos Quadros, apareciam duas das cinco pílulas, cortadas na divisa entre elas, e a faixa parecia completa. Quando o conteúdo passa da largura da faixa:
+**Faixa que rola para o lado** (Q5 da Coruja, 23/11/2026). Vale, abaixo de 720 px, para as quatro faixas da Mesa que rolam por dentro: a linha de etapas (`#mesa-etapas`, item ativo por `aria-current="step"`), as pílulas dos Quadros (`.quadros-abas`, por `aria-selected="true"`), as abas de Documentos (`.mesa-tabs`, "Acervo cadastrado" e "Pesquisar no conteúdo") e as do Caderno (`.notebook-tabs`, "Notas e redação" e "Trechos com fonte e contribuições"), as duas últimas por `aria-pressed="true"` (escopo completado pela T1 da Coruja sobre `bb83992`; a 320 px, "Pesquisar no conteúdo" fica cortada). A 320 px, a linha de etapas do Caderno deixava o passo atual, "4 Caderno", fora da vista. Nos Quadros, apareciam duas das cinco pílulas, cortadas na divisa entre elas, e a faixa parecia completa. Quando o conteúdo passa da largura da faixa:
 
 - **O item ativo fica à vista.** Ao desenhar a faixa e ao trocar de item, só a faixa rola (`scrollLeft`, nunca a página) até o item ativo caber inteiro, com 16 px de folga do lado de onde veio. A rolagem é instantânea, sem animação.
-- **Esmaecido na borda.** Do lado em que ainda há conteúdo, os últimos 32 px da faixa esmaecem até sumir. O esmaecido é uma máscara (`mask-image` com gradiente de opaco a transparente), e não uma cor, para valer nos dois temas sem token novo. O lado vem de `data-rola` (`fim`, `inicio` ou `ambos`), recalculado ao rolar e ao redimensionar. Sem estouro, a faixa fica sem o atributo e sem máscara. A máscara vai no elemento que rola. Se ele tiver fundo próprio, como a faixa dos quadros (`--theme-surface`), o fundo passa ao elemento pai, para não esmaecer junto.
+- **Esmaecido na borda.** Do lado em que ainda há conteúdo, os últimos 32 px da faixa esmaecem até sumir. O esmaecido é uma máscara (`mask-image` com gradiente de opaco a transparente), e não uma cor, para valer nos dois temas sem token novo. O lado vem de `data-rola` (`fim`, `inicio` ou `ambos`), recalculado ao rolar e ao redimensionar. Sem estouro, a faixa fica sem o atributo e sem máscara. A máscara vai no próprio elemento que rola. Nenhuma das quatro faixas tem fundo próprio no CSS (as pílulas dos Quadros ficam sobre o fundo do painel), então o esmaecido revela o fundo de trás. Se alguma ganhar fundo, ele passa ao elemento pai, para não esmaecer junto.
 - **Nada além disso.** Sem setas e sem barra de rolagem à vista (a linha de etapas já a esconde). Pelo teclado, o navegador já traz à vista o item que recebe o foco. Como não há animação, `prefers-reduced-motion` não muda nada aqui.
-- **Prova:** capturas a 320, 390 e 430 px do Caderno, de Documentos e dos Quadros, nos dois temas, com o item ativo inteiro dentro da faixa. A medida de reflow passa a conferir também os elementos que rolam por dentro, além da página.
+- **Prova:** capturas a 320, 390 e 430 px do Caderno (etapas e abas), de Documentos (etapas e abas, com "Pesquisar no conteúdo" ativa) e dos Quadros, nos dois temas, com o item ativo inteiro dentro da faixa. A medida de reflow passa a conferir também os elementos que rolam por dentro, além da página.
 
 <a id="achado"></a>
 
@@ -764,6 +768,18 @@ Pranchas: `conferir-achado-{claro,escuro}-390`, `conferir-achado-original-{claro
 
 Cabeçalho: o do celular do canvas (60 px: "Abrir menu", "Apuração" sobre o nome cortado com reticências, cota à direita). Margens de 16 px. A barra lateral é a mesma gaveta do tablet, com a largura de 256 px.
 
+<a id="cabecalho-celular"></a>
+
+**Cabeçalho do celular, abaixo de 720 px** (aceito pelo Maestro em 23/11/2026, sobre o que entrou com o botão "Configurações" em `29aeafa`). A 375 px, o cabeçalho tinha o menu, o seletor e "Configurações", e o seletor ficava cortado sem reticências ("Escolha uma a"). Abaixo de 720 px, o cabeçalho leva só três coisas:
+
+- **"Abrir menu"**, o botão só com o ícone;
+- **"Apuração" sobre o nome:** o seletor ocupa o espaço que sobra (`min-width: 0`, `flex: 1`), e o nome é cortado com reticências (`text-overflow: ellipsis`, `white-space: nowrap`, `overflow: hidden`). O nome inteiro continua nas opções do seletor;
+- **a cota à direita:** "R$ 18,40 de 50", em 14 `--theme-muted`, sem quebrar, como na tabela dos [cabeçalhos](#cabecalhos). Ela segue as regras do cartão da cota: some sem a rota ou sem sessão e vira "! Cota esgotada" com o teto atingido. O cabeçalho mostra o mesmo bloco que o [cartão da cota](#barra-lateral) escolhe, o de menor saldo, só no formato curto. Quando for a cota da instalação, o texto é "Cota da instalação R$ 40,00 de 200" (esgotada, "! Cota da instalação esgotada"). A parte da chave própria ("dos quais…" e "Chave própria da redação") não entra no cabeçalho e fica só no cartão. Assim o administrador vê no cabeçalho o mesmo número da barra (C1 da Coruja sobre `3d47814`).
+
+**"Configurações" sai do cabeçalho e vai para a gaveta**, no grupo em que Idioma, Tema e Sair já entram no celular (`.mesa-drawer-controls`, logo abaixo das áreas e acima do cartão da cota e do cartão da pessoa), como o primeiro do grupo. Ela continua aparecendo só para quem tem a capacidade (`data-requer="ia-config"`). A partir de 720 px, volta ao cabeçalho, no lugar de hoje.
+
+Prova: Visão geral e Minha conta a 320, 375 e 430 px, nos dois temas, com um nome de apuração longo, e a gaveta aberta a 375 px.
+
 **Conferir achado, 390.** Coluna única: título de 28 px com o progresso, caixa "Sua pergunta", lista de achados. No achado aberto, as ações ficam empilhadas em botões de 48 px de largura cheia, nesta ordem: "Ver o trecho no original" (secundário), "Confere com o original" (principal), "Precisa de ajuste" (secundário), "Sem suporte" (recusa).
 
 **Original no celular.** "Ver o trecho no original" abre o original numa camada de tela cheia (`conferir-achado-original-*-390`): cabeçalho com "Achados" (volta à lista, devolvendo o foco ao achado) e o selo "Lida por OCR"; nome do documento e página; a folha; zoom e "Abrir o original em nova aba"; no pé, o achado em conferência com as três ações, para conferir sem voltar. Aprovado pelo dono (P12.3).
@@ -1019,6 +1035,14 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 - **Para o dono**, Minha conta, Equipe e Configurações são três [abas](#abas) no topo da página, nessa ordem; no celular, pílulas de 44 (P20b). Quem não é dono vê só Minha conta, sem a linha de abas. Cada aba aparece pela capacidade que `GET /api/sessao` devolve: Equipe com `equipe-listar`, Configurações com `ia-config`. A Mesa não decide pelo nome do papel.
 - O botão "Configurações" do cabeçalho leva à aba Configurações. "Contas de acesso" continua em Configurações, como hoje, até o convite por e-mail da E3 de Contas. **Ela e as operações `contas-*` só saem na integração em que entram juntos o [convite](#convites) e o ["Esqueci a senha"](#aceitar-convite) da E3** (decisão do dono, P30, e ordem combinada com Contas). Nenhuma entrega tira a tela antiga antes disso, nem que uma das duas partes já esteja pronta: sem as duas, o dono fica sem jeito de incluir alguém ou a pessoa fica sem jeito de recuperar a senha. Depois disso, em Configurações fica só a configuração da IA, com a senha da [tabela](#dialogo-senha).
 - **Aceitar convite** (`/aceitar/<token>`) e **Redefinir a senha** (`/redefinir/<token>`) são páginas públicas da família do Entrar ([aceitar convite](#aceitar-convite)).
+
+<a id="configuracoes"></a>
+
+**Configurações, em todos os modos** (decisão do dono P43, 23/11/2026). O formulário do provedor e da chave da IA (`#ia-config`) passa a morar só em Configurações, em todos os modos. É o mesmo elemento, com a mesma lógica de salvar, e não uma cópia: sai de Perguntar e entra na página.
+
+- **No modo `local`:** o botão "Configurações" aparece sempre, no cabeçalho a partir de 720 px e, abaixo disso, na gaveta, como o primeiro do grupo ([cabeçalho do celular](#cabecalho-celular)). Não há perfil, Sair nem abas. A página tem a moldura das outras áreas, com o título "Configurações" (serifa 28/600) e, abaixo dele, um painel com "Provedor e chave da IA" (serifa 22/600) e o formulário. Com a página aberta, o botão leva `aria-pressed="true"`, e nenhum item da barra fica selecionado.
+- **Com contas:** a mesma seção, como primeiro painel da aba Configurações. "Contas de acesso" continua abaixo dela até a E3 (P30). Salvar segue a [tabela da senha](#dialogo-senha), como hoje. O texto "O provedor e a chave da IA ficam em Perguntar, em Conexão e opções." sai.
+- **Em Perguntar, "Conexão e opções"** fica com o estado da conexão, "Verificar conexão", "Encerrar serviço", o aviso "Processamento online pela API do provedor escolhido, cobrado por uso." e os detalhes técnicos. No lugar do formulário, uma linha em 14 `--theme-muted`: "IA: Anthropic (Claude), modelo padrão." (ou o modelo salvo), seguida do [link](#link) "Alterar em Configurações". O link abre a página e põe o foco no título da seção. Quem não tem `ia-config` vê a linha sem o link.
 
 ### Moldura comum
 

@@ -349,6 +349,39 @@ class TelaDaEquipeTest(cenario.DuasRedacoes):
         self.assertIsNone(corpo['gasto_chave_propria_brl'])
         self.assertTrue(all(p['gasto_chave_propria_brl'] is None for p in corpo['pessoas']))
 
+    def test_equipe_listar_diz_se_a_redacao_tem_chave_propria(self):
+        # For the Vitral (rota da Tranca, com o aval dela): presence only, of the session's newsroom.
+        self.assertIs(self.post('dono', 'equipe-listar', {})[1]['chave_propria'], False)
+        segredos.salvar_chave(self.root, 'anthropic', PROPRIA, self.a)
+        self.addCleanup(segredos.remover_chave, self.root, 'anthropic', self.a)
+        corpo, bruto = (lambda r: (r[1], r[2]))(self.post('dono', 'equipe-listar', {}))
+        self.assertIs(corpo['chave_propria'], True)
+        self.assertNotIn(b'sintetica-da-redacao', bruto)  # nothing of the key (its end is a common word here)
+        self.assertNotIn(b'"final"', bruto)
+        self.assertIs(self.post('dono_b', 'equipe-listar', {})[1]['chave_propria'], False)  # the other newsroom's own
+        status, corpo, _ = self.post('dono', 'equipe-listar', {'redacao': self.b})  # never a field of the body
+        self.assertEqual(status, 400)
+
+    def test_equipe_listar_com_o_arquivo_das_chaves_ilegivel_abre_com_null(self):
+        arquivo = segredos.caminho_das_redacoes(self.root)
+        arquivo.parent.mkdir(parents=True, exist_ok=True)
+        arquivo.write_text('{ilegível', encoding='utf-8')
+        self.addCleanup(arquivo.unlink)
+        status, corpo, _ = self.post('dono', 'equipe-listar', {})
+        self.assertEqual(status, 200)
+        self.assertIsNone(corpo['chave_propria'])
+        self.assertTrue(corpo['pessoas'])
+
+    def test_equipe_listar_fora_do_piloto_e_false_sem_ler_o_arquivo(self):
+        import rotas_equipe
+        principal = {'conta': self.ids['dono'], 'organizacao': {'id': self.a}}
+        with mock.patch.object(segredos, 'resumo', side_effect=AssertionError('leu o arquivo das chaves')) as lido:
+            for modo in ('local-contas', None):
+                with self.subTest(modo=modo):
+                    corpo = rotas_equipe.executar(self.root, 'equipe-listar', {}, principal, modo=modo)
+                    self.assertIs(corpo['chave_propria'], False)
+            lido.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

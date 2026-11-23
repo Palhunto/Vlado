@@ -143,6 +143,25 @@ def _abrir_trabalhador():
                             cwd=str(TRABALHADOR.parent), **opcoes)
 
 
+ESPERA_MORTE = 30.0  # seconds to reap a killed process; past it a warning, never an error that hides another
+
+
+def _matar_processo(proc, posix=None):
+    """Kill an extraction process now: on POSIX its own group first (Tesseract and OCRmyPDF go too), then always
+    the process itself. ``killpg`` fails quietly for a process that does not lead its own group: without the
+    second kill it would stay alive."""
+    posix = os.name != 'nt' if posix is None else posix
+    if posix:
+        try:
+            os.killpg(proc.pid, 9)
+        except (OSError, ProcessLookupError):
+            pass
+    try:
+        proc.kill()
+    except (OSError, ProcessLookupError):
+        pass
+
+
 def motivo_da_saida(codigo) -> str:
     """Why an extraction process ended without an answer, from its exit code."""
     if codigo in (-24, 152, 1816):  # SIGXCPU; Windows ERROR_NOT_ENOUGH_QUOTA (the job's CPU time)
@@ -372,13 +391,7 @@ class _ExecutorProcesso(_Executor):
             self.matar()  # the end event marks the task
 
     def matar(self):
-        try:
-            if os.name != 'nt':
-                os.killpg(self.proc.pid, 9)  # its own session: Tesseract and OCRmyPDF go too
-            else:
-                self.proc.kill()
-        except (OSError, ProcessLookupError):
-            pass
+        _matar_processo(self.proc)  # its own session: Tesseract and OCRmyPDF go too, and the process in any case
 
     def fechar(self):
         try:
@@ -619,15 +632,16 @@ class Fila:
             raise ValueError(motivo_da_saida(proc.returncode) + ' Consulte o original na interface.')
         finally:
             if proc.poll() is None:
+                _matar_processo(proc)
                 try:
-                    if os.name == 'nt':
-                        proc.kill()
-                    else:
-                        os.killpg(proc.pid, 9)
-                except (OSError, ProcessLookupError):
-                    pass
-                proc.wait(30)
-            proc.stdout.close()
+                    proc.wait(ESPERA_MORTE)
+                except subprocess.TimeoutExpired:  # never hide the refusal (or the image) being returned
+                    log.warning('O processo da leitura visual (pid %s) não terminou %s s depois de morto.',
+                                proc.pid, ESPERA_MORTE)
+            if proc.poll() is not None:
+                # Only once the process ended: with it alive, the reader thread blocked on its output holds the
+                # file's lock, and closing would wait for ever (the daemon thread and the file go with the process).
+                proc.stdout.close()
 
     # ciclo de vida -------------------------------------------------------------------------------
     def iniciar(self):

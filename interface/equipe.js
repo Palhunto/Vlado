@@ -47,6 +47,8 @@
   }
   const convites = () => lista?.convites || [];
   function titulo() {
+    // A carga da lista chega depois: se a pessoa já trocou de aba, o título (e o botão Convidar) não são mais da Equipe.
+    if (window.Conta.abaAtiva() !== 'equipe') return;
     const n = pessoas().length, p = convites().length;
     const contagem = n ? (n === 1 ? t('1 pessoa') : t('{n} pessoas', {n})) : '';
     const pendentes = p ? (p === 1 ? t('1 convite pendente') : t('{n} convites pendentes', {n: p})) : '';
@@ -59,6 +61,11 @@
       catalogo = resposta?.ok ? ((await resposta.json())?.casos || []) : [];
     } catch (_) { catalogo = []; }
   }
+  // A redação tem chave própria? `equipe-listar.chave_propria`: true com chave de IA própria salva agora; false sem ela (e sempre fora do piloto); null se o arquivo das chaves não pôde ser
+  // lido. Vem na própria lista, então vale para quem não tem `ia-config` (só o dono tem). Só presença: nada da chave.
+  // Sem chave própria na redação, nada do gasto com ela aparece (decisão do Design, P40). Com gasto no mês, aparece mesmo que a chave já tenha sido tirada, e mesmo com o campo
+  // ilegível (null) ou ausente: o gasto foi real.
+  const mostrarChavePropria = () => lista?.chave_propria === true || Number(lista?.gasto_chave_propria_brl) > 0 || pessoas().some(p => Number(p.gasto_chave_propria_brl) > 0);
   async function recarregar() {
     await carregar({corpo: raiz.corpoTabela}, async () => { const [equipe] = await Promise.all([api('equipe-listar', {}), buscarCatalogo()]); return equipe; },
       resposta => { lista = resposta; desenharLista(); desenharGasto(); titulo(); });
@@ -125,6 +132,8 @@
     const valor = reais(gasto.gasto_brl);
     if (gasto.esgotada) bloco.append(no('span', 'equipe-uso-esgotada', `! ${valor} · ${t('esgotada')}`));
     else bloco.append(no('span', 'conta-texto', valor));
+    // O que a chave própria da redação pagou por esta pessoa, "dos quais": o valor de cima já inclui essa parte, porque o teto da pessoa vale para as duas chaves (P40); só quando houve gasto.
+    if (Number(pessoa.gasto_chave_propria_brl) > 0 && mostrarChavePropria()) bloco.append(no('span', 'conta-apoio equipe-uso-propria', t('dos quais {valor} com a chave própria', {valor: reais(pessoa.gasto_chave_propria_brl)})));
     if (pessoa.teto_mensal_brl) bloco.append(no('span', 'conta-apoio', t('teto {valor}', {valor: reais(pessoa.teto_mensal_brl, {centavos: false})})));
     return bloco;
   }
@@ -605,9 +614,9 @@
     for (const pedido of pedidos) {
       const item = no('li', 'equipe-recuperacao'); item.dataset.recuperacao = pedido.id;
       const texto = no('div', 'conta-rotulo');
-      const nome = no('span', 'conta-texto'); nome.append(pedido.conta_nome ? dado(pedido.conta_nome) : t('uma conta removida'));
+      const nome = no('span', 'conta-texto'); nome.append(pedido.conta_nome ? nomeDaConta(pedido.conta_nome) : t('uma conta removida'));
       const detalhe = no('span', 'conta-apoio');
-      detalhe.append(modelar(t('pedido por {por} em {pedida} · vence em {vence}'), {por: pedido.pedida_por_nome ? dado(pedido.pedida_por_nome) : t('um dono'), pedida: data(pedido.pedida_em), vence: data(pedido.expira_em)}));
+      detalhe.append(modelar(t('pedido por {por} em {pedida} · vence em {vence}'), {por: pedido.pedida_por_nome ? nomeDaConta(pedido.pedida_por_nome) : t('um dono'), pedida: data(pedido.pedida_em), vence: data(pedido.expira_em)}));
       texto.append(nome, detalhe);
       const parte = !!quemSou && (pedido.pedida_por === quemSou || pedido.conta === quemSou);
       let acao;
@@ -629,6 +638,13 @@
       const medidor = no('div', 'mesa-medidor'); medidor.setAttribute('role', 'img'); medidor.style.setProperty('--uso', `${esgotada ? 100 : pct}%`);
       medidor.setAttribute('aria-label', esgotada ? t('Cota do mês esgotada: {valor}', {valor}) : t('{pct}% da cota usada', {pct}));
       partes.push(no('strong', 'conta-valor', valor), medidor, apoio('Cota da redação, definida por quem administra o serviço.'));
+      // O gasto com a chave de IA própria da redação, em linha separada: não entra na cota do serviço acima (P40). Vem nulo quando o gasto da redação não vem ou o razão não pôde ser lido.
+      const propria = lista?.gasto_chave_propria_brl;
+      if (mostrarChavePropria() && propria !== null && propria !== undefined && Number.isFinite(Number(propria))) {
+        const linhaDaChave = window.Conta.linha(no('span', 'conta-texto', t('Chave própria da redação')), no('strong', 'conta-valor', reais(propria)));
+        linhaDaChave.classList.add('equipe-chave-propria');
+        partes.push(linhaDaChave, apoio('Pago pela chave da redação: não entra na cota do serviço.'));
+      }
     } else {
       partes.push(apoio('O gasto da redação aparece aqui quando o serviço passar a contá-lo por redação. O de cada pessoa está na tabela.'));
     }
@@ -665,7 +681,10 @@
     convite_aceito: '{conta} aceitou o convite e entrou na redação', convite_expirado: 'Um convite venceu',
     // Recuperação do acesso, link de senha e troca do e-mail (frases do Design, #recuperar; nenhuma leva endereço de e-mail).
     recuperacao_pedida: '{por} pediu a recuperação do acesso de {conta}', recuperacao_confirmada: '{por} confirmou a recuperação do acesso de {conta}',
-    fator_ativado: '{conta} ativou o segundo fator', fator_removido: '{conta} removeu o segundo fator', fator_codigos_gerados: '{conta} gerou novos códigos de reserva',
+    fator_ativado: '{conta} ativou o segundo fator', fator_removido: '{conta} removeu o segundo fator',
+    // O servidor grava este tipo quando o fator cai pela recuperação do acesso (link de redefinição pedido por um dono, ou o operador no terminal); fator_removido é só de quem
+    // remove o próprio fator (Q2 da Coruja; a0cd095 da contas-o2).
+    fator_removido_na_recuperacao: 'O segundo fator de {conta} saiu na recuperação de acesso', fator_codigos_gerados: '{conta} gerou novos códigos de reserva',
     // O que a E4 também grava (frases a confirmar com o Design): aparelho novo, código de reserva, fator bloqueado e entrada protegida.
     aparelho_novo: '{conta} entrou de um aparelho novo', codigo_reserva_usado: '{conta} entrou com um código de reserva',
     fator_bloqueado: 'O segundo fator de {conta} foi bloqueado por muitos códigos errados', login_protegido: 'A entrada de {conta} foi protegida por muitas tentativas',
@@ -678,9 +697,12 @@
     redacao_criada: 'A redação foi criada', redacao_suspensa: 'A redação foi suspensa por quem administra o serviço',
     redacao_reativada: 'A redação foi reativada por quem administra o serviço', redacao_encerrada: 'A redação foi encerrada por quem administra o serviço',
   };
+  // O servidor manda "Conta excluída" no lugar do nome de uma conta que a própria pessoa excluiu (null fica para o rótulo do sistema): é texto da Mesa, e se traduz.
+  const CONTA_EXCLUIDA = 'Conta excluída';
+  const nomeDaConta = nome => (nome === CONTA_EXCLUIDA ? document.createTextNode(t(CONTA_EXCLUIDA)) : dado(nome));
   function nomeDe(evento, lado) {
     const nome = evento[`${lado}_nome`], id = evento[lado];
-    if (nome) return dado(nome);
+    if (nome) return nomeDaConta(nome);
     if (lado === 'por' && !(typeof id === 'string' && ID_CONTA.test(id))) return t('Quem administra o serviço');
     return t('uma conta removida');
   }

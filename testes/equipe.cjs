@@ -3,7 +3,7 @@
 // (apurações, teto mensal, acesso), o gasto da redação e a atividade recente, com uma frase para cada tipo de evento que o servidor grava.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {abrir, esperar, texto, digitar, mudar, botaoPorTexto, dialogo, dados, recusa, equipeListar, pessoa, ID, ALFA, BETA, GAMA, DELTA, tecla} = require('./contas_apoio.cjs');
+const {abrir, esperar, texto, digitar, mudar, botaoPorTexto, dialogo, dados, recusa, sessaoDe, equipeListar, pessoa, ID, ALFA, BETA, GAMA, DELTA, tecla} = require('./contas_apoio.cjs');
 
 const ANA = () => pessoa(ID.ana, 'Ana Lima', 'dono');
 const RUI = (extra = {}) => pessoa(ID.rui, 'Rui Castro', 'reporter', {casos: ['alfa', 'beta', 'gama', 'delta'], responsavel_de: ['alfa'], ...extra});
@@ -323,13 +323,17 @@ test('Atividade: cada tipo que o servidor grava tem frase (nenhum cai em "Ação
   const TIPOS = ['papel_alterado', 'conta_desativada', 'conta_reativada', 'conta_excluida', 'conta_criada', 'participacao_incluida', 'participacao_retirada', 'responsavel_alterado',
     'teto_alterado', 'senha_trocada', 'senha_definida', 'sessao_encerrada_a_distancia', 'conta_atualizada', 'recuperacao_emitida', 'login_bloqueado', 'sessao_encerrada',
     'convite_enviado', 'convite_reenviado', 'convite_cancelado', 'convite_aceito', 'convite_expirado', 'recuperacao_pedida', 'recuperacao_confirmada', 'senha_redefinida',
-    'redefinicao_pedida', 'email_troca_pedida', 'email_trocado', 'fator_ativado', 'fator_removido', 'fator_codigos_gerados', 'aparelho_novo', 'codigo_reserva_usado', 'fator_bloqueado', 'login_protegido',
+    'redefinicao_pedida', 'email_troca_pedida', 'email_trocado', 'fator_ativado', 'fator_removido', 'fator_removido_na_recuperacao', 'fator_codigos_gerados', 'aparelho_novo', 'codigo_reserva_usado', 'fator_bloqueado', 'login_protegido',
     'acesso_alterado', 'caso_atribuido', 'caso_criado', 'primeiro_admin', 'migracao_contas', 'redacao_criada', 'redacao_suspensa', 'redacao_reativada', 'redacao_encerrada'];
   const {mesa} = await abrirEquipe(com([ANA(), RUI()]));
   const {Equipe} = mesa.janela;
   const base = {conta: ID.rui, por: ID.ana, conta_nome: 'Rui Castro', por_nome: 'Ana Lima'};
   for (const tipo of TIPOS) assert.notEqual(texto(Equipe.frase({...base, tipo})), 'Ação de administração', tipo);
   assert.equal(texto(Equipe.frase({...base, tipo: 'tipo_que_ninguem_previu'})), 'Ação de administração');
+  // Q2 da Coruja: o fator que cai pela recuperação tem tipo próprio; fator_removido é só de quem remove o próprio
+  assert.equal(texto(Equipe.frase({...base, tipo: 'fator_removido', por: ID.rui, por_nome: 'Rui Castro'})), 'Rui Castro removeu o segundo fator', 'a própria conta removeu');
+  assert.equal(texto(Equipe.frase({...base, tipo: 'fator_removido_na_recuperacao', por: 'operador', por_nome: null})), 'O segundo fator de Rui Castro saiu na recuperação de acesso', 'o operador recuperou o acesso');
+  assert.equal(texto(Equipe.frase({...base, tipo: 'fator_removido_na_recuperacao', por: ID.rui, por_nome: 'Rui Castro'})), 'O segundo fator de Rui Castro saiu na recuperação de acesso', 'o link de redefinição pedido por um dono');
   assert.equal(texto(Equipe.frase({...base, tipo: 'conta_desativada'})), 'Ana Lima desativou a conta de Rui Castro');
   assert.equal(texto(Equipe.frase({...base, tipo: 'senha_trocada', por: ID.rui, por_nome: 'Rui Castro'})), 'Rui Castro trocou a senha');
   assert.equal(texto(Equipe.frase({...base, tipo: 'conta_excluida', conta_nome: null})), 'Ana Lima removeu uma conta removida da redação');
@@ -337,6 +341,9 @@ test('Atividade: cada tipo que o servidor grava tem frase (nenhum cai em "Ação
   assert.equal(texto(Equipe.frase({...base, tipo: 'conta_criada', por: null, por_nome: null})), 'Quem administra o serviço criou a conta de Rui Castro');
   assert.equal(texto(Equipe.frase({...base, tipo: 'papel_alterado', por: 'f'.repeat(16), por_nome: null})), 'uma conta removida mudou o papel de Rui Castro');
   assert.equal(texto(Equipe.frase({...base, tipo: 'caso_atribuido', conta: null, conta_nome: null, por: 'operador', por_nome: null})), 'Quem administra o serviço atribuiu uma apuração a uma pessoa');
+  // O servidor manda "Conta excluída" no lugar do nome de quem excluiu a própria conta (9bb59c7 da contas-o2); null fica para o rótulo do sistema.
+  assert.equal(texto(Equipe.frase({...base, tipo: 'senha_trocada', conta_nome: 'Conta excluída'})), 'Conta excluída trocou a senha');
+  assert.equal(texto(Equipe.frase({...base, tipo: 'papel_alterado', por_nome: 'Conta excluída'})), 'Conta excluída mudou o papel de Rui Castro');
   const hostil = Equipe.frase({...base, tipo: 'conta_criada', conta_nome: '<img src=x onerror=alert(1)>'});
   assert.equal(hostil.querySelector('img'), null, 'o nome entra como texto');
 });
@@ -388,4 +395,84 @@ test('em inglês: título, cabeçalhos, estados e frases da atividade saem em in
   assert.ok(texto(painelEquipe(mesa)).includes('Ana Lima changed the role of Rui Castro'));
   assert.ok(texto(painelEquipe(mesa)).includes('1 person still has the old guest profile'));
   assert.equal(celulas(linhaDe(mesa, ID.cora))[1].querySelector('option').textContent, 'Guest (old profile)');
+});
+
+test('a carga da Equipe que chega depois de a pessoa voltar a Minha conta não sobrescreve o título nem põe o Convidar de volta (B1 do Traço)', async () => {
+  let liberar;
+  const lenta = new Promise(resolver => { liberar = resolver; });
+  const f = abrir({api: op => (op === 'equipe-listar' ? lenta.then(() => equipeListar([ANA(), RUI()])) : undefined)});
+  await esperar(f.mesa);
+  f.mesa.$('conta-aba-equipe').click(); await f.mesa.esperar(6);
+  f.mesa.$('conta-aba-conta').click(); await f.mesa.esperar(6);
+  liberar(); await esperar(f.mesa);
+  assert.equal(f.mesa.$('area-titulo').textContent, 'Minha conta', 'o título segue sendo o da aba ativa');
+  assert.ok(f.mesa.doc.querySelector('.equipe-acao-titulo') === null, 'o Convidar não volta ao título de Minha conta');
+});
+
+test('P40: o gasto com a chave própria da redação aparece em linha separada no cartão do gasto, sem somar à cota do serviço; nulo ou sem o gasto da redação, a linha some', async () => {
+  const f = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: '3.25'}));
+  const cartao = f.mesa.doc.querySelector('[data-cartao="gasto"]');
+  assert.ok(texto(cartao).includes('R$ 24,50 de R$ 150'), 'o gasto da cota do serviço segue como veio, sem a chave própria somada');
+  const linha = cartao.querySelector('.equipe-chave-propria');
+  assert.ok(linha, 'a linha separada existe'); assert.equal(texto(linha), 'Chave própria da redaçãoR$ 3,25');
+  assert.ok(texto(cartao).includes('Pago pela chave da redação: não entra na cota do serviço.'));
+  assert.ok(!texto(cartao).includes('R$ 27,75'), 'nada de soma');
+  assert.equal(cartao.querySelector('.mesa-medidor').getAttribute('aria-label'), '16% da cota usada', 'o medidor segue só a cota do serviço');
+  const zero = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00', chave_propria: true}));
+  assert.equal(texto(zero.mesa.doc.querySelector('.equipe-chave-propria')), 'Chave própria da redaçãoR$ 0,00', 'com chave própria e sem gasto: "0.00"');
+  const semChave = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}));
+  assert.ok(semChave.mesa.doc.querySelector('.equipe-chave-propria') === null, 'sem chave própria na redação (e sem gasto com ela), nada aparece');
+  const doServico = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00', chave_propria: false}));
+  assert.ok(doServico.mesa.doc.querySelector('.equipe-chave-propria') === null, 'chave_propria false (só a chave do serviço, ou fora do piloto): nada aparece');
+  const ilegivel = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00', chave_propria: null}));
+  assert.ok(ilegivel.mesa.doc.querySelector('.equipe-chave-propria') === null, 'chave_propria null (arquivo das chaves ilegível), sem gasto: a lista abre e a linha não aparece');
+  const ilegivelComGasto = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: '3.25', chave_propria: null}));
+  assert.equal(texto(ilegivelComGasto.mesa.doc.querySelector('.equipe-chave-propria')), 'Chave própria da redaçãoR$ 3,25', 'null com gasto: o gasto foi real e aparece');
+  const retirada = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: '3.25', chave_propria: false}));
+  assert.equal(texto(retirada.mesa.doc.querySelector('.equipe-chave-propria')), 'Chave própria da redaçãoR$ 3,25', 'chave já tirada, mas com gasto no mês: aparece');
+  const nulo = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: null}));
+  assert.ok(nulo.mesa.doc.querySelector('.equipe-chave-propria') === null, 'o razão não pôde ser lido: sem a linha');
+  const semGasto = await abrirEquipe(com([ANA(), RUI()], {gasto: null, gasto_chave_propria_brl: null}));
+  assert.ok(semGasto.mesa.doc.querySelector('.equipe-chave-propria') === null, 'sem o bloco do gasto da redação, sem a linha');
+});
+
+test('P40: por pessoa, o que a chave própria pagou aparece abaixo do uso do mês como "dos quais" (só com gasto): o valor de cima já a inclui, e nada é somado', async () => {
+  const f = await abrirEquipe(com([ANA(), RUI({gasto_chave_propria_brl: '3.25'}), pessoa(ID.davi, 'Davi Melo', 'editor', {gasto_chave_propria_brl: null})]));
+  const uso = id => texto(celulas(linhaDe(f.mesa, id))[3]);
+  assert.equal(uso(ID.rui), 'R$ 18,40dos quais R$ 3,25 com a chave própria', 'o valor de cima fica como veio e já inclui a parte da chave própria: "dos quais"');
+  assert.equal(uso(ID.ana), 'R$ 18,40', '"0.00": nada a mostrar');
+  assert.equal(uso(ID.davi), 'R$ 18,40', 'nulo (razão ilegível): nada a mostrar');
+  assert.ok(!uso(ID.rui).includes('21,65'), 'nada de soma');
+});
+
+test('P40: em inglês, a linha da chave própria sai em inglês', async () => {
+  const f = await abrirEquipe({...com([ANA(), RUI({gasto_chave_propria_brl: '3.25'})], {gasto_chave_propria_brl: '3.25'}), idioma: 'en'});
+  await f.mesa.esperar(20);
+  assert.equal(texto(f.mesa.doc.querySelector('.equipe-chave-propria')), 'Newsroom’s own keyR$ 3,25');
+  assert.ok(texto(f.mesa.doc.querySelector('[data-cartao="gasto"]')).includes('Paid by the newsroom’s key: not part of the service quota.'));
+  assert.ok(texto(linhaDe(f.mesa, ID.rui)).includes('of which R$ 3,25 with the newsroom’s own key'));
+});
+
+test('P40: o "dos quais" qualifica o valor e fica colado a ele, antes do teto (ressalva do Traço)', async () => {
+  const f = await abrirEquipe(com([ANA(), RUI({gasto_chave_propria_brl: '3.25', teto_mensal_brl: '30.00'})], {gasto_chave_propria_brl: '3.25'}));
+  const uso = celulas(linhaDe(f.mesa, ID.rui))[3];
+  assert.deepEqual([...uso.querySelectorAll('span')].map(s => texto(s)), ['R$ 18,40', 'dos quais R$ 3,25 com a chave própria', 'teto R$ 30'], 'valor, depois o dos quais, depois o teto');
+});
+
+test('em inglês, "Conta excluída" vira "Deleted account" na atividade; o nome de uma pessoa continua como veio', async () => {
+  const {mesa} = await abrirEquipe({...com([ANA(), RUI()]), idioma: 'en'});
+  const {Equipe} = mesa.janela;
+  assert.equal(texto(Equipe.frase({tipo: 'senha_trocada', conta: ID.rui, por: ID.rui, conta_nome: 'Conta excluída', por_nome: 'Conta excluída'})), 'Deleted account changed the password');
+  assert.equal(texto(Equipe.frase({tipo: 'senha_trocada', conta: ID.rui, por: ID.rui, conta_nome: 'Rui Castro', por_nome: 'Rui Castro'})), 'Rui Castro changed the password');
+});
+
+test('P40: quem vê a Equipe sem ter ia-config (editor) vê a linha da chave própria pelo campo chave_propria da lista, e a Mesa não chama ia-config', async () => {
+  const base = sessaoDe('dono');
+  const semIaConfig = {...base, capacidades: base.capacidades.filter(capacidade => capacidade !== 'ia-config')};
+  assert.ok(!semIaConfig.capacidades.includes('ia-config') && semIaConfig.capacidades.includes('equipe-listar'));
+  const f = await abrirEquipe({sessao: semIaConfig, papel: 'editor', ...com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00', chave_propria: true})});
+  assert.equal(texto(f.mesa.doc.querySelector('.equipe-chave-propria')), 'Chave própria da redaçãoR$ 0,00', 'com a chave própria salva e sem gasto: a linha aparece mesmo sem ia-config');
+  assert.ok(!f.mesa.chamadas.some(chamada => chamada.operacao === 'ia-config'), 'a Equipe não pergunta mais ao ia-config');
+  const sem = await abrirEquipe({sessao: semIaConfig, papel: 'editor', ...com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00', chave_propria: false})});
+  assert.ok(sem.mesa.doc.querySelector('.equipe-chave-propria') === null, 'sem chave própria: nada');
 });

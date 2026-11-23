@@ -63,8 +63,21 @@ def _chave_propria(root, conta, da_redacao=False):
         return None
 
 
-def _listar(root, redacao, principal, gasto_da_redacao):
+def _tem_chave_propria(root, redacao, modo):
+    """equipe-listar.chave_propria (Viga, with this file's owner's consent): whether the newsroom of the session has
+    its own AI key saved now; presence only. False outside the piloto, where it never counts (P3c), without reading
+    the keys file; None when that file cannot be read, and the team screen still opens."""
+    if modo != 'piloto':
+        return False
+    try:
+        return custo.redacao_tem_chave_propria(root, redacao)
+    except (ValueError, OSError):
+        return None
+
+
+def _listar(root, redacao, principal, gasto_da_redacao, modo=None):
     resposta = acesso.equipe(root, redacao)
+    resposta['chave_propria'] = _tem_chave_propria(root, redacao, modo)  # the session's newsroom, never the body's
     for pessoa in resposta['pessoas']:
         pessoa['gasto'] = _gasto(root, pessoa['id'])
         pessoa['gasto_chave_propria_brl'] = _chave_propria(root, pessoa['id'])  # apart: the 5 keys of 'gasto' stay
@@ -153,7 +166,7 @@ def executar(root, operation, data, principal, ip=None, parar=None, gasto_da_red
             parar(data['conta'], tuple(acesso.alcance(root, data['conta'])[0]))
         return resultado
     if operation == 'equipe-listar':
-        return _listar(root, redacao, principal, gasto_da_redacao)
+        return _listar(root, redacao, principal, gasto_da_redacao, modo)
     if operation == 'equipe-atividade':
         return acesso.atividade(root, redacao, data.get('limite', 50), data.get('antes'))
     if 'convi' in operation:

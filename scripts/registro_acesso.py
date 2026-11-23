@@ -73,6 +73,8 @@ EVENTOS = frozenset({
     # convite, e-mail, redefinição e troca de e-mail (E3); segundo fator, entrada em dois passos e ciclo de vida (E4)
     'convite_expirado', 'redefinicao_pedida', 'email_troca_pedida', 'email_trocado', 'email_enviado', 'email_falhou',
     'aparelho_novo', 'login_protegido', 'fator_codigos_gerados', 'conta_inativa_avisada',
+    # a varredura diária desativa a conta inativa (E4b-4, por = manutencao)
+    'conta_desativada_por_inatividade',
     # segundo fator (E4): bloqueado por tentativas (atividade); indisponível, sem a chave ou com a semente ilegível
     'fator_bloqueado', 'fator_indisponivel',
     # o segundo fator retirado ao terminar uma recuperação (pelo link de redefinição ou pelo terminal)
@@ -109,7 +111,9 @@ CODIGOS = frozenset({'operacao_proibida', 'caso_nao_liberado', 'campos_nao_permi
                      # segundo fator indisponível (E4); o padrão de acesso.Recusada, que pode chegar em admin_recusada
                      'fator_indisponivel', 'requisicao_invalida',
                      # pergunta recusada porque a chave de IA da redação não pôde ser lida (P3, C3)
-                     'chave_redacao_ilegivel'})
+                     'chave_redacao_ilegivel',
+                     # excluir a própria conta com o nome digitado diferente (E4b-3, admin_recusada com validacao)
+                     'nome_confirmacao_divergente'})
 # Qual e-mail saiu ou falhou (email_enviado, email_falhou): só o tipo, nunca o endereço nem o texto.
 MENSAGENS = frozenset({'convite', 'redefinicao', 'novo_acesso', 'senha_trocada', 'fator_alterado', 'recuperacao',
                        'muitas_tentativas', 'email_novo', 'conta_inativa', 'fator_bloqueado'})
@@ -496,6 +500,69 @@ def arquivar_evento(evento: dict) -> None:
     registrar('evento_arquivado', 'ok', evento.get('conta') if isinstance(evento.get('conta'), str) else None,
               por=evento.get('por') if isinstance(evento.get('por'), str) else None,
               tipo_original=evento.get('tipo'), em_original=evento.get('em'))
+
+
+# --- leitura para a própria pessoa (exportar meus dados, E4b-2b de Contas) ------------------------------------
+
+# Eventos com a conta preenchida que outra pessoa pode disparar sem provar ser ela (uma senha errada, um pedido de
+# redefinição pelo e-mail, um código errado depois da senha) ou que o sistema grava sozinho: o IP ali não é o dela.
+SEM_AUTORIA_PROVADA = ANONIMOS | frozenset({'login_bloqueado', 'redefinicao_pedida', 'recuperacao_pedida',
+                                            'email_enviado', 'email_falhou', 'fator_recusado', 'fator_bloqueado',
+                                            'evento_arquivado', 'registro_cheio'})
+MAX_ACESSOS_DA_CONTA = 2000
+
+
+def acessos_da_conta(root, conta) -> list[dict]:
+    """The lines of the audit log the account itself caused, for its own data export: ``{em, evento, resultado}``
+    and, when the line has them, ``cliente`` and ``ip`` (its own, as in its sessions). Only lines with ``conta`` equal
+    to it, without ``por`` (someone else acting on it: the IP would be theirs) and outside SEM_AUTORIA_PROVADA;
+    never alvo, another account, a name or free text. The window the log keeps, oldest first, newest last, at most
+    MAX_ACESSOS_DA_CONTA. A last line cut short (a write in progress, or a crash) is skipped; any other line that
+    cannot be read raises ValueError, and a folder or file that cannot be read raises OSError: the export says
+    then that this part is incomplete."""
+    from collections import deque
+    if not isinstance(conta, str) or not _ID.fullmatch(conta):
+        raise ValueError('Conta inválida para o registro de acesso.')
+    destino = os.environ.get('VLADO_REGISTRO', '').strip()
+    destino = Path(destino) if destino else Path(root) / 'registro'
+    try:
+        nomes = sorted(p for p in destino.iterdir() if ARQUIVO_DIA.fullmatch(p.name))
+    except FileNotFoundError:
+        return []
+    saida = deque(maxlen=MAX_ACESSOS_DA_CONTA)
+    for arquivo in nomes:
+        with open(arquivo, 'rb') as f:  # line by line: a day of the log may be large
+            for bruta in f:
+                if not bruta.strip():
+                    continue
+                try:
+                    linha = json.loads(bruta)
+                    if not isinstance(linha, dict):
+                        raise ValueError
+                except ValueError:
+                    if not bruta.endswith(b'\n'):  # the last one, cut short: not a line of the log yet
+                        continue
+                    raise ValueError(f'Linha ilegível no registro de acesso ({arquivo.name}).') from None
+                item = _acesso_da_conta(linha, conta)
+                if item is not None:
+                    saida.append(item)
+    return list(saida)
+
+
+def _acesso_da_conta(linha: dict, conta: str) -> dict | None:
+    if (linha.get('conta') != conta or 'por' in linha or linha.get('evento') not in EVENTOS
+            or linha['evento'] in SEM_AUTORIA_PROVADA or linha.get('resultado') not in RESULTADOS
+            or not isinstance(linha.get('em'), str) or not _DATA.fullmatch(linha['em'])):
+        return None
+    item = {'em': linha['em'], 'evento': linha['evento'], 'resultado': linha['resultado']}
+    if linha.get('cliente') in CLIENTES:
+        item['cliente'] = linha['cliente']
+    if isinstance(linha.get('ip'), str):
+        try:
+            item['ip'] = str(ipaddress.ip_address(linha['ip']))
+        except ValueError:
+            pass
+    return item
 
 
 def permitir_operacoes(nomes) -> None:

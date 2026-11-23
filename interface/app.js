@@ -65,8 +65,11 @@ async function api(operation, data, binary = false) {
   }
   if (!response.ok) {
     window.Sessao?.recusada(result);  // 403 redacao_suspensa: o estado vale para a Mesa inteira
-    // A pendência da conta (o segundo fator obrigatório que falta cadastrar): a Mesa volta à página dela (contrato de contas, 4.3).
-    if (result?.codigo === 'pendencia_de_conta' && (result.pendencias || []).includes('segundo_fator') && location.pathname !== '/conta/segundo-fator') location.replace('/conta/segundo-fator');
+    // A pendência da conta (os termos novos a aceitar, depois o segundo fator obrigatório que falta cadastrar): a Mesa volta à página dela, a dos termos primeiro (contrato de contas, 4.3 e 12).
+    if (result?.codigo === 'pendencia_de_conta') {
+      const pagina = (result.pendencias || []).includes('termos') ? '/conta/termos' : (result.pendencias || []).includes('segundo_fator') ? '/conta/segundo-fator' : null;
+      if (pagina && location.pathname !== pagina) location.replace(pagina);
+    }
     // One place turns server errors into the interface language (by `codigo` in English).
     const failure = new Error(window.I18N?.erro ? window.I18N.erro(result) : result.erro || 'Não foi possível completar a operação.');
     failure.result = result; failure.status = response.status;

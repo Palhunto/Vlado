@@ -189,6 +189,19 @@
   activate();
 })();
 
+// Configurações (P43): o botão do cabeçalho fica com aria-pressed enquanto a página está aberta, e o link "Alterar em Configurações" de Perguntar > Conexão e opções
+// abre a página com o foco no título do painel do provedor e da chave da IA (o formulário mora lá, em todos os modos).
+(() => {
+  const botao = $('mesa-configuracoes'), alterar = $('ia-alterar');
+  registrarGanchoArea({depois: nome => botao.setAttribute('aria-pressed', String(nome === 'configuracoes'))});
+  alterar?.addEventListener('click', async evento => {
+    evento.preventDefault();
+    showArea('configuracoes');
+    try { await window.Conta?.abrir?.('configuracoes'); } catch (_) { /* a aba não abriu: o painel segue onde está */ }
+    $('ia-titulo').focus();
+  });
+})();
+
 // Phones: Configurações, language, theme and sign-out move into the navigation drawer, leaving the
 // header to the menu, the investigation selector and the quota (componentes.md#cabecalho-celular).
 (() => {

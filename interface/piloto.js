@@ -3,7 +3,14 @@
 // The server enforces every rule; this script only shapes the screen.
 (() => {
   const body = document.body;
-  if (body.dataset.modo === 'local') return;  // local mode has no accounts: no sign-out, profile or Configurações button
+  // Configurações existe em todos os modos (P43): onde há login ela abre a aba da página da pessoa, e no modo local a página só traz o provedor e a chave da IA.
+  // O modo local não tem login: sem Sair, sem perfil e sem abas.
+  if (body.dataset.modo === 'local') {
+    const configuracoes = $('mesa-configuracoes');
+    configuracoes.hidden = false;
+    configuracoes.addEventListener('click', () => showArea('configuracoes'));
+    return;
+  }
   const t = (texto, vars) => (window.I18N ? window.I18N.t(texto, vars) : texto);
   const sair = document.getElementById('mesa-sair');
   sair.hidden = false;

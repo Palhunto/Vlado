@@ -348,3 +348,24 @@ button[aria-disabled="true"]{cursor:progress}
   .fator-codigos{grid-template-columns:minmax(0,1fr)}
   .fator-senha-linha input,.fator-mostrar{min-height:48px}
 }
+
+/* Gasto com a chave própria da redação (P40): em linha separada, sem somar à cota do serviço */
+.equipe-chave-propria{margin-top:var(--espaco-1);padding-top:var(--espaco-2);border-top:1px solid var(--theme-line);min-height:0}
+
+/* Erro do campo do nome no diálogo com campo (Excluir a conta): junto ao campo, sem ser o erro do diálogo */
+.dialogo-erro-nome{font-size:var(--text-md);line-height:1.5;color:var(--theme-danger);margin-top:calc(var(--espaco-1) - var(--espaco-4))}
+.dialogo-erro-nome[hidden]{display:none}
+
+/* === Seus dados em Minha conta (componentes.md#minha-conta; conta.js, dados_conta.js) === */
+.conta-termos .conta-link{color:var(--theme-accent);text-decoration:underline;font-weight:600}
+.conta-termos .conta-link:hover{color:var(--theme-primary-hover)}
+
+/* Pendência de termos novos (componentes.md#pendencia-termos; termos.js): a caixa de marcar de 20 px e o aviso da página, na família da pendência do fator */
+/* O label global é coluna e em negrito, e o input tem 44 px de altura mínima: a caixa de termos volta a ser linha, em peso normal, como a do convite (.entrar-termos) */
+.termos-pagina .termos-caixa{display:flex;flex-direction:row;gap:var(--espaco-3);align-items:flex-start;font-size:var(--text-base);font-weight:400;line-height:1.5;cursor:pointer}
+.termos-pagina .termos-caixa input{flex:none;width:var(--espaco-5);height:var(--espaco-5);min-height:0;margin:var(--espaco-1) 0 0;accent-color:var(--theme-accent)}
+.termos-pagina .termos-caixa input[aria-invalid="true"]{outline:2px solid var(--theme-danger);outline-offset:2px}
+.termos-erro,.termos-aviso{margin:0}
+.termos-erro[hidden],.termos-aviso[hidden],.termos-estado[hidden]{display:none}
+.termos-nao-aceitar{margin:0}
+.termos-ler{font-weight:600;text-decoration:underline;color:var(--theme-accent)}

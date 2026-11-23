@@ -5,7 +5,17 @@
   "commit": "720f62bddb7226106071d4728c292cb1df519ceb",
   "source_file": "typescript-javascript/qrcodegen.ts",
   "source_sha256": "c4749095a91bf9696e3a303998b9905e467094f53041e64393e65e6d887737fd",
-  "build": "typescript@5.6.3: tsc --strict --lib DOM,DOM.Iterable,ES6 --target ES6 qrcodegen.ts (as opções de typescript-javascript/build.sh do projeto)",
+  "build": {
+    "compilador": "typescript@5.6.3 (npm)",
+    "opcoes": "--strict --lib DOM,DOM.Iterable,ES6 --target ES6 (as de typescript-javascript/build.sh do projeto; o resto é o padrão do tsc, inclusive newline LF)",
+    "passos": [
+      "curl -sSL -o qrcodegen.ts https://raw.githubusercontent.com/nayuki/QR-Code-generator/720f62bddb7226106071d4728c292cb1df519ceb/typescript-javascript/qrcodegen.ts",
+      "sha256sum qrcodegen.ts   # tem de dar o source_sha256 deste manifesto",
+      "npx --yes -p typescript@5.6.3 tsc --strict --lib DOM,DOM.Iterable,ES6 --target ES6 --outDir saida qrcodegen.ts",
+      "sha256sum saida/qrcodegen.js   # tem de dar files[\"qrcodegen.js\"] deste manifesto"
+    ],
+    "comando": "npx --yes -p typescript@5.6.3 tsc --strict --lib DOM,DOM.Iterable,ES6 --target ES6 --outDir saida qrcodegen.ts"
+  },
   "license": "MIT",
   "files": {
     "qrcodegen.js": "6e200897a80ff15a652a5d601667856d807cec60cfc81a3a351305d69cc9dbbd",
