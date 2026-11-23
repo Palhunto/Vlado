@@ -667,7 +667,9 @@
     convite_aceito: '{conta} aceitou o convite e entrou na redação', convite_expirado: 'Um convite venceu',
     // Recuperação do acesso, link de senha e troca do e-mail (frases do Design, #recuperar; nenhuma leva endereço de e-mail).
     recuperacao_pedida: '{por} pediu a recuperação do acesso de {conta}', recuperacao_confirmada: '{por} confirmou a recuperação do acesso de {conta}',
-    fator_ativado: '{conta} ativou o segundo fator', fator_removido: '{conta} removeu o segundo fator', fator_codigos_gerados: '{conta} gerou novos códigos de reserva',
+    fator_ativado: '{conta} ativou o segundo fator', fator_removido: '{conta} removeu o segundo fator',
+    // Quando quem registra não é a própria conta (a recuperação do acesso feita por outro dono ou pelo operador), o fator não foi removido por ela (Q2 da Coruja).
+    fator_removido_na_recuperacao: 'O segundo fator de {conta} saiu na recuperação de acesso', fator_codigos_gerados: '{conta} gerou novos códigos de reserva',
     // O que a E4 também grava (frases a confirmar com o Design): aparelho novo, código de reserva, fator bloqueado e entrada protegida.
     aparelho_novo: '{conta} entrou de um aparelho novo', codigo_reserva_usado: '{conta} entrou com um código de reserva',
     fator_bloqueado: 'O segundo fator de {conta} foi bloqueado por muitos códigos errados', login_protegido: 'A entrada de {conta} foi protegida por muitas tentativas',
@@ -687,7 +689,8 @@
     return t('uma conta removida');
   }
   function frase(evento) {
-    const modelo = FRASES[evento.tipo];
+    const saiuNaRecuperacao = evento.tipo === 'fator_removido' && !!evento.por && evento.por !== evento.conta;
+    const modelo = FRASES[saiuNaRecuperacao ? 'fator_removido_na_recuperacao' : evento.tipo];
     const alvo = no('span', 'equipe-frase');
     if (!modelo) { alvo.textContent = t('Ação de administração'); return alvo; }
     // Quando as duas pontas são a mesma conta, a frase usa só o nome dela.

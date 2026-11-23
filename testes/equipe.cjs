@@ -330,6 +330,10 @@ test('Atividade: cada tipo que o servidor grava tem frase (nenhum cai em "Ação
   const base = {conta: ID.rui, por: ID.ana, conta_nome: 'Rui Castro', por_nome: 'Ana Lima'};
   for (const tipo of TIPOS) assert.notEqual(texto(Equipe.frase({...base, tipo})), 'Ação de administração', tipo);
   assert.equal(texto(Equipe.frase({...base, tipo: 'tipo_que_ninguem_previu'})), 'Ação de administração');
+  // Q2 da Coruja: o fator que cai pela recuperação não foi "removido" pela própria conta
+  assert.equal(texto(Equipe.frase({...base, tipo: 'fator_removido', por: ID.rui, por_nome: 'Rui Castro'})), 'Rui Castro removeu o segundo fator', 'a própria conta removeu');
+  assert.equal(texto(Equipe.frase({...base, tipo: 'fator_removido', por: 'operador', por_nome: null})), 'O segundo fator de Rui Castro saiu na recuperação de acesso', 'o operador recuperou o acesso');
+  assert.equal(texto(Equipe.frase({...base, tipo: 'fator_removido', por: ID.ana})), 'O segundo fator de Rui Castro saiu na recuperação de acesso', 'outro dono recuperou o acesso');
   assert.equal(texto(Equipe.frase({...base, tipo: 'conta_desativada'})), 'Ana Lima desativou a conta de Rui Castro');
   assert.equal(texto(Equipe.frase({...base, tipo: 'senha_trocada', por: ID.rui, por_nome: 'Rui Castro'})), 'Rui Castro trocou a senha');
   assert.equal(texto(Equipe.frase({...base, tipo: 'conta_excluida', conta_nome: null})), 'Ana Lima removeu uma conta removida da redação');

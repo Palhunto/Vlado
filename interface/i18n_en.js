@@ -1727,6 +1727,7 @@ window.VLADO_I18N_EN = {
     "Digite o código do aplicativo autenticador, ou um código de reserva.": "Type the authenticator app code, or a reserve code.",
     "Código incorreto.": "Wrong code.",
     "O cadastro do segundo fator está indisponível neste servidor. Avise quem administra o serviço.": "Second factor set-up is not available on this server. Tell whoever runs the service.",
+    "O segundo fator de {conta} saiu na recuperação de acesso": "{conta}’s second factor was removed by the access recovery",
     "{conta} ativou o segundo fator": "{conta} turned on the second factor",
     "{conta} removeu o segundo fator": "{conta} removed the second factor",
     "{conta} gerou novos códigos de reserva": "{conta} generated new reserve codes",
