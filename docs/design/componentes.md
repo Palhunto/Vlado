@@ -51,6 +51,10 @@ Cada componente tem uma âncora própria, para os critérios de aceite apontarem
 
 Serifa = `--fonte-titulo` *(novo)*, Source Serif 4. Sem serifa = `--fonte-interface` *(novo)*, Source Sans 3. Nenhum texto de interface abaixo de 14 px; nenhum campo abaixo de 16 px. Texto de leitura com até 70 caracteres por linha (UX-10).
 
+<a id="apostrofo"></a>
+
+**Apóstrofo e aspas no inglês** (decisão do Design, 23/11/2026, sobre o cruzamento do Lume com o Vitral no ensaio da nona rodada). O texto em inglês da interface (`i18n_en.js`, em textos e em padrões) usa o apóstrofo curvo `’` (U+2019), como as aspas curvas “ ” que o arquivo já usa no lugar das «» do português. O apóstrofo reto `'` fica só em código, identificador e valor de atributo. "Chave própria da redação" é "Newsroom’s own key", e "dos quais {valor} com a chave própria" é "of which {valor} with the newsroom’s own key". O "with" é porque a chave paga o gasto. "On" leria como gasto com a compra da chave. As variantes do mesmo texto (com a cota usada e com a cota esgotada) seguem igual.
+
 ### Espaço, raio e alvo
 
 - Espaços do canvas: 4, 8, 12, 16, 24, 32 e 48 px na escala. **Decisão do dono (P11.8):** preenchimento, intervalo e margem fora da grade de 4 px arredondam para cima na implementação: 6 → 8, 10 → 12, 14 → 16, 18 → 20, 22 → 24 (e 2 → 4, 42 → 44). As tabelas desta especificação mostram a medida do canvas; o Frontend aplica o arredondamento, e a conferência aceita essa diferença como regra, não como divergência.
