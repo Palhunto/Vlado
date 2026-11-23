@@ -768,6 +768,18 @@ Pranchas: `conferir-achado-{claro,escuro}-390`, `conferir-achado-original-{claro
 
 Cabeçalho: o do celular do canvas (60 px: "Abrir menu", "Apuração" sobre o nome cortado com reticências, cota à direita). Margens de 16 px. A barra lateral é a mesma gaveta do tablet, com a largura de 256 px.
 
+<a id="cabecalho-celular"></a>
+
+**Cabeçalho do celular, abaixo de 720 px** (aceito pelo Maestro em 23/11/2026, sobre o que entrou com o botão "Configurações" em `29aeafa`). A 375 px, o cabeçalho tinha o menu, o seletor e "Configurações", e o seletor ficava cortado sem reticências ("Escolha uma a"). Abaixo de 720 px, o cabeçalho leva só três coisas:
+
+- **"Abrir menu"**, o botão só com o ícone;
+- **"Apuração" sobre o nome:** o seletor ocupa o espaço que sobra (`min-width: 0`, `flex: 1`), e o nome é cortado com reticências (`text-overflow: ellipsis`, `white-space: nowrap`, `overflow: hidden`). O nome inteiro continua nas opções do seletor;
+- **a cota à direita:** "R$ 18,40 de 50", em 14 `--theme-muted`, sem quebrar, como na tabela dos [cabeçalhos](#cabecalhos). Ela segue as regras do cartão da cota: some sem a rota ou sem sessão e vira "! Cota esgotada" com o teto atingido.
+
+**"Configurações" sai do cabeçalho e vai para a gaveta**, no grupo em que Idioma, Tema e Sair já entram no celular (`.mesa-drawer-controls`, logo abaixo das áreas e acima do cartão da cota e do cartão da pessoa), como o primeiro do grupo. Ela continua aparecendo só para quem tem a capacidade (`data-requer="ia-config"`). A partir de 720 px, volta ao cabeçalho, no lugar de hoje.
+
+Prova: Visão geral e Minha conta a 320, 375 e 430 px, nos dois temas, com um nome de apuração longo, e a gaveta aberta a 375 px.
+
 **Conferir achado, 390.** Coluna única: título de 28 px com o progresso, caixa "Sua pergunta", lista de achados. No achado aberto, as ações ficam empilhadas em botões de 48 px de largura cheia, nesta ordem: "Ver o trecho no original" (secundário), "Confere com o original" (principal), "Precisa de ajuste" (secundário), "Sem suporte" (recusa).
 
 **Original no celular.** "Ver o trecho no original" abre o original numa camada de tela cheia (`conferir-achado-original-*-390`): cabeçalho com "Achados" (volta à lista, devolvendo o foco ao achado) e o selo "Lida por OCR"; nome do documento e página; a folha; zoom e "Abrir o original em nova aba"; no pé, o achado em conferência com as três ações, para conferir sem voltar. Aprovado pelo dono (P12.3).
