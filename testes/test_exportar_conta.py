@@ -71,7 +71,7 @@ class ExportarTest(cenario.DuasRedacoes):
                          ('vlado-meus-dados', 1, ['itens_criados', 'registro_de_acesso']))
         self.assertEqual(set(dados), {'formato', 'versao', 'gerado_em', 'conta', 'redacao', 'segundo_fator', 'termos',
                                       'sessoes', 'aparelhos', 'participacoes', 'eventos', 'itens_criados', 'acessos',
-                                      'incompleto'})
+                                      'conversas_desde', 'incompleto'})
         self.assertEqual((dados['itens_criados'], dados['acessos']), (None, None))
         self.assertEqual((dados['conta']['id'], dados['conta']['papel'], dados['redacao']['id'], dados['participacoes']),
                          (cid, 'reporter', self.a, ['alpha']))
@@ -218,7 +218,8 @@ class ExportarTest(cenario.DuasRedacoes):
         falso.itens_da_conta = itens
         with patch.dict(sys.modules, {'modulo_de_itens_falso': falso}), \
                 patch.object(rotas_contas, 'MODULOS_DE_ITENS', ('modulo_de_itens_falso',)), \
-                patch.object(registro_acesso, 'acessos_da_conta', lambda root, conta: [], create=True):
+                patch.object(registro_acesso, 'acessos_da_conta', lambda root, conta: [], create=True), \
+                self.sem_criador(lambda root, casos: None):
             dados = json.loads(self.exportar(sessao)[2])
         self.assertEqual(dados['itens_criados'], [{'tipo': 'nota', 'caso': 'alpha', 'criado_em': '2026-11-20T10:00:00Z', 'id': 'E1'}])
         self.assertEqual(dados['incompleto'], [])  # whole: both parts in
@@ -231,9 +232,43 @@ class ExportarTest(cenario.DuasRedacoes):
             with patch.dict(sys.modules, {'modulo_de_itens_falso': modulo}), \
                     patch.object(rotas_contas, 'MODULOS_DE_ITENS', ('modulo_de_itens_falso',)), \
                     patch.object(falso, 'itens_da_conta', side_effect=OSError('ilegível')), \
-                    patch.object(registro_acesso, 'acessos_da_conta', lambda root, conta: [], create=True):
+                    patch.object(registro_acesso, 'acessos_da_conta', lambda root, conta: [], create=True), \
+                    self.sem_criador(lambda root, casos: None):
                 dados = json.loads(self.exportar(sessao)[2])
             self.assertEqual((dados['itens_criados'], dados['incompleto']), (None, ['itens_criados']))
+
+    @staticmethod
+    def sem_criador(funcao):
+        """`codex_apuracao.conversas_sem_criador` as the Platform's commit brings it (or None: not there yet)."""
+        import codex_apuracao
+        return patch.object(codex_apuracao, 'conversas_sem_criador', funcao, create=True)
+
+    def test_conversas_de_antes_do_criador_ficam_ditas_em_incompleto(self):
+        # The conversations record who created them only from the version that brought it: the file says from when
+        # its list of conversations is whole, and that the ones before are not in it.
+        sessao, _ = self.nova()
+        falso = types.ModuleType('modulo_de_itens_falso')
+        falso.itens_da_conta = lambda root, conta, casos: []
+        pedidos = []
+        def sem_criador(root, casos):
+            pedidos.append(sorted(casos))
+            return '2026-11-24T09:00:00+00:00'
+        casos = [(None, (False, None)), (sem_criador, (False, '2026-11-24T09:00:00+00:00')),
+                 (lambda root, casos: None, (True, None)), (lambda root, casos: (_ for _ in ()).throw(OSError()), (False, None))]
+        for funcao, (inteiras, desde) in casos:
+            with patch.dict(sys.modules, {'modulo_de_itens_falso': falso}), \
+                    patch.object(rotas_contas, 'MODULOS_DE_ITENS', ('modulo_de_itens_falso',)), \
+                    patch.object(registro_acesso, 'acessos_da_conta', lambda root, conta: [], create=True), \
+                    self.sem_criador(funcao):
+                dados = json.loads(self.exportar(sessao)[2])
+            self.assertEqual((dados['conversas_desde'], dados['incompleto']),
+                             (desde, [] if inteiras else ['conversas_anteriores']), funcao)
+        self.assertNotIn(cenario.CASO_B, pedidos[0])  # the same cases as the items: never of the other newsroom
+        # Without the items, `itens_criados` already says it: the conversations are not asked.
+        with patch.object(registro_acesso, 'acessos_da_conta', lambda root, conta: [], create=True), \
+                self.sem_criador(sem_criador):
+            dados = json.loads(self.exportar(sessao)[2])
+        self.assertEqual((dados['conversas_desde'], dados['incompleto']), (None, ['itens_criados']))
 
     @staticmethod
     def downloads(registrar):

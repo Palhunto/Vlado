@@ -210,13 +210,37 @@ def _acessos(root, conta) -> list | None:
         return None
 
 
+def _conversas_desde(root, conta) -> tuple[bool, str | None]:
+    """(whole, since): whether every conversation of the newsroom's cases records who created it. Conversations
+    record `criada_por` only from the version that brought it; `codex_apuracao.conversas_sem_criador(root, casos)`
+    gives the creation time of the newest one without it (None: there is none). The list of conversations is whole
+    from that moment on. Without the function, or when it fails: not whole, since unknown."""
+    try:
+        ler = getattr(importlib.import_module('codex_apuracao'), 'conversas_sem_criador', None)
+    except ImportError:
+        ler = None
+    if ler is None:
+        return False, None
+    try:
+        desde = ler(root, acesso.casos_da_redacao_da_conta(root, conta))
+    except (ValueError, OSError):
+        return False, None
+    if desde is None:
+        return True, None
+    return False, desde if isinstance(desde, str) and 0 < len(desde) <= 40 else None
+
+
 def partes_de_outros_donos(root, conta) -> dict:
-    """`itens_criados` and `acessos` of the export, each one a list or None, and `incompleto` with the codes of the
-    parts that are not in the file (`itens_criados`, `registro_de_acesso`), empty when the file is whole."""
-    itens, acessos = _itens_criados(root, conta), _acessos(root, conta)
-    return {'itens_criados': itens, 'acessos': acessos,
-            'incompleto': [codigo for codigo, parte in (('itens_criados', itens), ('registro_de_acesso', acessos))
-                           if parte is None]}
+    """`itens_criados` and `acessos` of the export, each one a list or None, `conversas_desde`, and `incompleto` with
+    the codes of what the file does not carry: `itens_criados` and `registro_de_acesso` (the whole part), and
+    `conversas_anteriores` (the items are in, but the conversations before `conversas_desde`, or of a time not known
+    when it is None, are not). Empty when the file is whole."""
+    itens, acessos, inteiras, desde = _itens_criados(root, conta), _acessos(root, conta), True, None
+    if itens is not None:  # the conversations only matter once the items came: otherwise `itens_criados` says it
+        inteiras, desde = _conversas_desde(root, conta)
+    incompleto = [codigo for codigo, falta in (('itens_criados', itens is None), ('conversas_anteriores', not inteiras),
+                                               ('registro_de_acesso', acessos is None)) if falta]
+    return {'itens_criados': itens, 'acessos': acessos, 'conversas_desde': desde, 'incompleto': incompleto}
 
 
 class RotasContas:
