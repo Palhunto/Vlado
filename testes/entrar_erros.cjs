@@ -103,3 +103,17 @@ test('a mensagem de campo fica a 4 px do campo: a folha desconta o intervalo do 
   assert.match(css, /\.entrar-cartao form>\.campo-erro\{margin-top:calc\(var\(--espaco-1\) - var\(--entrar-intervalo\)\)\}/);
   assert.doesNotMatch(css, /\.entrar-senha-linha\{flex-direction:column\}/, 'no celular o botão Mostrar não empurra a mensagem para longe da senha');
 });
+
+test('?aviso=conta_excluida: o Entrar diz "A sua conta foi excluída." na caixa de aviso (em inglês também), sem tirar o foco do login, e limpa o endereço', async () => {
+  const mesa = await abrir({url: 'http://127.0.0.1:8765/entrar?aviso=conta_excluida'});
+  assert.deepEqual(mesa.erros, []);
+  const caixa = mesa.$('entrar-mensagem');
+  assert.equal(caixa.hidden, false); assert.equal(caixa.textContent, 'A sua conta foi excluída.');
+  assert.equal(caixa.getAttribute('role'), 'status', 'é um aviso, não um erro');
+  assert.ok(mesa.doc.activeElement === mesa.$('entrar-login'));
+  assert.equal(mesa.janela.location.search, '', 'o aviso sai do endereço');
+  const ingles = await abrir({url: 'http://127.0.0.1:8765/entrar?aviso=conta_excluida', idioma: 'en'});
+  assert.equal(ingles.$('entrar-mensagem').textContent, 'Your account was deleted.');
+  const sem = await abrir({url: 'http://127.0.0.1:8765/entrar?aviso=outro'});
+  assert.equal(sem.$('entrar-mensagem').hidden, true, 'só o aviso conhecido aparece');
+});

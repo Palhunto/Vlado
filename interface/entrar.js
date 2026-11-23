@@ -64,6 +64,7 @@
       aviso_teste: 'O Vlado está em teste. Use só documentos públicos: trechos são enviados ao provedor de IA.',
       erro_termos: 'Falta aceitar os termos. Marque a caixa para continuar.',
       termos_mudaram: 'Os termos mudaram enquanto você lia. Confira a versão nova e marque de novo.',
+      aviso_conta_excluida: 'A sua conta foi excluída.',
       erro_registro: 'Registro de acesso indisponível. Avise a administração.',
       convite_sem_efeito: 'Este convite não vale mais',
       convite_sem_efeito_texto: 'Convite inválido, cancelado ou vencido. Peça um novo a quem convidou.',
@@ -169,6 +170,7 @@
       aviso_teste: 'Vlado is in trial. Use public documents only: excerpts are sent to the AI provider.',
       erro_termos: 'The terms are not accepted. Tick the box to continue.',
       termos_mudaram: 'The terms changed while you were reading. Check the new version and tick the box again.',
+      aviso_conta_excluida: 'Your account was deleted.',
       erro_registro: 'The access record is unavailable. Tell the administrators.',
       convite_sem_efeito: 'This invitation is no longer valid',
       convite_sem_efeito_texto: 'Invalid, cancelled or expired invitation. Ask whoever invited you for a new one.',
@@ -312,11 +314,11 @@
   }
   // Cada pendência tem a sua página: o módulo que a desenha e o que ele traz (a de termos vem primeiro, contrato 4.3 e 12).
   const PENDENCIAS = {
-    segundo_fator: {modulo: '/fator.js', objeto: 'Fator'},
-    termos: {modulo: '/termos.js', objeto: 'Termos'},
+    segundo_fator: {modulos: ['/fator.js'], objeto: 'Fator'},
+    termos: {modulos: ['/dialogo.js', '/dados_conta.js', '/termos.js'], objeto: 'Termos'},   // o diálogo de excluir a conta e a leitura de conta-ver vêm antes
   };
   async function iniciarPendencia(pendencia) {
-    const {modulo, objeto} = PENDENCIAS[pendencia];
+    const {modulos, objeto} = PENDENCIAS[pendencia];
     let sessao = null;
     try {
       const resposta = await fetch('/api/sessao', {headers: {Accept: 'application/json'}, credentials: 'same-origin'});
@@ -328,11 +330,12 @@
     try {
       await carregarScript('/i18n.js');
       if (lingua === 'en') await carregarScript('/i18n_en.js');
-      await carregarScript(modulo);
+      for (const modulo of modulos) await carregarScript(modulo);
     } catch (_) { mostrar('erro_rede', false, false); return; }
     const secao = $('pendencia-secao');
     secao.hidden = false;
-    window[objeto].pagina(secao, {abrirMesa: () => window.location.replace('/'), sair: () => window.location.replace('/entrar')});
+    // `pendencias` diz à página de termos se o segundo fator ainda está por cadastrar (então baixar os dados e excluir a conta esperam por ele).
+    window[objeto].pagina(secao, {abrirMesa: () => window.location.replace('/'), sair: () => window.location.replace('/entrar'), pendencias: sessao.pendencias || []});
     const titulo = secao.querySelector('h1');
     if (titulo) { titulo.id = 'pendencia-titulo'; secao.setAttribute('aria-labelledby', titulo.id); titulo.tabIndex = -1; titulo.focus(); }
     redesenhar = () => window.I18N?.definir(lingua);   // o idioma do botão do topo vale também para o conteúdo do módulo da pendência
@@ -349,6 +352,10 @@
       const ligado = entrada.ok && (await entrada.json()).esqueci_senha === true;
       $('entrar-esqueci').hidden = !ligado; $('entrar-esqueci-texto').hidden = ligado;
     } catch (_) { /* O texto continua. */ }
+    if (new URLSearchParams(window.location.search).get('aviso') === 'conta_excluida') {   // a exclusão da conta leva aqui (termos.js, conta.js)
+      mostrar('aviso_conta_excluida', true, false);
+      esconderToken('/entrar');
+    }
     $('entrar-login').focus();
     $('entrar-form').addEventListener('submit', async evento => {
       evento.preventDefault();
