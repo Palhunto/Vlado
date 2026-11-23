@@ -124,7 +124,6 @@ window.VLADO_I18N_EN = {
     "Encerrar serviço": "Stop service",
     "Configurações": "Settings",
     "fonte": "source",
-    "Somente a administração vê esta área. Adicione contas para outras pessoas usarem a Mesa neste computador.": "Only administrators see this area. Add accounts so other people can use the desk on this computer.",
     "Encerra o serviço local e interrompe as execuções ativas": "Stops the local service and interrupts active runs",
     "Processamento online pela API do provedor definido em configuracao.json, cobrado por uso. A chave fica na variável de ambiente do servidor (ANTHROPIC_API_KEY ou OPENAI_API_KEY) e nunca é enviada ao navegador.": "Online processing through the provider's API, billed per use. The key stays on the server and is never sent to the browser.",
     "Escolher apuração e conversa": "Choose investigation and conversation",
