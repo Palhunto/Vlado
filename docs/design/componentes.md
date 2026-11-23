@@ -944,6 +944,12 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
   - **Erros:** no campo do endereço, com o texto do servidor (página de outro site, endereço inválido).
   - **Celular:** os campos e o botão em largura cheia.
 
+**O recibo acompanha a pergunta** *(derivado, 22/11/2026, combinado com o Lume para a R4)*. A W02, regra 8, diz que o recibo do lote "é conferido antes da primeira pergunta". Por isso ele não some quando "Cadastrar arquivos" sai: passa a nascer de "Perguntar aos documentos", no pé da Documentos.
+
+- **Quando aparece:** se, nesta visita à Documentos, houve um envio e o recibo dele está pronto, "Perguntar aos documentos" abre Perguntar com o recibo recolhido acima da caixa da pergunta (`#codex-recibo-alerta`). Sem envio nesta visita, Perguntar abre sem ele, como hoje pela barra lateral.
+- **Forma:** o aviso em linha da Mesa (`.notice`), um `<details>` fechado. O resumo é "Recibo do último envio · confira as limitações antes de perguntar". Aberto, mostra o mesmo cartão do recibo da Documentos ("Recibo do lote: 3 de 3 arquivos", novos e duplicados, "Detalhes técnicos"), sem repetir ids.
+- **Quando some:** ao enviar a primeira pergunta, como hoje, ou ao trocar de apuração.
+
 <a id="nova-apuracao"></a>
 
 ### Nova apuração (W01)
@@ -971,6 +977,13 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 - **Acima da área de envio:** "A apuração é criada no primeiro envio. Antes disso, nada fica guardado." em 14 `--theme-muted`, e o [link](#link) "‹ Nome e fontes", que volta ao passo 1 com os campos preenchidos.
 - **No envio:** o cartão de envio por arquivo de sempre. Quando o primeiro lote é aceito, a apuração passa a existir: o seletor do topo passa a ela e a tela vira a Documentos comum.
 - **Passo 3:** quando o recibo do lote fica pronto, a linha de etapas marca "3 Conferir recibo" e "Ver recibo" abre o cartão do recibo, como hoje. Depois do recibo conferido, a linha de etapas sai.
+
+**Primeiro envio que falhou** *(22/11/2026, sobre `a373ce7`)*. Quando o primeiro lote falha e a apuração não nasce, a tela fica no passo 2 da Nova apuração, sem as peças da Documentos comum: sem abas, busca, barra "Leitura", o vazio "Escolha uma apuração…" e "Perguntar aos documentos".
+
+- O título continua "Nova apuração" com o nome.
+- O cartão de envio mostra o erro do arquivo.
+- Acima dele vem o aviso "Esta apuração não chegou a ser criada: o primeiro envio falhou. Recomece a Nova apuração.", em cores de aviso, com a ação "Recomeçar" (secundário), que volta ao passo 1 com os campos preenchidos.
+- O diálogo de saída com o envio no ar é "A apuração está sendo criada", com o texto "Sair não cancela o envio: a apuração nasce assim mesmo, e você a encontra depois na Visão geral." e as ações "Ficar" e "Sair e encontrá-la depois".
 
 **Sair no meio.** Quem sai no passo 1 ou no 2, antes do envio, não deixa nada. A Mesa não guarda rascunho de apuração; quando o formulário foi preenchido, pede a confirmação "Sair sem criar a apuração?" (variante simples do [diálogo](#dialogo), ação "Sair").
 
@@ -1064,7 +1077,7 @@ A resposta é sempre `{estado: "confirmacao_enviada"}`, para endereço livre e p
 
 ### Segundo fator (E4a)
 
-*(Derivado, 22/11/2026.)* Estrutura do W08 (linha "Código do autenticador ativo" e "Códigos de reserva") e dos passos 2 e 3 do W10. Dados da E4a de Contas (`lancamento/contas-o2` `85b900a`; contrato, 8.2 e 12): TOTP de 6 dígitos e dez códigos de reserva de uso único, no formato `ABCDE-FGHJK`. A chave de acesso segue fora (decisão 4). O fator é obrigatório para dono e editor no `piloto` pela [pendência](#pendencia-fator), que entra num commit próprio de Contas.
+*(Derivado, 22/11/2026.)* Estrutura do W08 (linha "Código do autenticador ativo" e "Códigos de reserva") e dos passos 2 e 3 do W10. Dados da E4a de Contas (`lancamento/contas-o2` `85b900a`; contrato, 8.2 e 12): TOTP de 6 dígitos e dez códigos de reserva de uso único, no formato `ABCD-EFGH-JKLM-NPQR` (19 caracteres; a tela mostra o que o servidor manda). A chave de acesso segue fora (decisão 4). O fator é obrigatório para dono e editor no `piloto` pela [pendência](#pendencia-fator), que entra num commit próprio de Contas.
 
 **Na linha "Segundo fator" de Entrada e segurança** (Minha conta), conforme `conta-ver` → `segundo_fator`:
 
@@ -1072,7 +1085,7 @@ A resposta é sempre `{estado: "confirmacao_enviada"}`, para endereço livre e p
 |---|---|---|
 | Desligado (`ativo: false`) | "○ Segundo fator desligado" e, em 14 `--theme-muted`, "Um código do aplicativo autenticador, além da senha, na entrada." Quando `GET /api/sessao` não traz `conta-fator-remover` em `capacidades` (dono e editor, em todo modo), vem também "Depois de cadastrado, o segundo fator não pode ser removido no seu papel." A tela não diz que o fator é obrigatório: no `local-contas` ele é opcional, e onde é obrigatório quem não o tem não chega a Minha conta, porque vai à [página da pendência](#pendencia-fator) (B1 da Coruja sobre `8ce862e`). | "Cadastrar" (secundário) |
 | Ligado | "✓ Código do autenticador ativo" e, em 14 `--theme-muted`, "desde 12 de nov. · 8 códigos de reserva" (`ativado_em`, `codigos_restantes`) | "Gerar novos códigos" e "Trocar de aparelho" (secundários); "Remover" (destrutivo) só quando `GET /api/sessao` traz `conta-fator-remover` em `capacidades`, que nunca vem para dono e editor |
-| Ligado, com 3 códigos ou menos | igual ao anterior, mais a linha "! Restam 2 códigos de reserva. Gere novos." em 14/600 `--theme-warning` | as mesmas |
+| Ligado, com 3 códigos ou menos | igual ao anterior, mais a linha "! Restam 2 códigos de reserva. Gere novos." em 14/600 `--theme-warning`; com 1, "! Resta 1 código de reserva. Gere novos."; com nenhum, "! Não restam códigos de reserva. Gere novos." | as mesmas |
 
 **Cadastrar** abre o diálogo "Cadastrar o segundo fator", da família do [diálogo](#dialogo). A largura é 480, e no celular a tela cheia menos 16 px de cada lado. A rubrica marca o passo ("PASSO 1 DE 3"), como no W10.
 
@@ -1125,7 +1138,7 @@ A resposta é sempre `{estado: "confirmacao_enviada"}`, para endereço livre e p
 - texto "Digite o código de 6 dígitos do aplicativo autenticador.";
 - campo "Código do aplicativo" (48 px, `inputmode="numeric"`, `autocomplete="one-time-code"`);
 - abaixo do campo, o [link](#link) "Usar um código de reserva". Ele troca o rótulo para "Código de reserva" e o `inputmode` para `text`, aceita espaço, hífen e minúsculas, e passa a ler "Usar o código do aplicativo";
-- apoio em 14 `--theme-muted`: "Você tem 5 minutos para digitar o código.";
+- apoio em 14 `--theme-muted`: "Você tem 5 minutos para digitar o código.", a 4 px do link acima. O campo, o link e o apoio formam um grupo só, com 8 px entre o campo e o link; o intervalo de 18 px do formulário fica só entre os grupos;
 - ação principal grande "Entrar" (`entrar-segundo-fator {codigo}`);
 - link "Entrar com outra conta", que volta ao formulário.
 
@@ -1152,7 +1165,14 @@ Respostas:
 
 Qualquer outra operação responde 403 `pendencia_de_conta` (contrato, 4.3). Se uma chegar, a Mesa volta a esta página. Combinado com Contas em 22/11/2026: a página é `GET /conta/segundo-fator`. Ela serve o mesmo `entrar.html` de `/entrar`, sem dado de conta no HTML, e o script vê `pendencias: ["segundo_fator"]` em `GET /api/sessao`. Com a pendência, `GET /` responde 303 para ela. A sessão só alcança `GET /api/sessao`, `sessao-sair`, `conta-ver`, `conta-fator-iniciar` e `conta-fator-confirmar`. A página não precisa de mais nada: o texto não leva nome nem papel, e "Sair" usa `sessao-sair`. Não é uma seção da Mesa, e a Mesa (`index.html`) não abre com a pendência.
 
-Na atividade da Equipe: `fator_ativado` "Beltrano ativou o segundo fator"; `fator_removido` "Beltrano removeu o segundo fator"; `fator_codigos_gerados` "Beltrano gerou novos códigos de reserva".
+Na atividade da Equipe: `fator_ativado` "Beltrano ativou o segundo fator"; `fator_removido` "Beltrano removeu o segundo fator"; `fator_codigos_gerados` "Beltrano gerou novos códigos de reserva"; `aparelho_novo` "Beltrano entrou de um aparelho novo"; `codigo_reserva_usado` "Beltrano entrou com um código de reserva"; `fator_bloqueado` "O segundo fator de Beltrano foi bloqueado por muitos códigos errados"; `login_protegido` "A entrada de Beltrano foi protegida por muitas tentativas".
+
+**Detalhes aceitos sobre `cd2337d`** (Vitral, 22/11/2026):
+
+- No diálogo, o passo 1 não repete título: o do diálogo ("Cadastrar o segundo fator" ou "Trocar de aparelho") basta. O passo 3 tem o título "Guarde os códigos de reserva".
+- Linhas de estado do diálogo: "Chave copiada.", "Códigos copiados.", "Arquivo baixado." e, quando a área de transferência recusa, "Não deu para copiar. Selecione e copie à mão."
+- Se o gerador do QR não carregar, no lugar dele: "Não deu para desenhar o código QR. Digite a chave abaixo no aplicativo." A chave em texto basta.
+- Em "Trocar de aparelho", com o código atual em branco, a recusa vem antes do envio: "Falta o código do aparelho atual. Digite o código do aplicativo ou um código de reserva."
 
 <a id="equipe"></a>
 
