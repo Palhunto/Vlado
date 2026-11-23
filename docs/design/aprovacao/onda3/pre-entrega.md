@@ -151,7 +151,7 @@ Minha conta, Equipe, convite e redefinir a senha (Onda 2) não estão nesta linh
 - R7, em `9520fc3` (plural concordado nos achados) e `599e9e2` (Configurações sem o texto de contas). A lista foi medida na linha de base `db4e032`, anterior a esses dois commits;
 - R5, em parte, em `7c2345c` e `61d7fe3`: o Entrar ganhou as seções da Onda 2; a conferência com o canvas inteiro fica para a captura nova da linha de base.
 
-- R6, em `dbf0281` (`lancamento/qa-o3`): 84 capturas extras, de 14 telas em 430×932, em paisagem 812×375 e com a página a 200 %, nos dois temas. Nenhuma tem rolagem lateral. O Design aceitou 78 como referência; as 6 `nova` esperam a correção da linha de etapas do passo 1.
+- R6, em `dbf0281` (`lancamento/qa-o3`): 84 capturas extras, de 14 telas em 430×932, em paisagem 812×375 e com a página a 200 %, nos dois temas. Nenhuma tem rolagem lateral. O Design aceitou 78 como referência. Em `9e2dd95` (`lancamento/qa-o3`), a Sonda regerou as 14 `nova` com a linha de etapas do passo 1 (correção do Lume em `06d478e`) e os 10 `foco_mesa_*`, e acrescentou 28 capturas de reflow a 320 px (WCAG 1.4.10), sem rolagem lateral em nenhuma. O Design conferiu e aceitou todas em 23/11/2026. A R6 está resolvida por inteiro.
 
 Aberta: só a R3, exceção declarada até a Onda 4. Com isso, a lista de pré-entrega da Onda 3 está cumprida.
 
