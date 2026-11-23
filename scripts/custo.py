@@ -32,7 +32,9 @@ nunca leva número (``estouro``); os números ficam na barra e na recusa direta.
 **Chave própria da redação (contrato 8.5).** Uma pergunta feita com a chave que a redação cadastrou
 (``segredos``) não é paga pelo serviço: o gasto cai na pessoa (o teto dela continua valendo, como
 definido, sem o limite da cota da redação) e num lançamento separado da redação
-(``chaves_proprias``), fora da cota paga pelo serviço e fora da soma da instalação.
+(``chaves_proprias``, e a parte de cada pessoa em ``chaves_proprias_contas``), fora da cota paga
+pelo serviço e fora da soma da instalação. A barra da cota e a tela Equipe mostram esse lançamento num
+campo à parte (P40): a pessoa, o próprio; o dono, também o da redação.
 
 **Gasto sem redação própria.** O gasto sem conta (modo local, ou uma chamada sem conta) e o gasto já
 gravado antes desta versão ficam na chave ``instalacao``, a da redação inicial: contam para o teto e a
@@ -446,9 +448,10 @@ def _registro(caminho):
                 or any(type(v) is not int or v < 0 for v in atual[grupo].values())
                 for grupo in ('contas', 'organizacoes')):
             raise ValueError(f'mês {quando} danificado')
-        proprias = atual.get('chaves_proprias', {})  # optional: months before the newsroom's own key lack it
-        if not isinstance(proprias, dict) or any(type(v) is not int or v < 0 for v in proprias.values()):
-            raise ValueError(f'mês {quando} danificado')
+        for grupo in ('chaves_proprias', 'chaves_proprias_contas'):  # optional: older months lack them
+            proprias = atual.get(grupo, {})
+            if not isinstance(proprias, dict) or any(type(v) is not int or v < 0 for v in proprias.values()):
+                raise ValueError(f'mês {quando} danificado')
     return dados
 
 
@@ -484,7 +487,7 @@ def _do_mes(dados, quando):
     atual = dados['meses'].get(quando)
     if not isinstance(atual, dict):
         atual = {'contas': {}, 'organizacoes': {}}
-    for chave in ('contas', 'organizacoes', 'chaves_proprias'):
+    for chave in ('contas', 'organizacoes', 'chaves_proprias', 'chaves_proprias_contas'):
         if not isinstance(atual.get(chave), dict):
             atual[chave] = {}
     return atual
@@ -502,11 +505,21 @@ def _totais(atual, chaves) -> dict:
             'instalacao': sum(v for v in atual['organizacoes'].values() if type(v) is int and v >= 0)}
 
 
-def gasto_chave_propria(root, conta, chaves=None) -> int:
-    """Micro-reais the newsroom of ``conta`` spent this month with its own key (not paid by the service)."""
+def gasto_chave_propria(root, conta, chaves=None) -> dict:
+    """{'conta', 'organizacao': micro-reais} spent this month with the newsroom's own key (not paid by the
+    service): by ``conta``, and by its whole newsroom."""
     chaves = chaves or chaves_orcamento(conta, root)
-    valor = _do_mes(_ler_gasto(root), mes())['chaves_proprias'].get(chaves['organizacao'])
-    return valor if type(valor) is int and valor >= 0 else 0
+    atual = _do_mes(_ler_gasto(root), mes())
+    valor = lambda d, k: d.get(k) if type(d.get(k)) is int and d.get(k) >= 0 else 0  # noqa: E731
+    return {'conta': valor(atual['chaves_proprias_contas'], chaves['conta']),
+            'organizacao': valor(atual['chaves_proprias'], chaves['organizacao'])}
+
+
+def gasto_chave_propria_brl(root, conta, *, da_redacao=False) -> str:
+    """The own key's spend this month in reais as text ('3.25'): by ``conta``, or its newsroom's (``da_redacao``,
+    for the dono only: the route decides, by the gate). Never added to the service's quota."""
+    micro = gasto_chave_propria(root, conta)['organizacao' if da_redacao else 'conta']
+    return str((Decimal(micro) / MICRO).quantize(Decimal('0.01'), ROUND_HALF_UP))
 
 
 def gasto(root, conta, chaves=None) -> dict:
@@ -540,11 +553,13 @@ def _somar(root, chaves, quando, micro_brl, chave_propria=False):
         guardados = {k: v for k, v in _PENDENTES.items() if k[0] == raiz}
         for (_, mes_pendente, conta_pendente, organizacao_pendente, propria), valor in guardados.items():
             atrasado = _do_mes(dados, mes_pendente)
-            for grupo, chave in (('contas', conta_pendente), (_grupo_da_redacao(propria), organizacao_pendente)):
+            for grupo, chave in (('contas', conta_pendente), (_grupo_da_redacao(propria), organizacao_pendente)) + (
+                    (('chaves_proprias_contas', conta_pendente),) if propria else ()):
                 atrasado[grupo][chave] = atrasado[grupo].get(chave, 0) + valor
             dados['meses'][mes_pendente] = atrasado
         atual = _do_mes(dados, quando)
-        for grupo, chave in (('contas', chaves['conta']), (_grupo_da_redacao(chave_propria), chaves['organizacao'])):
+        for grupo, chave in (('contas', chaves['conta']), (_grupo_da_redacao(chave_propria), chaves['organizacao'])) + (
+                (('chaves_proprias_contas', chaves['conta']),) if chave_propria else ()):
             atual[grupo][chave] = atual[grupo].get(chave, 0) + max(0, int(micro_brl))
         dados['meses'][quando] = atual
         for antigo in sorted(dados['meses'])[:-MESES_GUARDADOS]:
@@ -651,6 +666,13 @@ def situacao(root, conta, *, administrador=False) -> dict:
                 'cambio_brl_por_usd': str(cambio(root, tabela)), 'tabela_vigente_em': tabela['vigente_em']}
     if administrador:
         resposta['organizacao'] = bloco(usado_org, teto_org)
+    # P40: what the newsroom's own key paid, apart (never in the service's quota above): the person's own, and the
+    # newsroom's for whoever sees it. The person's block above counts both keys (its ceiling holds for both).
+    propria = gasto_chave_propria(root, conta, chaves)
+    em_reais = lambda micro: str((Decimal(micro) / MICRO).quantize(Decimal('0.01'), ROUND_HALF_UP))  # noqa: E731
+    resposta['chave_propria'] = {'conta_brl': em_reais(propria['conta'])}
+    if administrador:
+        resposta['chave_propria']['organizacao_brl'] = em_reais(propria['organizacao'])
     return resposta
 
 

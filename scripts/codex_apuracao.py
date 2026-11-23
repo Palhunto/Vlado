@@ -280,6 +280,14 @@ class Conversas:
                 self.rpc = self.factory(self.root, self._notification)
             return self.rpc
 
+    # P3c: the newsroom's own AI key is read only in the piloto mode (the server says so). In local-contas a keys file
+    # left from a pilot would count there, or, unreadable, refuse without warning: there the service's key pays.
+    chave_da_redacao = False
+
+    def _redacao_da_chave(self, conta):
+        """The newsroom whose own key the questions of ``conta`` may use, or None (not piloto, or no newsroom)."""
+        return custo.redacao_do_gasto(self.root, conta) if self.chave_da_redacao else None
+
     def status(self, redacao=None):
         """API connection state. Keys stay in the server environment and are never returned. ``redacao``: the
         newsroom of who asks, whose own key counts (``chave_propria``: that key would pay)."""
@@ -296,13 +304,15 @@ class Conversas:
         quota of the person, of the newsroom and of the installation (CUS-01, CUS-03, accounts 8.5).
         ``ve_redacao``: the newsroom's numbers may go in a refusal (the route says, by the gate). Returns
         the status."""
-        estado = self.status(custo.redacao_do_gasto(self.root, conta))
+        estado = self.status(self._redacao_da_chave(conta))
         if not estado['autenticado']:
             raise ErroIA('Chave de API ausente: cole a chave em Perguntar à IA › Conexão e opções, ou defina '
                          + ' ou '.join(CHAVES.values()) + ' no ambiente do servidor.', codigo='autenticacao')
         if estado.get('recusa_modelo'):
             raise ValueError(estado['recusa_modelo'])
-        limites.conferir_dia(self.root, custo.chaves_orcamento(conta, self.root)['organizacao'])
+        # P40: a question paid with the newsroom's own key counts in its newsroom's day, not in the installation's.
+        limites.conferir_dia(self.root, custo.chaves_orcamento(conta, self.root)['organizacao'],
+                             instalacao=not estado['chave_propria'])
         custo.conferir_antes(self.root, conta, estado.get('modelo'), convidado=convidado, ve_redacao=ve_redacao,
                              chave_propria=estado['chave_propria'])
         return estado
@@ -700,7 +710,7 @@ class Conversas:
             ctx['cancel'] = False
             ctx['meta']['conta'] = conta  # whose quota this execution spends (CUS-01)
             ctx['orcamento'] = chaves
-            ctx['redacao_da_chave'] = custo.redacao_do_gasto(self.root, conta)  # whose own key the turns may use
+            ctx['redacao_da_chave'] = self._redacao_da_chave(conta)  # whose own key the turns may use (piloto)
             ctx['modelo_cobrado'] = estado.get('modelo')
             ctx['observacoes_humanas'] = feedback['conteudo'] if feedback else None
             ctx['meta']['observacoes_humanas'] = None
@@ -1193,7 +1203,7 @@ class Conversas:
         organizacao, dia_organizacao = (chaves or {}).get('organizacao', custo.ORGANIZACAO), 0
         try:
             valores = limites.ler(self.root)
-            dia = limites.somar_dia(self.root, custo.tokens_totais(uso), organizacao)
+            dia = limites.somar_dia(self.root, custo.tokens_totais(uso), organizacao, instalacao=not chave_propria)
             dia_organizacao = limites.dia_da_organizacao(self.root, organizacao)
         except (ValueError, OSError) as exc:
             self._event(identifier, 'aviso', registrar_falha('Limites de tokens não conferidos: ' + str(exc),
@@ -1211,7 +1221,7 @@ class Conversas:
             # The newsroom first (it then learns nothing of the others). What is said here goes to the conversation,
             # which the colleagues of the case read: never the newsroom's usage or ceiling (accounts contract 4.5).
             causa, motivo = 'limite_dia', 'Limite diário de uso da redação atingido. Tente novamente amanhã (UTC).'
-        elif valores['tokens_por_dia'] is not None and dia > valores['tokens_por_dia']:
+        elif not chave_propria and valores['tokens_por_dia'] is not None and dia > valores['tokens_por_dia']:
             # Nobody learns the installation-wide usage: it adds up every newsroom (accounts contract, 4.5).
             causa, motivo = 'limite_dia', 'Limite diário de uso da instalação atingido. Tente novamente amanhã (UTC).'
         elif totais is not None:
@@ -1422,7 +1432,7 @@ class Conversas:
             self._conferir_simultaneas(conta, restrito=dono is not None)
             meta['conta'] = conta
             ctx['orcamento'] = chaves
-            ctx['redacao_da_chave'] = custo.redacao_do_gasto(self.root, conta)
+            ctx['redacao_da_chave'] = self._redacao_da_chave(conta)
             ctx['modelo_cobrado'] = estado.get('modelo')
             run, question, pipeline = self._reconstruir(identifier)
             pendentes = [e for e in pipeline.etapas if e not in pipeline.accepted]
