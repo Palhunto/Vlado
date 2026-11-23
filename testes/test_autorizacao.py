@@ -450,9 +450,27 @@ class PapeisTest(Http):
 
     def test_cota_diaria_por_conta(self):
         acesso.atualizar(self.root, self.ana_id, por='cli', cota_diaria=1)  # the legacy daily quota is the operator's
-        self.perguntar(self.ana)
-        status, erro = self.post(self.ana, 'codex-perguntar', {'caso': 'alpha', 'pergunta': 'Outra.'})
+        # The quota is of the UTC day. With the clock of the accounts stopped the two questions fall on the same
+        # day even when the suite runs across 00:00 UTC: there the second one was counted on a new day, passed the
+        # quota and met the first one still running (`pergunta_em_andamento`, which has no `parametros`).
+        with patch('acesso.agora', return_value=acesso.agora()):
+            self.perguntar(self.ana)
+            status, erro = self.post(self.ana, 'codex-perguntar', {'caso': 'alpha', 'pergunta': 'Outra.'})
         self.assertEqual((status, erro['codigo'], erro['parametros']), (400, 'cota_diaria_esgotada', {'cota': 1}))
+
+    def test_cota_diaria_e_do_dia_em_utc_e_recomeca_a_meia_noite(self):
+        acesso.atualizar(self.root, self.ana_id, por='cli', cota_diaria=1)
+        fim_do_dia = acesso.agora().replace(hour=23, minute=59, second=30, microsecond=0)
+        with patch('acesso.agora', return_value=fim_do_dia):
+            ana = self.entrar('ana')  # a session of that moment
+            self.perguntar(ana)
+        with patch('acesso.agora', return_value=fim_do_dia + timedelta(seconds=10)):  # the same day: the quota refuses
+            status, erro = self.post(ana, 'codex-perguntar', {'caso': 'alpha', 'pergunta': 'Outra.'})
+            self.assertEqual((status, erro['codigo'], erro['parametros']), (400, 'cota_diaria_esgotada', {'cota': 1}))
+        with patch('acesso.agora', return_value=fim_do_dia + timedelta(minutes=1)):  # 00:00:30 UTC of the next day
+            # The quota lets it through again; what refuses it now is yesterday's question, still running.
+            status, erro = self.post(ana, 'codex-perguntar', {'caso': 'alpha', 'pergunta': 'Outra.'})
+            self.assertEqual((status, erro['codigo']), (400, 'pergunta_em_andamento'))
 
     def test_convidado_nao_envia_corpo_grande(self):
         cookie, csrf = self.ana
