@@ -1066,6 +1066,12 @@ def definir_situacao_redacao(root: Path, organizacao, situacao, por='operador') 
     with _bd(root, escrever=True) as tx:
         if not isinstance(organizacao, str) or not tx.um('SELECT 1 FROM organizacoes WHERE id = ?', organizacao):
             raise ValueError('Redação não encontrada.')
+        antes = tx.um('SELECT situacao FROM organizacoes WHERE id = ?', organizacao)['situacao']
+        if situacao == 'ativa' and antes != 'ativa':
+            # The dates of inactivity only run in an active newsroom (4b-4; B1 of the review): while it was suspended
+            # nobody could sign in, so its people start again from the return, as a reactivated account does.
+            tx.ex('UPDATE contas SET ultimo_acesso = ?, aviso_inatividade_em = NULL WHERE organizacao = ?'
+                  ' AND excluida_em IS NULL', _iso(agora()), organizacao)
         tx.ex('UPDATE organizacoes SET situacao = ? WHERE id = ?', situacao, organizacao)
         _evento(tx, 'redacao_' + {'ativa': 'reativada', 'suspensa': 'suspensa', 'encerrada': 'encerrada'}[situacao],
                 None, por, organizacao=organizacao)
@@ -1968,6 +1974,8 @@ def _varrer(root: Path) -> dict:
         for conta in tx.todos("SELECT * FROM contas WHERE ativa = 1 AND excluida_em IS NULL AND senha_hash IS NULL"
                               " AND senha_definida_em IS NULL AND ativacao_expira_em <= ?"
                               " AND ativacao_motivo IS NOT 'recuperacao' ORDER BY criada_em, rowid", _iso(momento)):
+            if not _redacao_ativa(tx, conta['organizacao']):  # Z1 of the review: nothing runs in a suspended newsroom
+                continue
             try:
                 _apagar_conta(tx, conta, 'manutencao', momento)
                 excluidas += 1

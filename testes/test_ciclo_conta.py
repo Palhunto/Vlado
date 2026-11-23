@@ -276,6 +276,45 @@ class InativasTest(test_acesso.DuasRedacoes):
         resultado = self.varrer()
         self.assertEqual((resultado['contas_avisadas'], resultado['para_o_operador'], self.enviadas), (0, [], []))
 
+    def test_aviso_antes_da_suspensao_recomeca_na_volta(self):
+        # B1 of the review: warned on day 0, suspended until day 60. The 30 days of the warning ran while nobody
+        # could sign in; on the return the count starts again, as for a reactivated account.
+        self.inativa(self.rep_b)
+        self.assertEqual(self.varrer()['contas_avisadas'], 1)
+        acesso.definir_situacao_redacao(self.root, self.b, 'suspensa')
+        with self.depois(days=60):
+            acesso.definir_situacao_redacao(self.root, self.b, 'ativa')
+        conta = self.conta(self.rep_b)
+        self.assertIsNone(conta['aviso_inatividade_em'])
+        resultado = self.varrer(days=61)
+        self.assertEqual((resultado['contas_desativadas'], resultado['contas_avisadas']), (0, 0))
+        self.assertEqual(self.varrer(days=60 + acesso.INATIVIDADE_DIAS - 1)['contas_avisadas'], 0)
+        self.assertEqual(self.varrer(days=60 + acesso.INATIVIDADE_DIAS, minutes=1)['contas_avisadas'], 1)
+        self.assertEqual(len(self.enviadas), 2)
+
+    def test_suspensao_longa_nao_conta_como_inatividade(self):
+        # Suspended for 175 days after the last sign-in: on the return nobody is warned for those days.
+        self.inativa(self.rep_b, dias=0)
+        acesso.definir_situacao_redacao(self.root, self.b, 'suspensa')
+        with self.depois(days=175):
+            acesso.definir_situacao_redacao(self.root, self.b, 'ativa')
+        self.assertEqual(self.varrer(days=181)['contas_avisadas'], 0)
+        self.assertEqual(self.enviadas, [])
+        self.assertEqual(self.varrer(days=175 + acesso.INATIVIDADE_DIAS, minutes=1)['contas_avisadas'], 1)
+        # Suspending again, or an active newsroom set active again, does not move anybody's dates.
+        antes = self.conta(self.rep_a)['ultimo_acesso']
+        acesso.definir_situacao_redacao(self.root, self.a, 'ativa')
+        self.assertEqual(self.conta(self.rep_a)['ultimo_acesso'], antes)
+
+    def test_conta_sem_senha_de_redacao_suspensa_nao_sai(self):
+        # Z1 of the review: the removal of the accounts that never had a password does not run in a suspended newsroom.
+        nova, _ = acesso.criar_conta(self.root, 'Sem Senha B', 'sem.senha.b', papel='reporter', organizacao=self.b,
+                                     por='operador')
+        acesso.definir_situacao_redacao(self.root, self.b, 'suspensa')
+        resultado = self.varrer('tela', hours=acesso.ATIVACAO_HORAS, minutes=1)
+        self.assertEqual((resultado['contas_excluidas'], resultado['para_o_operador']), (0, []))
+        self.assertIsNone(self.conta(nova['id'])['excluida_em'])
+
     def test_criada_sem_senha_e_vencida_sai_e_a_da_recuperacao_fica(self):
         nova, _ = acesso.criar_conta(self.root, 'Nunca Ativou', 'nunca.ativou', papel='reporter', organizacao=self.a,
                                      por='operador')
