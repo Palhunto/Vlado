@@ -323,6 +323,11 @@ class UltimoDono(Recusada):
     status, codigo, motivo = 400, 'ultimo_dono', 'ultimo_dono'
 
 
+class NomeDivergente(Recusada):
+    """The name typed to confirm the deletion of the own account is not the account's (it is not a wrong password)."""
+    status, codigo, motivo = 400, 'nome_confirmacao_divergente', 'validacao'
+
+
 class TermosDesatualizados(Recusada):
     """The version of the terms sent is not the one in force (or none came while there is one)."""
     status, codigo, motivo = 400, 'termos_desatualizados', 'validacao'
@@ -1468,25 +1473,79 @@ def remover(root: Path, cid, por: str, organizacao: str, senha=None, ip=None) ->
         _conta(tx, cid, organizacao)  # an unknown account is refused before the password is asked
     confirmar_senha(root, por, senha, ip)
     with _bd(root, escrever=True) as tx:
-        conta = _conta(tx, cid, organizacao)
-        momento = agora()
-        if conta['papel'] == 'dono' and conta['ativa'] and not _donos_ativos(tx, organizacao, exceto=cid):
+        return _apagar_conta(tx, _conta(tx, cid, organizacao), por, agora())
+
+
+def _ultimo_dono(tx: _Tx, conta) -> bool:
+    return conta['papel'] == 'dono' and bool(conta['ativa']) and not _donos_ativos(tx, conta['organizacao'], exceto=conta['id'])
+
+
+def _apagar_conta(tx: _Tx, conta, por: str, momento: datetime) -> dict:
+    """What removing a person and deleting the own account both do (contract, 8.4: the same effect): only the id
+    stays, with the situation `excluida`. The last active dono of a newsroom is refused, checked inside the same
+    transaction that deletes."""
+    cid = conta['id']
+    if _ultimo_dono(tx, conta):
+        raise UltimoDono(ULTIMO_DONO)
+    _derrubar_sessoes(tx, cid)
+    _cancelar_convites_de(tx, cid, momento)
+    _sem_fator(tx, cid)
+    tx.ex('DELETE FROM aparelhos WHERE conta = ?', cid)
+    tx.ex('DELETE FROM participacoes WHERE conta = ?', cid)
+    tx.ex('UPDATE termos_aceites SET ip = NULL WHERE conta = ?', cid)  # the proof stays: id, version, date (P41 b)
+    _sem_responsabilidade(tx, cid)
+    tx.ex('DELETE FROM uso_diario WHERE conta = ?', cid)
+    _limpar_tentativas(tx, conta)
+    tx.ex('DELETE FROM tentativas WHERE chave = ?', CHAVE_CONFIRMACAO + cid)
+    tx.ex("UPDATE contas SET ativa = 0, nome = '', login = NULL, email = NULL, senha_hash = NULL, senha_definida_em = NULL,"
+          ' cota_diaria = NULL, teto_mensal_brl = NULL, idioma = NULL, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
+          ' ativacao_motivo = NULL, excluida_em = ? WHERE id = ?', _iso(momento), cid)
+    _evento(tx, 'conta_excluida', cid, por, momento)
+    return {'id': cid, 'situacao': 'excluida'}
+
+
+def excluir_conta(root: Path, cid, nome, senha, ip=None) -> dict:
+    """`conta-excluir`: the person deletes the own account (contract, 8.4 and the delivery 4b-3), with the same
+    effect as `equipe-remover`. The order is the one agreed with the Frontend: the typed name first (the account's
+    current name, ignoring the ends' spaces and the case; a wrong one is not a wrong password), then the last dono,
+    so that an impossible deletion never spends an attempt, then the password."""
+    with _bd(root) as tx:
+        conta = _conta(tx, cid)
+        digitado = nome.strip().casefold() if isinstance(nome, str) and len(nome) <= 400 else None
+        if not digitado or digitado != (conta['nome'] or '').strip().casefold():
+            raise NomeDivergente('O nome digitado não é o da conta.')
+        if _ultimo_dono(tx, conta):
             raise UltimoDono(ULTIMO_DONO)
-        _derrubar_sessoes(tx, cid)
-        _cancelar_convites_de(tx, cid, momento)
-        _sem_fator(tx, cid)
-        tx.ex('DELETE FROM aparelhos WHERE conta = ?', cid)
-        tx.ex('DELETE FROM participacoes WHERE conta = ?', cid)
-        tx.ex('UPDATE termos_aceites SET ip = NULL WHERE conta = ?', cid)  # the proof stays: id, version, date (P41 b)
-        _sem_responsabilidade(tx, cid)
-        tx.ex('DELETE FROM uso_diario WHERE conta = ?', cid)
-        _limpar_tentativas(tx, conta)
-        tx.ex('DELETE FROM tentativas WHERE chave = ?', CHAVE_CONFIRMACAO + cid)
-        tx.ex("UPDATE contas SET ativa = 0, nome = '', login = NULL, email = NULL, senha_hash = NULL, senha_definida_em = NULL,"
-              ' cota_diaria = NULL, teto_mensal_brl = NULL, idioma = NULL, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
-              ' ativacao_motivo = NULL, excluida_em = ? WHERE id = ?', _iso(momento), cid)
-        _evento(tx, 'conta_excluida', cid, por, momento)
-        return {'id': cid, 'situacao': 'excluida'}
+    confirmar_senha(root, cid, senha, ip)
+    with _bd(root, escrever=True) as tx:
+        return _apagar_conta(tx, _conta(tx, cid), cid, agora())
+
+
+# What the Mesa shows as the author of something made by an account that no longer exists (contract, 8.4 and
+# decision 10). The records keep the old name; only the output changes, here, in one place.
+CONTA_EXCLUIDA = 'Conta excluída'
+
+
+def nomes_publicos(root: Path, ids, organizacao: str | None = None) -> dict:
+    """The name to show for each account id: its name, `CONTA_EXCLUIDA` for a deleted account, and None for what is
+    not an account (a fixed label of the system, an old login) or is an account of another newsroom than
+    `organizacao`, when it is given: a name never tells one newsroom who is in another."""
+    pedidos = sorted({i for i in ids if isinstance(i, str) and ID_CONTA.fullmatch(i)})
+    if not pedidos:
+        return {}
+    with _bd(root) as tx:
+        linhas = tx.todos(f'SELECT id, nome, organizacao, excluida_em FROM contas WHERE id IN ({", ".join("?" * len(pedidos))})',
+                          *pedidos)
+    return {c['id']: _nome_para_mostrar(c) for c in linhas if organizacao is None or c['organizacao'] == organizacao}
+
+
+def nome_publico(root: Path, cid, organizacao: str | None = None) -> str | None:
+    """One id of `nomes_publicos`."""
+    return nomes_publicos(root, [cid], organizacao).get(cid)
+
+
+def _nome_para_mostrar(conta) -> str:
+    return CONTA_EXCLUIDA if conta['excluida_em'] else conta['nome']
 
 
 def _valor_do_teto(valor) -> str | None:
@@ -1543,8 +1602,8 @@ def atividade(root: Path, organizacao: str, limite: int = 50, antes=None) -> dic
     with _bd(root) as tx:
         # At most MAX_EVENTOS rows: the window of each newsroom.
         linhas = tx.todos('SELECT em, tipo, conta, por FROM eventos WHERE organizacao = ? ORDER BY n', organizacao)
-        nomes = {c['id']: c['nome'] for c in tx.todos(
-            'SELECT id, nome FROM contas WHERE organizacao = ? AND excluida_em IS NULL', organizacao)}
+        nomes = {c['id']: _nome_para_mostrar(c) for c in tx.todos(  # a deleted one shows as `CONTA_EXCLUIDA`
+            'SELECT id, nome, excluida_em FROM contas WHERE organizacao = ?', organizacao)}
         fim = len(linhas) if antes is None else min(antes - 1, len(linhas))
         inicio = max(0, fim - limite)
         return {'eventos': [{'em': l['em'], 'tipo': l['tipo'], 'conta': l['conta'], 'por': l['por'],
@@ -2252,8 +2311,9 @@ def _link_de_recuperacao(tx: _Tx, conta, momento: datetime) -> str:
 
 
 def _recuperacao_publica(tx: _Tx, linha) -> dict:
-    nomes = {c['id']: c['nome'] for c in tx.todos('SELECT id, nome FROM contas WHERE id IN (?, ?) AND excluida_em IS NULL',
-                                                  linha['conta'], linha['pedida_por'])}
+    nomes = {c['id']: _nome_para_mostrar(c) for c in tx.todos('SELECT id, nome, excluida_em FROM contas WHERE id IN (?, ?)'
+                                                               ' AND organizacao = ?', linha['conta'], linha['pedida_por'],
+                                                               linha['organizacao'])}
     return {'id': linha['id'], 'conta': linha['conta'], 'conta_nome': nomes.get(linha['conta']),
             'pedida_por': linha['pedida_por'], 'pedida_por_nome': nomes.get(linha['pedida_por']),
             'pedida_em': linha['pedida_em'], 'expira_em': linha['expira_em'], 'estado': linha['estado']}

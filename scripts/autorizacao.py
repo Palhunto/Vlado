@@ -108,6 +108,7 @@ _linhas(MATRIZ, 'nenhum', 'A', TODOS, 'sessao-sair conta-senha-trocar conta-sess
 # obrigatório; aceitar os termos: só onde eles existem, o `piloto` (as duas em `_recusa_do_modo`)
 _linhas(MATRIZ, 'nenhum', 'L', TODOS, 'conta-ver conta-sessoes')
 _linhas(MATRIZ, 'nenhum', 'B', TODOS, 'conta-exportar')
+_linhas(MATRIZ, 'nenhum', 'A', TODOS, 'conta-excluir')
 _linhas(MATRIZ, 'nenhum', 'E', TODOS, 'conta-atualizar')
 # 5.5 A redação.
 _linhas(MATRIZ, 'nenhum', 'L', SO_DONO, 'ia-config equipe-listar equipe-atividade')
@@ -178,8 +179,7 @@ _linhas(MATRIZ, 'caso', 'L', MESA, 'continuidade-resumo')
 TRANSITORIAS: dict[str, Regra] = {}
 RETIRADAS = ('contas-listar', 'contas-criar', 'contas-atualizar', 'contas-desativar', 'contas-reativar', 'contas-recuperar')
 # Operações que o contrato já define e que entram nas próximas entregas (segundo fator, ciclo de vida).
-PENDENTES = frozenset((
-    'conta-excluir').split())
+PENDENTES: frozenset[str] = frozenset()
 # Antes da sessão (seção 5.3): sem papel, conferidas em `rotas_contas._publico`.
 PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin', 'convite-consultar', 'convite-aceitar',
             'senha-esqueci', 'senha-redefinir', 'email-confirmar', 'entrar-segundo-fator')

@@ -116,7 +116,7 @@ class TermosTest(cenario.DuasRedacoes):
 
     def test_quem_nao_aceita_ainda_sai_e_leva_os_proprios_dados(self):
         # Ressalva B2: with the terms pending, exporting and deleting the own account are not refused by the pending
-        # item (until their deliveries they answer as operations that do not exist yet); with the second factor
+        # item (an empty body is refused by their own checks, never by the pending item); with the second factor
         # pending, they are.
         sessao, _ = self.nova()
         with com_termos('v1'):
