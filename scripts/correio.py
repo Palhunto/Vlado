@@ -153,13 +153,14 @@ MODELOS = {
     'conta_inativa': ('conta_inativa', {
         'pt': ('A sua conta no Vlado está sem uso',
                'Ninguém entra na sua conta no Vlado há mais de {dias} dias. Se ela continuar sem uso por mais {prazo} '
-               'dias, será desativada: não é apagada, e quem administra a sua redação pode reativá-la.\n\n'
+               'dias, poderá ser desativada: não é apagada, e quem administra a sua redação pode reativá-la. A única '
+               'conta de dono ativa de uma redação nunca é desativada.\n\n'
                'Para mantê-la, basta entrar na Mesa pelo endereço de sempre. Se não precisa mais dela, pode excluí-la '
                'em Minha conta.\n'),
         'en': ('Your Vlado account is not in use',
                'Nobody has signed in to your Vlado account for more than {dias} days. If it stays unused for {prazo} '
-               'more days, it will be deactivated: it is not deleted, and whoever runs your newsroom can reactivate '
-               'it.\n\nTo keep it, just sign in to the Mesa at the usual address. If you no longer need it, you can '
+               'more days, it may be deactivated: it is not deleted, and whoever runs your newsroom can reactivate '
+               'it. The only active owner account of a newsroom is never deactivated.\n\nTo keep it, just sign in to the Mesa at the usual address. If you no longer need it, you can '
                'delete it in My account.\n')}),
     'conta_inativa_dono': ('conta_inativa', {
         'pt': ('A sua conta no Vlado está sem uso',

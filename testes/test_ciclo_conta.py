@@ -155,13 +155,18 @@ class NomePublicoTest(cenario.DuasRedacoes):
         dono, dono_b = self.ids['dono'], self.ids['dono_b']
         cid = self.conta('Pessoa Removida', 'pessoa.removida', 'reporter', ['alpha'])
         acesso.remover(self.root, cid, dono, self.a, SENHA)
-        self.assertEqual(acesso.nome_publico(self.root, dono), 'Dona Alfa')
-        self.assertEqual(acesso.nome_publico(self.root, cid), acesso.CONTA_EXCLUIDA)
-        self.assertEqual(acesso.nome_publico(self.root, cid, self.a), 'Conta excluída')
+        self.assertEqual(acesso.nome_publico(self.root, dono, self.a), 'Dona Alfa')
+        self.assertEqual(acesso.nome_publico(self.root, cid, self.a), acesso.CONTA_EXCLUIDA)
+        self.assertEqual(acesso.CONTA_EXCLUIDA, 'Conta excluída')
+        for sem_redacao in ((), (None,), ('',)):  # Y1 of the review: who forgets the newsroom gets an error, no names
+            with self.assertRaises(TypeError if not sem_redacao else ValueError):
+                acesso.nome_publico(self.root, dono, *sem_redacao)
+            with self.assertRaises(TypeError if not sem_redacao else ValueError):
+                acesso.nomes_publicos(self.root, [dono, dono_b], *sem_redacao)
         self.assertIsNone(acesso.nome_publico(self.root, dono_b, self.a))  # never a name of the other newsroom
         self.assertIsNone(acesso.nome_publico(self.root, cid, self.b))
         for valor in ('manutencao', 'admin', None, 7, 'f' * 16):
-            self.assertIsNone(acesso.nome_publico(self.root, valor), valor)
+            self.assertIsNone(acesso.nome_publico(self.root, valor, self.a), valor)
         self.assertEqual(acesso.nomes_publicos(self.root, [dono, cid, dono_b, 'operador'], self.a),
                          {dono: 'Dona Alfa', cid: 'Conta excluída'})
 
@@ -199,7 +204,8 @@ class InativasTest(test_acesso.DuasRedacoes):
         (para, assunto, corpo), = self.enviadas
         self.assertEqual(para, f'{self.rep_a}@exemplo.test')
         self.assertIn('há mais de 180 dias', corpo)
-        self.assertIn('por mais 30 dias, será desativada', corpo)
+        self.assertIn('por mais 30 dias, poderá ser desativada', corpo)  # Z2: with two donos, one of them is not
+        self.assertIn('A única conta de dono ativa de uma redação nunca é desativada', corpo)
         self.assertNotIn('http', assunto + corpo)  # no link: the message never carries where to type the password
         self.assertTrue(self.conta(self.rep_a)['aviso_inatividade_em'])
         self.assertEqual(self.varrer()['contas_avisadas'], 0)  # warned once
@@ -269,6 +275,48 @@ class InativasTest(test_acesso.DuasRedacoes):
         self.assertEqual(resultado['contas_desativadas'], 0)
         self.assertEqual(resultado['para_o_operador'], [{'conta': self.dono_b, 'redacao': self.b, 'motivo': 'ultimo_dono'}])
         self.assertEqual(self.conta(self.dono_b)['ativa'], 1)
+
+    def test_dono_a_espera_de_recuperacao_nao_conta_como_dono(self):
+        # Y2 of the review of 4b-3: two donos, one waiting for a recovery (no password). The other one is the last who
+        # can run the newsroom: she does not delete herself, is not removed nor deactivated, and the sweep keeps her.
+        dona2 = self.pessoa('Dona Dois', 'dona.dois', 'dono', self.a)
+        _, token = acesso.recuperar(self.root, dona2, por='operador', organizacao=self.a)
+        with self.assertRaises(acesso.UltimoDono):
+            acesso.excluir_conta(self.root, self.dono_a, 'Dona A', test_acesso.SENHA)
+        self.assertEqual(self.tentativas_de_senha(self.dono_a), [])  # refused before the password: no attempt spent
+        with patch.object(acesso, 'confirmar_senha'):  # past the password, the lock of the deletion itself holds
+            with self.assertRaises(acesso.UltimoDono):
+                acesso.remover(self.root, self.dono_a, dona2, self.a, 'qualquer')
+        with self.assertRaises(acesso.UltimoDono):
+            acesso.desativar(self.root, self.dono_a, por=dona2, organizacao=self.a)
+        self.inativa(self.dono_a)
+        self.assertEqual(self.varrer()['contas_avisadas'], 1)
+        self.assertIn('única conta de dono ativa da sua redação', self.enviadas[0][2])
+        resultado = self.varrer(days=acesso.DESATIVACAO_DIAS + 1)
+        self.assertEqual(resultado['contas_desativadas'], 0)
+        self.assertIn({'conta': self.dono_a, 'redacao': self.a, 'motivo': 'ultimo_dono'}, resultado['para_o_operador'])
+        conta = self.conta(self.dono_a)
+        self.assertEqual((conta['ativa'], conta['excluida_em']), (1, None))
+        # Once the other dono has a password again, the first one may leave.
+        acesso.ativar(self.root, token, test_acesso.SENHA)
+        self.assertEqual(acesso.excluir_conta(self.root, self.dono_a, 'Dona A', test_acesso.SENHA)['situacao'], 'excluida')
+
+    def tentativas_de_senha(self, cid):
+        return self.linhas('SELECT * FROM tentativas WHERE chave = ?', acesso.CHAVE_CONFIRMACAO + cid)
+
+    def test_duas_varreduras_juntas_nao_avisam_duas_vezes(self):
+        # Z3 of the review: the server's start and the daily job at the same time. The one that finds the lock taken
+        # sends nothing; the warning is sent once.
+        self.inativa(self.rep_a)
+        with acesso._trinco_sem_espera(Path(str(acesso.caminho_bd(self.root)) + '.avisos')) as meu:
+            self.assertTrue(meu)
+            with correio.usar('smtp'):
+                self.assertEqual(acesso.avisar_inativas(self.root), {'contas_avisadas': 0, 'para_o_operador': []})
+            self.assertEqual(self.enviadas, [])
+            self.assertIsNone(self.conta(self.rep_a)['aviso_inatividade_em'])
+        self.assertEqual(self.varrer()['contas_avisadas'], 1)
+        self.assertEqual(self.varrer()['contas_avisadas'], 0)
+        self.assertEqual(len(self.enviadas), 1)
 
     def test_redacao_suspensa_nao_corre_prazo(self):
         acesso.definir_situacao_redacao(self.root, self.b, 'suspensa')
