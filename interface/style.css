@@ -2661,3 +2661,15 @@ body[data-nova="passo2"] #area-documentos :is(.mesa-tabs,.docs-topo,.mesa-acervo
 .docs-ler:hover{background:none;color:var(--theme-primary-hover)}
 body[data-nova="passo2"] #area-documentos :is(.docs-avisos,.docs-paginas){display:none}
 .nova-incerto{margin:0 0 var(--espaco-3);padding:var(--espaco-3) var(--espaco-4);border:1px solid var(--theme-warning-line);border-radius:var(--raio-controle);background:var(--theme-warning-bg);color:var(--theme-warning)}
+
+/* Portão AA (docs/design/componentes.md#foco-aa). Só tokens.
+   (a) O anel dos itens da barra lateral e das abas que NÃO são o item selecionado entra 1 px na borda do próprio item, porque com o afastamento de 2 px o
+   ocre caía sobre o verde do vizinho selecionado (1,62:1 no claro). O intervalo de 4 px entre os itens é condição: com 3 px ou menos o medidor lê o vizinho.
+   O item selecionado mantém o afastamento padrão. */
+:is(.areas,.mesa-tabs,.notebook-tabs,.quadros-abas) :is(a,button,[role=tab]):not([aria-pressed=true],[aria-current],[aria-selected=true]):focus-visible{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:-1px}
+/* (b) Editor do Caderno (Vditor): a área de edição ocupa o cartão inteiro e o cartão corta, então o anel é interno (mudancas-de-token.md, item 2). */
+#apuracao-vditor .vditor-reset:focus{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:calc(-1 * var(--foco-largura) - 2px)}
+#apuracao-vditor .vditor-toolbar :is(button,.vditor-tooltipped):focus-visible{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:0}
+/* (c) Seletor de apuração do topo, sem caixa como no canvas (P34): o que o identifica é o rótulo, o nome e a seta, todos em --theme-text; o fundo ao passar o mouse só reforça. */
+.persistent-context select{color:var(--theme-text)}
+.persistent-context select:hover{background:var(--theme-soft)}
