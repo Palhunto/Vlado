@@ -302,7 +302,7 @@ A coluna Tipo diz o que a operação faz: `L` lê, `B` baixa arquivo, `E` escrev
 | `GET /api/integracao` | nenhum | L | sim | sim | sim | sim | sim | Só capacidades do servidor. |
 | `GET /api/catalogo` | nenhum | L | sim | sim | sim | sim | sim | Passa por `filtrar`. |
 | `GET /api/fila` | `lote`, `caso` ou nenhum | L | sim | sim | sim | sim | sim | Sem parâmetro, passa por `filtrar`. O recibo vai sem caminho de arquivo. |
-| `GET /api/cota` | nenhum | L | sim | sim | sim | sim | sim | A própria conta. O bloco da redação só vai ao dono. |
+| `GET /api/cota` | nenhum | L | sim | sim | sim | sim | sim | A própria conta. O bloco da redação só vai ao dono. O gasto com a chave própria da redação vai à parte, em `chave_propria` (seção 8.5). |
 
 ### 5.3 Antes da sessão
 
@@ -346,7 +346,7 @@ Resolvedor `nenhum`. Toda operação age só sobre a redação da sessão. O id 
 
 | Operação | Tipo | D | E | R | L | C | Observação |
 |---|---|---|---|---|---|---|---|
-| `equipe-listar`\* | L | sim | — | — | — | — | Pessoas, papéis, apurações de cada uma, gasto do mês, convites pendentes. |
+| `equipe-listar`\* | L | sim | — | — | — | — | Pessoas, papéis, apurações de cada uma, gasto do mês (e, à parte, o gasto com a chave própria da redação), convites pendentes. |
 | `equipe-convidar`\*, `equipe-convite-reenviar`\*, `equipe-convite-cancelar`\* | A | sim | — | — | — | — | Seção 8.1. Convidar com o papel dono pede a senha. |
 | `equipe-papel`\* | A | sim | — | — | — | — | Recusa rebaixar o último dono ativo. Promover a dono e mudar o papel de um dono pedem a senha (seção 5.15). Nunca atribui `convidado`. |
 | `equipe-desativar`\*, `equipe-reativar`\*, `equipe-remover`\* | A | sim | — | — | — | — | Recusam o último dono ativo. Desativar encerra as sessões e para as execuções em curso, como hoje. Desativar um dono pede a senha; remover pede sempre (seção 5.15). A própria conta não é removida aqui. |
@@ -667,6 +667,7 @@ Esta seção fixa comportamento, não implementação.
   4. o teto no painel do provedor, fora do Vlado.
 - **Quem vê o quê:** a pessoa vê o próprio gasto (`GET /api/cota`); o dono vê o da redação e o de cada pessoa (`equipe-listar`); o operador vê o total de cada redação. Sempre em reais.
 - **Chave própria da redação (opcional):** o dono a cadastra em `ia-config-salvar`. Com ela, as perguntas da redação usam essa chave e o gasto não desconta da cota paga pelo serviço. O teto por pessoa continua valendo e o gasto continua medido, num lançamento separado. O navegador só vê se a chave existe e os quatro últimos caracteres. Guardar a chave e decidir quem a troca é desta onda; usar a chave da redação na chamada ao provedor é mudança em arquivo da Plataforma (decisão 11).
+- **Gasto com a chave própria, à parte (P40, decisão do dono):** a pergunta paga com a chave própria conta no limite diário de tokens da própria redação, mas não no total diário da instalação, que o serviço paga. O gasto dela aparece num campo separado, nunca somado à cota do serviço: em `GET /api/cota`, `chave_propria.conta_brl` para a pessoa e `chave_propria.organizacao_brl` só para quem vê a redação (o dono); em `equipe-listar`, `pessoas[].gasto_chave_propria_brl` e `gasto_chave_propria_brl` da redação, este só quando o gasto da redação é dela e só dela (seção 4.5), e `null` sem isso ou com o razão ilegível, sem impedir a tela de abrir. Reais, como texto com duas casas. O bloco `conta` de `GET /api/cota` segue contando as duas chaves, porque o teto da pessoa vale para as duas; o bloco `organizacao` é só a cota do serviço. A chave da redação só é lida no modo `piloto` (ressalva P3c da revisão): no `local-contas`, um `chaves_redacoes.json` que sobrou não vale nem recusa, e paga a chave do serviço. Feito pela Plataforma em `112986c`, com duas linhas em arquivos de Contas (`rotas_equipe._listar` e `interface_pesquisa.Servidor.__init__`) com o aval de Contas.
 - **Vizinho barulhento.** O teto de execuções simultâneas e o limite diário de tokens (`limites.conferir_dia`) são hoje da instalação: uma redação consegue esgotá-los para todas. Passam a existir por redação, com um total da instalação por cima, e a mensagem de recusa deixa de citar o número de perguntas da instalação. São mudanças em arquivos da Plataforma (seção 10).
 
 ## 9. Reavaliação de S2 e S6 (SEG-07)
