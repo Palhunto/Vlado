@@ -29,8 +29,11 @@ livre da máquina (mínima e máxima). Nada disso decide nada: vai só na mensag
 limite, para dizer se o processo inteiro parou (a máquina) ou se só os pedidos esperaram (a Mesa).
 
 **Pular só sem CPU, medida fora da Mesa.** Lentidão nunca pula por si: uma Mesa que regrida e fique
-lenta falha. Quando um tempo passa do limite (``T_ref`` acima de ``TETO_REF``, ou um pedido acima do
-seu limite), uma sonda à parte, de prioridade normal, pede ``SONDA_CPU`` s de CPU: se não os tem em
+lenta falha. ``T_ref`` acima de ``TETO_REF`` falha quando, nos mesmos segundos dos dez cadastros, a
+máquina deixou ociosos pelo menos 4 vezes o CPU que a Mesa gastou neles (mínimo de 1 s), e pula com os
+números quando não deixou: medido sem disputar com a Mesa (``apoio_cpu_baixa.decidir_por_ociosa``).
+Quando um pedido das sessões passa do seu limite, uma sonda à parte, de prioridade normal, pede
+``SONDA_CPU`` s de CPU: se não os tem em
 ``SONDA_PRAZO`` s, a máquina está saturada e o teste pula com o motivo explícito ("máquina saturada
 para processos de prioridade normal: X s para Y s de CPU"); se os tem, a lentidão é da Mesa e o teste
 falha. O processo de extração roda abaixo da prioridade normal e sem o núcleo 0 (SEG-01), para não
@@ -71,7 +74,7 @@ from modelo_pasta import copiar  # noqa: E402
 import test_codex_integracao as integracao  # noqa: E402
 from test_extracao_cadastro_pdf import HAS_PYPDF  # noqa: E402
 from test_fila_extracao import pdf_pesado  # noqa: E402
-from apoio_cpu_baixa import NECESSARIO_PARA_LER, esperar_com_cpu  # noqa: E402
+from apoio_cpu_baixa import NECESSARIO_PARA_LER, cpu_ociosa_s, decidir_por_ociosa, esperar_com_cpu  # noqa: E402
 
 SESSOES = 10
 LIMITE = 2.0
@@ -321,9 +324,15 @@ class PortaoFilaTest(unittest.TestCase):
 
     def test_dez_sessoes_com_extracao_longa_em_curso(self):
         # The same ten uploads with no extraction in course: the reference of this machine, this minute.
+        # In the same window: the machine's idle CPU and what this process (the Mesa runs in it) spent. A normal
+        # probe would compete with the Mesa and change T_ref itself (apoio_cpu_baixa.decidir_por_ociosa).
+        ociosa_antes, gasto_antes = cpu_ociosa_s(), time.process_time()
         referencia = self.cadastros_simultaneos('referencia')
+        ociosa_depois, gasto = cpu_ociosa_s(), time.process_time() - gasto_antes
         if referencia > TETO_REF:
-            self.lento('normal', f'T_ref = {referencia:.2f} s, acima de {TETO_REF:.0f} s: a Mesa está lenta para cadastrar')
+            ociosa = None if ociosa_antes is None or ociosa_depois is None else ociosa_depois - ociosa_antes
+            decidir_por_ociosa(self, ociosa, gasto,
+                               f'T_ref = {referencia:.2f} s, acima de {TETO_REF:.0f} s: a Mesa está lenta para cadastrar')
         limite_cadastros = max(LIMITE_CADASTROS, 2 * referencia)
         with tempfile.TemporaryDirectory() as pasta:
             pesado = pdf_pesado(Path(pasta) / 'pesado.pdf')  # about 15 s of reading on one core

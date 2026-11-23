@@ -38,7 +38,8 @@ from selecionar_caso import selecionar  # noqa: E402
 import test_registros as fixtures  # noqa: E402
 from test_extracao_cadastro_pdf import HAS_PYPDF, pdf_sintetico  # noqa: E402
 import trava_cadastro  # noqa: E402
-from apoio_cpu_baixa import NECESSARIO_ARQUIVO, NECESSARIO_PARA_LER, esperar_com_cpu  # noqa: E402
+from apoio_cpu_baixa import (NECESSARIO_ARQUIVO, NECESSARIO_PARA_LER, NECESSARIO_PARA_SAIR,  # noqa: E402
+                             esperar_com_cpu)
 
 AUXILIAR = TESTES / 'apoio_trava_processo.py'
 
@@ -812,12 +813,12 @@ class FilaProcessosTest(Base):
         lote = corpo['lote']['lote']
         trabalhador = self.lendo(lote)
         self.assertNotEqual(trabalhador, mesa.pid)
-        inicio = time.monotonic()
         mesa.matar()
-        # The extraction process ends with the Mesa (vigia), long before the file would be read
-        # (about 15 s): not because its input closed, which it only reads between files.
-        esperar(lambda: not vivo(trabalhador), 10, 'o processo de extração sobreviveu à Mesa')
-        self.assertLess(time.monotonic() - inicio, 4, 'o processo de extração saiu só ao terminar a leitura')
+        # The extraction process ends with the Mesa (vigia) within 4 s, long before the file would be read
+        # (about 15 s): not because its input closed, which it only reads between files. Waking the vigia
+        # takes low-priority CPU too: the wait fails only if a probe in the same conditions had it.
+        esperar_com_cpu(self, lambda: not vivo(trabalhador), 4, NECESSARIO_PARA_SAIR,
+                        'o processo de extração não saiu com a Mesa (saiu só ao terminar a leitura, ou nunca)')
         self.assertEqual(interno(self.root, lote)['arquivos'][0]['estado'], 'extraindo')
         # The next start reads the file again (one attempt counted) and publishes it.
         nova = Mesa(self, self.root, '--extracao', 'processos')

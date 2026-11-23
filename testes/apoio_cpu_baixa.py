@@ -15,10 +15,16 @@ a extração teve durante ele: uma folga basta para a sonda passar.
 
 No CI o portão tem de rodar sem pular: o pulo existe só para a máquina de desenvolvimento cheia.
 
+Para a Mesa, que roda em prioridade normal, uma sonda normal disputaria os núcleos com ela e mudaria o tempo
+medido. Ali vale ``decidir_por_ociosa``: a CPU que sobrou ociosa na máquina durante a mesma janela
+(``cpu_ociosa_s``, sem consumir nada), contra o que a própria Mesa gastou nela.
+
 A sonda anota o próprio CPU num arquivo a cada 0,1 s e é morta ao fim da espera, na hora: sem CPU ela não
 acumula nada, então o último valor anotado vale (no máximo 0,1 s a menos). Roda no Python base, e não no
 lançador do ``.venv`` do Windows, para que matar o processo mate a sonda.
 """
+import ctypes
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -27,6 +33,8 @@ import time
 
 NECESSARIO_PARA_LER = 2.0  # CPU s: 4 times the ~0.5 s from process start to the first page of the heavy PDF
 NECESSARIO_ARQUIVO = 60.0  # CPU s: 4 times the ~15 s of reading the whole heavy PDF on one core
+NECESSARIO_PARA_SAIR = 0.5  # CPU s: 4 times the ~0.1 s for the watcher to wake and end the process
+OCIOSA_MINIMA = 1.0  # CPU s left idle that always counts as "the machine had CPU" (decidir_por_ociosa)
 
 SONDA = r"""
 import os, sys, time
@@ -107,6 +115,34 @@ class SondaBaixa:
             self.parar()
         finally:
             self._pasta.cleanup()
+
+
+def cpu_ociosa_s():
+    """Idle CPU seconds of the whole machine so far (all cores added up), or None where it cannot be read."""
+    if os.name == 'nt':
+        ociosa, nucleo, usuario = (ctypes.c_ulonglong() for _ in range(3))
+        if not ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(ociosa), ctypes.byref(nucleo), ctypes.byref(usuario)):
+            return None
+        return ociosa.value / 10_000_000
+    try:
+        with open('/proc/stat', encoding='ascii') as estado:
+            campos = estado.readline().split()
+        return (int(campos[4]) + int(campos[5])) / os.sysconf('SC_CLK_TCK')  # idle + iowait
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def decidir_por_ociosa(teste, ociosa, gasto, mensagem):
+    """A time of the Mesa over its limit: FAIL when the machine left at least 4 times what the Mesa spent in the
+    same window idle (at least OCIOSA_MINIMA s), or when idle time cannot be read; SKIP otherwise, with the numbers."""
+    necessario = max(OCIOSA_MINIMA, 4 * gasto)
+    if ociosa is None:
+        teste.fail(f'{mensagem} (CPU ociosa da máquina ilegível nesta plataforma; a Mesa gastou {gasto:.2f} s)')
+    numeros = (f'na mesma janela a máquina deixou {ociosa:.2f} s de CPU ociosa; a Mesa gastou {gasto:.2f} s '
+               f'(necessário {necessario:.2f} s ociosos)')
+    if ociosa >= necessario:
+        teste.fail(f'{mensagem}, com CPU disponível: {numeros}')
+    teste.skipTest(f'máquina saturada para prioridade normal: {numeros}; {mensagem}')
 
 
 def esperar_com_cpu(teste, condicao, prazo, necessario, mensagem, sonda=SondaBaixa, passo=0.02):

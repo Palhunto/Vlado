@@ -73,6 +73,47 @@ class RegraTest(unittest.TestCase):
         self.assertIn('a Mesa reiniciada não concluiu o lote', texto)
 
 
+class OciosaTest(unittest.TestCase):
+    """The rule for the Mesa's own times (T_ref of the gate): idle CPU of the machine in the same window."""
+
+    def decidir(self, ociosa, gasto):
+        try:
+            apoio.decidir_por_ociosa(self, ociosa, gasto, 'T_ref = 6.20 s, acima de 6 s')
+        except AssertionError as erro:
+            return 'falha', str(erro)
+        except unittest.SkipTest as pulo:
+            return 'pula', str(pulo)
+        self.fail('a regra não decidiu')
+
+    def test_com_ociosa_suficiente_falha(self):
+        decisao, texto = self.decidir(ociosa=9.0, gasto=2.0)  # 4 x 2.0 = 8.0 needed
+        self.assertEqual(decisao, 'falha', texto)
+        self.assertIn('com CPU disponível: na mesma janela a máquina deixou 9.00 s de CPU ociosa; a Mesa gastou 2.00 s '
+                      '(necessário 8.00 s ociosos)', texto)
+
+    def test_sem_ociosa_suficiente_pula_com_os_numeros(self):
+        decisao, texto = self.decidir(ociosa=7.9, gasto=2.0)
+        self.assertEqual(decisao, 'pula', texto)
+        self.assertTrue(texto.startswith('máquina saturada para prioridade normal: '), texto)
+        self.assertIn('T_ref = 6.20 s, acima de 6 s', texto)
+
+    def test_minimo_de_um_segundo(self):
+        self.assertEqual(self.decidir(ociosa=0.9, gasto=0.1)[0], 'pula')  # 4 x 0.1 < 1 s: the minimum counts
+        self.assertEqual(self.decidir(ociosa=1.0, gasto=0.1)[0], 'falha')
+
+    def test_ociosa_ilegivel_falha(self):
+        decisao, texto = self.decidir(ociosa=None, gasto=2.0)
+        self.assertEqual(decisao, 'falha', texto)
+        self.assertIn('ilegível', texto)
+
+    def test_cpu_ociosa_da_maquina_cresce(self):
+        antes = apoio.cpu_ociosa_s()
+        if antes is None:
+            self.skipTest('CPU ociosa ilegível nesta plataforma')
+        time.sleep(0.3)
+        self.assertGreaterEqual(apoio.cpu_ociosa_s(), antes)
+
+
 class SondaRealTest(unittest.TestCase):
     def test_mede_e_para_na_hora(self):
         # Stopped at once even when the machine gives it no CPU (it is killed, not asked).
