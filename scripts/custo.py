@@ -645,17 +645,21 @@ def _numeros_da_redacao(convidado, ve_redacao) -> bool:
     return bool(ve_redacao) if ve_redacao is not None else not convidado
 
 
-def _redacao_tem_chave_propria(root, conta) -> bool:
-    """Whether the newsroom of ``conta`` has its own AI key saved now (any provider). An unreadable keys file
-    counts as no: the bar then shows the own-key part only when there was spend with it."""
-    redacao = redacao_do_gasto(root, conta)
-    if redacao is None:
-        return False
+def redacao_tem_chave_propria(root, redacao) -> bool | None:
+    """Whether ``redacao`` has its own AI key saved now (any provider): presence only, never any part of the key.
+    None when the keys file cannot be read (segredos.ChavesIlegiveis) or does not accept that newsroom id."""
     import segredos
     try:
         return any(v.get('origem') == 'redacao' for v in segredos.resumo(Path(root), redacao).values())
-    except ValueError:  # segredos.ChavesIlegiveis, or a newsroom id the keys file does not accept
-        return False
+    except (ValueError, OSError):
+        return None
+
+
+def _redacao_tem_chave_propria(root, conta) -> bool:
+    """Whether the newsroom of ``conta`` has its own AI key saved now. An unreadable keys file counts as no: the
+    bar then shows the own-key part only when there was spend with it."""
+    redacao = redacao_do_gasto(root, conta)
+    return redacao is not None and redacao_tem_chave_propria(root, redacao) is True
 
 
 def situacao(root, conta, *, administrador=False, piloto=False) -> dict:
