@@ -1016,6 +1016,18 @@ def listar_redacoes(root: Path) -> list[dict]:
                 for o in tx.todos('SELECT * FROM organizacoes ORDER BY criada_em, id')]
 
 
+EVENTOS_DA_CHAVE_DE_IA = ('chave_ia_salva', 'chave_ia_removida')
+
+
+def registrar_chave_de_ia(root: Path, cid: str, tipo: str) -> None:
+    """The dono saved or removed the newsroom's own AI key: it goes to the activity of the newsroom and to the audit
+    log. Who and when; never the key, nor any part of it."""
+    if tipo not in EVENTOS_DA_CHAVE_DE_IA:
+        raise ValueError('Evento de chave desconhecido.')
+    with _bd(root, escrever=True) as tx:
+        _evento(tx, tipo, _conta(tx, cid)['id'], cid)
+
+
 def total_redacoes(root: Path) -> int:
     with _bd(root) as tx:
         return tx.um('SELECT COUNT(*) AS total FROM organizacoes')['total']

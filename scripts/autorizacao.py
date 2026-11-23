@@ -328,10 +328,6 @@ def _recusa_do_modo(root: Path, modo: str, papel, operacao: str) -> Recusa | Non
         return None
     if operacao == 'codex-desligar':
         return _proibida('O serviço hospedado não pode ser encerrado pela interface.', 'servico_nao_encerravel')
-    if operacao == 'ia-config-salvar' and acesso.total_redacoes(root) > 1:
-        # Enquanto a chave própria de cada redação não existe, a do serviço não se troca pela Mesa numa instalação
-        # com mais de uma redação: seria uma redação mudando a conexão de todas.
-        return _proibida('A conexão com a IA deste serviço é definida por quem o administra.')
     if operacao == 'conta-fator-remover' and papel in acesso.FATOR_OBRIGATORIO:
         return _proibida(FATOR_OBRIGATORIO)  # onde o fator é obrigatório, quem é obrigado não o remove (seção 8.2)
     return None
@@ -470,10 +466,12 @@ def filtrar(root: Path, modo: str, principal: dict, operacao: str, resposta):
         return {**resposta, 'lotes': lotes}
     if operacao == 'ambiente' and modo == 'piloto':
         return {k: v for k, v in resposta.items() if k != 'python'}
-    if operacao == 'ia-config' and modo == 'piloto' and acesso.total_redacoes(root) > 1:
-        # Da chave do serviço, uma redação sabe só que existe.
-        chaves = {provedor: {'configurada': bool(chave.get('configurada')), 'final': None,
-                             'origem': 'servico' if chave.get('configurada') else None}
+    if operacao in ('ia-config', 'ia-config-salvar') and modo == 'piloto':
+        # A rota já devolve só a chave da própria redação (`rotas_gestao.resumo_da_redacao`). Aqui fica a segunda
+        # trava: nada que tenha origem na chave do serviço sai com os quatro últimos caracteres.
+        chaves = {provedor: chave if chave.get('origem') == 'redacao' else
+                  {'configurada': bool(chave.get('configurada')), 'final': None,
+                   'origem': 'servico' if chave.get('configurada') else None}
                   for provedor, chave in (resposta.get('chaves') or {}).items() if isinstance(chave, dict)}
         return {**resposta, 'chaves': chaves}
     if principal.get('papel') == 'leitor' and operacao in ('codex-listar', 'codex-eventos'):
