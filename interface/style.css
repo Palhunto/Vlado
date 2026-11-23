@@ -1797,6 +1797,16 @@ main:has(#area-achados:not([hidden])) .intro{margin-bottom:16px}
 @media (max-width:719px) {
   .persistent-context>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
+/* Cabeçalho do celular (componentes.md#cabecalho-celular): o botão de menu, "Apuração" sobre o nome (que ganha reticências, nunca corte seco) e a cota à direita;
+   Configurações, idioma, tema e Sair ficam na gaveta (desktop.js). A partir de 720 px a cota fica só na barra lateral. */
+.mesa-cota-cabecalho{flex:none;margin-left:auto;font-size:var(--text-sm);color:var(--theme-muted);white-space:nowrap}
+@media (min-width:720px) {
+  .mesa-cota-cabecalho{display:none!important}
+}
+@media (max-width:719px) {
+  .app-header .persistent-context{grid-template-columns:minmax(0,1fr);min-width:0}
+  .app-header .persistent-context select{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+}
 /* Home: a plain first step instead of a hero. */
 .mesa-primeiro-passo{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:0}
 .mesa-primeiro-passo h2{font-size:var(--text-xl);margin:0 0 6px}

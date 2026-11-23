@@ -189,16 +189,18 @@
   activate();
 })();
 
-// Phones: language, theme and sign-out move into the navigation drawer, leaving the
-// header to the menu and the investigation selector.
+// Phones: Configurações, language, theme and sign-out move into the navigation drawer, leaving the
+// header to the menu, the investigation selector and the quota (componentes.md#cabecalho-celular).
 (() => {
   const phone = matchMedia('(max-width:719px)');
   const header = document.querySelector('.app-header');
-  const controls = ['mesa-idioma','mesa-sair','mesa-tema'].map(id => $(id));
+  // In the drawer Configurações comes first; in the header it keeps its place between language and sign-out.
+  const inDrawer = ['mesa-configuracoes','mesa-idioma','mesa-sair','mesa-tema'].map(id => $(id));
+  const inHeader = ['mesa-idioma','mesa-configuracoes','mesa-sair','mesa-tema'].map(id => $(id));
   const drawer = element('div', undefined, 'mesa-drawer-controls');
   function place() {
-    if (phone.matches) { drawer.append(...controls); $('mesa-sidebar').querySelector('.areas').after(drawer); }
-    else { header.append(...controls); drawer.remove(); }
+    if (phone.matches) { drawer.append(...inDrawer); $('mesa-sidebar').querySelector('.areas').after(drawer); }
+    else { header.append(...inHeader); drawer.remove(); }
   }
   phone.addEventListener('change', place);
   place();
@@ -361,10 +363,15 @@
       const pct=Math.min(100,Math.round(used/cap*100));
       const value=`R$ ${money(used,true)} de R$ ${money(cap,!Number.isInteger(cap))}`,spent=Boolean(block.esgotada);
       // Used up is never shown by colour alone (W11, rules 6 and 7): the label changes, a "!" comes first and the aria-label says it.
-      $('mesa-cota-rotulo').textContent=scope?(spent?'Cota da instalação esgotada':'Cota da instalação'):(spent?'Cota esgotada':'Cota do mês');
+      const rotulo=scope?(spent?'Cota da instalação esgotada':'Cota da instalação'):(spent?'Cota esgotada':'Cota do mês');
+      $('mesa-cota-rotulo').textContent=rotulo;
       $('mesa-cota-valor').textContent=value;
+      // No celular a cota vai ao cabeçalho, curta (componentes.md#cabecalho-celular): "R$ 18,40 de 50", ou "! Cota esgotada" no teto; só aparece abaixo de 720 px (CSS).
+      // O mesmo bloco do cartão (o de menor saldo, escolhido acima) e o mesmo rótulo, só no formato curto e sem a parte da chave própria: "Cota da instalação R$ 40,00 de 200", "! Cota da instalação esgotada".
+      const cabecalho=$('mesa-cota-cabecalho');cabecalho.textContent=spent?`! ${rotulo}`:`${scope?`${rotulo} `:''}R$ ${money(used,true)} de ${money(cap,!Number.isInteger(cap))}`;cabecalho.hidden=false;
       $('mesa-cota-medidor').style.setProperty('--uso',(spent?100:pct)+'%');
       $('mesa-cota-medidor').setAttribute('aria-label',scope?(spent?`Cota da instalação esgotada: ${value}`:`${pct}% da cota da instalação usada`):(spent?`Cota do mês esgotada: ${value}`:`${pct}% da cota usada`));
+      $('mesa-cota-cabecalho').setAttribute('aria-label',$('mesa-cota-medidor').getAttribute('aria-label'));
       // P40 (b): o gasto com a chave de IA própria da redação, em linha separada: não entra na cota do serviço acima. A pessoa vê o que pagou por ela; o dono vê também o da redação.
       const chave=data.chave_propria,reais=raw=>{const n=Number(raw);return raw!=null&&Number.isFinite(n)?`R$ ${money(n,true)}`:'';};
       // O que a chave própria da redação pagou já está no valor da cota da pessoa: é parte ("dos quais R$ 3,25 com a chave própria"), não acréscimo. Aparece com o gasto mandado
@@ -375,7 +382,7 @@
       $('mesa-cota-chave-redacao-valor').textContent=inteira;$('mesa-cota-chave-redacao').hidden=!inteira;
       if(mostraParte)$('mesa-cota-medidor').setAttribute('aria-label',`${$('mesa-cota-medidor').getAttribute('aria-label')}, dos quais ${dela} com a chave própria`);
       card.dataset.esgotada=String(spent);card.hidden=false;
-    }catch(_){card.hidden=true;}
+    }catch(_){card.hidden=true;$('mesa-cota-cabecalho').hidden=true;}
   }
   window.recarregarAcervo=force=>loadInventory(force);window.definirEstadoAcervo=mensagem=>text('mesa-acervo-status',mensagem);
   window.atualizarCotaBarra=force=>loadQuota(force);   // codex.js chama ao terminar cada pergunta
@@ -520,7 +527,9 @@
 // esse lado; sem estouro, sem atributo. O item ativo é o que a faixa já marca (aria-current, aria-selected ou aria-pressed): ela é observada, então quem a desenha ou troca o item não muda.
 (() => {
   const ativo = '[aria-current],[aria-selected="true"],[aria-pressed="true"]';
-  const faixas = new WeakSet();
+  const SELETOR = '#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs';
+  const faixas = new WeakSet(), pendentes = new Set();
+  let quadro = 0;
   const folgaDe = faixa => { const valor = parseFloat(getComputedStyle(faixa).getPropertyValue('--espaco-4')); return Number.isFinite(valor) ? valor : 16; };
   function marcar(faixa) {
     const resto = faixa.scrollWidth - faixa.clientWidth, esq = faixa.scrollLeft;
@@ -536,24 +545,28 @@
     }
     marcar(faixa);
   }
+  // Um recálculo por faixa e por quadro, qualquer que seja o número de mudanças: a faixa é marcada e o quadro seguinte a atualiza.
+  function agendar(faixa) {
+    pendentes.add(faixa);
+    if (quadro) return;
+    quadro = requestAnimationFrame(() => { quadro = 0; const fila = [...pendentes]; pendentes.clear(); fila.forEach(trazerOAtivo); });
+  }
   function observar(faixa) {
     if (!faixa || faixas.has(faixa)) return;
     faixas.add(faixa);
     let largura = 0;
     faixa.addEventListener('scroll', () => marcar(faixa), {passive: true});
-    if (typeof MutationObserver === 'function') new MutationObserver(() => trazerOAtivo(faixa)).observe(faixa, {childList: true, subtree: true, attributes: true, attributeFilter: ['aria-current', 'aria-selected', 'aria-pressed']});
+    // Só a própria faixa é observada (os itens e o item ativo), nunca a página: uma conversa longa não passa por aqui.
+    if (typeof MutationObserver === 'function') new MutationObserver(() => agendar(faixa)).observe(faixa, {childList: true, subtree: true, attributes: true, attributeFilter: ['aria-current', 'aria-selected', 'aria-pressed']});
     // Ao aparecer (a área estava escondida) ou ao mudar de largura a faixa recalcula; só ao aparecer ela traz o ativo de novo.
-    if (typeof ResizeObserver === 'function') new ResizeObserver(() => { const apareceu = largura === 0; largura = faixa.clientWidth; if (apareceu) trazerOAtivo(faixa); else marcar(faixa); }).observe(faixa);
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => { const apareceu = largura === 0; largura = faixa.clientWidth; if (apareceu) agendar(faixa); else marcar(faixa); }).observe(faixa);
     trazerOAtivo(faixa);
   }
-  const SELETOR = '#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs';
   document.querySelectorAll(SELETOR).forEach(observar);
-  // As abas de Minha conta nascem depois (conta.js): quem entra na página com a classe das abas também é observado.
-  if (typeof MutationObserver === 'function' && document.body) {
-    new MutationObserver(registros => registros.forEach(r => r.addedNodes.forEach(no => {
-      if (no.nodeType !== 1) return;
-      if (no.matches(SELETOR)) observar(no);
-      no.querySelectorAll?.(SELETOR).forEach(observar);
-    }))).observe(document.body, {childList: true, subtree: true});
+  // As abas de Minha conta nascem depois (conta.js), como filhas diretas de #area-configuracoes: só esse contêiner é observado, sem descer a árvore.
+  const moldura = document.getElementById('area-configuracoes');
+  if (moldura && typeof MutationObserver === 'function') {
+    new MutationObserver(registros => registros.forEach(r => r.addedNodes.forEach(no => { if (no.nodeType === 1 && no.matches(SELETOR)) observar(no); })))
+      .observe(moldura, {childList: true});
   }
 })();
