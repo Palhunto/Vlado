@@ -272,6 +272,27 @@ def itens_da_conta(root, conta, casos):
     return itens
 
 
+def conversas_sem_criador(root, casos):
+    """For the data export (E4b-2b): the ``criada_em_utc`` of the most recent conversation in ``casos`` (outside the
+    trash) without ``criada_por`` (made before it was written, or in the local mode), or None when there is none.
+    From that moment on the conversations of ``itens_da_conta`` are complete; before it, some may be missing. A
+    conversation that cannot be read raises ValueError or OSError."""
+    casos, removidos = lixeira.casos_disponiveis(root, casos)
+    pasta = dentro(root, 'conversas')
+    mais_recente = None
+    for path in sorted(pasta.glob('*/conversa.json')) if pasta.is_dir() and casos else []:
+        meta = ler_json(path)
+        if not isinstance(meta, dict) or meta.get('id') != path.parent.name:
+            raise ValueError('Conversa ilegível.')
+        if (meta.get('caso') in casos and not meta.get('criada_por')
+                and not lixeira.excluido(root, meta['caso'], conversa=meta['id'], itens=removidos)):
+            criada = meta.get('criada_em_utc')
+            if not isinstance(criada, str):
+                raise ValueError('Conversa sem data de criação.')
+            mais_recente = max(mais_recente or criada, criada)
+    return mais_recente
+
+
 class _LoteNaFila(Exception):
     """A batch of the case reached the extraction queue while the freeze took the cadastro lock."""
 

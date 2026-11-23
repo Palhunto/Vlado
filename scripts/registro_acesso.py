@@ -113,7 +113,9 @@ CODIGOS = frozenset({'operacao_proibida', 'caso_nao_liberado', 'campos_nao_permi
                      # pergunta recusada porque a chave de IA da redação não pôde ser lida (P3, C3)
                      'chave_redacao_ilegivel',
                      # excluir a própria conta com o nome digitado diferente (E4b-3, admin_recusada com validacao)
-                     'nome_confirmacao_divergente'})
+                     'nome_confirmacao_divergente',
+                     # teto de exportações da própria conta (E4b-2b, 429, motivo limite, admin_recusada de conta-exportar)
+                     'limite_de_exportacoes'})
 # Qual e-mail saiu ou falhou (email_enviado, email_falhou): só o tipo, nunca o endereço nem o texto.
 MENSAGENS = frozenset({'convite', 'redefinicao', 'novo_acesso', 'senha_trocada', 'fator_alterado', 'recuperacao',
                        'muitas_tentativas', 'email_novo', 'conta_inativa', 'fator_bloqueado'})

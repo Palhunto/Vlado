@@ -59,6 +59,12 @@ def casos_da_exportacao(root, conta, casos):
     items, read once, for what is in the trash inside a case (a conversation, a round)."""
     if not isinstance(conta, str) or not re.fullmatch(ID_CONTA, conta):
         raise ValueError('Conta inválida para exportar os itens.')
+    return casos_disponiveis(root, casos)
+
+
+def casos_disponiveis(root, casos):
+    """``(cases, trash items)``: of ``casos`` (checked), those that exist and are not in the trash, in the given
+    order, and the active trash items, read once."""
     if not isinstance(casos, (list, tuple, set, frozenset)):
         raise ValueError('Lista de apurações inválida.')
     itens = ativos(root)

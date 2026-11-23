@@ -202,9 +202,17 @@ class ConversasTest(redacoes.Redacoes, unittest.TestCase):
         redacoes.aguardar_fim(self.manager, identificador)
         caminho = self.root / f'conversas/{identificador}/conversa.json'
         meta = ler_json(caminho)
+        self.assertIsNone(codex_apuracao.conversas_sem_criador(self.root, ['alpha']))  # all of them have it
         del meta['criada_por']  # as written before this change: meta['conta'] alone is never taken as the creator
         caminho.write_text(__import__('json').dumps(meta), encoding='utf-8')
         self.assertEqual(codex_apuracao.itens_da_conta(self.root, self.bia, ['alpha']), [])
+        # The export says from when its conversations are complete: after the most recent one without a creator.
+        self.assertEqual(codex_apuracao.conversas_sem_criador(self.root, ['alpha']), meta['criada_em_utc'])
+        self.assertIsNone(codex_apuracao.conversas_sem_criador(self.root, ['outra']))  # only the cases passed
+        with self.assertRaises(ValueError):
+            codex_apuracao.conversas_sem_criador(self.root, 'alpha')
+        lixeira.adicionar(self.root, 'conversa', 'alpha', 'Conversa', conversa=identificador)
+        self.assertIsNone(codex_apuracao.conversas_sem_criador(self.root, ['alpha']))  # in the trash: not counted
 
     def test_conversa_ilegivel_levanta(self):
         pasta = self.root / f'conversas/{uuid.uuid4().hex}'
