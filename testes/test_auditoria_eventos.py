@@ -209,11 +209,19 @@ class DiaCheioTest(Auditoria):
         """Os 300 mil pedidos da prova da revisão: do mesmo IP, agora, são poucas linhas."""
         acesso.limpar_limites()
         antes = len(self.todas())
+        minuto = lambda: datetime.now(timezone.utc).replace(second=0, microsecond=0)  # noqa: E731
+        primeiro = minuto()
         for numero in range(400):
             self.publico('entrar', {'login': f'ninguem{numero}', 'senha': SENHA})
+        # The aggregation is one line per IP and per calendar minute (UTC): the 400 requests take a few seconds and
+        # may cross a minute's turn, which gives one aggregated line more, never one per request.
+        minutos = int((minuto() - primeiro).total_seconds() // 60) + 1
         reg.descarregar(tudo=True)
         novas = self.todas()[antes:]
-        self.assertLessEqual(len(novas), 21, '400 pedidos do mesmo IP: 20 falhas e uma linha agregada')
+        self.assertLessEqual(len(novas), 20 + minutos,
+                             f'400 pedidos do mesmo IP: 20 falhas e uma linha agregada por minuto ({minutos})')
+        agregadas = [l for l in novas if l.get('motivo') == 'limite_ip']
+        self.assertEqual(len({l['em'] for l in agregadas}), len(agregadas), 'duas linhas agregadas no mesmo minuto')
         self.assertEqual(sum(l.get('quantidade', 1) for l in novas), 400)
 
 
