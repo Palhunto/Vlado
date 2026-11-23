@@ -33,15 +33,15 @@ mostra referência, atual e diferença (pixels diferentes em vermelho, caixas ao
 
 ## O que é capturado
 
-Telas: `inicio`, `documentos`, `cadastro`, `codex`, `achados`, `apuracao`, `diligencias`, `quadros`, `gerenciar`,
+Telas: `inicio`, `documentos`, `nova` (Nova apuração, passo 1), `codex`, `achados`, `apuracao`, `diligencias`, `quadros`, `gerenciar`,
 `caderno`, `configuracoes`, as abas `quadros_linha` e `quadros_mapa` (por `/?area=<área>&caso=vila_serena_sintetico`, servidor `local`) e `entrar` (servidor
 `local-contas`). Larguras 375, 768, 1024 e 1440 px; temas claro e escuro. Captura de página inteira, então a altura
 varia por tela. Nome: `<tela>__<largura>__<tema>.png`.
 
 **Foco de teclado** (`foco_*`): o capturador aperta Tab até o alvo ficar focado com `:focus-visible` e captura com o
 anel visível; se o foco não chegar ao alvo, a rodada falha. Alvos: campo de login e botão Entrar na tela de entrar
-(375 e 1440 px); botão "Enviar e cadastrar agora", campo "Natureza dos documentos" e, só em 1440 px, o item
-"Cadastrar arquivos" da barra lateral, na Mesa (área `cadastro`). Nos dois temas: 18 imagens. Mudar a cor, a
+(375 e 1440 px); botão "Continuar para documentos", campo "Natureza dos documentos" e, só em 1440 px, o item
+"Perguntar" da barra lateral, na Nova apuração (área `nova`; a área "Cadastrar arquivos" saiu, R4). Nos dois temas: 18 imagens. Mudar a cor, a
 espessura ou o `outline-offset` do foco reprova (verificado: cor do foco no tema claro, 9 de 9 reprovadas; offset
 efetivo de 4 px para 2 px, 5 de 5). Nas demais capturas o foco é retirado de propósito, para não aparecer anel.
 

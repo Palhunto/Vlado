@@ -3,7 +3,7 @@
     python testes/regressao_visual.py gerar     # refaz a linha de base em testes/referencias_visuais/<plataforma>/
     python testes/regressao_visual.py comparar  # captura de novo e compara com a linha de base; relatório em tmp/
 
-Captura 11 áreas (inicio, documentos, cadastro, codex, achados, apuracao, diligencias, quadros, gerenciar,
+Captura 11 áreas (inicio, documentos, nova, codex, achados, apuracao, diligencias, quadros, gerenciar,
 caderno, configuracoes), duas abas de `quadros` (linha do tempo e mapa de relações) em 375, 768, 1024 e 1440 px, nos temas claro e escuro, e a tela de entrar. Só
 dados sintéticos: uma pasta temporária semeada por `vlado_lancador.preparar_dados` + `semear_ambiente.semear`
 (casos vila_serena_sintetico e campo_verde_aditivo_sintetico), que nunca é a do projeto. O servidor sobe
@@ -44,7 +44,7 @@ sys.path.insert(0, str(AQUI))
 import regressao_visual_comparador as comparador  # noqa: E402
 
 REFERENCIAS = AQUI / 'referencias_visuais'
-TELAS = ('inicio', 'documentos', 'cadastro', 'codex', 'achados', 'apuracao', 'diligencias', 'quadros',
+TELAS = ('inicio', 'documentos', 'nova', 'codex', 'achados', 'apuracao', 'diligencias', 'quadros',
          'gerenciar', 'caderno', 'configuracoes')
 TELA_ENTRAR = 'entrar'
 # Mesma área, outra aba aberta por clique (a Mesa não guarda a aba na URL): nome -> (área, nome da aba).
@@ -53,9 +53,9 @@ VARIANTES = {'quadros_linha': ('quadros', 'Linha do tempo'), 'quadros_mapa': ('q
 # nome -> (tela de base, seletor do alvo, larguras em que o alvo é alcançável por Tab).
 FOCOS = {'foco_entrar_campo': ('entrar', '#entrar-login', (375, 1440)),
          'foco_entrar_botao': ('entrar', '#entrar-enviar', (375, 1440)),
-         'foco_mesa_botao': ('cadastro', '#enviar-documentos', (375, 1440)),
-         'foco_mesa_campo': ('cadastro', '#cadastro-natureza', (375, 1440)),
-         'foco_mesa_barra': ('cadastro', '#ver-codex', (1440,))}   # a barra lateral só existe em tela larga
+         'foco_mesa_botao': ('nova', '#nova-continuar', (375, 1440)),
+         'foco_mesa_campo': ('nova', '#nova-natureza', (375, 1440)),
+         'foco_mesa_barra': ('nova', '#ver-codex', (1440,))}   # a barra lateral só existe em tela larga
 TODAS = TELAS + tuple(VARIANTES) + (TELA_ENTRAR,) + tuple(FOCOS)
 CASO = 'vila_serena_sintetico'
 CONVERSA = 'c' * 32   # conversa sintética de regressao_visual_rodada.py, aberta em ?codex-conversa=

@@ -262,7 +262,7 @@ class SelecaoTest(unittest.TestCase):
     def test_larguras_e_temas_do_plano(self):
         self.assertEqual(sorted(rv.VIEWPORTS), [375, 768, 1024, 1440])
         self.assertEqual(sorted(rv.TEMAS), ['claro', 'escuro'])
-        pedidas = {'inicio', 'documentos', 'cadastro', 'codex', 'achados', 'apuracao', 'diligencias', 'quadros', 'gerenciar'}
+        pedidas = {'inicio', 'documentos', 'nova', 'codex', 'achados', 'apuracao', 'diligencias', 'quadros', 'gerenciar'}
         self.assertTrue(pedidas <= set(rv.TELAS))
 
 
