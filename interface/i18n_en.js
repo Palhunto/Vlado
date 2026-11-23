@@ -1741,6 +1741,20 @@ window.VLADO_I18N_EN = {
     "Recuperar acesso": "Recover access",
     "Sair": "Sign out",
     "Selecione o link e copie manualmente.": "Select the link and copy it manually.",
+    // Seus dados em Minha conta (E4b: conta.js, dados_conta.js)
+    "Termos de uso: versão {versao}, aceita em {dia}.": "Terms of use: version {versao}, accepted on {dia}.",
+    "Termos de uso: versão {versao}.": "Terms of use: version {versao}.",
+    "Ler os termos": "Read the terms",
+    "Baixe um arquivo com o que o Vlado guarda sobre você: perfil, aceites dos termos, sessões, participações e a atividade dos últimos 90 dias. O conteúdo das apurações é da redação e não entra.": "Download a file with what Vlado keeps about you: profile, acceptances of the terms, sessions, memberships and the activity of the last 90 days. The content of the investigations belongs to the newsroom and is not included.",
+    "Exportar meus dados": "Export my data",
+    "Preparando o arquivo…": "Preparing the file…",
+    "Ainda não traz: {itens}.": "Not yet included: {itens}.",
+    "Excluir a conta": "Delete the account",
+    "Excluir a sua conta?": "Delete your account?",
+    "Excluindo…": "Deleting…",
+    "Digite o seu nome, «{nome}», para confirmar": "Type your name, «{nome}», to confirm",
+    "Você sai da Mesa agora e não entra mais com esta conta. Suas notas, revisões e conversas ficam com a redação, e a Mesa passa a mostrar o autor como «Conta excluída». O seu nome continua gravado nos registros já feitos e nos backups, que não podem ser reescritos.": "You leave the Mesa now and can no longer sign in with this account. Your notes, reviews and conversations stay with the newsroom, and the Mesa shows the author as «Deleted account». Your name stays recorded in the records already made and in the backups, which cannot be rewritten.",
+    "A redação precisa de ao menos um dono ativo. Antes de excluir a sua conta, torne outra pessoa dono na Equipe.": "The newsroom needs at least one active owner. Before deleting your account, make someone else an owner in Team.",
   },
   padroes: [
     // Cota do mês na barra lateral
