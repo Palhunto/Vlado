@@ -598,3 +598,31 @@ test('R3, formulário de Cadastrar arquivos (até o passo 3): o mesmo cuidado de
   [...dialogo.querySelectorAll('.dialogo-acoes button')][0].click(); await mesa.esperar(6);
   assert.equal(mesa.pedidos.length, 1, 'cancelar não envia'); assert.match(mesa.$('cadastro-erro').textContent, /Não sabemos se a apuração foi criada/);
 });
+
+test('N2: um 500 no pedido do primeiro lote de apuração nova também é incerto (como rede, 502 e 504): para os lotes seguintes e avisa', async () => {
+  for (const status of [500, 504]) {
+    const mesa = abrir();
+    const promessa = mesa.janela.Envio.enviar({escopo: {novo: true, titulo: 'T'}, arquivos: [arquivo('a.pdf', 40 * MB), arquivo('b.pdf', 40 * MB)], alvo: mesa.$('alvo')});
+    await livre(mesa);
+    mesa.pedidos[0].responder(status, {});
+    const final = await promessa;
+    assert.equal(mesa.pedidos.length, 1, `${status}: nenhum lote seguinte`); assert.equal(final.incerto, true, String(status)); assert.equal(final.aviso_incerto, AVISO_INCERTO);
+  }
+  const claro = abrir();   // 400 e 503 seguem sendo recusa clara
+  const envio = claro.janela.Envio.enviar({escopo: {novo: true, titulo: 'T'}, arquivos: [arquivo('a.pdf', 40 * MB), arquivo('b.pdf', 40 * MB)], alvo: claro.$('alvo')});
+  await livre(claro); claro.pedidos[0].responder(400, {estado: 'erro', erro: 'Informe o título do novo caso.'});
+  await livre(claro); await livre(claro);
+  assert.equal(claro.pedidos.length, 2); claro.pedidos[1].responder(400, {estado: 'erro', erro: 'Informe o título do novo caso.'});
+  assert.notEqual((await envio).incerto, true);
+});
+
+test('N3: depois de o primeiro lote falhar, o reenvio ao caso responde "inexistente" e a pessoa lê "recomece a Nova apuração", sem enviar os outros lotes', async () => {
+  const mesa = abrir();
+  const promessa = mesa.janela.Envio.enviar({escopo: {novo: false, caso: 'apuracao_perdida'}, arquivos: [arquivo('a.pdf', 40 * MB), arquivo('b.pdf', 40 * MB), arquivo('c.pdf', 40 * MB)], alvo: mesa.$('alvo')});
+  await livre(mesa);
+  mesa.pedidos[0].responder(400, {estado: 'erro', codigo: 'caso_inexistente', erro: 'Caso inexistente; não cadastrar em outro caso automaticamente.'});
+  const final = await promessa;
+  assert.equal(mesa.pedidos.length, 1, 'os outros lotes não são enviados');
+  for (const linha of linhas(mesa)) assert.match(resultado(linha), /Esta apuração não chegou a ser criada: o primeiro envio falhou\. Recomece a Nova apuração\./);
+  assert.equal(final.recebidos, 0); assert.ok(final.erro);
+});

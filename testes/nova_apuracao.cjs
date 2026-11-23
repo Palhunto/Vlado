@@ -10,7 +10,7 @@ const {criarMesa, Evento} = require('./dom_minimo.cjs');
 const ALFA = {id: 'alfa', titulo: 'Pauta Alfa', rodadas: []};
 const CASO_NOVO = 'apuracao_' + 'a'.repeat(32);
 
-function abrir({idioma = 'pt', casos = [ALFA], url = 'http://127.0.0.1:8765/'} = {}) {
+function abrir({idioma = 'pt', casos = [ALFA], url = 'http://127.0.0.1:8765/', fluxo = true, lote = null, api = () => undefined} = {}) {
   const pedidos = [];
   class XHR {
     constructor() { this.ouvintes = {}; this.upload = {addEventListener() {}}; pedidos.push(this); }
@@ -19,15 +19,16 @@ function abrir({idioma = 'pt', casos = [ALFA], url = 'http://127.0.0.1:8765/'} =
   }
   const catalogo = [...casos];
   const mesa = criarMesa({idioma, armazenamento: idioma === 'en' ? {'vlado-idioma': 'en'} : {}, catalogo, url,
-    api: operacao => ({inventario: {caso_id: CASO_NOVO, corpus_id: 'c1', total_documentos: 1, documentos: []}, 'codex-listar': {conversas: []}}[operacao] || {}),
+    api: (operacao, dados) => { const propria = api(operacao, dados); if (propria !== undefined) return propria; return ({inventario: {caso_id: CASO_NOVO, corpus_id: 'c1', total_documentos: 1, documentos: []}, 'codex-listar': {conversas: []}}[operacao] || {}); },
     preparar: janela => {
       janela.XMLHttpRequest = XHR; janela.TextEncoder = TextEncoder;
       janela.setTimeout = (funcao, ms, ...resto) => (ms === 1500 ? setImmediate(funcao) : setTimeout(funcao, ms, ...resto));
       const original = janela.fetch;
       janela.fetch = async (endereco, opcoes) => {
-        if (String(endereco) === '/api/integracao') return {ok: true, json: async () => ({envio_fluxo: true})};
+        if (String(endereco) === '/api/integracao') return {ok: true, json: async () => (fluxo ? {envio_fluxo: true} : {})};
         if (String(endereco) === '/api/catalogo') return {ok: true, json: async () => ({casos: catalogo})};
         if (String(endereco).startsWith('/api/fila?lote=')) {
+          if (lote) return {ok: true, json: async () => ({lote})};
           return {ok: true, json: async () => ({lote: {lote: 'L1', caso: CASO_NOVO, estado: 'publicado', recibo: {recebidos: 1, novos: 1, duplicados: 0, corpus_id: 'c1'},
             arquivos: [{indice: 0, estado: 'pronto', extracao: 'extraido', paginas: 2}]}})};
         }
@@ -266,4 +267,79 @@ test('B1: se o envio falha sem criar nada, o link volta e a pessoa pode corrigir
   assert.equal(mesa.$('nova-voltar').disabled, false, 'nada nasceu: dá para voltar');
   mesa.$('nova-voltar').click(); await mesa.esperar(4);
   assert.equal(area(mesa), 'nova'); assert.equal(mesa.$('nova-nome').value, 'Obra da escola');
+});
+
+// --- N1 a N4 da Coruja ------------------------------------------------------------------------------------------------------------------------
+test('N1: sem o envio por arquivo no servidor a própria Nova apuração envia em JSON (novo:true, sem caso), cria a apuração e segue ao passo 3, sem a área antiga', async () => {
+  const mesa = abrir({fluxo: false, api: (operacao, dados) => (operacao === 'cadastrar'
+    ? {caso_id: CASO_NOVO, corpus_id: 'c1', recebidos: 1, novos: 1, duplicados: 0, total_documentos: 1, arquivos: [{nome: 'primeiro.pdf', estado: 'pronto'}], inventario: {}} : undefined)});
+  await mesa.esperar(10);
+  mesa.janela.FileReader = class { readAsDataURL() { this.result = 'data:;base64,AAAA'; this.onload(); } };
+  await passo2(mesa, {nome: 'Obra da escola', web: true});
+  await soltar(mesa);
+  await mesa.esperar(20);
+  const [pedido] = mesa.chamadas.filter(c => c.operacao === 'cadastrar');
+  assert.ok(pedido, 'o envio em JSON saiu');
+  assert.equal(pedido.dados.novo, true); assert.ok(!('caso' in pedido.dados), 'sem caso escolhido pela tela');
+  assert.equal(pedido.dados.titulo, 'Obra da escola'); assert.equal(pedido.dados.modo_fontes, 'documentos_web'); assert.equal(pedido.dados.dominio_permitido, 'prefeitura.sp.gov.br');
+  assert.deepEqual(pedido.dados.arquivos, [{nome: 'primeiro.pdf', base64: 'AAAA'}]);
+  assert.equal(mesa.$('area-cadastro').hidden, true, 'não cai na área antiga');
+  assert.equal(mesa.janela.contextoCaso(), CASO_NOVO); assert.equal(mesa.doc.body.dataset.nova, undefined);
+  assert.equal(mesa.$('nova-etapas-2').querySelector('[aria-current="step"]').textContent.trim(), '3 Conferir recibo');
+  assert.match(mesa.$('documentos-recibo').textContent, /Recibo do lote: 1 de 1 arquivos/);
+  assert.equal(mesa.$('nova-voltar').disabled, false);
+});
+
+test('N1: o envio em JSON acima de 50 MB é recusado antes, e uma falha do servidor volta ao passo 2 sem criar nada', async () => {
+  const grande = abrir({fluxo: false}); await grande.esperar(10);
+  await passo2(grande);
+  const evento = new Evento('drop', {bubbles: true, cancelable: true}); evento.dataTransfer = {files: [{name: 'enorme.pdf', size: 60 * 1024 * 1024}]};
+  grande.$('documentos-zona').dispatchEvent(evento); await grande.esperar(10);
+  assert.equal(grande.chamadas.filter(c => c.operacao === 'cadastrar').length, 0);
+  assert.match(grande.$('mesa-acervo-status').textContent, /O lote excede 50 MB/); assert.equal(grande.$('nova-voltar').disabled, false);
+  const falha = abrir({fluxo: false, api: operacao => { if (operacao === 'cadastrar') throw Object.assign(new Error('Nome inválido.'), {result: {erro: 'Nome inválido.'}}); return undefined; }});
+  await falha.esperar(10);
+  falha.janela.FileReader = class { readAsDataURL() { this.result = 'data:;base64,AAAA'; this.onload(); } };
+  await passo2(falha); await soltar(falha); await falha.esperar(15);
+  assert.equal(falha.janela.NovaApuracao.ativa(), true, 'a apuração continua por criar'); assert.match(falha.$('mesa-acervo-status').textContent, /Nome inválido\./);
+  assert.equal(falha.$('nova-voltar').disabled, false);
+});
+
+test('N3: primeiro lote aceito e depois falho na fila: a tela sai da apuração que não existe e pede para recomeçar a Nova apuração', async () => {
+  const mesa = abrir({lote: {lote: 'L1', caso: CASO_NOVO, estado: 'falha', motivo: 'Não foi possível ler os arquivos.', arquivos: []}});
+  await mesa.esperar(10);
+  await passo2(mesa, {nome: 'Obra da escola'});
+  await soltar(mesa);
+  mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', caso: CASO_NOVO, estado: 'enfileirado', arquivos: []}});
+  await mesa.esperar(40);
+  assert.equal(mesa.janela.contextoCaso(), '', 'o seletor não fica numa apuração que não existe');
+  assert.equal(mesa.$('nova-incerto').hidden, false);
+  assert.equal(mesa.$('nova-incerto').textContent, 'Esta apuração não chegou a ser criada: o primeiro envio falhou. Recomece a Nova apuração.');
+  assert.ok(!mesa.catalogo.some(c => c.id === CASO_NOVO));
+});
+
+test('N4: com o envio no ar, sair pela barra diz a verdade (a apuração está sendo criada; sair não cancela) e oferece Ficar ou Sair e encontrá-la depois', async () => {
+  const mesa = abrir(); await mesa.esperar(10);
+  await passo2(mesa, {nome: 'Obra da escola'});
+  await soltar(mesa);
+  assert.equal(mesa.pedidos.length, 1, 'o envio está no ar (segurado)');
+  mesa.$('ver-codex').click(); await mesa.esperar(4);
+  const d = dialogo(mesa);
+  assert.ok(d, 'pede confirmação');
+  assert.equal(d.querySelector('.dialogo-titulo').textContent, 'A apuração está sendo criada');
+  assert.ok(d.textContent.includes('Sair não cancela o envio: a apuração nasce assim mesmo, e você a encontra depois na Visão geral.'));
+  assert.ok(!d.textContent.includes('Nada foi criado'), 'não diz que nada foi criado');
+  assert.deepEqual(botoes(mesa).map(b => b.textContent), ['Ficar', 'Sair e encontrá-la depois']);
+  botoes(mesa)[0].click(); await mesa.esperar(4);   // Ficar
+  assert.equal(area(mesa), 'documentos'); assert.equal(mesa.janela.NovaApuracao.ativa(), true);
+  mesa.$('ver-codex').click(); await mesa.esperar(4);
+  botoes(mesa)[1].click(); await mesa.esperar(8);   // Sair e encontrá-la depois
+  assert.equal(area(mesa), 'codex', 'saiu');
+  mesa.catalogo.push({id: CASO_NOVO, titulo: 'Obra da escola', rodadas: []});
+  mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', caso: CASO_NOVO, estado: 'enfileirado', arquivos: []}});
+  await mesa.esperar(40);
+  assert.equal(area(mesa), 'codex', 'a apuração nasceu, mas a página em que a pessoa está não muda');
+  assert.equal(mesa.janela.contextoCaso(), '', 'e o contexto dela não é trocado por trás');
+  assert.ok([...mesa.$('contexto-caso').options].some(o => o.value === CASO_NOVO), 'a apuração está no seletor (e na Visão geral)');
+  assert.equal(mesa.pedidos.length, 1, 'uma apuração só');
 });

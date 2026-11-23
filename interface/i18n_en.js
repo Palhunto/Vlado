@@ -1366,6 +1366,11 @@ window.VLADO_I18N_EN = {
     // Minha conta e Equipe (conta.js, equipe.js) e o diálogo com senha (dialogo.js)
     "Sua senha": "Your password",
     // Nova apuração (passos 1 e 2)
+    "A apuração está sendo criada": "The investigation is being created",
+    "Sair não cancela o envio: a apuração nasce assim mesmo, e você a encontra depois na Visão geral.": "Leaving does not cancel the upload: the investigation is created anyway, and you will find it later in the Overview.",
+    "Sair e encontrá-la depois": "Leave and find it later",
+    "Ficar": "Stay",
+    "Esta apuração não chegou a ser criada: o primeiro envio falhou. Recomece a Nova apuração.": "This investigation was not created: the first upload failed. Start the New investigation again.",
     "Não sabemos se a apuração foi criada: a resposta do servidor não chegou. Confira a apuração na Visão geral antes de enviar de novo.": "We don't know whether the investigation was created: the server's answer did not arrive. Check the investigation in the Overview before sending again.",
     "Enviar de novo pode criar outra apuração": "Sending again may create another investigation",
     "Enviar mesmo assim": "Send anyway",

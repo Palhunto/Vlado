@@ -834,7 +834,9 @@ window.NovaApuracao = (() => {
   let dados = null;      // o que o passo 1 coletou: {nome, natureza, modo_fontes, dominio_permitido?}
   let etapa = null;      // 1, 2 ou 3 enquanto a linha de etapas vale (ela segue até o recibo ser conferido, já com a apuração criada)
   let liberado = false;  // a saída foi confirmada: o clique que a pediu segue
+  let criadaAqui = null; // a apuração que o primeiro envio desta página fez nascer, até o fim do envio
   let incerto = null;    // o aviso, enquanto não se sabe se a apuração nasceu num envio que não terminou: um reenvio pode criar outra
+  let saiuComEnvio = false;  // a pessoa saiu da página com o envio no ar: a apuração nasce mesmo assim, sem tirá-la de onde foi
   let enviando = false;  // o primeiro envio está no ar: a apuração pode nascer a qualquer momento, então o passo 1 não reabre (B1 da Coruja: voltar, corrigir e continuar criava DUAS)
 
   const fontes = () => [...document.querySelectorAll('input[name="nova-fontes"]')].find(opcao => opcao.checked)?.value || 'somente_documental';
@@ -909,7 +911,8 @@ window.NovaApuracao = (() => {
     desenharEtapas(); titular();
   }
   function encerrar() {
-    fluxo = null; dados = null; etapa = null; incerto = null;
+    if (enviando) saiuComEnvio = true;   // o envio segue por trás; o `dados` fica para o envio terminar
+    fluxo = null; if (!enviando) dados = null; etapa = null; incerto = null;
     delete document.body.dataset.nova;
     $('nova-aviso').hidden = true; $('nova-incerto').hidden = true;
     preencher(null); limpar(); desenharEtapas();
@@ -919,6 +922,11 @@ window.NovaApuracao = (() => {
   // "Sair sem criar a apuração?": só quando o formulário foi preenchido; a Mesa não guarda rascunho de apuração.
   async function confirmarSaida(gatilho) {
     if (!preenchido()) return true;
+    // Com o primeiro envio no ar, sair não o cancela: a apuração nasce assim mesmo. O diálogo diz isso e oferece ficar.
+    if (enviando) {
+      return !!(await window.Dialogo.confirmar({titulo: 'A apuração está sendo criada', texto: 'Sair não cancela o envio: a apuração nasce assim mesmo, e você a encontra depois na Visão geral.',
+        acao: 'Sair e encontrá-la depois', cancelar: 'Ficar', gatilho}));
+    }
     return !!(await window.Dialogo.confirmar({titulo: 'Sair sem criar a apuração?', texto: 'Nada foi criado e nada fica guardado.', acao: 'Sair', gatilho}));
   }
   function titular() {
@@ -945,30 +953,60 @@ window.NovaApuracao = (() => {
       if (!ok) return null;
       incerto = null; $('nova-incerto').hidden = true;
     }
-    marcarEnvio(true);
-    const escopo = {novo: true, titulo: dados.nome, natureza: dados.natureza, modo_fontes: dados.modo_fontes,
+    marcarEnvio(true); saiuComEnvio = false;
+    const nome = dados.nome;
+    const escopo = {novo: true, titulo: nome, natureza: dados.natureza, modo_fontes: dados.modo_fontes,
       ...(dados.dominio_permitido ? {dominio_permitido: dados.dominio_permitido} : {})};
-    try {
-    return await window.Documentos.enviar(arquivos, {escopo, alvo: $('documentos-envio'), alvoRecibo: $('documentos-recibo'),
-      // O servidor aceitou o primeiro lote: a apuração existe. O seletor do topo passa a ela e a tela vira a Documentos comum.
-      aoCriar: async caso => {
-        const nome = dados.nome, noPasso1 = currentArea === 'nova';
+    // A apuração existe (o servidor aceitou o primeiro lote): o seletor do topo passa a ela e a tela vira a Documentos comum; se a pessoa saiu com o envio
+    // no ar, ela só entra na lista (a Visão geral a mostra) e a página em que a pessoa está não muda.
+    const criada = async caso => {
+        const noPasso1 = currentArea === 'nova';
         marcarEnvio(false);   // a apuração existe: não há mais o risco de criar outra, e a Nova apuração pode abrir de novo
         fluxo = null; dados = null; delete document.body.dataset.nova;
         $('nova-aviso').hidden = true;
         // O catálogo só ganha a apuração quando o lote é publicado (depois da leitura dos arquivos): até lá, o título vem do que a pessoa digitou.
         if (typeof loadCatalog === 'function') await loadCatalog();
         if (!cases.some(c => c.id === caso)) cases.push({id: caso, titulo: nome, rodadas: []});
+        criadaAqui = caso;
+        if (saiuComEnvio) { window.dispatchEvent(new Event('catalogo-carregado')); return; }   // quem saiu a encontra depois na Visão geral
+        fluxo = null; dados = null; delete document.body.dataset.nova; $('nova-aviso').hidden = true;
         window.definirContextoCaso?.(caso, {force: true});
         if (noPasso1) showArea('documentos');   // nasceu com a pessoa no passo 1: leva à Documentos dela, não a um formulário que criaria outra
         areaHeading(); desenharEtapas();
         await extra.depoisDeCriar?.(caso);
-      },
+    };
+    const aoCriar = async caso => { marcarEnvio(false); await criada(caso); };   // a apuração existe: não há mais o risco de criar outra
+    // N1: sem o envio por arquivo no servidor, a própria Nova apuração envia em JSON (sem depender da área Cadastrar arquivos).
+    const enviarEmJson = async arquivosEscolhidos => {
+      const total = arquivosEscolhidos.reduce((soma, arquivo) => soma + arquivo.size, 0);
+      if (total > 50 * 1024 * 1024) { window.definirEstadoAcervo?.('O lote excede 50 MB. Divida o envio em lotes menores; nenhum arquivo foi enviado.'); return null; }
+      window.definirEstadoAcervo?.(`Enviando e cadastrando ${arquivosEscolhidos.length} arquivo(s)…`);
+      try {
+        const lote = await Promise.all(arquivosEscolhidos.map(encodeFile));
+        const resultado = await api('cadastrar', {...escopo, arquivos: lote});
+        if (resultado.recebidos !== arquivosEscolhidos.length || resultado.arquivos.length !== arquivosEscolhidos.length) throw new Error('Recibo incompleto. Confira o inventário antes de considerar o lote confirmado.');
+        marcarEnvio(false); await criada(resultado.caso_id);
+        window.Envio.renderRecibo($('documentos-recibo'), resultado);
+        etapa = 3; desenharEtapas(); if (typeof loadCatalog === 'function') await loadCatalog(); await extra.aoConcluir?.(resultado);
+        return resultado;
+      } catch (falha) {
+        window.definirEstadoAcervo?.(falha.message); return null;
+      }
+    };
+    try {
+    return await window.Documentos.enviar(arquivos, {escopo, alvo: $('documentos-envio'), alvoRecibo: $('documentos-recibo'), aoCriar,
       aoConcluir: async resultado => { etapa = 3; desenharEtapas(); if (typeof loadCatalog === 'function') await loadCatalog(); await extra.aoConcluir?.(resultado); },
-      aoIndisponivel: extra.aoIndisponivel,
+      aoIndisponivel: enviarEmJson,
       aoTerminar: resultado => {
         if (fluxo === 'passo2' && resultado && !resultado.recebidos && resultado.incerto) {
           incerto = resultado.aviso_incerto; $('nova-incerto').textContent = incerto; $('nova-incerto').hidden = false;
+        }
+        // N3: o servidor aceitou o primeiro lote (a apuração nasceu) e o lote falhou na fila: a apuração não existe de fato. A tela sai dela e pede para recomeçar.
+        if (resultado && !resultado.recebidos && criadaAqui && !resultado.incerto && !saiuComEnvio) {
+          const perdida = criadaAqui; criadaAqui = null;
+          const posicao = cases.findIndex(c => c.id === perdida); if (posicao >= 0 && !cases[posicao].rodadas.length) cases.splice(posicao, 1);
+          window.definirContextoCaso?.('', {force: true}); areaHeading();
+          $('nova-incerto').textContent = t('Esta apuração não chegou a ser criada: o primeiro envio falhou. Recomece a Nova apuração.'); $('nova-incerto').hidden = false;
         }
       }});
     } finally { marcarEnvio(false); }
