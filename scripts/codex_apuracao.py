@@ -278,13 +278,14 @@ class Conversas:
                 self.rpc = self.factory(self.root, self._notification)
             return self.rpc
 
-    def status(self):
-        """API connection state. Keys stay in the server environment and are never returned."""
+    def status(self, redacao=None):
+        """API connection state. Keys stay in the server environment and are never returned. ``redacao``: the
+        newsroom of who asks, whose own key counts (``chave_propria``: that key would pay)."""
         rpc = self._start()
-        account = rpc.call('account/read', {}).get('account') or {}
+        account = rpc.call('account/read', {'redacao': redacao} if redacao else {}).get('account') or {}
         return {'versao': rpc.version, 'autenticado': account.get('type') == 'api',
                 'tipo': account.get('type'), 'provedor': account.get('provedor'),
-                'modelo': account.get('modelo'), 'online': True,
+                'modelo': account.get('modelo'), 'online': True, 'chave_propria': bool(account.get('chave_propria')),
                 # The inference server says when the configured model is outside the list (CUS-03).
                 'recusa_modelo': account.get('recusa_modelo')}
 
@@ -293,14 +294,15 @@ class Conversas:
         quota of the person, of the newsroom and of the installation (CUS-01, CUS-03, accounts 8.5).
         ``ve_redacao``: the newsroom's numbers may go in a refusal (the route says, by the gate). Returns
         the status."""
-        estado = self.status()
+        estado = self.status(custo.redacao_do_gasto(self.root, conta))
         if not estado['autenticado']:
             raise ErroIA('Chave de API ausente: cole a chave em Perguntar à IA › Conexão e opções, ou defina '
                          + ' ou '.join(CHAVES.values()) + ' no ambiente do servidor.', codigo='autenticacao')
         if estado.get('recusa_modelo'):
             raise ValueError(estado['recusa_modelo'])
         limites.conferir_dia(self.root, custo.chaves_orcamento(conta, self.root)['organizacao'])
-        custo.conferir_antes(self.root, conta, estado.get('modelo'), convidado=convidado, ve_redacao=ve_redacao)
+        custo.conferir_antes(self.root, conta, estado.get('modelo'), convidado=convidado, ve_redacao=ve_redacao,
+                             chave_propria=estado['chave_propria'])
         return estado
 
     def _conferir_simultaneas(self, conta, restrito=False):
@@ -696,6 +698,7 @@ class Conversas:
             ctx['cancel'] = False
             ctx['meta']['conta'] = conta  # whose quota this execution spends (CUS-01)
             ctx['orcamento'] = chaves
+            ctx['redacao_da_chave'] = custo.redacao_do_gasto(self.root, conta)  # whose own key the turns may use
             ctx['modelo_cobrado'] = estado.get('modelo')
             ctx['observacoes_humanas'] = feedback['conteudo'] if feedback else None
             ctx['meta']['observacoes_humanas'] = None
@@ -999,9 +1002,11 @@ class Conversas:
                         'Não herde suporte nem aprovação para os novos achados. Não leia outras rodadas '
                         'nem amplie o corpus. IDs abaixo pertencem à rodada de origem.\n'
                         + json.dumps(ctx['observacoes_humanas'], ensure_ascii=False))
-                result = rpc.call('turn/start', {'threadId': ctx['meta']['thread_id'],
-                    'input': [{'type': 'text', 'text': prompt}],
-                    'approvalPolicy': 'on-request'})
+                turno = {'threadId': ctx['meta']['thread_id'], 'input': [{'type': 'text', 'text': prompt}],
+                         'approvalPolicy': 'on-request'}
+                if ctx.get('redacao_da_chave'):
+                    turno['redacao'] = ctx['redacao_da_chave']  # the newsroom's own key, when it has one
+                result = rpc.call('turn/start', turno)
                 with self.lock:
                     if ctx['busy']:
                         ctx['meta']['turn_id'] = result['turn']['id']
@@ -1144,7 +1149,8 @@ class Conversas:
             if modelo and modelo not in modelos:
                 modelos.append(modelo)
             registro = {'numero': numero, 'etapa': ctx['meta'].get('etapa'), 'rodada': ctx['meta'].get('rodada'),
-                        'turno': params.get('turnId'), 'modelo': modelo, 'uso': uso, 'registrado_em_utc': agora()}
+                        'turno': params.get('turnId'), 'modelo': modelo, 'uso': uso, 'registrado_em_utc': agora(),
+                        'chave': 'redacao' if params.get('chavePropria') is True else 'servico'}
             if gasto:
                 registro['custo'] = gasto
                 ctx['meta']['custo_micro_brl'] = ctx['meta'].get('custo_micro_brl', 0) + gasto['micro_brl']
@@ -1161,9 +1167,9 @@ class Conversas:
                                                  publica=f'Registro de uso da API {numero:04} não gravado.'))
         self._event(identifier, 'uso', {'etapa': registro['etapa'], 'modelo': modelo, 'uso': uso, 'total': total,
                                         **({'custo_brl': gasto['brl']} if gasto else {})})
-        self._aplicar_limites(identifier, uso, total, gasto)
+        self._aplicar_limites(identifier, uso, total, gasto, chave_propria=params.get('chavePropria') is True)
 
-    def _aplicar_limites(self, identifier, uso, total, gasto=None):
+    def _aplicar_limites(self, identifier, uso, total, gasto=None, chave_propria=False):
         """Stop the round when it exceeds the per-question or daily token budget (cache included) or the
         month's quota in reais of its account or of the organization."""
         ctx = self.contexts[identifier]
@@ -1178,7 +1184,8 @@ class Conversas:
             sem_registro = custo.MENSAGEM_SEM_CALCULO  # spent and not priced: never go on without a count (R1)
         elif gasto and chaves:  # the month's spend first: it is added even when the token limits cannot be read
             try:
-                totais = custo.somar_gasto(self.root, meta.get('conta'), gasto['micro_brl'], chaves)
+                totais = custo.somar_gasto(self.root, meta.get('conta'), gasto['micro_brl'], chaves,
+                                           chave_propria=chave_propria)
             except custo.GastoSemRegistro as exc:
                 sem_registro = str(exc)  # stop before the next call (R1, R2)
         organizacao, dia_organizacao = (chaves or {}).get('organizacao', custo.ORGANIZACAO), 0
@@ -1207,7 +1214,8 @@ class Conversas:
             causa, motivo = 'limite_dia', 'Limite diário de uso da instalação atingido. Tente novamente amanhã (UTC).'
         elif totais is not None:
             try:
-                estourou = custo.estouro(self.root, totais, conta=meta.get('conta'))  # never a number (B1)
+                estourou = custo.estouro(self.root, totais, conta=meta.get('conta'),  # never a number (B1)
+                                         chave_propria=chave_propria)
             except ValueError:
                 estourou = None
             if estourou:
@@ -1412,6 +1420,7 @@ class Conversas:
             self._conferir_simultaneas(conta, restrito=dono is not None)
             meta['conta'] = conta
             ctx['orcamento'] = chaves
+            ctx['redacao_da_chave'] = custo.redacao_do_gasto(self.root, conta)
             ctx['modelo_cobrado'] = estado.get('modelo')
             run, question, pipeline = self._reconstruir(identifier)
             pendentes = [e for e in pipeline.etapas if e not in pipeline.accepted]

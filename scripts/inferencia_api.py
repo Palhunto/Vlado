@@ -228,6 +228,7 @@ class _Thread:
         self.instrucoes = ''
         self.modelo = None
         self.turno = None
+        self.redacao = None  # the newsroom of who asks this turn: its own key, when it has one (contract 8.5)
         self.cancelar = threading.Event()
         self.ocioso = threading.Event()  # set when no worker is running for this thread
         self.ocioso.set()
@@ -289,15 +290,31 @@ class ServidorAPI:
                 pass
 
     # -- account and catalog ------------------------------------------------
-    def _chave(self, provedor):
-        """Environment variable first, then the key saved from the Mesa."""
-        return segredos.ler_chave(self.root, provedor) or ''
+    def _chave(self, provedor, redacao=None):
+        """The newsroom's own key when ``redacao`` has one, else the service's (environment, then the key saved
+        from the Mesa)."""
+        return segredos.ler_chave(self.root, provedor, redacao) or ''
+
+    def _chave_e_origem(self, provedor, redacao=None):
+        """(key, own): ``own`` says whether the key is the newsroom's own, read so that key and origin agree."""
+        for _ in range(3):
+            origem = segredos.origem_da_chave(self.root, provedor, redacao)
+            chave = self._chave(provedor, redacao)
+            if segredos.origem_da_chave(self.root, provedor, redacao) == origem:
+                break
+        return chave, origem == 'redacao' and bool(chave)
+
+    @staticmethod
+    def _redacao(params):
+        valor = (params or {}).get('redacao')
+        return valor if isinstance(valor, str) and valor else None
 
     def _conta(self, params):
         inferencia = ler_inferencia(self.root)
-        if not self._chave(inferencia.provedor):
+        chave, propria = self._chave_e_origem(inferencia.provedor, self._redacao(params))
+        if not chave:
             return {'account': None}
-        conta = {'type': 'api', 'provedor': inferencia.provedor, 'modelo': inferencia.modelo}
+        conta = {'type': 'api', 'provedor': inferencia.provedor, 'modelo': inferencia.modelo, 'chave_propria': propria}
         import custo
         try:  # a model outside the installation's list is refused before any question (CUS-03)
             custo.conferir_modelo(self.root, inferencia.provedor, inferencia.modelo)
@@ -399,6 +416,7 @@ class ServidorAPI:
                 raise ErroIA('Já há um turno em andamento nesta conversa.')
             turno = uuid.uuid4().hex
             thread.turno = turno
+            thread.redacao = self._redacao(params)
             thread.ocioso.clear()
             thread.cancelar.clear()
             thread.mensagens.append({'papel': 'usuario', 'texto': texto})
@@ -457,7 +475,7 @@ class ServidorAPI:
 
     def _laco(self, thread, turno):
         inferencia = ler_inferencia(self.root)
-        chave = self._chave(inferencia.provedor)
+        chave, propria = self._chave_e_origem(inferencia.provedor, thread.redacao)
         if not chave:
             raise ErroIA(f'Chave de API ausente para {inferencia.provedor}: cole a chave em Perguntar à IA › '
                          f'Conexão e opções, ou defina {CHAVES[inferencia.provedor]} no ambiente do servidor.',
@@ -483,8 +501,9 @@ class ServidorAPI:
             if resposta.texto:
                 self._emitir('item/completed', thread, item={'type': 'agentMessage', 'id': item,
                                                              'text': resposta.texto})
+            # Which key paid this call: the Mesa puts its cost on the newsroom's own entry or on the service's quota.
             self._emitir('item/usage', thread, turnId=turno, uso=dict(resposta.uso),
-                         modelo=resposta.modelo or thread.modelo)
+                         modelo=resposta.modelo or thread.modelo, chavePropria=propria)
             if thread.cancelar.is_set():
                 return 'interrupted'
             if not chamadas:
