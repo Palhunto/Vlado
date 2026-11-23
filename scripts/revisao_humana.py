@@ -8,6 +8,7 @@ from comum import dentro, escrever_json, ler_json, pasta_preparacao, sha256
 from indice_sqlite import caminho_rodada
 import caderno
 import indice_achados
+import lixeira
 from registros_achados import carregar, recibo, trava
 
 ORIGEM_DECLARADA = 'declaracao_do_usuario_na_interface'
@@ -56,6 +57,31 @@ def _historico(run, revision, origin):
         events.append(item)
         previous = sha256(path)
     return events, previous
+
+
+def itens_da_conta(root, conta, casos):
+    """Human review marks the account made, for its own data export (E4b-2b of Contas; Viga, with the Maestro's
+    consent): ``[{tipo: 'revisao', caso, criado_em, id}]`` (id: the event's), only in ``casos`` (those it reaches,
+    as the caller says) and only events of this account. Never the observation, the finding or a name. Rounds in
+    the trash (on their own or with their conversation) and cases in the trash stay out. An event that cannot be
+    read raises ValueError or OSError (the export says it is incomplete)."""
+    casos, removidos = lixeira.casos_da_exportacao(root, conta, casos)
+    itens = []
+    for case in casos:
+        execucoes = dentro(root, f'execucoes/{case}')
+        for run in sorted(execucoes.iterdir()) if execucoes.is_dir() else []:
+            if (not run.is_dir() or not re.fullmatch(lixeira.ID_RODADA, run.name)
+                    or lixeira.excluido(root, case, rodada=run.name, itens=removidos)):
+                continue
+            revisoes = run / 'saidas/revisao_humana'
+            for path in sorted(revisoes.glob('*/eventos/*.json')) if revisoes.is_dir() else []:
+                item = ler_json(path)
+                if not isinstance(item, dict) or item.get('caso_id') != case or item.get('rodada') != run.name:
+                    raise ValueError('Histórico de revisão humana inválido.')
+                if item.get('origem') == ORIGEM_CONTA and item.get('conta_id') == conta:
+                    itens.append({'tipo': 'revisao', 'caso': case, 'criado_em': item.get('em_utc'),
+                                  'id': item.get('evento_id')})
+    return itens
 
 
 def _marca(events, identifier, version):

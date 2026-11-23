@@ -28,6 +28,7 @@ import unicodedata
 import caderno
 import comparador
 import evidencias as ev
+import lixeira
 from revisao_humana import ESTADOS as ESTADOS_REVISAO_HUMANA
 
 ESTADOS = ('sem_suporte', 'suporte_parcial', 'suportada', 'revisada_por_humano')
@@ -338,6 +339,30 @@ def listar(root, case):
                 item = {**item, 'estado': None, 'historico': [], 'divergente': True, 'erro': str(exc)}
         result.append(item)
     return result
+
+
+def itens_da_conta(root, conta, casos):
+    """What the account created in the newsroom check, for its own data export (E4b-2b of Contas; Viga, with the
+    Maestro's consent): ``[{tipo, caso, criado_em, id}]``, only in ``casos`` (those it reaches, as the caller says):
+    ``conferencia`` for a record it created (its first event is of this account; id: the record's) and
+    ``revisao_afirmacao`` for each claim review it made (id: ``<record>:<event sequence>``). Never the text, the
+    observation or a name. Cases in the trash stay out. A record whose history cannot be read raises ValueError
+    (the export says it is incomplete), since whose actions it holds is unknown."""
+    casos, _ = lixeira.casos_da_exportacao(root, conta, casos)
+    itens = []
+    for case in casos:
+        for record in listar(root, case):
+            if record.get('divergente'):
+                raise ValueError('Registro da conferência da redação ilegível.')
+            for event in record['historico']:
+                if event.get('conta_id') != conta or event.get('origem_autoria') != caderno.AUTORIA_CONTA:
+                    continue
+                if event['sequencia'] == 1:
+                    itens.append({'tipo': 'conferencia', 'caso': case, 'criado_em': event['em_utc'], 'id': record['id']})
+                if (event['estado'].get('revisao') or {}).get('sequencia') == event['sequencia']:
+                    itens.append({'tipo': 'revisao_afirmacao', 'caso': case, 'criado_em': event['em_utc'],
+                                  'id': f"{record['id']}:{event['sequencia']}"})
+    return itens
 
 
 def _campos(data, extra):

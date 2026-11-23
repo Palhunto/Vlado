@@ -251,6 +251,27 @@ def agora():
     return datetime.now(timezone.utc).isoformat()
 
 
+def itens_da_conta(root, conta, casos):
+    """Conversations the account created, for its own data export (E4b-2b of Contas):
+    ``[{tipo: 'conversa', caso, criado_em, id}]``, only in ``casos`` (those it reaches, as the caller says) and only
+    those with ``criada_por`` equal to it (written at creation from now on; older ones have none and stay out:
+    ``meta['conta']`` is whoever asked last, never a guess at who created it). Never the title, the question or a
+    name. Conversations and cases in the trash stay out. A conversation that cannot be read raises ValueError or
+    OSError (the export says it is incomplete)."""
+    casos, removidos = lixeira.casos_da_exportacao(root, conta, casos)
+    pasta = dentro(root, 'conversas')
+    itens = []
+    for path in sorted(pasta.glob('*/conversa.json')) if pasta.is_dir() and casos else []:
+        meta = ler_json(path)
+        if not isinstance(meta, dict) or meta.get('id') != path.parent.name:
+            raise ValueError('Conversa ilegível.')
+        if (meta.get('criada_por') == conta and meta.get('caso') in casos
+                and not lixeira.excluido(root, meta['caso'], conversa=meta['id'], itens=removidos)):
+            itens.append({'tipo': 'conversa', 'caso': meta['caso'], 'criado_em': meta.get('criada_em_utc'),
+                          'id': meta['id']})
+    return itens
+
+
 class _LoteNaFila(Exception):
     """A batch of the case reached the extraction queue while the freeze took the cadastro lock."""
 
@@ -675,6 +696,10 @@ class Conversas:
                        'modelo': None, 'dono': dono, 'politica': 'read-only; on-request; sem web/conectores/shell'},
                        'events': [], 'busy': False, 'usado_em': time.monotonic(),
                        'uso': next(self._usos)}
+                if isinstance(conta, str) and re.fullmatch(lixeira.ID_CONTA, conta):
+                    # Who created it (E4b-2b, export my data): only the account id, only here; meta['conta'] is
+                    # whoever asked last (CUS-01) and changes with every question and resume.
+                    ctx['meta']['criada_por'] = conta
                 self.contexts[identifier] = ctx
                 if feedback:
                     ctx['meta']['rodada_base'] = feedback['conteudo']['rodada_origem']

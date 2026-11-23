@@ -49,6 +49,27 @@ def validar(tipo, caso, conversa=None, rodada=None):
         raise ValueError('Identificador de item inválido.')
 
 
+ID_CONTA = r'[0-9a-f]{16}'  # acesso: secrets.token_hex(8)
+
+
+def casos_da_exportacao(root, conta, casos):
+    """For the ``itens_da_conta`` of each module (export my data, E4b-2b of Contas): checks ``conta`` (an account
+    id) and ``casos`` (the cases the caller says the account reaches; never read here), and gives back
+    ``(cases, trash items)``: the cases that exist and are not in the trash, in the given order, and the active trash
+    items, read once, for what is in the trash inside a case (a conversation, a round)."""
+    if not isinstance(conta, str) or not re.fullmatch(ID_CONTA, conta):
+        raise ValueError('Conta inválida para exportar os itens.')
+    if not isinstance(casos, (list, tuple, set, frozenset)):
+        raise ValueError('Lista de apurações inválida.')
+    itens = ativos(root)
+    disponiveis = []
+    for caso in casos:
+        validar('caso', caso)
+        if caso not in disponiveis and not excluido(root, caso, itens=itens) and dentro(root, f'casos/{caso}').is_dir():
+            disponiveis.append(caso)
+    return disponiveis, itens
+
+
 def salvar(root, itens):
     # Callers hold the registration lock and the conversation manager lock.
     from cadastrar_documentos import _atomico, _bytes
