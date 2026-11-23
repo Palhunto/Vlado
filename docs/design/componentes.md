@@ -774,7 +774,7 @@ Cabeçalho: o do celular do canvas (60 px: "Abrir menu", "Apuração" sobre o no
 
 - **"Abrir menu"**, o botão só com o ícone;
 - **"Apuração" sobre o nome:** o seletor ocupa o espaço que sobra (`min-width: 0`, `flex: 1`), e o nome é cortado com reticências (`text-overflow: ellipsis`, `white-space: nowrap`, `overflow: hidden`). O nome inteiro continua nas opções do seletor;
-- **a cota à direita:** "R$ 18,40 de 50", em 14 `--theme-muted`, sem quebrar, como na tabela dos [cabeçalhos](#cabecalhos). Ela segue as regras do cartão da cota: some sem a rota ou sem sessão e vira "! Cota esgotada" com o teto atingido.
+- **a cota à direita:** "R$ 18,40 de 50", em 14 `--theme-muted`, sem quebrar, como na tabela dos [cabeçalhos](#cabecalhos). Ela segue as regras do cartão da cota: some sem a rota ou sem sessão e vira "! Cota esgotada" com o teto atingido. O cabeçalho mostra o mesmo bloco que o [cartão da cota](#barra-lateral) escolhe, o de menor saldo, só no formato curto. Quando for a cota da instalação, o texto é "Cota da instalação R$ 40 de 200" (esgotada, "! Cota da instalação esgotada"). A parte da chave própria ("dos quais…" e "Chave própria da redação") não entra no cabeçalho e fica só no cartão. Assim o administrador vê no cabeçalho o mesmo número da barra (C1 da Coruja sobre `3d47814`).
 
 **"Configurações" sai do cabeçalho e vai para a gaveta**, no grupo em que Idioma, Tema e Sair já entram no celular (`.mesa-drawer-controls`, logo abaixo das áreas e acima do cartão da cota e do cartão da pessoa), como o primeiro do grupo. Ela continua aparecendo só para quem tem a capacidade (`data-requer="ia-config"`). A partir de 720 px, volta ao cabeçalho, no lugar de hoje.
 
