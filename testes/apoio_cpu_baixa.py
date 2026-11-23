@@ -165,17 +165,42 @@ def pular(teste, motivo):
     teste.skipTest(motivo)
 
 
-def decidir_por_ociosa(teste, ociosa, gasto, mensagem):
-    """A time of the Mesa over its limit: FAIL when the machine left at least 4 times what the Mesa spent in the
-    same window idle (at least OCIOSA_MINIMA s), or when idle time cannot be read; SKIP otherwise, with the numbers."""
-    necessario = max(OCIOSA_MINIMA, 4 * gasto)
+def decidir_por_ociosa(teste, ociosa, gasto, janela, mensagem):
+    """A time of the Mesa over its limit: FAIL when the machine left idle, in the same window of ``janela`` clock
+    seconds, at least max(OCIOSA_MINIMA, min(4 x what the Mesa spent, janela)) CPU seconds (P38: never more than a
+    whole idle core for the window), or when idle time cannot be read; SKIP otherwise, with the numbers."""
+    necessario = max(OCIOSA_MINIMA, min(4 * gasto, janela))
     if ociosa is None:
         teste.fail(f'{mensagem} (CPU ociosa da máquina ilegível nesta plataforma; a Mesa gastou {gasto:.2f} s)')
-    numeros = (f'na mesma janela a máquina deixou {ociosa:.2f} s de CPU ociosa; a Mesa gastou {gasto:.2f} s '
-               f'(necessário {necessario:.2f} s ociosos)')
+    numeros = (f'na mesma janela de {janela:.2f} s a máquina deixou {ociosa:.2f} s de CPU ociosa; a Mesa gastou '
+               f'{gasto:.2f} s (necessário {necessario:.2f} s ociosos)')
     if ociosa >= necessario:
         teste.fail(f'{mensagem}, com CPU disponível: {numeros}')
     pular(teste, f'máquina saturada para prioridade normal: {numeros}; {mensagem}')
+
+
+class JanelaCpu:
+    """A window for a time of the Mesa: the machine's idle CPU, this process's CPU (the Mesa runs in the test's
+    process) and the clock between entering and leaving; ``decidir`` applies ``decidir_por_ociosa`` to them.
+
+    The low-priority extraction running in the window counts as used, not idle, CPU: the measure undercounts what
+    the Mesa could have had, so it errs toward skipping, never toward a false failure."""
+
+    ociosa = gasto = janela = None
+
+    def __enter__(self):
+        self._ociosa, self._gasto, self._relogio = cpu_ociosa_s(), time.process_time(), time.monotonic()
+        return self
+
+    def __exit__(self, *erro):
+        ociosa = cpu_ociosa_s()
+        self.gasto = time.process_time() - self._gasto
+        self.janela = time.monotonic() - self._relogio
+        self.ociosa = None if self._ociosa is None or ociosa is None else ociosa - self._ociosa
+
+    def decidir(self, teste, mensagem):
+        """FAIL or SKIP (see decidir_por_ociosa) for a time over its limit measured in this window."""
+        decidir_por_ociosa(teste, self.ociosa, self.gasto, self.janela, mensagem)
 
 
 def esperar_com_cpu(teste, condicao, prazo, necessario, mensagem, sonda=SondaBaixa, passo=0.02):

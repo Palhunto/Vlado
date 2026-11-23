@@ -28,27 +28,26 @@ só dorme 0,1 s de cada vez e anota a maior parada que viu, as faltas de página
 livre da máquina (mínima e máxima). Nada disso decide nada: vai só na mensagem quando um pedido passa do
 limite, para dizer se o processo inteiro parou (a máquina) ou se só os pedidos esperaram (a Mesa).
 
-**Pular só sem CPU, medida fora da Mesa.** Lentidão nunca pula por si: uma Mesa que regrida e fique
-lenta falha. ``T_ref`` acima de ``TETO_REF`` falha quando, nos mesmos segundos dos dez cadastros, a
-máquina deixou ociosos pelo menos 4 vezes o CPU que a Mesa gastou neles (mínimo de 1 s), e pula com os
-números quando não deixou: medido sem disputar com a Mesa (``apoio_cpu_baixa.decidir_por_ociosa``).
-Quando um pedido das sessões passa do seu limite, uma sonda à parte, de prioridade normal, pede
-``SONDA_CPU`` s de CPU: se não os tem em
-``SONDA_PRAZO`` s, a máquina está saturada e o teste pula com o motivo explícito ("máquina saturada
-para processos de prioridade normal: X s para Y s de CPU"); se os tem, a lentidão é da Mesa e o teste
-falha. O processo de extração roda abaixo da prioridade normal e sem o núcleo 0 (SEG-01), para não
+**Pular só sem CPU, medida na mesma janela.** Lentidão nunca pula por si: uma Mesa que regrida e fique
+lenta falha. Os tempos da própria Mesa (``T_ref`` acima de ``TETO_REF``, o cadastro avulso acima de
+``LIMITE`` e os pedidos das sessões acima dos seus limites) são medidos numa ``JanelaCpu``: falham
+quando, nos mesmos segundos, a máquina deixou ociosos pelo menos 4 vezes o CPU que o processo do teste
+(onde a Mesa roda) gastou neles, sem passar da duração da janela (um núcleo inteiro ocioso) e com
+mínimo de 1 s; pulam com os números quando não deixou (``apoio_cpu_baixa.decidir_por_ociosa``). Uma
+sonda normal tirada depois não servia: com a máquina 93% ocupada ela teve os seus 0,2 s em 0,27 s e
+culpou a Mesa; uma sonda normal durante a janela disputaria os núcleos com a própria Mesa. Com a CPU
+ociosa ilegível, falha. O processo de extração roda abaixo da prioridade normal e sem o núcleo 0 (SEG-01), para não
 tirar CPU da Mesa, e com a máquina saturada por outros processos pode nem começar: a espera de até
 60 s pelo começo da leitura roda, durante toda ela, uma sonda nas mesmas condições dele (prioridade
 abaixo do normal, sem o núcleo 0). Se a sonda teve na janela pelo menos 2 s de CPU (4 vezes os ~0,5 s
 de que a extração precisa até a primeira página) e a leitura não começou, falha; senão, pula com os
 números (``apoio_cpu_baixa``). Uma sonda curta depois do prazo não servia: uma folga basta para ela
 passar, sem dizer o que a extração teve durante a espera. Para fechar a Onda 1, o portão tem de rodar
-sem pular.
+sem pular (no CI, ``VLADO_EXIGIR_SEM_PULO=1`` faz de todo pulo uma falha).
 
 Medido no Windows de 4 núcleos (22/11): ``T_ref`` de 0,9 a 1,7 s com nenhum, dois ou os quatro
-núcleos ocupados por outros processos; os dez cadastros com a extração longa, de 1,6 a 5,9 s. A sonda
-tem 0,2 s de CPU em 0,23 s com a máquina livre; com os quatro núcleos ocupados, a de prioridade baixa
-tem 0,06 s em 10,7 s.
+núcleos ocupados por outros processos; os dez cadastros com a extração longa, de 1,6 a 5,9 s. Com os
+quatro núcleos ocupados, uma sonda de prioridade baixa sem o núcleo 0 tem 0,06 s de CPU em 10,7 s.
 
 Dados sintéticos; sem rede nem modelo.
 """
@@ -58,7 +57,6 @@ import http.client
 import json
 import os
 from pathlib import Path
-import subprocess
 import sys
 import tempfile
 import threading
@@ -74,39 +72,12 @@ from modelo_pasta import copiar  # noqa: E402
 import test_codex_integracao as integracao  # noqa: E402
 from test_extracao_cadastro_pdf import HAS_PYPDF  # noqa: E402
 from test_fila_extracao import pdf_pesado  # noqa: E402
-from apoio_cpu_baixa import (NECESSARIO_PARA_LER, cpu_ociosa_s, decidir_por_ociosa, esperar_com_cpu,  # noqa: E402
-                             pular)
+from apoio_cpu_baixa import NECESSARIO_PARA_LER, JanelaCpu, esperar_com_cpu  # noqa: E402
 
 SESSOES = 10
 LIMITE = 2.0
 LIMITE_CADASTROS = 12.0
 TETO_REF = 6.0  # T_ref above this (measured 0.9 to 1.7 s, even with all 4 cores busy): the Mesa is slow
-SONDA_CPU = 0.2  # seconds of CPU a probe asks for ...
-SONDA_PRAZO = 10.0  # ... within this (a free core gives them in about 0.2 s)
-SONDA = """
-import os, sys, time
-prazo, pedido, prioridade = float(sys.argv[1]), float(sys.argv[2]), sys.argv[3]
-if prioridade == 'normal':
-    pass  # as the Mesa: normal priority, every core
-elif os.name == 'nt':
-    import ctypes
-    k32 = ctypes.windll.kernel32
-    k32.GetCurrentProcess.restype = ctypes.c_void_p
-    processo = k32.GetCurrentProcess()
-    k32.SetPriorityClass(ctypes.c_void_p(processo), 0x4000)  # BELOW_NORMAL_PRIORITY_CLASS, as the extraction
-    nucleos = os.cpu_count() or 1
-    if nucleos > 1:  # without core 0, as the extraction
-        k32.SetProcessAffinityMask(ctypes.c_void_p(processo), ctypes.c_size_t(sum(1 << n for n in range(1, min(nucleos, 64)))))
-else:
-    os.nice(10)
-    nucleos = sorted(os.sched_getaffinity(0)) if hasattr(os, 'sched_getaffinity') else []
-    if len(nucleos) > 1:
-        os.sched_setaffinity(0, nucleos[1:])
-inicio, base = time.monotonic(), time.process_time()
-while time.process_time() - base < pedido and time.monotonic() - inicio < prazo:
-    pass
-print(f'{time.monotonic() - inicio:.2f} {time.process_time() - base:.2f}')
-"""
 
 
 def faltas_de_pagina():
@@ -307,33 +278,14 @@ class PortaoFilaTest(unittest.TestCase):
         self.assertEqual(len(tempos), SESSOES)
         return max(tempos)
 
-    @staticmethod
-    def sonda(prioridade):
-        """(wall seconds, CPU seconds) a process apart from the Mesa gets, asking for SONDA_CPU s of CPU
-        within SONDA_PRAZO s: ``normal`` (as the Mesa) or ``baixa`` (the extraction's priority and cores)."""
-        saida = subprocess.run([sys.executable, '-c', SONDA, str(SONDA_PRAZO), str(SONDA_CPU), prioridade],
-                               capture_output=True, text=True, timeout=SONDA_PRAZO + 60, check=True).stdout.split()
-        return float(saida[0]), float(saida[1])
-
-    def lento(self, prioridade, falha):
-        """A time over its limit: skipped only when the probe of ``prioridade`` gets no CPU, else failed."""
-        demora, cpu = self.sonda(prioridade)
-        if cpu < SONDA_CPU:  # with VLADO_EXIGIR_SEM_PULO=1 (CI) a skip is a failure (apoio_cpu_baixa.pular)
-            pular(self, f'máquina saturada para processos de prioridade {prioridade}: {demora:.1f} s para '
-                        f'{cpu:.2f} s de CPU (pedidos {SONDA_CPU} s); {falha}')
-        self.fail(f'{falha} (com CPU disponível: a sonda de prioridade {prioridade} teve {cpu:.2f} s em {demora:.2f} s)')
-
     def test_dez_sessoes_com_extracao_longa_em_curso(self):
         # The same ten uploads with no extraction in course: the reference of this machine, this minute.
         # In the same window: the machine's idle CPU and what this process (the Mesa runs in it) spent. A normal
-        # probe would compete with the Mesa and change T_ref itself (apoio_cpu_baixa.decidir_por_ociosa).
-        ociosa_antes, gasto_antes = cpu_ociosa_s(), time.process_time()
-        referencia = self.cadastros_simultaneos('referencia')
-        ociosa_depois, gasto = cpu_ociosa_s(), time.process_time() - gasto_antes
+        # probe would compete with the Mesa and change T_ref itself (apoio_cpu_baixa.JanelaCpu).
+        with JanelaCpu() as janela_ref:
+            referencia = self.cadastros_simultaneos('referencia')
         if referencia > TETO_REF:
-            ociosa = None if ociosa_antes is None or ociosa_depois is None else ociosa_depois - ociosa_antes
-            decidir_por_ociosa(self, ociosa, gasto,
-                               f'T_ref = {referencia:.2f} s, acima de {TETO_REF:.0f} s: a Mesa está lenta para cadastrar')
+            janela_ref.decidir(self, f'T_ref = {referencia:.2f} s, acima de {TETO_REF:.0f} s: a Mesa está lenta para cadastrar')
         limite_cadastros = max(LIMITE_CADASTROS, 2 * referencia)
         with tempfile.TemporaryDirectory() as pasta:
             pesado = pdf_pesado(Path(pasta) / 'pesado.pdf')  # about 15 s of reading on one core
@@ -347,15 +299,20 @@ class PortaoFilaTest(unittest.TestCase):
                         60, NECESSARIO_PARA_LER, f'o processo de extração não começou a ler (T_ref = {referencia:.2f} s)',
                         passo=0.05)
         texto = base64.b64encode('Documento sintético avulso.'.encode('utf-8')).decode('ascii')
-        inicio = time.monotonic()
-        status, recibo = self.pedir('POST', '/api/cadastrar', {'caso': 'alpha', 'natureza': 'sinteticos',
-                                                               'arquivos': [{'nome': 'avulso.txt', 'base64': texto}]})
-        avulso = time.monotonic() - inicio
+        with JanelaCpu() as janela_avulso:
+            inicio = time.monotonic()
+            status, recibo = self.pedir('POST', '/api/cadastrar', {'caso': 'alpha', 'natureza': 'sinteticos',
+                                                                   'arquivos': [{'nome': 'avulso.txt', 'base64': texto}]})
+            avulso = time.monotonic() - inicio
         self.assertEqual((status, recibo.get('novos')), (200, 1), recibo)
-        self.assertLess(avulso, LIMITE, 'o cadastro esperou a extração longa')
+        if avulso >= LIMITE:
+            janela_avulso.decidir(self, f'o cadastro avulso levou {avulso:.2f} s (limite {LIMITE:.0f} s): '
+                                        'o cadastro esperou a extração longa')
         tempos, erros = [], []
         sessoes = [threading.Thread(target=self.sessao, args=(n, tempos, erros), daemon=True) for n in range(SESSOES)]
-        with Diagnostico() as diagnostico:  # only for the message below: it decides nothing
+        # The window of the sessions, from the first request to the last: it decides a request over its limit.
+        # The Diagnostico only goes in the message.
+        with Diagnostico() as diagnostico, JanelaCpu() as janela_sessoes:
             for sessao in sessoes:
                 sessao.start()
             for sessao in sessoes:
@@ -364,9 +321,9 @@ class PortaoFilaTest(unittest.TestCase):
         self.assertEqual(len(tempos), SESSOES * 6)
         lentos = sorted((t for t in tempos if t[0] >= (limite_cadastros if t[2] == 'cadastro' else LIMITE)), reverse=True)
         if lentos:
-            self.lento('normal', f'pedidos acima do limite com a extração longa em curso: {lentos} '
-                                 f'(T_ref = {referencia:.2f} s, limite dos cadastros {limite_cadastros:.2f} s; '
-                                 f'{diagnostico.texto()})')
+            janela_sessoes.decidir(self, f'pedidos acima do limite com a extração longa em curso: {lentos} '
+                                         f'(T_ref = {referencia:.2f} s, limite dos cadastros {limite_cadastros:.2f} s; '
+                                         f'{diagnostico.texto()})')
         # The long file was still being read the whole time (otherwise the check proves nothing).
         estado = self.pedir('GET', f'/api/fila?lote={lote}')[1]['lote']
         self.assertEqual((estado['estado'], estado['arquivos'][0]['estado']), ('processando', 'extraindo'),

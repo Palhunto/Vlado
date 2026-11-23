@@ -109,7 +109,7 @@ class ExigirSemPuloTest(unittest.TestCase):
                 apoio.esperar_com_cpu(self, lambda: None, 0.1, 60.0, 'não leu', sonda=sonda_falsa(cpu=0.28))
             self.assertIn('pulo proibido (VLADO_EXIGIR_SEM_PULO=1): máquina saturada para prioridade baixa', str(falha.exception))
             with self.assertRaises(AssertionError) as falha:
-                apoio.decidir_por_ociosa(self, 0.5, 2.0, 'T_ref acima de 6 s')
+                apoio.decidir_por_ociosa(self, 0.5, 2.0, 60.0, 'T_ref acima de 6 s')
             self.assertIn('pulo proibido (VLADO_EXIGIR_SEM_PULO=1): máquina saturada para prioridade normal',
                           str(falha.exception))
 
@@ -122,10 +122,10 @@ class ExigirSemPuloTest(unittest.TestCase):
 class OciosaTest(unittest.TestCase):
     """The rule for the Mesa's own times (T_ref of the gate): idle CPU of the machine in the same window."""
 
-    def decidir(self, ociosa, gasto):
+    def decidir(self, ociosa, gasto, janela=60.0):
         try:
             with mock.patch.dict(os.environ, {apoio.EXIGIR_SEM_PULO: ''}):  # the CI exports it: not here
-                apoio.decidir_por_ociosa(self, ociosa, gasto, 'T_ref = 6.20 s, acima de 6 s')
+                apoio.decidir_por_ociosa(self, ociosa, gasto, janela, 'T_ref = 6.20 s, acima de 6 s')
         except AssertionError as erro:
             return 'falha', str(erro)
         except unittest.SkipTest as pulo:
@@ -135,8 +135,8 @@ class OciosaTest(unittest.TestCase):
     def test_com_ociosa_suficiente_falha(self):
         decisao, texto = self.decidir(ociosa=9.0, gasto=2.0)  # 4 x 2.0 = 8.0 needed
         self.assertEqual(decisao, 'falha', texto)
-        self.assertIn('com CPU disponível: na mesma janela a máquina deixou 9.00 s de CPU ociosa; a Mesa gastou 2.00 s '
-                      '(necessário 8.00 s ociosos)', texto)
+        self.assertIn('com CPU disponível: na mesma janela de 60.00 s a máquina deixou 9.00 s de CPU ociosa; a Mesa '
+                      'gastou 2.00 s (necessário 8.00 s ociosos)', texto)
 
     def test_sem_ociosa_suficiente_pula_com_os_numeros(self):
         decisao, texto = self.decidir(ociosa=7.9, gasto=2.0)
@@ -147,6 +147,15 @@ class OciosaTest(unittest.TestCase):
     def test_minimo_de_um_segundo(self):
         self.assertEqual(self.decidir(ociosa=0.9, gasto=0.1)[0], 'pula')  # 4 x 0.1 < 1 s: the minimum counts
         self.assertEqual(self.decidir(ociosa=1.0, gasto=0.1)[0], 'falha')
+
+    def test_nunca_mais_que_um_nucleo_ocioso_na_janela(self):
+        # P38: 4 x 2.0 = 8 s, but the window lasted 6.2 s: one whole idle core for it is enough to blame the Mesa.
+        decisao, texto = self.decidir(ociosa=6.2, gasto=2.0, janela=6.2)
+        self.assertEqual(decisao, 'falha', texto)
+        self.assertIn('(necessário 6.20 s ociosos)', texto)
+        self.assertEqual(self.decidir(ociosa=6.1, gasto=2.0, janela=6.2)[0], 'pula')
+        self.assertEqual(self.decidir(ociosa=0.9, gasto=2.0, janela=0.5)[0], 'pula')  # the 1 s minimum still holds
+        self.assertEqual(self.decidir(ociosa=1.0, gasto=2.0, janela=0.5)[0], 'falha')
 
     def test_ociosa_ilegivel_falha(self):
         decisao, texto = self.decidir(ociosa=None, gasto=2.0)
@@ -159,6 +168,42 @@ class OciosaTest(unittest.TestCase):
             self.skipTest('CPU ociosa ilegível nesta plataforma')
         time.sleep(0.3)
         self.assertGreaterEqual(apoio.cpu_ociosa_s(), antes)
+
+
+class JanelaCpuTest(unittest.TestCase):
+    """The window the gate measures its own times in (T_ref, the single upload, the sessions)."""
+
+    def test_mede_ociosa_gasto_e_relogio(self):
+        with apoio.JanelaCpu() as janela:
+            fim = time.monotonic() + 0.3
+            while time.monotonic() < fim:
+                sum(range(1000))
+        self.assertGreaterEqual(janela.janela, 0.3)
+        self.assertGreater(janela.gasto, 0.0)
+        self.assertTrue(janela.ociosa is None or janela.ociosa >= 0.0)
+        if os.name == 'nt':
+            self.assertIsNotNone(janela.ociosa)
+
+    def decidir(self, ociosa, gasto, duracao):
+        janela = apoio.JanelaCpu()
+        janela.ociosa, janela.gasto, janela.janela = ociosa, gasto, duracao
+        try:
+            with mock.patch.dict(os.environ, {apoio.EXIGIR_SEM_PULO: ''}):
+                janela.decidir(self, 'pedidos acima do limite: [(2.83, 4, pergunta)]')
+        except AssertionError as erro:
+            return 'falha', str(erro)
+        except unittest.SkipTest as pulo:
+            return 'pula', str(pulo)
+        self.fail('a regra não decidiu')
+
+    def test_com_ociosa_falha_e_sem_ela_pula(self):
+        decisao, texto = self.decidir(ociosa=20.0, gasto=3.0, duracao=8.0)  # needs max(1, min(12, 8)) = 8
+        self.assertEqual(decisao, 'falha', texto)
+        self.assertIn('pedidos acima do limite: [(2.83, 4, pergunta)], com CPU disponível', texto)
+        decisao, texto = self.decidir(ociosa=0.89, gasto=3.0, duracao=8.0)
+        self.assertEqual(decisao, 'pula', texto)
+        self.assertIn('deixou 0.89 s de CPU ociosa', texto)
+        self.assertEqual(self.decidir(ociosa=None, gasto=3.0, duracao=8.0)[0], 'falha')  # unreadable: fails
 
 
 class SondaRealTest(unittest.TestCase):
