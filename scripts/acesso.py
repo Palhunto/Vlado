@@ -2956,6 +2956,60 @@ def _dict_ou_none(linha):
     return dict(linha) if linha else None
 
 
+# --- export of the own data (`conta-exportar`, contract of accounts, 8.4 and the delivery 4b-2) ---------------------
+
+FORMATO_EXPORTACAO, VERSAO_EXPORTACAO = 'vlado-meus-dados', 1
+# What the file does not carry yet, as fixed codes the page translates (ressalva E4): the list of what the person
+# created, which lives in other modules' files, and the accesses in the audit log, which is the Platform's.
+EXPORTACAO_INCOMPLETA = ('itens_criados', 'registro_de_acesso')
+# Who did an event, when it was not an account: the fixed labels this module writes in `por`.
+POR_SISTEMA = frozenset({'operador', 'manutencao', 'migracao', 'migracao_contas', 'primeiro_acesso', 'primeiro_admin'})
+
+
+def _quem(tx: _Tx, valor, cid: str) -> str | None:
+    """The other side of an event, as the export shows it (ressalva B1): the person, a fixed label of the system, or
+    just "another account", never its id nor its name."""
+    if valor is None:
+        return None
+    if valor == cid:
+        return 'voce'
+    if valor in POR_SISTEMA and not tx.um('SELECT 1 FROM contas WHERE id = ?', valor):
+        return valor
+    return 'outra_conta'
+
+
+def exportar_conta(root: Path, cid) -> dict:
+    """`conta-exportar`: what the store keeps about the person, for the person (contract, 8.4). Nothing of anybody
+    else, and never a secret: no password hash, token, ticket, seed, reserve code, csrf, session id or cookie, device
+    mark or its summary, nor AI key. The content of the cases is the newsroom's and leaves by their own export."""
+    with _bd(root) as tx:
+        conta = _conta(tx, cid)
+        cid, momento = conta['id'], agora()
+        redacao = tx.um('SELECT id, nome FROM organizacoes WHERE id = ?', conta['organizacao'])
+        eventos = [{'em': e['em'], 'tipo': e['tipo'], 'conta': _quem(tx, e['conta'], cid), 'por': _quem(tx, e['por'], cid)}
+                   for e in tx.todos('SELECT em, tipo, conta, por FROM eventos WHERE (conta = ? OR por = ?) AND em > ?'
+                                     ' ORDER BY n', cid, cid, _iso(momento - timedelta(days=ATIVIDADE_DIAS)))]
+        return {
+            'formato': FORMATO_EXPORTACAO, 'versao': VERSAO_EXPORTACAO, 'gerado_em': _iso(momento),
+            'conta': {'id': cid, 'nome': conta['nome'], 'email': conta['email'], 'login': conta['login'],
+                      'papel': conta['papel'], 'idioma': conta['idioma'] or IDIOMAS[0], 'situacao': _situacao(conta),
+                      'criada_em': conta['criada_em'], 'senha_definida_em': conta['senha_definida_em'],
+                      'cota_diaria': conta['cota_diaria'], 'teto_mensal_brl': conta['teto_mensal_brl']},
+            'redacao': dict(redacao),
+            'segundo_fator': _estado_do_fator(tx, cid),
+            'termos': [dict(t) for t in tx.todos('SELECT versao, aceito_em, ip FROM termos_aceites WHERE conta = ?'
+                                                 ' ORDER BY aceito_em, rowid', cid)],
+            'sessoes': [dict(s) for s in tx.todos(
+                'SELECT criada_em, ultimo_uso, expira_em, cliente, aparelho, ip_criacao, ip_ultimo FROM sessoes'
+                ' WHERE conta = ? AND expira_em > ? ORDER BY criada_em', cid, _iso(momento))],
+            'aparelhos': [dict(a) for a in tx.todos('SELECT criado_em, ultimo_uso FROM aparelhos WHERE conta = ?'
+                                                    ' ORDER BY criado_em', cid)],
+            'participacoes': _participacoes(tx, cid),
+            'eventos': eventos,
+            'incompleto': list(EXPORTACAO_INCOMPLETA),
+        }
+
+
 def atualizar_perfil(root: Path, cid, *, nome=None, idioma=None) -> dict:
     """The person changes the own name and the language of the e-mails; nothing else is theirs to change here."""
     if nome is None and idioma is None:

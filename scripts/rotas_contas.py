@@ -23,6 +23,7 @@ import correio
 import proxies_confiaveis
 import rascunhos
 import registro_acesso
+import rotas_conversa
 import rotas_equipe
 
 # What the legacy guest profile may call: the guest column of the matrix (`autorizacao.MATRIZ`) is exactly
@@ -45,18 +46,25 @@ COOKIE_PILOTO ='vlado_sessao'
 # Each person on the own account (contract, 5.4): the account is always the session's, never one named in the body.
 CONTA_PROPRIA = ('conta-ver', 'conta-atualizar', 'conta-senha-trocar', 'conta-sessoes', 'conta-sessao-encerrar',
                  'conta-sessoes-encerrar-outras', 'conta-email-trocar', 'conta-fator-iniciar', 'conta-fator-confirmar',
-                 'conta-fator-codigos', 'conta-fator-remover', 'conta-termos-aceitar')
+                 'conta-fator-codigos', 'conta-fator-remover', 'conta-termos-aceitar', 'conta-exportar')
 _CAMPOS_DA_CONTA = {'conta-ver': set(), 'conta-atualizar': {'nome', 'idioma'}, 'conta-senha-trocar': {'senha_atual', 'senha_nova'},
                     'conta-sessoes': set(), 'conta-sessao-encerrar': {'sessao'}, 'conta-sessoes-encerrar-outras': set(),
                     'conta-email-trocar': {'email', 'senha'}, 'conta-fator-iniciar': {'senha', 'codigo'},
                     'conta-fator-confirmar': {'codigo'}, 'conta-fator-codigos': {'senha', 'codigo'},
-                    'conta-fator-remover': {'senha'}, 'conta-termos-aceitar': {'versao'}}
+                    'conta-fator-remover': {'senha'}, 'conta-termos-aceitar': {'versao'}, 'conta-exportar': set()}
 COOKIE_APARELHO = 'vlado_aparelho'  # the mark of a device an account already used (contract, 8.2); one year
 APARELHO_SEGUNDOS = 365 * 24 * 3600
 COOKIE_SEGUNDO_PASSO = 'vlado_passo2'  # the ticket between the right password and the second factor (five minutes)
 _NAVEGADORES = (('Edg/', 'Edge'), ('OPR/', 'Opera'), ('Firefox/', 'Firefox'), ('Chrome/', 'Chrome'), ('Safari/', 'Safari'))
 _SISTEMAS = (('Android', 'Android'), ('iPhone', 'iOS'), ('iPad', 'iOS'), ('Windows', 'Windows'), ('Mac OS X', 'macOS'),
              ('Linux', 'Linux'))
+
+
+class Arquivo:
+    """An answer that is a file to save (operations of type B): the handler sends it as an attachment."""
+
+    def __init__(self, nome: str, conteudo: bytes, tipo='application/json; charset=utf-8'):
+        self.nome, self.conteudo, self.tipo = nome, conteudo, tipo
 
 
 def aparelho(agente, cliente='web'):
@@ -128,6 +136,10 @@ def conta_propria(root, operation, data, principal, ip=None, origem=None, marca=
         raise ValueError('Contas só existem nos modos com login.')
     if operation == 'conta-ver':
         return {**acesso.ver_conta(root, conta, termos), 'sessao': atual}
+    if operation == 'conta-exportar':  # the own data, as a file (contract, 8.4; 4b-2)
+        dados = acesso.exportar_conta(root, conta)
+        return Arquivo(f'vlado-meus-dados-{dados["gerado_em"][:10]}.json',
+                       json.dumps(dados, ensure_ascii=False, indent=2).encode('utf-8'))
     if operation == 'conta-termos-aceitar':
         return {'estado': 'termos_aceitos', 'termos': acesso.aceitar_termos(root, conta, data.get('versao'), termos, ip)}
     if operation == 'conta-atualizar':
@@ -352,8 +364,13 @@ class RotasContas:
         operation is audited once (`admin_recusada`, with the reason: validation, wrong password, last dono, blocked)."""
         try:
             if operation in CONTA_PROPRIA:
-                return conta_propria(self.server.root, operation, data, principal, ip=self._ip(), origem=self.server.origin,
-                                     marca=self._cookie(COOKIE_APARELHO), termos=self._termos())
+                resposta = conta_propria(self.server.root, operation, data, principal, ip=self._ip(),
+                                         origem=self.server.origin, marca=self._cookie(COOKIE_APARELHO), termos=self._termos())
+                if isinstance(resposta, Arquivo):  # audited as a download by `_send` (SEG-02)
+                    self._send(200, resposta.conteudo, resposta.tipo,
+                               {'Content-Disposition': f'attachment; filename="{resposta.nome}"'})
+                    return rotas_conversa.RESPONDIDO
+                return resposta
             return rotas_equipe.executar(
                 self.server.root, operation, data, principal, ip=self._ip(), parar=self._parar_execucoes,
                 gasto_da_redacao=autorizacao.gasto_da_redacao(self.server.root, self.server.modo, principal),

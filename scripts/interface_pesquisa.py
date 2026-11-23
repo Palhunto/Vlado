@@ -870,6 +870,8 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 result = self._gestao(operation, data, principal, concedido)
             elif operation in rotas_equipe.OPERACOES or operation in CONTA_PROPRIA:
                 result = self._equipe(operation, data, principal)
+                if result is rotas_conversa.RESPONDIDO:  # a file already sent (`conta-exportar`)
+                    return
             elif operation in rotas_conversa.OPERACOES:
                 result = self._conversa(operation, data, dono, casos_liberados, consulta_contada,
                                         conta=principal['conta'])
