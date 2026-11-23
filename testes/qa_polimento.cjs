@@ -15,9 +15,10 @@ const [origin, output, chrome] = process.argv.slice(2);
   async function conversation() {
     await page.locator('#contexto-caso option[value="fontes"]').waitFor({state:'attached'});
     await page.selectOption('#contexto-caso', 'fontes');
-    if (!await page.locator('#codex-acervo').evaluate(el => el.open)) await page.locator('#codex-acervo>summary').click();
+    // Trocar a apuração recarrega as conversas e o painel recolhe: espera a conversa chegar e só então abre o acervo.
     await page.locator('#codex-conversa option[value="' + 'a'.repeat(32) + '"]').waitFor({state:'attached'});
-    await page.selectOption('#codex-conversa', 'a'.repeat(32));
+    if (!await page.locator('#codex-acervo').evaluate(el => el.open)) await page.locator('#codex-acervo>summary').click();
+    await page.selectOption('#codex-conversa', 'a'.repeat(32), {force:true});   // o painel pode recolher entre a abertura e a escolha
     await page.locator('.codex-answer').waitFor();
     await page.locator('#codex-status').filter({hasText:'Execução concluída'}).waitFor();
     assert.equal(await page.locator('#codex-acervo').evaluate(el => el.open), false);
@@ -29,14 +30,13 @@ const [origin, output, chrome] = process.argv.slice(2);
     await enviarArquivos(page, {name:'Documento sintético.txt', mimeType:'text/plain', buffer:Buffer.from('Cadastro de interface, sem pergunta editorial.')});
     await page.locator('#mesa-acervo-status').filter({hasText:'Documentos registrados. Aguardando sua pergunta.'}).waitFor();
     assert.match(await page.locator('#contexto-caso').inputValue(), /^apuracao_[a-f0-9]{32}$/);
-    assert.doesNotMatch(await page.locator('#documentos-recibo').innerText(), /apuracao_|SHA-256/);
-    await page.click('#ver-codex');
-    // DEFEITO CONHECIDO (Lume): no passo 3 ("Conferir recibo") o cabeçalho ainda mostra o identificador e o subtítulo "Nenhuma apuração
-    // selecionada"; o nome só aparece depois de sair da tela. A conferência do nome fica aqui, depois de sair para Perguntar.
+    // No passo 3 ("Conferir recibo") o cabeçalho já mostra o nome digitado, não o identificador (c728dd0).
     await page.waitForFunction(() => document.querySelector('#contexto-caso option:checked')?.textContent === 'Minha apuração legível', null, {timeout:15000});
     assert.equal(await page.locator('#area-descricao').innerText(), 'Minha apuração legível');
+    assert.doesNotMatch(await page.locator('#documentos-recibo').innerText(), /apuracao_|SHA-256/);
     checks.push('Cadastro apenas por nome, ID interno automático, recibo sem identificadores expostos.');
     await page.click('#ver-codex');
+    await page.locator('#area-codex:not([hidden])').waitFor();
     await page.locator('#codex-conta').filter({hasText:'Conectado à API'}).waitFor();
     assert.equal(await page.locator('#codex-conexao').evaluate(el => el.open), false);
     assert.equal(await page.locator('#contexto-caso option[value="fontes"]').textContent(), 'Americanas — fatos relevantes');
