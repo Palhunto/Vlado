@@ -101,21 +101,36 @@ test('codex.js avisa o cartão quando a pergunta termina (o acompanhamento para 
   assert.match(codigo, /if \(!active && data\.eventos\.length < 100\) \{ window\.atualizarCotaBarra\?\.\(true\);/);
 });
 
-test('P40 (b): o gasto com a chave própria da redação aparece em linha separada, sem somar à cota; o dono vê também o da redação; sem o campo, nada aparece', async () => {
+test('P40 (b): o gasto na chave própria da redação é um bloco separado abaixo do medidor (rubrica, Você e, só para o dono, Redação), sem somar à cota; R$ 0,00 sem gasto; some quando o servidor não manda', async () => {
   const comChave = (gasto, propria, redacao) => ({...conta(gasto, '50.00'), chave_propria: {conta_brl: propria, ...(redacao ? {organizacao_brl: redacao} : {})}});
   const pessoa = await abrir(comChave('18.40', '3.25'));
   assert.equal(pessoa.$('mesa-cota-valor').textContent, 'R$ 18,40 de R$ 50', 'a cota do serviço segue como estava');
-  assert.equal(pessoa.$('mesa-cota-chave').hidden, false);
-  assert.equal(pessoa.$('mesa-cota-chave').querySelector('span').textContent, 'Chave da redação'); assert.equal(pessoa.$('mesa-cota-chave-valor').textContent, 'R$ 3,25');
-  assert.equal(pessoa.$('mesa-cota-chave-redacao').hidden, true, 'a pessoa não vê o da redação inteira');
+  const bloco = pessoa.$('mesa-cota-chave');
+  assert.equal(bloco.hidden, false);
+  assert.equal(bloco.querySelector('.mesa-cota-rubrica').textContent, 'Na chave própria da redação');
+  assert.equal(bloco.querySelector('.mesa-cota-rotulo').textContent, 'Você'); assert.equal(pessoa.$('mesa-cota-chave-valor').textContent, 'R$ 3,25');
+  assert.equal(pessoa.$('mesa-cota-chave-redacao').hidden, true, 'a pessoa não vê o da redação');
+  assert.equal(bloco.getAttribute('aria-label'), 'Gasto na chave própria da redação: você, R$ 3,25');
+  assert.equal(bloco.getAttribute('role'), 'group');
   const dono = await abrir(comChave('18.40', '3.25', '12.00'));
   assert.equal(dono.$('mesa-cota-chave-redacao').hidden, false);
-  assert.equal(dono.$('mesa-cota-chave-redacao').querySelector('span').textContent, 'Redação inteira'); assert.equal(dono.$('mesa-cota-chave-redacao-valor').textContent, 'R$ 12,00');
+  assert.equal(dono.$('mesa-cota-chave-redacao').querySelector('.mesa-cota-rotulo').textContent, 'Redação'); assert.equal(dono.$('mesa-cota-chave-redacao-valor').textContent, 'R$ 12,00');
+  assert.equal(dono.$('mesa-cota-chave').getAttribute('aria-label'), 'Gasto na chave própria da redação: você, R$ 3,25; redação, R$ 12,00');
   const zero = await abrir(comChave('0.00', '0.00'));
-  assert.equal(zero.$('mesa-cota-chave-valor').textContent, 'R$ 0,00', 'sempre presente, 0,00 sem gasto');
+  assert.equal(zero.$('mesa-cota-chave').hidden, false); assert.equal(zero.$('mesa-cota-chave-valor').textContent, 'R$ 0,00', 'R$ 0,00 se ainda não houve gasto');
   const sem = await abrir(conta('18.40', '50.00'));
-  assert.equal(sem.$('mesa-cota-chave').hidden, true); assert.equal(sem.$('mesa-cota-chave-redacao').hidden, true);
+  assert.equal(sem.$('mesa-cota-chave').hidden, true, 'sem chave própria, o bloco some'); assert.equal(sem.$('mesa-cota-chave-redacao').hidden, true);
   const ingles = await abrir(comChave('18.40', '3.25', '12.00'), 'en');
-  assert.match(ingles.$('mesa-cota-chave').textContent, /Newsroom key/); assert.match(ingles.$('mesa-cota-chave-redacao').textContent, /Whole newsroom/);
+  ingles.janela.I18N.aplicar(ingles.$('mesa-sidebar'));
+  assert.equal(ingles.$('mesa-cota-chave').querySelector('.mesa-cota-rubrica').textContent, "On the newsroom's own key");
+  assert.equal(ingles.$('mesa-cota-chave').querySelector('.mesa-cota-rotulo').textContent, 'You');
+  assert.equal(ingles.$('mesa-cota-chave-redacao').querySelector('.mesa-cota-rotulo').textContent, 'Newsroom');
+  assert.equal(ingles.$('mesa-cota-chave').getAttribute('aria-label'), "Spending on the newsroom's own key: you, R$ 3,25; newsroom, R$ 12,00");
 });
 
+test('folha de estilos: o bloco da chave própria fica 8 px (--espaco-1 entre as linhas) abaixo do medidor, com a rubrica em 14 px muted e sem quebra no rótulo', () => {
+  const estilo = fs.readFileSync(path.join(__dirname, '..', 'interface', 'style.css'), 'utf8');
+  assert.ok(estilo.includes('.mesa-cota-chave{display:flex;flex-direction:column;gap:var(--espaco-1)}'));
+  assert.ok(estilo.includes('.mesa-cota-rubrica{margin:0;font-size:var(--text-md);line-height:1.25;color:var(--muted)}'));
+  assert.ok(estilo.includes('.mesa-cota-chave .mesa-cota-rotulo{white-space:nowrap}'));
+});

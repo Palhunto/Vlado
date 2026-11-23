@@ -70,8 +70,11 @@
       <div id="mesa-cota" class="mesa-cota" hidden>
         <p class="mesa-cota-linha"><span id="mesa-cota-rotulo" class="mesa-cota-rotulo">Cota do mês</span><strong id="mesa-cota-valor" class="mesa-cota-valor"></strong></p>
         <div id="mesa-cota-medidor" class="mesa-medidor" role="img"></div>
-        <p id="mesa-cota-chave" class="mesa-cota-linha" hidden><span class="mesa-cota-rotulo">Chave da redação</span><strong id="mesa-cota-chave-valor" class="mesa-cota-valor"></strong></p>
-        <p id="mesa-cota-chave-redacao" class="mesa-cota-linha" hidden><span class="mesa-cota-rotulo">Redação inteira</span><strong id="mesa-cota-chave-redacao-valor" class="mesa-cota-valor"></strong></p>
+        <div id="mesa-cota-chave" class="mesa-cota-chave" role="group" hidden>
+          <p class="mesa-cota-rubrica">Na chave própria da redação</p>
+          <p class="mesa-cota-linha"><span class="mesa-cota-rotulo">Você</span><strong id="mesa-cota-chave-valor" class="mesa-cota-valor"></strong></p>
+          <p id="mesa-cota-chave-redacao" class="mesa-cota-linha" hidden><span class="mesa-cota-rotulo">Redação</span><strong id="mesa-cota-chave-redacao-valor" class="mesa-cota-valor"></strong></p>
+        </div>
       </div>
       <button id="ver-configuracoes" type="button" class="mesa-perfil" aria-pressed="false" aria-controls="area-configuracoes" hidden><span class="mesa-avatar" aria-hidden="true"></span><span class="mesa-perfil-texto"><strong class="mesa-perfil-nome" translate="no"></strong><span class="mesa-perfil-papel"></span></span></button>
     </div>

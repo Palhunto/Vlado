@@ -367,9 +367,11 @@
       $('mesa-cota-medidor').setAttribute('aria-label',scope?(spent?`Cota da instalação esgotada: ${value}`:`${pct}% da cota da instalação usada`):(spent?`Cota do mês esgotada: ${value}`:`${pct}% da cota usada`));
       // P40 (b): o gasto com a chave de IA própria da redação, em linha separada: não entra na cota do serviço acima. A pessoa vê o que pagou por ela; o dono vê também o da redação.
       const chave=data.chave_propria,reais=raw=>{const n=Number(raw);return raw!=null&&Number.isFinite(n)?`R$ ${money(n,true)}`:'';};
-      const dela=reais(chave?.conta_brl),inteira=reais(chave?.organizacao_brl);
-      $('mesa-cota-chave-valor').textContent=dela;$('mesa-cota-chave').hidden=!dela;
-      $('mesa-cota-chave-redacao-valor').textContent=inteira;$('mesa-cota-chave-redacao').hidden=!inteira;
+      // O bloco aparece quando o servidor manda o gasto na chave (R$ 0,00 se ainda não houve) e some quando a redação não tem chave própria.
+      const dela=reais(chave?.conta_brl),inteira=reais(chave?.organizacao_brl),tr=(pt,vars)=>window.I18N?window.I18N.t(pt,vars):pt;
+      $('mesa-cota-chave-valor').textContent=dela;$('mesa-cota-chave-redacao-valor').textContent=inteira;
+      $('mesa-cota-chave-redacao').hidden=!inteira;$('mesa-cota-chave').hidden=!dela;
+      if(dela)$('mesa-cota-chave').setAttribute('aria-label',inteira?`Gasto na chave própria da redação: você, ${dela}; redação, ${inteira}`:`Gasto na chave própria da redação: você, ${dela}`);
       card.dataset.esgotada=String(spent);card.hidden=false;
     }catch(_){card.hidden=true;}
   }

@@ -1038,6 +1038,11 @@ progress{accent-color:var(--green)}
 .mesa-cota-linha{display:flex;flex-wrap:wrap;justify-content:space-between;gap:0 var(--espaco-2);margin:0;font-size:var(--text-md);line-height:1.25}
 .mesa-cota-rotulo{color:var(--muted)}
 .mesa-cota-valor{font-weight:600;white-space:nowrap}
+/* P40 (b) (componentes.md, barra lateral): o gasto na chave de IA própria da redação, em bloco separado 8 px abaixo do medidor; não soma à cota do serviço. */
+.mesa-cota-chave{display:flex;flex-direction:column;gap:var(--espaco-1)}
+.mesa-cota-chave[hidden]{display:none}
+.mesa-cota-rubrica{margin:0;font-size:var(--text-md);line-height:1.25;color:var(--muted)}
+.mesa-cota-chave .mesa-cota-rotulo{white-space:nowrap}
 /* Medidor (componentes.md#medidor): 6 px, trilha de linha, preenchimento de acento; passou do teto, cor de aviso. */
 .mesa-medidor{height:6px;border-radius:var(--raio-pilula);background:var(--line);overflow:hidden}
 .mesa-medidor::before{content:'';display:block;height:100%;width:var(--uso,0%);border-radius:inherit;background:var(--theme-accent)}
