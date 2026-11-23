@@ -10,10 +10,12 @@ cortado. Aqui cada elemento visível com `overflow-x` auto ou scroll é medido e
 
 O que reprova (função `julgar`, testável sem navegador):
   - o item ativo (aria-current, aria-selected ou aria-pressed) fora da faixa que o contém, ou fora da janela;
-  - a faixa de componentes.md (`#mesa-etapas`, `.quadros-abas`) com `data-rola` que não bate com a posição da rolagem, ou sem máscara quando o atributo existe;
+  - a faixa de componentes.md (`#mesa-etapas`, `.quadros-abas`, `.mesa-tabs`, `.notebook-tabs`) com `data-rola` que não bate com a posição da rolagem, ou sem
+    máscara quando o atributo existe;
   - o elemento que rola por dentro e não é faixa nem tabela, com o item ativo cortado.
-O que só é avisado (vai ao manifesto em `rolagem_interna`): elemento que rola por dentro e não é faixa nem tabela, mesmo com o ativo à vista (as abas do
-Caderno e de Documentos, hoje, não recebem o tratamento da faixa). Tabela de dados fica de fora: a WCAG 1.4.10 a isenta.
+O que só é avisado (vai ao manifesto em `rolagem_interna`): elemento que rola por dentro e não é faixa nem tabela, mesmo com o ativo à vista (uma faixa nova
+que o desktop.js ainda não conheça). Tabela de dados fica de fora: a WCAG 1.4.10 a isenta.
+O custo da faixa numa conversa longa (Q5d) é medido por `regressao_visual_custo.py`.
 """
 from __future__ import annotations
 
@@ -31,7 +33,8 @@ CENARIOS_FAIXA = {
     '390': {'viewport': {'width': 390, 'height': 844}, 'escala': 1},
     '430': {'viewport': {'width': 430, 'height': 932}, 'escala': 1},
 }
-SELETOR_FAIXA = '#mesa-etapas,.quadros-abas'
+# As faixas de interface/desktop.js: a linha de etapas, as pílulas dos Quadros e (Q5a, 2803276) as abas de Documentos, do Caderno e de Minha conta.
+SELETOR_FAIXA = '#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs'
 SELETOR_TABELA = 'table,.markdown-table,.mesa-table-wrap'
 SELETOR_ATIVO = '[aria-current],[aria-selected="true"],[aria-pressed="true"]'
 TOLERANCIA = 0.6   # px: a subpixel do layout
