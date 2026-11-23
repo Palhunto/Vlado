@@ -87,3 +87,32 @@ test('F3: o envio em JSON acima de 50 MB é recusado antes de sair, com a mesma 
   assert.equal(saiu, false);
   assert.match(mesa.$('mesa-acervo-status').textContent, /O lote excede 50 MB\. Divida o envio em lotes menores; nenhum arquivo foi enviado\./);
 });
+
+test('o recibo do último envio acompanha "Perguntar aos documentos" (W02, regra 8): recolhido, sem ids repetidos, só se houve envio na visita, e some ao trocar de apuração', async () => {
+  const BETA = {id: 'beta', titulo: 'Pauta Beta', rodadas: []};
+  const mesa = criarMesa({desktop: false, modo: 'local', idioma: 'pt', url: 'http://127.0.0.1:8765/?area=documentos&caso=alfa', catalogo: [ALFA, BETA],
+    preparar: janela => {
+      const original = janela.fetch;
+      janela.fetch = async (endereco, opcoes) => (String(endereco) === '/api/integracao' ? {ok: true, json: async () => ({})} : original(endereco, opcoes));
+      janela.FileReader = class { readAsDataURL() { this.result = 'data:;base64,AAAA'; this.onload(); } };
+    },
+    api: operacao => ({'cadastrar': {caso_id: 'alfa', corpus_id: 'c1', recebidos: 1, novos: 1, duplicados: 0, total_documentos: 1, arquivos: [{nome: 'novo.pdf', estado: 'pronto'}], inventario: {}},
+      inventario: {caso_id: 'alfa', corpus_id: 'c1', documentos: [], total_documentos: 0}, 'codex-listar': {conversas: []}}[operacao] || {})});
+  await mesa.esperar(12);
+  const alerta = mesa.$('codex-recibo-alerta');
+  mesa.$('mesa-perguntar').click(); await mesa.esperar(6);
+  assert.equal(alerta.hidden, true, 'sem envio na visita, a Pergunta abre sem o recibo');
+  const evento = new Evento('drop', {bubbles: true, cancelable: true}); evento.dataTransfer = {files: [{name: 'novo.pdf', size: 1024}]};
+  mesa.$('documentos-zona').dispatchEvent(evento);
+  await mesa.esperar(30);
+  mesa.janela.showArea('documentos');
+  mesa.$('mesa-perguntar').click(); await mesa.esperar(6);
+  assert.equal(alerta.hidden, false); assert.ok(!alerta.open, 'recolhido');
+  assert.equal(alerta.querySelector('summary').textContent, 'Recibo do último envio · confira as limitações antes de perguntar');
+  assert.match(alerta.textContent, /Recibo do lote: 1 de 1 arquivos/);
+  assert.equal(alerta.querySelectorAll('[id]').length, 0, 'sem ids repetidos');
+  assert.ok(mesa.$('documentos-recibo'), 'o recibo da Documentos continua');
+  mesa.janela.definirContextoCaso('beta', {force: true}); await mesa.esperar(10);
+  assert.equal(alerta.hidden, true, 'trocar de apuração tira o recibo');
+  assert.equal(mesa.$('documentos-recibo').hidden, true);
+});
