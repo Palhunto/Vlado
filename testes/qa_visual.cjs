@@ -1,7 +1,7 @@
 const editor=require('./editor_notas.cjs');
 'use strict';
 const {chromium}=require('playwright');
-const {irParaNovaApuracao} = require('./qa_navegacao.cjs');
+const {criarApuracao, enviarArquivos} = require('./qa_navegacao.cjs');
 const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
 const path=require('node:path');
@@ -9,12 +9,17 @@ const [origin,out,chat]=process.argv.slice(2);
 (async()=>{
  const browser=await chromium.launch({headless:true,executablePath:chromium.executablePath()});
  const page=await browser.newPage({viewport:{width:1440,height:1040},acceptDownloads:true});
+ // Tema escuro só quando nada foi guardado ainda: o padrão sem valor guardado mudou de mãos (prefers-color-scheme, depois escuro de novo), e este roteiro
+ // não deve depender dele. O guardado vence em toda carga, então alternar o tema e recarregar continua valendo.
+ await page.addInitScript(()=>{try{if(!localStorage.getItem('apuracao:tema'))localStorage.setItem('apuracao:tema','dark');}catch{}});
  const result={checks:[],errors:[],external:[],trace:[]};
  page.on('request',r=>{if(/\/api\/(buscar|cobertura|catalogo)$/.test(r.url()))result.trace.push(r.url().split('/').pop());});
  page.on('pageerror',e=>result.errors.push(e.stack||e.message));
  page.on('request',r=>{if(!r.url().startsWith(origin)&&!r.url().startsWith('blob:'))result.external.push(r.url());});
  const shot=async name=>{await page.evaluate(()=>document.fonts.ready);await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(out,name+'.png')});};
- const go=async area=>{if((await page.viewportSize()).width<=720&&await page.locator('#mesa-menu').getAttribute('aria-expanded')!=='true')await page.locator('#mesa-menu').click();await page.locator('#ver-'+area).click();};
+ const irPara=async area=>{if(await page.locator('#original-dialogo[open]').count())await page.click('#original-fechar');if((await page.viewportSize()).width<=720&&await page.locator('#mesa-menu').getAttribute('aria-expanded')!=='true')await page.locator('#mesa-menu').click();await page.locator('#ver-'+area).click();};
+ // Nova apuração e Apurações saíram da barra: chegam-se a elas pela Visão geral (qa_navegacao.cjs).
+ const go=async area=>{if(area==='nova'){await irPara('inicio');await page.click('#inicio-nova');return;}if(area==='gerenciar'){await irPara('inicio');await page.click('#inicio-trocar');return;}return irPara(area);};
  const open=async id=>{if(!await page.locator('#'+id).evaluate(el=>el.open))await page.locator('#'+id+'>summary').click();};
  try{
   await page.goto(origin);await page.locator('#area-inicio').waitFor({state:'visible'});
@@ -38,7 +43,7 @@ const [origin,out,chat]=process.argv.slice(2);
   result.checks.push('Início vazio e retomada usam somente o contexto escolhido e o inventário real.');
   await go('documentos');await page.locator('#mesa-acervo-lista tbody tr').first().waitFor();assert.equal(await page.locator('#mesa-acervo-lista tbody tr').count(),3);
   await shot('documentos');await page.fill('#mesa-filtrar-documento','texto');assert.equal(await page.locator('#mesa-acervo-lista tbody tr').count(),1);
-  await page.locator('.mesa-document-name').click();await page.locator('#original-dialogo[open]').waitFor();assert.match(await page.locator('#original-conteudo').innerText(),/A fonte declara valor 12/);assert.equal(await page.evaluate(()=>window.INJETADO),undefined);await page.keyboard.press('Escape');
+  await page.locator('#mesa-acervo-lista .docs-abrir').first().click();await page.locator('#original-dialogo[open]').waitFor();assert.match(await page.locator('#original-conteudo').innerText(),/A fonte declara valor 12/);assert.equal(await page.evaluate(()=>window.INJETADO),undefined);await page.keyboard.press('Escape');
   await page.fill('#mesa-filtrar-documento','');await page.selectOption('#mesa-filtrar-leitura','limitacoes');assert.equal(await page.locator('#mesa-acervo-lista tbody tr').count(),1);
   result.checks.push('Acervo filtra nome/cobertura e abre o original com identidade e hash, sem executar HTML documental.');
   await page.click('#mesa-aba-pesquisa');await page.selectOption('#rodada','R001');await page.selectOption('#geracao','v1');await page.locator('#buscar:not([disabled])').waitFor();
@@ -65,13 +70,14 @@ const [origin,out,chat]=process.argv.slice(2);
   result.checks.push('Editor visual acompanha o tema e preserva o texto ao alternar.');
   await editor.write(page,'Rascunho que não deve se perder.');page.once('dialog',dialog=>dialog.dismiss());await page.selectOption('#contexto-caso','');assert.equal(await page.inputValue('#contexto-caso'),'alpha');assert.equal((await editor.read(page)).trim(),'Rascunho que não deve se perder.');await page.click('#apuracao-salvar');await page.locator('#apuracao-status').filter({hasText:'Nota salva'}).waitFor();result.checks.push('Troca de apuração respeita o aviso de rascunho não salvo.');
   await go('diligencias');await page.click('#diligencias-nova');await page.fill('#diligencias-acao','Solicitar comprovante sintético');await page.fill('#diligencias-responsavel','Repórter de teste');await page.fill('#diligencias-autor','Autoria de teste');await page.click('#diligencias-salvar');await page.locator('.diligence-entry').first().waitFor();assert.equal(await page.locator('.mesa-diligence-column').count(),3);await shot('diligencias');result.checks.push('Diligência salva aparece na coluna correspondente ao estado real.');
-  await irParaNovaApuracao(page);await page.fill('#cadastro-titulo-input','Caso de interface — lote sintético');await page.setInputFiles('#cadastro-arquivos',{name:'fonte_visual.txt',mimeType:'text/plain',buffer:Buffer.from('Arquivo sintético para cadastro e recibo, sem pergunta editorial.')});await shot('cadastro');await page.click('#enviar-documentos');await page.locator('#cadastro-perguntar:not([hidden])').waitFor();const newCase=await page.inputValue('#cadastro-caso');assert.match(newCase,/^apuracao_/);await shot('recibo');
+  // Nova apuração: passo 1 (nome e fontes), passo 2 (Documentos, onde o primeiro lote cria a apuração) e o recibo do lote.
+  await criarApuracao(page,{nome:'Caso de interface — lote sintético'});await shot('cadastro');await enviarArquivos(page,{name:'fonte_visual.txt',mimeType:'text/plain',buffer:Buffer.from('Arquivo sintético para cadastro e recibo, sem pergunta editorial.')});const newCase=await page.inputValue('#contexto-caso');assert.match(newCase,/^apuracao_/);await shot('recibo');
   const metadata=await page.evaluate(async id=>(await (await fetch('/api/catalogo')).json()).casos.find(c=>c.id===id),newCase);assert.equal(metadata.rodadas.length,0);result.checks.push('Cadastro e recibo reais preservam o lote antes da pergunta, sem criar rodada.');
   await go('gerenciar');await page.locator('#gerenciar-excluir-caso').waitFor({state:'visible'});await shot('gerenciar');await page.click('#gerenciar-excluir-caso');await page.locator('dialog.dialogo .dialogo-acoes button.danger').click();await page.locator('#gerenciar-lixeira button').first().waitFor();await page.locator('#gerenciar-lixeira button').first().click();await page.locator('#gerenciar-lixeira .manage-empty').waitFor();result.checks.push('Exclusão confirmada e restauração preservadas no gerenciador.');
   await page.selectOption('#contexto-caso','alpha');
   for(const width of [1440,1024,768,390,320]){
    await page.setViewportSize({width,height:844});
-   for(const area of ['inicio','documentos','cadastro','codex','achados','apuracao','diligencias','gerenciar']){
+   for(const area of ['inicio','documentos','nova','codex','achados','apuracao','diligencias','gerenciar']){
     await go(area);await page.evaluate(()=>document.fonts.ready);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,area+' transborda em '+width+'px');
     if(width===390)await shot(area+'-mobile');
