@@ -1,10 +1,12 @@
 """A regra das esperas pela extração (apoio_cpu_baixa): falha quando houve CPU e a leitura não aconteceu, pula só
 quando a sonda da mesma janela não teve CPU. Sondas falsas com números escolhidos; uma real só para ver que mede e
 para. Sem Mesa nem rede."""
+import os
 from pathlib import Path
 import sys
 import time
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import apoio_cpu_baixa as apoio  # noqa: E402
@@ -44,7 +46,8 @@ class RegraTest(unittest.TestCase):
 
     def pulo(self, *args, **kwargs):
         try:
-            apoio.esperar_com_cpu(self, *args, **kwargs)
+            with mock.patch.dict(os.environ, {apoio.EXIGIR_SEM_PULO: ''}):  # the CI exports it: not here
+                apoio.esperar_com_cpu(self, *args, **kwargs)
         except unittest.SkipTest as pulo:
             return str(pulo)
         except AssertionError as erro:
@@ -73,12 +76,56 @@ class RegraTest(unittest.TestCase):
         self.assertIn('a Mesa reiniciada não concluiu o lote', texto)
 
 
+class SondaQueNaoMedeTest(unittest.TestCase):
+    """B1: a probe that dies or never runs is a failure of the wait, never a skip blamed on the machine."""
+
+    def esperar(self, codigo):
+        with mock.patch.dict(os.environ, {apoio.EXIGIR_SEM_PULO: ''}):
+            try:
+                apoio.esperar_com_cpu(self, lambda: None, 1.0, 2.0, 'não leu',
+                                      sonda=lambda limite: apoio.SondaBaixa(limite, codigo=codigo))
+            except AssertionError as erro:
+                return str(erro)
+            except unittest.SkipTest as pulo:
+                self.fail(f'pulou com uma sonda que não mediu: {pulo}')
+        self.fail('a regra não decidiu')
+
+    def test_sonda_que_sai_na_primeira_linha_falha(self):
+        sai = ("import sys\nopen(sys.argv[2], 'a').write('0\\n')\nsys.exit(3)\n")
+        texto = self.esperar(sai)
+        self.assertIn('a sonda da CPU não mediu: a sonda terminou sozinha antes do fim da espera (código 3)', texto)
+
+    def test_sonda_que_nao_anota_nada_falha(self):
+        texto = self.esperar('import time\ntime.sleep(60)\n')
+        self.assertIn('a sonda não anotou nenhuma medida', texto)
+
+
+class ExigirSemPuloTest(unittest.TestCase):
+    """C2: with VLADO_EXIGIR_SEM_PULO=1 (the CI job) every skip of these rules is a failure, same reason."""
+
+    def test_pulo_vira_falha(self):
+        with mock.patch.dict(os.environ, {apoio.EXIGIR_SEM_PULO: '1'}):
+            with self.assertRaises(AssertionError) as falha:
+                apoio.esperar_com_cpu(self, lambda: None, 0.1, 60.0, 'não leu', sonda=sonda_falsa(cpu=0.28))
+            self.assertIn('pulo proibido (VLADO_EXIGIR_SEM_PULO=1): máquina saturada para prioridade baixa', str(falha.exception))
+            with self.assertRaises(AssertionError) as falha:
+                apoio.decidir_por_ociosa(self, 0.5, 2.0, 'T_ref acima de 6 s')
+            self.assertIn('pulo proibido (VLADO_EXIGIR_SEM_PULO=1): máquina saturada para prioridade normal',
+                          str(falha.exception))
+
+    def test_sem_a_variavel_pula(self):
+        with mock.patch.dict(os.environ, {apoio.EXIGIR_SEM_PULO: ''}):
+            with self.assertRaises(unittest.SkipTest):
+                apoio.pular(self, 'motivo sintético')
+
+
 class OciosaTest(unittest.TestCase):
     """The rule for the Mesa's own times (T_ref of the gate): idle CPU of the machine in the same window."""
 
     def decidir(self, ociosa, gasto):
         try:
-            apoio.decidir_por_ociosa(self, ociosa, gasto, 'T_ref = 6.20 s, acima de 6 s')
+            with mock.patch.dict(os.environ, {apoio.EXIGIR_SEM_PULO: ''}):  # the CI exports it: not here
+                apoio.decidir_por_ociosa(self, ociosa, gasto, 'T_ref = 6.20 s, acima de 6 s')
         except AssertionError as erro:
             return 'falha', str(erro)
         except unittest.SkipTest as pulo:
@@ -126,6 +173,7 @@ class SondaRealTest(unittest.TestCase):
         self.assertGreaterEqual(cpu, 0.0)
         self.assertLessEqual(cpu, janela * 64)  # never more CPU than its cores could give
         self.assertEqual(sonda.parar(), (janela, cpu))  # stopping again reads the same numbers
+        self.assertIsNone(sonda.problema)  # the real probe ran and wrote: it is never blamed (B1)
 
 
 if __name__ == '__main__':

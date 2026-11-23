@@ -74,7 +74,8 @@ from modelo_pasta import copiar  # noqa: E402
 import test_codex_integracao as integracao  # noqa: E402
 from test_extracao_cadastro_pdf import HAS_PYPDF  # noqa: E402
 from test_fila_extracao import pdf_pesado  # noqa: E402
-from apoio_cpu_baixa import NECESSARIO_PARA_LER, cpu_ociosa_s, decidir_por_ociosa, esperar_com_cpu  # noqa: E402
+from apoio_cpu_baixa import (NECESSARIO_PARA_LER, cpu_ociosa_s, decidir_por_ociosa, esperar_com_cpu,  # noqa: E402
+                             pular)
 
 SESSOES = 10
 LIMITE = 2.0
@@ -317,9 +318,9 @@ class PortaoFilaTest(unittest.TestCase):
     def lento(self, prioridade, falha):
         """A time over its limit: skipped only when the probe of ``prioridade`` gets no CPU, else failed."""
         demora, cpu = self.sonda(prioridade)
-        if cpu < SONDA_CPU:
-            self.skipTest(f'máquina saturada para processos de prioridade {prioridade}: {demora:.1f} s para '
-                          f'{cpu:.2f} s de CPU (pedidos {SONDA_CPU} s); {falha}')
+        if cpu < SONDA_CPU:  # with VLADO_EXIGIR_SEM_PULO=1 (CI) a skip is a failure (apoio_cpu_baixa.pular)
+            pular(self, f'máquina saturada para processos de prioridade {prioridade}: {demora:.1f} s para '
+                        f'{cpu:.2f} s de CPU (pedidos {SONDA_CPU} s); {falha}')
         self.fail(f'{falha} (com CPU disponível: a sonda de prioridade {prioridade} teve {cpu:.2f} s em {demora:.2f} s)')
 
     def test_dez_sessoes_com_extracao_longa_em_curso(self):

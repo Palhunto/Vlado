@@ -21,7 +21,17 @@ medido. Ali vale ``decidir_por_ociosa``: a CPU que sobrou ociosa na máquina dur
 
 A sonda anota o próprio CPU num arquivo a cada 0,1 s e é morta ao fim da espera, na hora: sem CPU ela não
 acumula nada, então o último valor anotado vale (no máximo 0,1 s a menos). Roda no Python base, e não no
-lançador do ``.venv`` do Windows, para que matar o processo mate a sonda.
+lançador do ``.venv`` do Windows, para que matar o processo mate a sonda. A primeira linha (``0``) ela anota
+ainda em prioridade normal, antes de baixar a sua: sem nenhuma linha, ou tendo terminado sozinha antes do fim
+da espera, quem falhou foi a sonda, e a espera FALHA dizendo que ela não mediu (nunca pula por uma sonda que
+não rodou).
+
+Numa máquina de 2 núcleos, sem o núcleo 0 a sonda e a extração dividem o único núcleo que sobra: cada uma tem
+cerca de metade dele durante a espera. A regra continua valendo (as duas recebem o mesmo), mas a extração anda
+mais devagar enquanto a sonda roda.
+
+Com ``VLADO_EXIGIR_SEM_PULO=1`` (o job do CI), todo pulo destas regras vira falha, com o mesmo motivo: o portão
+só fecha a onda rodando sem pular.
 """
 import ctypes
 import os
@@ -35,10 +45,13 @@ NECESSARIO_PARA_LER = 2.0  # CPU s: 4 times the ~0.5 s from process start to the
 NECESSARIO_ARQUIVO = 60.0  # CPU s: 4 times the ~15 s of reading the whole heavy PDF on one core
 NECESSARIO_PARA_SAIR = 0.5  # CPU s: 4 times the ~0.1 s for the watcher to wake and end the process
 OCIOSA_MINIMA = 1.0  # CPU s left idle that always counts as "the machine had CPU" (decidir_por_ociosa)
+EXIGIR_SEM_PULO = 'VLADO_EXIGIR_SEM_PULO'
 
 SONDA = r"""
 import os, sys, time
 limite, arquivo = float(sys.argv[1]), sys.argv[2]
+with open(arquivo, 'a', encoding='ascii') as saida:  # still at normal priority: proof that this code ran
+    saida.write('0\n')
 if os.name == 'nt':
     import ctypes
     k32 = ctypes.windll.kernel32
@@ -77,34 +90,47 @@ def _python_base():
 
 
 class SondaBaixa:
-    """A low-priority process without core 0 asking for CPU until ``parar`` (or ``limite`` s)."""
+    """A low-priority process without core 0 asking for CPU until ``parar`` (or ``limite`` s).
 
-    def __init__(self, limite):
+    ``problema`` (after ``parar``): why the probe did not measure (ended by itself before the wait did, or never
+    wrote a line), else None. ``codigo``: the probe's program (tests give a broken one)."""
+
+    def __init__(self, limite, codigo=SONDA):
         self._pasta = tempfile.TemporaryDirectory()
         self._arquivo = Path(self._pasta.name) / 'cpu.txt'
         self._inicio = time.monotonic()
-        self._proc = subprocess.Popen([_python_base(), '-c', SONDA, str(limite), str(self._arquivo)])
+        self._proc = subprocess.Popen([_python_base(), '-c', codigo, str(limite), str(self._arquivo)])
         self._medida = None
+        self.problema = None
 
     def _cpu(self):
+        """(last CPU seconds written, how many whole lines)."""
         try:
             linhas = self._arquivo.read_text(encoding='ascii').splitlines()
         except OSError:
-            return 0.0
-        for linha in reversed(linhas):  # the last whole line (the one being written may be cut)
+            return 0.0, 0
+        valores = []
+        for linha in linhas:  # the one being written may be cut
             try:
-                return float(linha)
+                valores.append(float(linha))
             except ValueError:
                 continue
-        return 0.0
+        return (valores[-1] if valores else 0.0), len(valores)
 
     def parar(self):
         """(wall seconds, CPU seconds) the probe had; kills it at once."""
         if self._medida is None:
             janela = time.monotonic() - self._inicio
-            self._proc.kill()
+            saiu = self._proc.poll()  # it only ends by itself on an error: its limit is past the wait's
+            if saiu is None:
+                self._proc.kill()
             self._proc.wait(30)
-            self._medida = (janela, self._cpu())
+            cpu, linhas = self._cpu()
+            if saiu is not None:
+                self.problema = f'a sonda terminou sozinha antes do fim da espera (código {saiu})'
+            elif not linhas:
+                self.problema = 'a sonda não anotou nenhuma medida (não chegou a rodar)'
+            self._medida = (janela, cpu)
         return self._medida
 
     def __enter__(self):
@@ -132,6 +158,13 @@ def cpu_ociosa_s():
         return None
 
 
+def pular(teste, motivo):
+    """Skip with ``motivo``; with VLADO_EXIGIR_SEM_PULO=1 (CI) the skip is a failure with the same reason."""
+    if os.environ.get(EXIGIR_SEM_PULO) == '1':
+        teste.fail(f'pulo proibido ({EXIGIR_SEM_PULO}=1): {motivo}')
+    teste.skipTest(motivo)
+
+
 def decidir_por_ociosa(teste, ociosa, gasto, mensagem):
     """A time of the Mesa over its limit: FAIL when the machine left at least 4 times what the Mesa spent in the
     same window idle (at least OCIOSA_MINIMA s), or when idle time cannot be read; SKIP otherwise, with the numbers."""
@@ -142,7 +175,7 @@ def decidir_por_ociosa(teste, ociosa, gasto, mensagem):
                f'(necessário {necessario:.2f} s ociosos)')
     if ociosa >= necessario:
         teste.fail(f'{mensagem}, com CPU disponível: {numeros}')
-    teste.skipTest(f'máquina saturada para prioridade normal: {numeros}; {mensagem}')
+    pular(teste, f'máquina saturada para prioridade normal: {numeros}; {mensagem}')
 
 
 def esperar_com_cpu(teste, condicao, prazo, necessario, mensagem, sonda=SondaBaixa, passo=0.02):
@@ -157,8 +190,11 @@ def esperar_com_cpu(teste, condicao, prazo, necessario, mensagem, sonda=SondaBai
                 break
             time.sleep(passo)
         janela, cpu = medidor.parar()
+    problema = getattr(medidor, 'problema', None)
+    if problema:  # a probe that did not run proves nothing about the machine: never a skip
+        teste.fail(f'{mensagem} em {prazo:.0f} s, e a sonda da CPU não mediu: {problema}')
     numeros = (f'a sonda de prioridade baixa sem o núcleo 0, na mesma janela, teve {cpu:.2f} s de CPU em '
                f'{janela:.1f} s (necessário {necessario:.0f} s)')
     if cpu >= necessario:
         teste.fail(f'{mensagem} em {prazo:.0f} s, com CPU disponível: {numeros}')
-    teste.skipTest(f'máquina saturada para prioridade baixa: {numeros}; {mensagem} em {prazo:.0f} s')
+    pular(teste, f'máquina saturada para prioridade baixa: {numeros}; {mensagem} em {prazo:.0f} s')
