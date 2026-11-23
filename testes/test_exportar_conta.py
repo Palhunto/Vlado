@@ -237,6 +237,49 @@ class ExportarTest(cenario.DuasRedacoes):
                 dados = json.loads(self.exportar(sessao)[2])
             self.assertEqual((dados['itens_criados'], dados['incompleto']), (None, ['itens_criados']))
 
+    def test_parte_que_falha_de_qualquer_jeito_nao_derruba_o_arquivo(self):
+        # B1 of the review: a KeyError in one module answered 400 with the exception's text and no file. Now each part
+        # stands apart: the failing one is left out, said in `incompleto`, and the others still come in.
+        sessao, cid = self.nova()
+        quebrado, bom = types.ModuleType('modulo_quebrado'), types.ModuleType('modulo_bom')
+        quebrado.itens_da_conta = lambda root, conta, casos: {}['SEGREDO-DO-ERRO']
+        bom.itens_da_conta = lambda root, conta, casos: [
+            {'tipo': 'nota', 'caso': 'alpha', 'criado_em': '2026-11-20T10:00:00Z', 'id': 'E1'}]
+        def acessos_quebrados(root, conta):
+            raise KeyError('SEGREDO-DO-REGISTRO')
+        with patch.dict(sys.modules, {'modulo_quebrado': quebrado, 'modulo_bom': bom}), \
+                patch.object(rotas_contas, 'MODULOS_DE_ITENS', ('modulo_quebrado', 'modulo_bom')), \
+                patch.object(registro_acesso, 'acessos_da_conta', acessos_quebrados, create=True), \
+                patch('sys.stderr') as log:
+            status, cabecalhos, corpo = self.exportar(sessao)
+        self.assertEqual(status, 200, corpo[:300])
+        self.assertTrue(cabecalhos['Content-Disposition'].startswith('attachment'))
+        dados = json.loads(corpo)
+        self.assertEqual(dados['itens_criados'], [{'tipo': 'nota', 'caso': 'alpha', 'criado_em': '2026-11-20T10:00:00Z', 'id': 'E1'}])
+        self.assertIsNone(dados['acessos'])
+        self.assertEqual(dados['incompleto'], ['itens_criados', 'registro_de_acesso'])
+        self.assertNotIn(b'SEGREDO', corpo)  # never the exception's text to the person
+        escrito = ''.join(str(c.args[0]) for c in log.write.call_args_list if c.args)
+        self.assertIn('KeyError', escrito)  # the server's log says which part and what kind of error
+        self.assertNotIn('SEGREDO', escrito)
+        # A module that does not even load, a conversations' function that fails, and a part that is not a list.
+        def conversas_quebradas(root, casos):
+            raise RuntimeError('SEGREDO')
+        bom2 = types.ModuleType('modulo_bom')
+        bom2.itens_da_conta = lambda root, conta, casos: []
+        with patch.dict(sys.modules, {'modulo_bom': bom2}), \
+                patch.object(rotas_contas, 'MODULOS_DE_ITENS', ('modulo_bom',)), \
+                patch.object(registro_acesso, 'acessos_da_conta', lambda root, conta: 'não é lista', create=True), \
+                self.sem_criador(conversas_quebradas), patch('sys.stderr'):
+            status, _, corpo = self.exportar(sessao)
+        self.assertEqual(status, 200)
+        dados = json.loads(corpo)
+        self.assertEqual((dados['acessos'], dados['incompleto']), (None, ['conversas_anteriores', 'registro_de_acesso']))
+        with patch.object(rotas_contas, 'MODULOS_DE_ITENS', ('modulo_que_nao_existe_xyz',)), \
+                patch.object(registro_acesso, 'acessos_da_conta', lambda root, conta: [], create=True), patch('sys.stderr'):
+            dados = json.loads(self.exportar(sessao)[2])
+        self.assertEqual((dados['itens_criados'], dados['incompleto']), (None, ['itens_criados']))
+
     @staticmethod
     def sem_criador(funcao):
         """`codex_apuracao.conversas_sem_criador` as the Platform's commit brings it (or None: not there yet)."""
