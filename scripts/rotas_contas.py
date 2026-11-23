@@ -3,8 +3,8 @@
 Aqui ficam quem chama (a conta relida do armazenamento a cada requisição, com a redação e as
 apurações ao alcance), as operações públicas antes da sessão (entrar, ativar, primeiro
 administrador), as ``conta-*`` (cada pessoa sobre a própria conta: perfil, senha e sessões; o id
-de outra conta nunca é aceito) e a gestão de contas ``contas-*``, que só o dono alcança e só sobre
-a própria redação (operações em retirada: saem quando a tela Equipe entrar). O que cada papel alcança é
+de outra conta nunca é aceito). A gestão das outras contas da redação fica em ``rotas_equipe``; as
+antigas ``contas-*`` saíram com o convite por e-mail. O que cada papel alcança é
 decidido num lugar só, ``autorizacao.conferir``; este módulo não lê o papel para autorizar.
 Origem, CSRF e leitura do corpo continuam no servidor; este módulo nunca lê nem grava chaves de API.
 """
@@ -15,24 +15,27 @@ from http.cookies import SimpleCookie
 import ipaddress
 import json
 import os
+import secrets
 
 import acesso
 import autorizacao
+import correio
 import proxies_confiaveis
 import rascunhos
 import registro_acesso
 import rotas_equipe
 
-# Account management in withdrawal (dono only, own newsroom) and what the legacy guest profile may call:
-# the guest column of the matrix (`autorizacao.MATRIZ`) is exactly OPERACOES_CONVIDADO.
-CONTAS_OPERACOES = ('contas-listar', 'contas-criar', 'contas-atualizar', 'contas-desativar', 'contas-reativar',
-                    'contas-recuperar')
+# What the legacy guest profile may call: the guest column of the matrix (`autorizacao.MATRIZ`) is exactly
+# OPERACOES_CONVIDADO plus the own account (`CONTA_PROPRIA`).
 OPERACOES_CONVIDADO = ('codex-status', 'codex-listar', 'codex-perguntar', 'codex-eventos', 'codex-cancelar',
                        'codex-retomar', 'codex-original', 'sessao-sair', *rascunhos.OPERACOES)
 # Guest operations on an existing conversation: the conversation's case is checked on every call.
 OPERACOES_CONVERSA = ('codex-eventos', 'codex-cancelar', 'codex-original', 'codex-retomar')
 # Before a session exists (hosted mode only): Origin + JSON, no CSRF, small bodies.
-OPERACOES_PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin')
+OPERACOES_PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin', 'convite-consultar', 'convite-aceitar',
+                      'senha-esqueci', 'senha-redefinir', 'email-confirmar', 'entrar-segundo-fator')
+ESQUECI_ENVIADO = 'Se houver uma conta com esse e-mail, a mensagem para redefinir a senha foi enviada.'
+ESQUECI_DESLIGADO = 'Nesta instalação a senha é recuperada por quem administra a redação.'
 AMBIENTES = ('homologacao', 'editorial', 'demonstracao')
 SEM_SESSAO = 'Sessão expirada ou encerrada. Entre novamente.'
 # Asking and retrying both spend one of the guest's daily questions (given back if refused).
@@ -41,9 +44,16 @@ ATIVOS_CONVERSA = frozenset({'preparando', 'executando', 'publicando'})
 COOKIE_PILOTO ='vlado_sessao'
 # Each person on the own account (contract, 5.4): the account is always the session's, never one named in the body.
 CONTA_PROPRIA = ('conta-ver', 'conta-atualizar', 'conta-senha-trocar', 'conta-sessoes', 'conta-sessao-encerrar',
-                 'conta-sessoes-encerrar-outras')
+                 'conta-sessoes-encerrar-outras', 'conta-email-trocar', 'conta-fator-iniciar', 'conta-fator-confirmar',
+                 'conta-fator-codigos', 'conta-fator-remover')
 _CAMPOS_DA_CONTA = {'conta-ver': set(), 'conta-atualizar': {'nome', 'idioma'}, 'conta-senha-trocar': {'senha_atual', 'senha_nova'},
-                    'conta-sessoes': set(), 'conta-sessao-encerrar': {'sessao'}, 'conta-sessoes-encerrar-outras': set()}
+                    'conta-sessoes': set(), 'conta-sessao-encerrar': {'sessao'}, 'conta-sessoes-encerrar-outras': set(),
+                    'conta-email-trocar': {'email', 'senha'}, 'conta-fator-iniciar': {'senha', 'codigo'},
+                    'conta-fator-confirmar': {'codigo'}, 'conta-fator-codigos': {'senha', 'codigo'},
+                    'conta-fator-remover': {'senha'}}
+COOKIE_APARELHO = 'vlado_aparelho'  # the mark of a device an account already used (contract, 8.2); one year
+APARELHO_SEGUNDOS = 365 * 24 * 3600
+COOKIE_SEGUNDO_PASSO = 'vlado_passo2'  # the ticket between the right password and the second factor (five minutes)
 _NAVEGADORES = (('Edg/', 'Edge'), ('OPR/', 'Opera'), ('Firefox/', 'Firefox'), ('Chrome/', 'Chrome'), ('Safari/', 'Safari'))
 _SISTEMAS = (('Android', 'Android'), ('iPhone', 'iOS'), ('iPad', 'iOS'), ('Windows', 'Windows'), ('Mac OS X', 'macOS'),
              ('Linux', 'Linux'))
@@ -60,7 +70,52 @@ def aparelho(agente, cliente='web'):
     return f'{navegador} · {sistema}' if sistema else navegador
 
 
-def conta_propria(root, operation, data, principal, ip=None):
+def _trocar_email(root, conta, data, ip, origem):
+    """``conta-email-trocar``: asks the password; the change only happens when the link sent to the NEW address is
+    used (``email-confirmar``). The answer is the same whether the address is free or already of another account,
+    and the messages leave in another thread, so its time is the same too; nothing is ever sent to an address in
+    use. The current address is told of the request. With the transport ``tela`` the link goes back to who asked."""
+    pedido = acesso.pedir_troca_de_email(root, conta, data.get('email'), data.get('senha'), ip)
+    link = f'{(origem or "").rstrip("/")}/confirmar-email/{pedido["token"]}'
+    if pedido['antigo']:
+        correio.enviar_depois('email_aviso', pedido['antigo'], pedido['idioma'], {}, conta=conta, raiz=root)
+    if not rotas_equipe.com_envio():
+        return {'estado': 'confirmacao_enviada', 'link': link}
+    if pedido['enviar']:
+        correio.enviar_depois('email_novo', pedido['novo'], pedido['idioma'],
+                              {'link': link, 'origem': origem, 'minutos': acesso.REDEFINICAO_MINUTOS}, conta=conta, raiz=root)
+    return {'estado': 'confirmacao_enviada'}
+
+
+def avisar_bloqueio_do_fator(root, exc):
+    """Five wrong codes in a row blocked the second factor of an account: the person is told, at the account's own
+    address. In the sign-in the code is only asked after the right password, so somebody else may have it."""
+    aviso = getattr(exc, 'aviso', None)
+    if aviso and aviso.get('email'):
+        correio.enviar_depois('fator_bloqueado', aviso['email'], aviso['idioma'], {'minutos': acesso.BLOQUEIO_MINUTOS},
+                              conta=aviso['id'], raiz=root)
+
+
+def _fator(root, operation, conta, data, ip, atual=None):
+    """``conta-fator-*``: the own second factor. The seed and the reserve codes go out once, in the answer of the
+    operation that makes them, and never again; the person is told by e-mail of every change."""
+    if operation == 'conta-fator-iniciar':
+        return acesso.iniciar_fator(root, conta, data.get('senha'), data.get('codigo'), ip)
+    if operation == 'conta-fator-confirmar':
+        resposta = {'estado': 'fator_ativado', 'codigos_de_reserva': acesso.confirmar_fator(root, conta, data.get('codigo'), ip, sessao_atual=atual)}
+    elif operation == 'conta-fator-codigos':
+        resposta = {'estado': 'codigos_gerados',
+                    'codigos_de_reserva': acesso.novos_codigos_do_fator(root, conta, data.get('senha'), data.get('codigo'), ip)}
+    else:
+        acesso.remover_fator(root, conta, data.get('senha'), ip)
+        resposta = {'estado': 'fator_removido'}
+    perfil = acesso.ver_conta(root, conta)['conta']
+    if perfil['email']:
+        correio.enviar_depois('fator_alterado', perfil['email'], perfil['idioma'], {}, conta=conta, raiz=root)
+    return resposta
+
+
+def conta_propria(root, operation, data, principal, ip=None, origem=None, marca=None):
     """``POST /api/conta-*``: the person on the own account. ``principal`` is the session; nothing here takes the id
     of an account, and the session that asks is told apart by its public id (never the cookie)."""
     if operation not in CONTA_PROPRIA or not isinstance(data, dict):
@@ -74,8 +129,15 @@ def conta_propria(root, operation, data, principal, ip=None):
         return {**acesso.ver_conta(root, conta), 'sessao': atual}
     if operation == 'conta-atualizar':
         return acesso.atualizar_perfil(root, conta, nome=data.get('nome'), idioma=data.get('idioma'))
+    if operation == 'conta-email-trocar':
+        return _trocar_email(root, conta, data, ip, origem)
+    if operation.startswith('conta-fator-'):
+        return _fator(root, operation, conta, data, ip, atual)
     if operation == 'conta-senha-trocar':
-        encerradas = acesso.trocar_senha(root, conta, data.get('senha_atual'), data.get('senha_nova'), atual, ip)
+        encerradas = acesso.trocar_senha(root, conta, data.get('senha_atual'), data.get('senha_nova'), atual, ip, marca=marca)
+        perfil = acesso.ver_conta(root, conta)['conta']
+        if perfil['email']:  # the person is told, at the account's own address (contract, 8.1)
+            correio.enviar_depois('senha_trocada', perfil['email'], perfil['idioma'], {}, conta=conta, raiz=root)
         return {'estado': 'senha_trocada', 'sessoes_encerradas': encerradas}
     if operation == 'conta-sessao-encerrar':
         acesso.encerrar_sessao_da_conta(root, conta, data.get('sessao'), atual)
@@ -83,11 +145,6 @@ def conta_propria(root, operation, data, principal, ip=None):
         return {'encerradas': acesso.encerrar_outras_sessoes(root, conta, atual),
                 'sessoes': acesso.sessoes_da_conta(root, conta, atual)}
     return {'sessoes': acesso.sessoes_da_conta(root, conta, atual)}
-
-
-def _como_antes(registro):
-    """An account as the `contas-*` screen knows it: the dono under the old name `admin`."""
-    return {**registro, 'papel': 'admin' if registro.get('papel') == 'dono' else registro.get('papel')}
 
 
 class RotasContas:
@@ -108,6 +165,45 @@ class RotasContas:
         except (ValueError, OSError):
             self.acesso_indisponivel = True  # answered with 503, never with a dropped connection
             return None, sid
+
+    def _cookie(self, nome):
+        cookie = SimpleCookie()
+        try:
+            cookie.load(self.headers.get('Cookie', ''))
+        except Exception:  # noqa: BLE001 - a malformed cookie header means no cookie
+            return None
+        morsel = cookie.get(nome)
+        return morsel.value if morsel else None
+
+    def _bilhete_do_segundo_passo(self):
+        return self._cookie(COOKIE_SEGUNDO_PASSO)
+
+    def _marca_do_aparelho(self):
+        """The device mark of this browser: the one it sent, or a fresh one. A fresh one only becomes the
+        browser's cookie if what it is doing works (a sign-in, or a link only the person receives): a refusal
+        never sets it."""
+        valor = self._cookie(COOKIE_APARELHO)
+        return valor if valor and acesso.SID.fullmatch(valor) else secrets.token_urlsafe(32)
+
+    def _cookie_do_aparelho(self, marca):
+        """`Lax`, not `Strict`: the links of the messages are opened from the mail program, and the mark must
+        travel with the sign-in that follows them."""
+        return (f'{COOKIE_APARELHO}={marca}; HttpOnly; ' + ('Secure; ' if self.server.modo == 'piloto' else '')
+                + f'SameSite=Lax; Path=/; Max-Age={APARELHO_SEGUNDOS}')
+
+    def _entrou(self, sid, csrf, conta, marca, cliente):
+        """The answer of every sign-in that worked: the session and the device mark as cookies, and, for a device
+        the account had never used, a notice to the account's own address (W08, rule 6)."""
+        if conta.get('aparelho_novo') and conta.get('email'):
+            correio.enviar_depois('novo_acesso', conta['email'], conta.get('idioma'),
+                                  {'aparelho': aparelho(self.headers.get('User-Agent'), cliente)}, conta=conta['id'],
+                                  raiz=self.server.root)
+        publica = {k: conta[k] for k in ('id', 'nome', 'login', 'email', 'papel', 'casos')}
+        self._send(200, json.dumps({'conta': publica, 'csrf': csrf, 'destino': autorizacao.destino_inicial(conta)},
+                                   ensure_ascii=False).encode('utf-8'),
+                   # The session goes last: a client that keeps one `Set-Cookie` per answer keeps the session.
+                   extra={'Set-Cookie': [self._cookie_do_aparelho(marca),
+                                         f'{COOKIE_PILOTO}={sid}; {self.server.atributos_cookie()}']})
 
     def _endereco_socket(self):
         """The TCP peer, never a forwarded header."""
@@ -174,6 +270,14 @@ class RotasContas:
                                    f'<title>Vlado</title><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/style.css"><main class="panel">{texto}</main></html>'
                                    ).encode('utf-8'), 'text/html; charset=utf-8')
 
+    def _esqueci_ligado(self):
+        """Whether "esqueci a senha" works here: only with real delivery, as there is nobody to show the link to
+        (contract, 8.1). A wrong mail configuration reads as off."""
+        try:
+            return correio.transporte() != 'tela'
+        except ValueError:
+            return False
+
     def _ambiente_publico(self):
         if self.server.modo != 'piloto':
             return None
@@ -222,10 +326,12 @@ class RotasContas:
         operation is audited once (`admin_recusada`, with the reason: validation, wrong password, last dono, blocked)."""
         try:
             if operation in CONTA_PROPRIA:
-                return conta_propria(self.server.root, operation, data, principal, ip=self._ip())
+                return conta_propria(self.server.root, operation, data, principal, ip=self._ip(), origem=self.server.origin,
+                                     marca=self._cookie(COOKIE_APARELHO))
             return rotas_equipe.executar(
                 self.server.root, operation, data, principal, ip=self._ip(), parar=self._parar_execucoes,
-                gasto_da_redacao=autorizacao.gasto_da_redacao(self.server.root, self.server.modo, principal))
+                gasto_da_redacao=autorizacao.gasto_da_redacao(self.server.root, self.server.modo, principal),
+                origem=self.server.origin, modo=self.server.modo)
         except (acesso.SenhaIncorreta, acesso.Bloqueado):
             raise  # already audited where the password is checked (`acesso.confirmar_senha`)
         except (ValueError, OSError) as exc:
@@ -233,60 +339,6 @@ class RotasContas:
                                       motivo=getattr(exc, 'motivo', 'validacao'), codigo=getattr(exc, 'codigo', None),
                                       alvo=data.get('conta') if isinstance(data.get('conta'), str) else None)
             raise
-
-    def _contas(self, operation, data, principal):
-        """Account management (admin only, hosted mode). A refused operation is audited (`admin_recusada`)."""
-        try:
-            return self._contas_executar(operation, data, principal)
-        except (acesso.SenhaIncorreta, acesso.Bloqueado):
-            raise  # already audited where the password is checked (`acesso.confirmar_senha`)
-        except (ValueError, OSError) as exc:
-            registro_acesso.registrar('admin_recusada', 'falha', principal.get('conta'),
-                                      motivo=getattr(exc, 'motivo', 'validacao'), codigo=getattr(exc, 'codigo', None),
-                                      alvo=data.get('id') if isinstance(data.get('id'), str) else None)
-            raise
-
-    def _contas_executar(self, operation, data, principal):
-        """Account management (dono only, own newsroom). Activation links are returned once, never stored.
-
-        Every account id is looked up inside the caller's newsroom: one of another newsroom reads as unknown.
-        The old interface still speaks `admin`: it is accepted on the way in and given back on the way out.
-
-        While these operations exist they ask the password of who does it (field `senha`) wherever the team's do
-        (contract, 5.15): creating a dono, promoting to dono, changing the role of a dono, deactivating a dono and
-        every recovery. The check is the same one (`acesso.confirmar_senha`): the name of the operation is not a
-        way around it. And they no longer give the legacy `convidado` profile to an account that is not one."""
-        root, por, redacao = self.server.root, principal['conta'], principal['organizacao']['id']
-        senha = {'confirmar': True, 'senha': data.get('senha'), 'ip': self._ip()}
-        if operation == 'contas-listar':
-            return {'contas': [_como_antes(c) for c in acesso.listar(root, redacao)],
-                    'eventos': acesso.eventos(root, 50, redacao)}
-        if operation in ('contas-criar', 'contas-atualizar') and data.get('casos') is not None:
-            casos = data.get('casos')
-            disponiveis = set(principal['casos'])  # the dono's reach: the cases of the own newsroom, and no other
-            if not isinstance(casos, list) or not all(isinstance(c, str) for c in casos) or not set(casos) <= disponiveis:
-                raise ValueError('Escolha apurações existentes para a conta.')
-        horas = data.get('horas', acesso.ATIVACAO_HORAS)
-        if operation == 'contas-criar':
-            papel = data.get('papel', 'convidado')
-            registro, token = acesso.criar_conta(root, data.get('nome'), data.get('login'), papel=papel,
-                                                 casos=data.get('casos') or [], cota_diaria=data.get('cota_diaria', 20),
-                                                 horas=horas, por=por, organizacao=redacao, **senha)
-            return {'conta': _como_antes(registro), 'link': f'{self.server.origin}/ativar/{token}'}
-        if operation == 'contas-recuperar':
-            registro, token = acesso.recuperar(root, data.get('id'), por=por, horas=horas, organizacao=redacao, **senha)
-            return {'conta': _como_antes(registro), 'link': f'{self.server.origin}/ativar/{token}'}
-        if operation == 'contas-desativar':
-            registro = acesso.desativar(root, data.get('id'), por=por, organizacao=redacao, **senha)
-            self._parar_execucoes(registro['id'], ())
-            return {'conta': _como_antes(registro)}
-        if operation == 'contas-reativar':
-            return {'conta': _como_antes(acesso.reativar(root, data.get('id'), por=por, organizacao=redacao))}
-        campos = {k: data[k] for k in ('nome', 'papel', 'casos', 'cota_diaria') if data.get(k) is not None}
-        registro = acesso.atualizar(root, data.get('id'), por=por, organizacao=redacao, **campos, **senha)
-        if registro.get('casos') is not None:  # not a dono: executions on cases it no longer reaches stop
-            self._parar_execucoes(registro['id'], registro.get('casos') or ())
-        return {'conta': _como_antes(registro)}
 
     def _parar_execucoes(self, conta_id, casos_mantidos):
         """A deactivated account, or a case taken away, must not keep spending the API in the background."""
@@ -332,28 +384,108 @@ class RotasContas:
             return
         try:
             if operation == 'entrar':
+                marca = self._marca_do_aparelho()
                 sid, csrf, conta = acesso.entrar(root, data.get('login'), data.get('senha'), ip=self._ip(),
                                                  cliente=data.get('cliente', 'web'),
-                                                 aparelho=aparelho(self.headers.get('User-Agent'), data.get('cliente', 'web')))
-                publica = {k: conta[k] for k in ('id', 'nome', 'login', 'papel', 'casos')}
-                self._send(200, json.dumps({'conta': publica, 'csrf': csrf, 'destino': autorizacao.destino_inicial(conta)},
-                                           ensure_ascii=False).encode('utf-8'),
-                           extra={'Set-Cookie': f'{COOKIE_PILOTO}={sid}; {self.server.atributos_cookie()}'})
+                                                 aparelho=aparelho(self.headers.get('User-Agent'), data.get('cliente', 'web')),
+                                                 marca=marca)
+                self._entrou(sid, csrf, conta, marca, data.get('cliente', 'web'))
+            elif operation == 'entrar-segundo-fator':
+                # The second step: the ticket is in a cookie of its own, good for this operation only.
+                if set(data) - {'codigo'}:
+                    raise ValueError('Campos inválidos no segundo passo da entrada.')
+                marca = self._marca_do_aparelho()
+                sid, csrf, conta = acesso.entrar_segundo_fator(root, self._bilhete_do_segundo_passo(), data.get('codigo'),
+                                                               ip=self._ip(), marca=marca)
+                self._entrou(sid, csrf, conta, marca, 'web')
             elif operation == 'ativacao-consultar':
                 acesso.limitar_ip(self._ip(), 'consultar')
                 self._json(200, acesso.consultar_ativacao(root, data.get('token')))
+            elif operation == 'convite-consultar':
+                acesso.limitar_ip(self._ip(), 'aceitar')
+                self._json(200, acesso.consultar_convite(root, data.get('token')))
+            elif operation == 'convite-aceitar':
+                # The account is born and its first session opens, as a sign-in does. The e-mail is the invitation's.
+                acesso.limitar_ip(self._ip(), 'aceitar')
+                if set(data) - {'token', 'nome', 'senha', 'termos_versao', 'cliente'}:
+                    raise ValueError('Campos inválidos no aceite do convite.')
+                marca = self._marca_do_aparelho()  # the browser that accepts is the account's first known device
+                sid, csrf, conta = acesso.aceitar_convite(
+                    root, data.get('token'), data.get('nome'), data.get('senha'), data.get('termos_versao'), ip=self._ip(),
+                    cliente=data.get('cliente', 'web'),
+                    aparelho=aparelho(self.headers.get('User-Agent'), data.get('cliente', 'web')), marca=marca)
+                self._entrou(sid, csrf, conta, marca, data.get('cliente', 'web'))
+            elif operation == 'senha-esqueci':
+                # One answer, in the same time, whether an account has the address or not: the message leaves in
+                # another thread. Without real delivery there is nobody to show the link to (contract, 8.1).
+                acesso.limitar_ip(self._ip(), 'esqueci')
+                if not self._esqueci_ligado():
+                    self._json(400, {'estado': 'erro', 'codigo': 'transporte_indisponivel', 'erro': ESQUECI_DESLIGADO})
+                    return
+                pedido = acesso.pedir_redefinicao(root, data.get('email'))
+                if pedido:
+                    token, quem = pedido
+                    correio.enviar_depois('redefinicao', quem['email'], quem['idioma'],
+                                          {'link': f'{self.server.origin}/redefinir/{token}', 'origem': self.server.origin,
+                                           'minutos': acesso.REDEFINICAO_MINUTOS}, conta=quem['id'], raiz=root)
+                self._json(200, {'estado': 'enviado', 'mensagem': ESQUECI_ENVIADO})
+            elif operation == 'senha-redefinir':
+                acesso.limitar_ip(self._ip(), 'redefinir')
+                if set(data) - {'token', 'senha', 'codigo'}:
+                    raise ValueError('Campos inválidos na redefinição de senha.')
+                marca = self._marca_do_aparelho()
+                quem = acesso.redefinir_senha(root, data.get('token'), data.get('senha'), data.get('codigo'), self._ip(),
+                                              marca=marca)
+                if quem['email']:
+                    correio.enviar_depois('senha_trocada', quem['email'], quem['idioma'], {}, conta=quem['id'], raiz=root)
+                # The link is something only the owner of the mailbox has: this browser becomes the account's known
+                # device (and the only one), which is the way out for whoever was kept in protected mode.
+                self._send(200, b'{"estado": "senha_redefinida"}', extra={'Set-Cookie': self._cookie_do_aparelho(marca)})
+            elif operation == 'email-confirmar':
+                # The link sent to the new address: the e-mail of the account changes, and the old address is told.
+                acesso.limitar_ip(self._ip(), 'confirmar_email')
+                if set(data) - {'token'}:
+                    raise ValueError('Campos inválidos na confirmação do e-mail.')
+                feito = acesso.confirmar_email(root, data.get('token'))
+                if feito['antigo']:
+                    correio.enviar_depois('email_trocado', feito['antigo'], feito['idioma'], {}, conta=feito['conta'], raiz=root)
+                self._json(200, {'estado': 'email_confirmado'})
             else:
                 acesso.limitar_ip(self._ip(), 'ativar')
-                conta = acesso.ativar(root, data.get('token'), data.get('senha'))
-                self._json(200, {'estado': 'senha_definida', 'login': conta['login']})
+                marca = self._marca_do_aparelho()
+                conta = acesso.ativar(root, data.get('token'), data.get('senha'), marca=marca)
+                self._send(200, json.dumps({'estado': 'senha_definida', 'login': conta['login']}).encode('utf-8'),
+                           extra={'Set-Cookie': self._cookie_do_aparelho(marca)})
+        except acesso.PedeSegundoFator as passo:
+            # The password was right and the account has a second factor: no session, only the five-minute ticket.
+            self._send(200, json.dumps({'estado': 'segundo_fator'}).encode('utf-8'), extra={
+                'Set-Cookie': f'{COOKIE_SEGUNDO_PASSO}={passo.bilhete}; {self.server.atributos_cookie()}; '
+                              f'Max-Age={acesso.ENTRADA_MINUTOS * 60}'})
         except acesso.RegistroIlegivel:
             self._json(503, {'estado': 'indisponivel', 'erro': 'Registro de acesso indisponível. Avise a administração.'})
         except acesso.Bloqueado as exc:
+            avisar_bloqueio_do_fator(self.server.root, exc)
             self._json(429, {'estado': 'bloqueado', 'codigo': 'bloqueado', 'erro': str(exc)})
+        except acesso.EntradaExpirada as exc:
+            self._json(401, {'estado': 'credenciais', 'codigo': 'entrada_expirada', 'erro': str(exc)})
+        except acesso.FatorIndisponivel as exc:  # the key of the seeds is missing: not the person's mistake
+            self._json(503, {'estado': 'indisponivel', 'codigo': 'fator_indisponivel', 'erro': str(exc)})
+        except acesso.CodigoNecessario as exc:  # no code came: asked for, and nothing counted
+            self._json(403, {'estado': 'proibido', 'codigo': 'fator_necessario', 'erro': str(exc)})
+        except acesso.CodigoInvalido as exc:  # the second factor, in the second step or in a reset by e-mail
+            self._json(403, {'estado': 'proibido', 'codigo': 'codigo_invalido', 'erro': str(exc)})
         except acesso.CredenciaisInvalidas as exc:
             self._json(401, {'estado': 'credenciais', 'codigo': 'credenciais', 'erro': str(exc)})
         except acesso.AtivacaoInvalida as exc:
             self._json(400, {'estado': 'erro', 'codigo': 'ativacao_invalida', 'erro': str(exc)})
+        except acesso.ConviteInvalido as exc:  # one answer for every link that creates nothing
+            self._json(400, {'estado': 'erro', 'codigo': 'convite_invalido', 'erro': str(exc)})
+        except acesso.LinkInvalido as exc:  # and one for every reset link that changes nothing
+            self._json(400, {'estado': 'erro', 'codigo': 'link_invalido', 'erro': str(exc)})
+        except acesso.SenhaInvalida as exc:  # the password chosen is out of size: the page says so under the field
+            if operation == 'ativar':
+                registro_acesso.registrar('ativacao_falha', 'falha', motivo='validacao', acesso_operacao='ativar')
+            self._json(400, {'estado': 'erro', 'codigo': 'senha_invalida', 'erro': str(exc)})
         except (ValueError, OSError) as exc:
             if operation == 'ativar':  # a refused password (too short...) is not a bad link: audited as validation
                 registro_acesso.registrar('ativacao_falha', 'falha', motivo='validacao', acesso_operacao='ativar')

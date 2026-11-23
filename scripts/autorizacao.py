@@ -93,13 +93,16 @@ MATRIZ: dict[str, Regra] = {}
 _linhas(MATRIZ, 'nenhum', 'L', TODOS, 'GET:/ GET:/api/sessao GET:/api/integracao GET:/api/catalogo GET:/api/cota')
 _linhas(MATRIZ, 'lote+caso+nenhum', 'L', TODOS, 'GET:/api/fila')
 # 5.4 A própria conta.
-_linhas(MATRIZ, 'nenhum', 'A', TODOS, 'sessao-sair conta-senha-trocar conta-sessao-encerrar conta-sessoes-encerrar-outras')
+_linhas(MATRIZ, 'nenhum', 'A', TODOS, 'sessao-sair conta-senha-trocar conta-sessao-encerrar conta-sessoes-encerrar-outras '
+                                      'conta-email-trocar conta-fator-iniciar conta-fator-confirmar conta-fator-codigos')
+_linhas(MATRIZ, 'nenhum', 'A', '—|—|sim|sim|sim', 'conta-fator-remover')  # negado a quem tem o segundo fator obrigatório
 _linhas(MATRIZ, 'nenhum', 'L', TODOS, 'conta-ver conta-sessoes')
 _linhas(MATRIZ, 'nenhum', 'E', TODOS, 'conta-atualizar')
 # 5.5 A redação.
 _linhas(MATRIZ, 'nenhum', 'L', SO_DONO, 'ia-config equipe-listar equipe-atividade')
 _linhas(MATRIZ, 'nenhum', 'A', SO_DONO, 'ia-config-salvar codex-desligar equipe-papel equipe-desativar equipe-reativar '
-                                        'equipe-remover equipe-teto')
+                                        'equipe-remover equipe-teto equipe-convidar equipe-convite-reenviar '
+                                        'equipe-convite-cancelar equipe-recuperar equipe-recuperar-confirmar')
 _linhas(MATRIZ, 'nenhum', 'L', DONO_E_REPORTER, 'ambiente')
 _linhas(MATRIZ, 'nenhum', 'L', TODOS, 'codex-status')
 # 5.6 Apurações: criação, participação e lixeira.
@@ -159,19 +162,16 @@ _linhas(MATRIZ, 'caso', 'E', 'sim|sim|—|—|—', 'redacao-revisar')
 _linhas(MATRIZ, 'caso', 'E', TODOS, 'rascunhos-salvar rascunhos-ler rascunhos-listar rascunhos-descartar')
 _linhas(MATRIZ, 'caso', 'L', MESA, 'continuidade-resumo')
 
-# Operações retiradas pelo contrato (nota da seção 5.5), que continuam até a tela Equipe entrar: só o dono, e só
-# sobre a própria redação. Saem daqui e de OPERACOES_API na mesma integração em que `equipe-*` entrar.
+# Operações em retirada: nenhuma. As seis `contas-*` (nota da seção 5.5) saíram com o convite por e-mail (P30) e
+# respondem 404 como qualquer operação inexistente; `equipe-*`, `caso-*` e o convite as substituem.
 TRANSITORIAS: dict[str, Regra] = {}
-_linhas(TRANSITORIAS, 'nenhum', 'A', SO_DONO, 'contas-listar contas-criar contas-atualizar contas-desativar '
-                                              'contas-reativar contas-recuperar')
-# Operações que o contrato já define e que entram nas próximas entregas (conta própria, equipe, convites, senha).
+RETIRADAS = ('contas-listar', 'contas-criar', 'contas-atualizar', 'contas-desativar', 'contas-reativar', 'contas-recuperar')
+# Operações que o contrato já define e que entram nas próximas entregas (segundo fator, ciclo de vida).
 PENDENTES = frozenset((
-    'entrar-segundo-fator convite-consultar convite-aceitar senha-esqueci senha-redefinir '
-    'conta-email-trocar conta-fator-iniciar conta-fator-confirmar conta-fator-codigos conta-fator-remover '
-    'conta-termos-aceitar conta-exportar conta-excluir '
-    'equipe-convidar equipe-convite-reenviar equipe-convite-cancelar equipe-recuperar equipe-recuperar-confirmar').split())
+    'conta-termos-aceitar conta-exportar conta-excluir').split())
 # Antes da sessão (seção 5.3): sem papel, conferidas em `rotas_contas._publico`.
-PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin')
+PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin', 'convite-consultar', 'convite-aceitar',
+            'senha-esqueci', 'senha-redefinir', 'email-confirmar', 'entrar-segundo-fator')
 _REGRAS = {**MATRIZ, **TRANSITORIAS}
 
 
@@ -311,7 +311,7 @@ def conferir(root: Path, modo: str, principal: dict, operacao: str, dados: dict)
     mensagem de sempre). Não grava nada: quem registra a posse de uma apuração nova é ``registrar_novo``."""
     root = Path(root)
     if modo == 'local':
-        if operacao in TRANSITORIAS or operacao.startswith(('caso-', 'conta-', 'equipe-')):
+        if operacao.startswith(('caso-', 'conta-', 'equipe-')):
             raise _proibida('Contas só existem nos modos com login.')
         return Acesso(operacao, dados, dados.get('caso') if isinstance(dados.get('caso'), str) else None)
     if modo == 'piloto' and operacao == 'codex-desligar':
@@ -338,11 +338,6 @@ def conferir(root: Path, modo: str, principal: dict, operacao: str, dados: dict)
         # Enquanto a chave própria de cada redação não existe, a do serviço não se troca pela Mesa numa instalação
         # com mais de uma redação: seria uma redação mudando a conexão de todas.
         raise _proibida('A conexão com a IA deste serviço é definida por quem o administra.')
-    if operacao == 'contas-criar' and acesso.total_redacoes(root) > 1:
-        # The login is unique in the whole installation, so "this login already exists" would tell one newsroom
-        # that another has an account with it. Where there is more than one newsroom, nobody chooses a login in
-        # the Mesa: people come in by the operator's terminal until the invitation by e-mail replaces this.
-        raise _proibida('Neste serviço, as contas novas são criadas por quem o administra, até o convite por e-mail entrar.')
     if papel in RESTRITOS and operacao in CAMPOS_RESTRITOS and set(dados) - CAMPOS_RESTRITOS[operacao]:
         raise _proibida(MENSAGEM_CAMPOS[operacao], 'campos_nao_permitidos')
     novo = 'novo' in regra.resolvedor

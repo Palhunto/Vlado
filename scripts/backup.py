@@ -14,6 +14,13 @@ segredos/ are left out unless asked: a pasted key can be pasted again, and a bac
 server volume. Everything else a user created is in: cases, rounds, conversations, trash, intake, accounts
 (with password hashes) and settings.
 
+segredos/ also holds `contas.chave`, the key that opens the second-factor seeds kept in the accounts store. It
+goes with the secrets, never with the accounts: a copy of the accounts alone must not be able to make codes. But
+it cannot be typed again: an accounts backup restored without it leaves every second factor unusable (people
+enrol again after a recovery). So a backup that leaves the secrets out says so in its manifest when that key
+exists; keep a copy of it where the secrets are kept. This module copies the file as bytes and never reads,
+prints or logs what is in it.
+
   python scripts/backup.py criar --destino backups/ [--cifrar-para age1... | ARQUIVO_DE_CHAVES_PUBLICAS]
   python scripts/backup.py criar --destino -  > vlado-dados.tar.gz      (stream, e.g. from a container)
   python scripts/backup.py restaurar ARQUIVO [--identidade CHAVE_PRIVADA] [--substituir]
@@ -50,6 +57,7 @@ import urllib.request
 ROOT = Path(os.environ.get('VLADO_BACKUP_RAIZ') or Path(__file__).resolve().parents[1])
 PASTAS = ('casos', 'conversas', 'execucoes', 'lixeira', 'entrada', 'acesso', 'ajustes')
 SEGREDOS = 'segredos'
+CHAVE_DAS_CONTAS = 'contas.chave'  # opens the second-factor seeds of the accounts store (scripts/segundo_fator.py)
 MANIFESTO = 'manifesto_backup.json'
 PROIBIDOS = (chr(92), ':', chr(0))  # backslash (Windows separator), drive letter, NUL
 # Work in progress that the application publishes by renaming: never part of a backup, and while one
@@ -386,6 +394,9 @@ def _escrever_pacote(root: Path, pacote: tarfile.TarFile, incluir_segredos: bool
                           'a Mesa o desfaz na próxima partida')
         else:
             avisos.append(f'pasta de preparo abandonada, fora do backup: {abandonado}')
+    if not incluir_segredos and (root / SEGREDOS / CHAVE_DAS_CONTAS).is_file():  # only whether it exists; never opened
+        avisos.append(f'{SEGREDOS}/{CHAVE_DAS_CONTAS} ficou de fora, com os segredos: sem ela, os segundos fatores das contas '
+                      'deste backup não abrem depois de restaurar. Guarde uma cópia dela junto dos segredos.')
     try:
         for relativo, caminho, eh_dir in _entradas(root, pastas):
             if relativo is None:
