@@ -129,8 +129,8 @@ test('P40 (b): o que a chave própria pagou é parte do valor da cota ("dos quai
   assert.equal(esgotada.$('mesa-cota-medidor').getAttribute('aria-label'), 'Cota do mês esgotada: R$ 50,00 de R$ 50, dos quais R$ 8,00 com a chave própria');
   const ingles = await abrir(comChave('18.40', '3.25', '12.00'), 'en');
   ingles.janela.I18N.aplicar(ingles.$('mesa-sidebar'));
-  assert.equal(ingles.$('mesa-cota-chave').textContent, "of which R$ 3,25 on the newsroom’s own key");
-  assert.equal(ingles.$('mesa-cota-medidor').getAttribute('aria-label'), "37% of the quota used, of which R$ 3,25 on the newsroom’s own key");
+  assert.equal(ingles.$('mesa-cota-chave').textContent, "of which R$ 3,25 with the newsroom’s own key");
+  assert.equal(ingles.$('mesa-cota-medidor').getAttribute('aria-label'), "37% of the quota used, of which R$ 3,25 with the newsroom’s own key");
   assert.equal(ingles.$('mesa-cota-chave-redacao').querySelector('.mesa-cota-rotulo').textContent, "Newsroom’s own key");
 });
 
