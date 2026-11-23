@@ -128,6 +128,7 @@ test('Continuar para documentos: o passo 2 é a tela Documentos, com o nome no t
   assert.equal(mesa.$('area-descricao').getAttribute('translate'), 'no', 'o nome é dado de quem digitou');
   assert.equal(mesa.$('nova-etapas-2').hidden, false);
   assert.equal(mesa.$('nova-etapas-2').querySelector('[aria-current="step"]').textContent.trim(), '2 Documentos');
+  assert.equal(mesa.doc.body.dataset.novaEtapas, '1', 'a linha da Nova apuração toma o lugar da linha de Documentos, Pergunta, Conferência e Caderno');
   assert.equal(mesa.$('nova-aviso').hidden, false);
   assert.match(mesa.$('nova-aviso').textContent, /A apuração é criada no primeiro envio\. Antes disso, nada fica guardado\./);
   assert.equal(mesa.$('nova-voltar').textContent, '‹ Nome e fontes');
@@ -180,6 +181,7 @@ test('passo 3: com o recibo pronto a linha marca "3 Conferir recibo"; "Ver recib
   const ver = [...mesa.$('documentos-envio').querySelectorAll('a')].find(a => a.textContent === 'Ver recibo');
   ver.click(); await mesa.esperar(3);
   assert.equal(mesa.$('nova-etapas-2').hidden, true, 'depois do recibo conferido, a linha de etapas sai');
+  assert.equal(mesa.doc.body.dataset.novaEtapas, undefined, 'e a linha de sempre volta');
 });
 
 test('sair no meio: com o formulário preenchido pede "Sair sem criar a apuração?"; vazio, sai sem pergunta; Cancelar e a barra lateral seguem a regra', async () => {

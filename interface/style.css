@@ -2637,6 +2637,7 @@ body[data-suspensa] .persistent-context,body[data-suspensa] #mesa-configuracoes,
 .nova-aviso p{margin:0}
 .nova-voltar{min-height:var(--espaco-6);padding:0;border:0;background:none;color:var(--theme-accent);font-size:var(--text-md);font-weight:600;text-decoration:underline}
 .nova-voltar:hover{background:none;color:var(--theme-primary-hover)}
+body[data-nova-etapas] #mesa-etapas{display:none}
 body[data-nova="passo2"] #area-documentos :is(.mesa-tabs,.docs-topo,.mesa-acervo-toolbar,#mesa-acervo-lista,.mesa-acervo-next,#mesa-acervo-status,#mesa-acervo-erro){display:none}
 @media (max-width:719px) {
   .nova-etapas .nova-etapa{display:none}
