@@ -219,6 +219,7 @@ Onde: Conferir achado, Visão geral. `<nav aria-label="Áreas">`.
 | Cota esgotada (gasto igual ou acima do teto) | o cartão da cota vira aviso, nunca só pela cor: fundo `--theme-warning-bg`, borda 1 px `--theme-warning-line`; a primeira linha troca "Cota do mês" por "! Cota esgotada" em 14/600 `--theme-warning`, e o valor vem na linha de baixo, porque os dois não cabem juntos em 256 px (P11.5) ("R$ 50,00 de R$ 50": gasto sempre com centavos, teto sem centavos quando inteiro; 14/600 `--theme-warning`); o medidor fica cheio, com preenchimento `--theme-warning`; `aria-label` "Cota do mês esgotada: R$ 50,00 de R$ 50". O bloco "Limite atingido" ([estados](#estados)) aparece onde a ação para (pergunta, envio), não na barra | derivado de W11 (regras 6 e 7), 22/11/2026 |
 | Sem cota | sem a rota ou sem sessão, o cartão some; o perfil sobe para o lugar dele | derivado |
 | Cota da instalação | para o administrador, quando o orçamento da instalação é mais apertado que o da conta, o cartão mostra esse orçamento, no mesmo desenho: "Cota da instalação" e, esgotada, "! Cota da instalação esgotada". Também aparece no modo local, onde o teto vale. A trilha vazia do medidor e a borda do cartão em `--theme-line` (1,3:1) são decorativas: o valor e o `aria-label` dizem tudo | derivado, 22/11/2026 |
+| Gasto na chave própria da redação (P40 b) | o teto da pessoa vale para as duas chaves, então o valor da cota da pessoa ("R$ 18,40 de R$ 50") já inclui o que a chave própria pagou. Por isso a parte paga pela chave vem como parte do valor de cima, e não como acréscimo: logo abaixo do medidor, em 14 `--theme-muted`, "dos quais R$ 3,25 com a chave própria". Só para o dono, uma linha a mais, no estilo da linha da cota (rótulo 14 `--theme-muted`, valor 14/600): "Chave própria da redação" com o total da redação, que não entra na cota do serviço. As linhas aparecem quando o servidor manda o gasto na chave ("R$ 0,00" se ainda não houve) e somem sem chave própria. No cartão de 223 px, "dos quais…" quebra em duas linhas como frase, e na linha do dono o valor desce para baixo do rótulo, alinhado à esquerda, como na cota esgotada (altura mínima, P11.5). Os textos não encurtam, para não perder o sentido de parte do valor (aceito em 23/11/2026 sobre `8956e0c`). O `aria-label` do medidor ganha ", dos quais R$ 3,25 com a chave própria", também na cota esgotada. Quando o cartão mostra a cota da instalação (para o administrador), "dos quais" não aparece, porque essa cota é só a paga pelo serviço; a linha do total da redação, para o dono, continua (decisão do Lume, aceita). | derivado, 23/11/2026; ressalva da Coruja sobre `e965f75` e `913da30`, que tratavam a linha como acréscimo |
 | Abaixo de 1280 px | vira gaveta: o conteúdo fica `inert` com ela aberta, e ela abre pelo botão de menu do cabeçalho ([tablet](#tablet)) | plano (UX-11, UX-17) e derivado; limite de 1280 px decidido pelo dono (P12.1) |
 
 Sem ícones nos itens da barra, como no canvas (decisão do dono, P11.6). Rótulo e contador dos itens nunca quebram linha (P15.7); a largura de 256 px foi medida para o item mais longo, "Pedidos e prazos" ativo com "1 vence" (188 px de 199 úteis). Perfil e cota cabem numa linha com os textos das pranchas; para nome de redação ou valor mais longo, vale a altura mínima no lugar de altura fixa (P11.5). Área nova na barra pede nova medida.
@@ -944,6 +945,13 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
   - **Erros:** no campo do endereço, com o texto do servidor (página de outro site, endereço inválido).
   - **Celular:** os campos e o botão em largura cheia.
 
+**O recibo acompanha a pergunta** *(derivado, 22/11/2026, combinado com o Lume para a R4)*. A W02, regra 8, diz que o recibo do lote "é conferido antes da primeira pergunta". Por isso ele não some quando "Cadastrar arquivos" sai: passa a nascer de "Perguntar aos documentos", no pé da Documentos.
+
+- **Quando aparece:** se, nesta visita à Documentos, houve um envio e o recibo dele está pronto, "Perguntar aos documentos" abre Perguntar com o recibo recolhido acima da caixa da pergunta (`#codex-recibo-alerta`). Sem envio nesta visita, Perguntar abre sem ele, como hoje pela barra lateral.
+- **Forma:** o aviso em linha da Mesa (`.notice`), um `<details>` fechado. O resumo é "Recibo do último envio · confira as limitações antes de perguntar". Aberto, mostra o mesmo cartão do recibo da Documentos ("Recibo do lote: 3 de 3 arquivos", novos e duplicados, "Detalhes técnicos"), sem repetir ids.
+- **Quando some:** ao enviar a primeira pergunta, como hoje, ou ao trocar de apuração.
+- **Visita:** enquanto a página não é recarregada; recarregar zera. Combinado com o Lume em 22/11/2026, que o fez junto com o passo 3 da R4.
+
 <a id="nova-apuracao"></a>
 
 ### Nova apuração (W01)
@@ -971,6 +979,13 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 - **Acima da área de envio:** "A apuração é criada no primeiro envio. Antes disso, nada fica guardado." em 14 `--theme-muted`, e o [link](#link) "‹ Nome e fontes", que volta ao passo 1 com os campos preenchidos.
 - **No envio:** o cartão de envio por arquivo de sempre. Quando o primeiro lote é aceito, a apuração passa a existir: o seletor do topo passa a ela e a tela vira a Documentos comum.
 - **Passo 3:** quando o recibo do lote fica pronto, a linha de etapas marca "3 Conferir recibo" e "Ver recibo" abre o cartão do recibo, como hoje. Depois do recibo conferido, a linha de etapas sai.
+
+**Primeiro envio que falhou** *(22/11/2026, sobre `a373ce7`)*. Quando o primeiro lote falha e a apuração não nasce, a tela fica no passo 2 da Nova apuração, sem as peças da Documentos comum: sem abas, busca, barra "Leitura", o vazio "Escolha uma apuração…" e "Perguntar aos documentos".
+
+- O título continua "Nova apuração" com o nome.
+- O cartão de envio mostra o erro do arquivo.
+- Acima dele vem o aviso "Esta apuração não chegou a ser criada: o primeiro envio falhou. Recomece a Nova apuração.", em cores de aviso, com a ação "Recomeçar" (secundário), que volta ao passo 1 com os campos preenchidos.
+- O diálogo de saída com o envio no ar é "A apuração está sendo criada", com o texto "Sair não cancela o envio: a apuração nasce assim mesmo, e você a encontra depois na Visão geral." e as ações "Ficar" e "Sair e encontrá-la depois".
 
 **Sair no meio.** Quem sai no passo 1 ou no 2, antes do envio, não deixa nada. A Mesa não guarda rascunho de apuração; quando o formulário foi preenchido, pede a confirmação "Sair sem criar a apuração?" (variante simples do [diálogo](#dialogo), ação "Sair").
 
@@ -1021,7 +1036,7 @@ Ordem: à esquerda, Perfil, Entrada e segurança e Seus dados; à direita, Onde 
 | **Entrada e segurança** | linha "Senha", com "definida há 12 dias" em 14 `--theme-muted` (de `senha_definida_em`; "definida hoje" no dia), e "Trocar senha" (secundário) à direita. Abaixo, a linha "Segundo fator" ([segundo fator](#segundo-fator)). A chave de acesso fica fora (decisão 4) | `conta-ver` |
 | **Onde sua conta está aberta** | uma linha por sessão. A sessão em uso vem primeiro, com "Esta sessão" em 14/600 `--theme-muted` à direita e sem botão: sai-se dela por "Sair". As outras seguem na ordem do servidor (uso mais recente primeiro), com "Encerrar" (secundário). Cada linha tem o aparelho em 16 ("Firefox · Linux", "Aplicativo Android": o texto do servidor, `translate="no"`) e, abaixo, em 14 `--theme-muted`, o último uso e o endereço ("ontem, 21h10 · 189.40.12.7"). Com duas sessões ou mais, "Encerrar todas as outras" (secundário) no pé, e o apoio "Encerrar vale na próxima ação daquele aparelho." (contrato, 8.3). Encerrar é imediato, sem diálogo (W08, regra 5); o botão fica "Encerrando…", a linha sai e a linha de estado diz "✓ Sessão encerrada: Edge · Windows." ou "✓ 2 sessões encerradas." Se o servidor responder "Sessão não encontrada.", a lista recarrega, sem erro | `conta-sessoes`; `conta-sessao-encerrar` com `sessao`; `conta-sessoes-encerrar-outras` |
 | **Seu uso neste mês** | "Gasto com IA" em 16 e o valor em 16/600 à direita ("R$ 18,40 de R$ 50": gasto sempre com centavos; teto sem centavos quando inteiro, como na barra); [medidor](#medidor) de 6 px com `aria-label` ("37% da cota usada"); apoio "O teto é definido pelo dono da redação." Esgotada, o cartão vira o aviso da cota esgotada da barra ("! Cota esgotada", cores de aviso). Sem a rota, o cartão some. Sempre em reais, nunca em tokens (W08, regra 7) | `GET /api/cota`, bloco `conta` |
-| **Seus dados** | texto 16: "Exportar seus dados e excluir sua conta ainda não estão na Mesa. Para pedir, fale com o dono da redação." Para o dono, "fale com quem administra o serviço". Sem botões ([exceções](#contas-excecoes)) | nenhum |
+| **Seus dados** | **Termos de uso**, só no `piloto` e quando há versão vigente: "Termos de uso: versão 2026-12-01, aceita em 22 de nov." (`conta-ver` → `termos`) e o [link](#link) "Ler os termos", que abre `termos_vigente.endereco` em outra aba. **Exportar meus dados**: o texto "Baixe um arquivo com o que o Vlado guarda sobre você: perfil, aceites dos termos, sessões, participações e a atividade dos últimos 90 dias. O conteúdo das apurações é da redação e não entra." e o botão "Exportar meus dados" (secundário, "Preparando o arquivo…"), que baixa o JSON de `conta-exportar` com o nome que o servidor manda. Linha de estado: "✓ Arquivo baixado."; quando o arquivo traz `incompleto`, mais "Ainda não traz: " e o que o servidor lista. **Excluir a conta**: o botão "Excluir a conta" (destrutivo), que abre o [diálogo de excluir](#excluir-conta). O cartão fica em todas as contas; a última dona ou o último dono só descobre a recusa ao tentar, com a razão | `conta-ver`; `conta-exportar`; `conta-excluir` |
 
 Datas, nesta página e na Equipe: "agora" no primeiro minuto; "hoje, 14h32"; "ontem, 21h10"; "18 de nov., 09h05"; de outro ano, "18 de nov. de 2025". Em inglês, pelo i18n.
 
@@ -1064,7 +1079,7 @@ A resposta é sempre `{estado: "confirmacao_enviada"}`, para endereço livre e p
 
 ### Segundo fator (E4a)
 
-*(Derivado, 22/11/2026.)* Estrutura do W08 (linha "Código do autenticador ativo" e "Códigos de reserva") e dos passos 2 e 3 do W10. Dados da E4a de Contas (`lancamento/contas-o2` `85b900a`; contrato, 8.2 e 12): TOTP de 6 dígitos e dez códigos de reserva de uso único, no formato `ABCDE-FGHJK`. A chave de acesso segue fora (decisão 4). O fator é obrigatório para dono e editor no `piloto` pela [pendência](#pendencia-fator), que entra num commit próprio de Contas.
+*(Derivado, 22/11/2026.)* Estrutura do W08 (linha "Código do autenticador ativo" e "Códigos de reserva") e dos passos 2 e 3 do W10. Dados da E4a de Contas (`lancamento/contas-o2` `85b900a`; contrato, 8.2 e 12): TOTP de 6 dígitos e dez códigos de reserva de uso único, no formato `ABCD-EFGH-JKLM-NPQR` (19 caracteres; a tela mostra o que o servidor manda). A chave de acesso segue fora (decisão 4). O fator é obrigatório para dono e editor no `piloto` pela [pendência](#pendencia-fator), que entra num commit próprio de Contas.
 
 **Na linha "Segundo fator" de Entrada e segurança** (Minha conta), conforme `conta-ver` → `segundo_fator`:
 
@@ -1072,7 +1087,7 @@ A resposta é sempre `{estado: "confirmacao_enviada"}`, para endereço livre e p
 |---|---|---|
 | Desligado (`ativo: false`) | "○ Segundo fator desligado" e, em 14 `--theme-muted`, "Um código do aplicativo autenticador, além da senha, na entrada." Quando `GET /api/sessao` não traz `conta-fator-remover` em `capacidades` (dono e editor, em todo modo), vem também "Depois de cadastrado, o segundo fator não pode ser removido no seu papel." A tela não diz que o fator é obrigatório: no `local-contas` ele é opcional, e onde é obrigatório quem não o tem não chega a Minha conta, porque vai à [página da pendência](#pendencia-fator) (B1 da Coruja sobre `8ce862e`). | "Cadastrar" (secundário) |
 | Ligado | "✓ Código do autenticador ativo" e, em 14 `--theme-muted`, "desde 12 de nov. · 8 códigos de reserva" (`ativado_em`, `codigos_restantes`) | "Gerar novos códigos" e "Trocar de aparelho" (secundários); "Remover" (destrutivo) só quando `GET /api/sessao` traz `conta-fator-remover` em `capacidades`, que nunca vem para dono e editor |
-| Ligado, com 3 códigos ou menos | igual ao anterior, mais a linha "! Restam 2 códigos de reserva. Gere novos." em 14/600 `--theme-warning` | as mesmas |
+| Ligado, com 3 códigos ou menos | igual ao anterior, mais a linha "! Restam 2 códigos de reserva. Gere novos." em 14/600 `--theme-warning`; com 1, "! Resta 1 código de reserva. Gere novos."; com nenhum, "! Não restam códigos de reserva. Gere novos." | as mesmas |
 
 **Cadastrar** abre o diálogo "Cadastrar o segundo fator", da família do [diálogo](#dialogo). A largura é 480, e no celular a tela cheia menos 16 px de cada lado. A rubrica marca o passo ("PASSO 1 DE 3"), como no W10.
 
@@ -1088,7 +1103,7 @@ A resposta é sempre `{estado: "confirmacao_enviada"}`, para endereço livre e p
 3. **Códigos de reserva** (`codigos_de_reserva`, mostrados uma vez).
    - **Título:** "Guarde os códigos de reserva".
    - **Texto:** "Cada código entra uma vez, se você perder o celular. Eles não aparecem de novo."
-   - **Bloco dos códigos:** borda 1 px tracejada `--theme-input-line`, raio 8, preenchimento 12 e grade de duas colunas (uma no celular). Cada código fica em 16/600, com espaçamento de letra de 1 px, algarismos tabulares e `translate="no"`.
+   - **Bloco dos códigos:** borda 1 px tracejada `--theme-input-line`, raio 8, preenchimento 12 e grade de duas colunas só quando cada coluna comporta um código inteiro: cada coluna tem no mínimo 15 rem (240 px com a fonte padrão), com 16 px entre colunas, e a segunda abre a partir de 522 px de largura do bloco, contando preenchimento e borda (`repeat(auto-fit, minmax(min(100%, 15rem), 1fr))`). Com a fonte do usuário maior, o limite cresce junto (D2 da Coruja, combinado com o Lume, `8956e0c`). Abaixo disso, uma coluna, o que inclui o celular e o cartão da [pendência](#pendencia-fator). Cada código fica numa linha só, sem quebrar (`white-space: nowrap`), em 16/600, com espaçamento de letra de 1 px, algarismos tabulares e `translate="no"`.
    - **Ações:** "Copiar" e "Baixar" (secundários, lado a lado, como no W10). "Baixar" gera no navegador um arquivo `vlado-codigos-de-reserva.txt`, sem rede. Depois vem "Já guardei" (principal).
    - **Fechar:** neste passo Esc não fecha nem há "Cancelar"; só "Já guardei" fecha, porque os códigos não voltam. Ao fechar, a linha de estado diz "✓ Segundo fator ativado."
 
@@ -1125,7 +1140,7 @@ A resposta é sempre `{estado: "confirmacao_enviada"}`, para endereço livre e p
 - texto "Digite o código de 6 dígitos do aplicativo autenticador.";
 - campo "Código do aplicativo" (48 px, `inputmode="numeric"`, `autocomplete="one-time-code"`);
 - abaixo do campo, o [link](#link) "Usar um código de reserva". Ele troca o rótulo para "Código de reserva" e o `inputmode` para `text`, aceita espaço, hífen e minúsculas, e passa a ler "Usar o código do aplicativo";
-- apoio em 14 `--theme-muted`: "Você tem 5 minutos para digitar o código.";
+- apoio em 14 `--theme-muted`: "Você tem 5 minutos para digitar o código.", a 4 px do link acima. O campo, o link e o apoio formam um grupo só, com 8 px entre o campo e o link; o intervalo de 18 px do formulário fica só entre os grupos;
 - ação principal grande "Entrar" (`entrar-segundo-fator {codigo}`);
 - link "Entrar com outra conta", que volta ao formulário.
 
@@ -1137,6 +1152,40 @@ Respostas:
 - 200: vai a `destino`, como a entrada.
 
 **Redefinir a senha com segundo fator.** A página não sabe de antemão se a conta tem o fator. Ela envia `{token, senha}`. Se a resposta for 403 `codigo_invalido` sem código enviado, o campo de senha fica preenchido e aparece, abaixo dele, o campo "Código do aplicativo ou de reserva", com o texto "Esta conta tem segundo fator. Digite o código do aplicativo ou um código de reserva." O foco vai para o campo novo, e a ação reenvia `{token, senha, codigo}`. Com o código enviado, `codigo_invalido` põe "Código incorreto. Confira e tente de novo." no campo. O link de recuperação pedido por um dono retira o fator e não pede código (contrato, 12).
+
+<a id="excluir-conta"></a>
+
+**Excluir a conta** (E4b-3, `conta-excluir {senha, nome}`). É a variante [com senha](#dialogo-senha) destrutiva, com o campo do nome antes do da senha, como em "Apagar definitivamente".
+
+- **Título:** "Excluir a sua conta?"
+- **Texto, antes dos campos** (decisão 10 do contrato): "Você sai da Mesa agora e não entra mais com esta conta. Suas notas, revisões e conversas ficam com a redação, e a Mesa passa a mostrar o autor como «Conta excluída». O seu nome continua gravado nos registros já feitos e nos backups, que não podem ser reescritos."
+- **Campos:** "Digite o seu nome, «Ana Lima», para confirmar" (16/400, só o nome em 600), depois "Sua senha".
+- **Ação:** "Excluir a conta" (destrutiva, "Excluindo…"), habilitada só com o nome conferido e a senha preenchida.
+
+Respostas:
+
+| Resposta | O que a tela faz |
+|---|---|
+| sucesso | a sessão acaba na mesma resposta: a Mesa vai ao Entrar, que mostra na caixa de aviso "A sua conta foi excluída." |
+| nome que não confere (o servidor confere antes da senha, e o erro não conta como senha errada) | erro no campo do nome, com o texto do servidor; o foco volta a ele |
+| 400 `ultimo_dono` | erro do diálogo: "A redação precisa de ao menos um dono ativo. Antes de excluir a sua conta, torne outra pessoa dono na Equipe." |
+| senha errada e bloqueio | como na [variante com senha](#dialogo-senha) |
+
+<a id="pendencia-termos"></a>
+
+**Pendência: termos novos** (E4b-1, só no `piloto`). Quando `GET /api/sessao` traz `termos` em `pendencias`, a página é `GET /conta/termos`, da mesma família da [pendência do segundo fator](#pendencia-fator): marca, cartão centrado de até 440 px e rodapé. Com as duas pendências, a de termos vem primeiro.
+
+- **Rubrica:** "ANTES DE CONTINUAR".
+- **Título:** com aceite anterior (`conta-ver` → `termos` não nulo), "Os termos de uso mudaram"; sem nenhum, "Aceite os termos de uso".
+- **Texto:** "Para continuar usando o Vlado, leia e aceite os termos de uso e a política de privacidade do teste (versão 2026-12-01)." (`termos_vigente.versao`). Abaixo, o [link](#link) "Ler os termos", aberto em outra aba, para `termos_vigente.endereco`.
+- **Caixa de marcar:** "Li e aceito os termos de uso e a política de privacidade do teste." Sem marcar, ao enviar: "Falta aceitar os termos. Marque a caixa para continuar."
+- **Ação:** principal grande "Aceitar e abrir a Mesa" (`conta-termos-aceitar {versao}`; sem senha). Depois, a pendência do fator, se houver, ou `/`.
+- **Quem não quer aceitar** (ressalva B2 do contrato): abaixo da ação, em 14 `--theme-muted`, "Prefere não aceitar? Você pode baixar seus dados ou excluir a conta.". "Baixar seus dados" e "excluir a conta" são [links](#link): o primeiro baixa o arquivo, como em Minha conta; o segundo abre o [diálogo de excluir](#excluir-conta).
+- **Sair:** o link "Sair", no pé do cartão.
+- **Respostas:** `termos_desatualizados` relê a página com a versão nova e mostra "Os termos mudaram enquanto você lia. Confira a versão nova e marque de novo."; as demais vão à caixa de aviso.
+- A sessão só alcança `conta-ver`, `conta-termos-aceitar`, `conta-exportar` e `conta-excluir` (contrato, 12).
+
+**Contas inativas** (E4b-4) são só do servidor: o aviso de 180 dias sai por e-mail, com texto de Contas, e a Mesa não tem tela para isso. O que a pessoa vê é a conta desativada, como qualquer outra, e a linha da atividade acima.
 
 <a id="pendencia-fator"></a>
 
@@ -1152,7 +1201,14 @@ Respostas:
 
 Qualquer outra operação responde 403 `pendencia_de_conta` (contrato, 4.3). Se uma chegar, a Mesa volta a esta página. Combinado com Contas em 22/11/2026: a página é `GET /conta/segundo-fator`. Ela serve o mesmo `entrar.html` de `/entrar`, sem dado de conta no HTML, e o script vê `pendencias: ["segundo_fator"]` em `GET /api/sessao`. Com a pendência, `GET /` responde 303 para ela. A sessão só alcança `GET /api/sessao`, `sessao-sair`, `conta-ver`, `conta-fator-iniciar` e `conta-fator-confirmar`. A página não precisa de mais nada: o texto não leva nome nem papel, e "Sair" usa `sessao-sair`. Não é uma seção da Mesa, e a Mesa (`index.html`) não abre com a pendência.
 
-Na atividade da Equipe: `fator_ativado` "Beltrano ativou o segundo fator"; `fator_removido` "Beltrano removeu o segundo fator"; `fator_codigos_gerados` "Beltrano gerou novos códigos de reserva".
+Na atividade da Equipe: `fator_ativado` "Beltrano ativou o segundo fator"; `fator_removido` "Beltrano removeu o segundo fator"; `fator_codigos_gerados` "Beltrano gerou novos códigos de reserva"; `aparelho_novo` "Beltrano entrou de um aparelho novo"; `codigo_reserva_usado` "Beltrano entrou com um código de reserva"; `fator_bloqueado` "O segundo fator de Beltrano foi bloqueado por muitos códigos errados"; `login_protegido` "A entrada de Beltrano foi protegida por muitas tentativas".
+
+**Detalhes aceitos sobre `cd2337d`** (Vitral, 22/11/2026):
+
+- No diálogo, o passo 1 não repete título: o do diálogo ("Cadastrar o segundo fator" ou "Trocar de aparelho") basta. O passo 3 tem o título "Guarde os códigos de reserva".
+- Linhas de estado do diálogo: "Chave copiada.", "Códigos copiados.", "Arquivo baixado." e, quando a área de transferência recusa, "Não deu para copiar. Selecione e copie à mão."
+- Se o gerador do QR não carregar, no lugar dele: "Não deu para desenhar o código QR. Digite a chave abaixo no aplicativo." A chave em texto basta.
+- Em "Trocar de aparelho", com o código atual em branco, a recusa vem antes do envio: "Falta o código do aparelho atual. Digite o código do aplicativo ou um código de reserva."
 
 <a id="equipe"></a>
 
@@ -1191,6 +1247,7 @@ Criar conta com link e "Recuperar acesso" continuam em "Contas de acesso", em Co
 | Cartão | Conteúdo | Dados |
 |---|---|---|
 | **Gasto com IA neste mês** | com `gasto`: "R$ 24,50 de R$ 150" (16/600), o [medidor](#medidor) e o apoio "Cota da redação, definida por quem administra o serviço." Com `gasto` nulo, sem valor nem medidor, o apoio "O gasto da redação aparece aqui quando o serviço passar a contá-lo por redação. O de cada pessoa está na tabela." (contrato, 4.5). Abaixo, em todos os casos, o campo "Teto padrão por pessoa, em reais", igual ao do Gerenciar, com "Salvar"; vazio quer dizer o teto da instalação, e o apoio diz isso | `equipe-listar`; `equipe-teto` sem `conta` |
+| **Gasto na chave própria** (P40 b) | dentro do cartão "Gasto com IA neste mês", abaixo do medidor, quando a redação usa chave própria: a linha "Chave própria da redação" com o total (16, valor 600) e o apoio "Pago pela chave da redação: não entra na cota do serviço." (14 `--theme-muted`). Na tabela, em "Uso no mês", logo abaixo do gasto da pessoa e antes do "teto R$ 30", em 14 `--theme-muted`: "dos quais R$ 3,25 com a chave própria". A frase qualifica o valor e vem colada a ele (ressalva sobre `d6cfa77`, que a pôs depois do teto). O valor de cima já inclui essa parte, porque o teto da pessoa vale para as duas chaves (ressalva da Coruja, 23/11/2026); o total da redação na chave própria, ao contrário, não entra na cota do serviço. Sem chave própria, nada disso aparece. Textos do Vitral em `8860212`, aceitos em 23/11/2026 | `equipe-listar` |
 | **Atividade recente** | largura das duas colunas. As cinco últimas ações, uma por linha: a frase em 16 e, à direita, a data em 14 `--theme-muted`. Depois, "Mostrar mais" (secundário), que traz 50 de cada vez enquanto houver `proximo`. Só acessos e administração, nunca conteúdo (W09, regra 8). Sem nenhuma: "Nenhuma ação registrada ainda." | `equipe-atividade` com `limite` e `antes` |
 
 Frases da atividade. "Fulano" é `por_nome` e "Beltrano" é `conta_nome`; quando os dois são a mesma conta, a frase usa só o nome dela.
@@ -1202,7 +1259,9 @@ Frases da atividade. "Fulano" é `por_nome` e "Beltrano" é `conta_nome`; quando
 |---|---|
 | `papel_alterado` | Fulano mudou o papel de Beltrano |
 | `conta_desativada` / `conta_reativada` | Fulano desativou / reativou a conta de Beltrano |
-| `conta_excluida` | Fulano removeu Beltrano da redação |
+| `conta_excluida` | Fulano removeu Beltrano da redação; quando a própria pessoa excluiu a conta, "Uma pessoa excluiu a própria conta" (o nome já não existe) |
+| `termos_aceitos` | Beltrano aceitou os termos de uso |
+| `conta_desativada_por_inatividade` | A conta de Beltrano foi desativada por inatividade |
 | `conta_criada` | Fulano criou a conta de Beltrano |
 | `participacao_incluida` / `participacao_retirada` | Fulano incluiu Beltrano numa apuração / retirou Beltrano de uma apuração |
 | `responsavel_alterado` | Fulano mudou o responsável de uma apuração |
@@ -1358,7 +1417,7 @@ São seções novas da página do Entrar (`entrar.html`), irmãs de "Definir sua
 | E-mail | não é campo: o e-mail do convite está no texto e não muda aqui (W10, regra 3). Um `input` oculto com `autocomplete="username"` e o e-mail permite ao gerenciador de senhas guardar o par certo |
 | Seu nome | campo, `autocomplete="name"`, até 120 caracteres; recebe o foco inicial |
 | Crie uma senha | [campo de senha](#campo) com "Mostrar", `autocomplete="new-password"`; apoio "De 12 a 256 caracteres. Pode colar ou usar o gerenciador de senhas." (W10). Um campo só, como no W10 |
-| Termos | caixa de marcar "Li e aceito os termos de uso e a política de privacidade do teste.", obrigatória, só quando `termos_versao` não é nulo; envia a versão lida ([exceções](#contas-excecoes)). "termos de uso" leva a `/termos` e "política de privacidade" a `/privacidade`, páginas da própria instalação que entram com os textos da Documentação (D6). Os dois abrem em outra aba, para o formulário não se perder (`target="_blank"`, `rel="noopener"`), e o nome acessível de cada um termina em "(abre em nova aba)". Enquanto `termos_versao` vier nulo, a caixa não aparece; a caixa sem os links, como está em `7c2345c`, não chega a ser vista e não barra. Os links entram junto com as páginas |
+| Termos | só no `piloto` com versão vigente (`termos_versao` não nulo): a caixa de marcar "Li e aceito os termos de uso e a política de privacidade do teste.", obrigatória, em que "termos de uso e a política de privacidade" é um [link](#link) para `termos_endereco`, aberto em outra aba (`target="_blank"`, `rel="noopener noreferrer"`, nome acessível terminado em "(abre em nova aba)"). O aceite envia a versão lida. Resposta 400 `termos_desatualizados`: a página relê o convite e mostra, no lugar do erro, "Os termos mudaram enquanto você lia. Confira a versão nova e marque de novo.", com a caixa desmarcada. Sem versão vigente, a caixa não aparece (E4b, `c60b673`) |
 | Ação | principal grande "Criar conta e entrar" ("Criando a conta…") |
 | Aviso de teste | abaixo da ação, o bloco de aviso do Entrar, com o texto do passo 3 do W10: "Antes de começar" (16/600) e "O Vlado está em teste. Use só documentos públicos: trechos são enviados ao provedor de IA." (14) |
 
@@ -1413,9 +1472,7 @@ A conferência destas telas não barra por elas. Cada uma volta ao wireframe qua
 | W08 e W10: chave de acesso | fora | não volta: decisão 4 do contrato (P27) |
 | W08: cidade aproximada da sessão | aparelho, último uso e endereço | não volta: decisão 5 do contrato (P27) |
 | W08: "14 perguntas" no uso do mês | só o valor em reais | `GET /api/cota` trazer a contagem |
-| W08: "Exportar meus dados" e "Excluir minha conta" | o cartão Seus dados, só com o caminho por pessoa | houver `conta-exportar` e `conta-excluir` (contrato, 8.4); "Excluir" vem com o diálogo com senha e o nome digitado |
 | W09: "Convidar pessoa", convites pendentes e "Reenviar" | nada no lugar do botão. Abaixo da tabela, em 14 `--theme-muted`: numa instalação com uma redação só, "Para incluir alguém, crie uma conta em Configurações, Contas de acesso.", com "Contas de acesso" como [link](#link) para a aba; com mais de uma redação, onde `contas-criar` já é recusada (`5e342fe`), "Para incluir alguém na redação, fale com quem administra o serviço." A Mesa não distingue os dois casos (as capacidades são fixas por papel e a recusa só vem na chamada), então mostra sempre o primeiro texto, com o link (aceito em 22/11/2026 sobre `84cdcef`) | volta com a E3 de Contas (`281a468`), já especificada em [convites](#convites). As `contas-*` e "Contas de acesso" saem na mesma integração (P30) |
-| W10: caixa de aceite dos termos | fora enquanto `termos_versao` vem nulo | houver termos (contrato, 8.4; texto da Documentação, D6) |
 | W10: "Abrir a apuração de exemplo" e o tour (regra 7) | o aceite vai a `destino`, o destino inicial do servidor | houver apuração de exemplo e tour |
 | "Esqueci a senha" com o transporte `tela` | o texto "Esqueceu a senha? Fale com quem administra o serviço." | não volta: decisão 12 do contrato; a produção usa `smtp` |
 | W09: cartão "Chave de IA da redação" | a chave continua em Configurações, como hoje, com a senha | houver chave por redação (contrato, 8.5, parte da Plataforma) |
