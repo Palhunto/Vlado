@@ -446,3 +446,9 @@ test('P40: em inglês, a linha da chave própria sai em inglês', async () => {
   assert.ok(texto(f.mesa.doc.querySelector('[data-cartao="gasto"]')).includes('Paid by the newsroom’s key: not part of the service quota.'));
   assert.ok(texto(linhaDe(f.mesa, ID.rui)).includes('of which R$ 3,25 on the newsroom’s own key'));
 });
+
+test('P40: o "dos quais" qualifica o valor e fica colado a ele, antes do teto (ressalva do Traço)', async () => {
+  const f = await abrirEquipe(com([ANA(), RUI({gasto_chave_propria_brl: '3.25', teto_mensal_brl: '30.00'})], {gasto_chave_propria_brl: '3.25'}));
+  const uso = celulas(linhaDe(f.mesa, ID.rui))[3];
+  assert.deepEqual([...uso.querySelectorAll('span')].map(s => texto(s)), ['R$ 18,40', 'dos quais R$ 3,25 com a chave própria', 'teto R$ 30'], 'valor, depois o dos quais, depois o teto');
+});
