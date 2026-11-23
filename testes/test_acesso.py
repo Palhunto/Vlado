@@ -673,6 +673,8 @@ class EsquemaTest(DuasRedacoes):
     def para_a_versao_1(self):
         con = sqlite3.connect(acesso.caminho_bd(self.root))
         try:
+            for coluna in ('ultimo_acesso', 'aviso_inatividade_em'):  # version 9
+                con.execute(f'ALTER TABLE contas DROP COLUMN {coluna}')
             con.execute('DROP TABLE termos_aceites')  # version 8 (and its index)
             con.execute('DROP TABLE aparelhos')  # version 7
             for tabela in ('fatores', 'codigos_reserva', 'entradas'):  # version 6
@@ -712,6 +714,9 @@ class EsquemaTest(DuasRedacoes):
         self.assertEqual(acesso.sessao(self.root, sid)['conta'], self.dono_a)  # the session of before goes on
         self.assertEqual(acesso.sessoes_da_conta(self.root, self.dono_a)[0]['aparelho'], None)
         self.assertEqual(acesso.alcance(self.root, self.rep_a), (frozenset({'caso_a'}), frozenset({'caso_a'})))
+        # Version 9: an account of before counts its inactivity from the migration, never from its creation (4b-4).
+        self.assertTrue(all(c['ultimo_acesso'] and c['aviso_inatividade_em'] is None
+                            for c in self.linhas('SELECT ultimo_acesso, aviso_inatividade_em FROM contas')))
         acesso._PRONTOS.clear()
         self.assertEqual(acesso.listar(self.root), antes)  # a second start changes nothing
 

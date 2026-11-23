@@ -1012,6 +1012,18 @@ def servir(server, prazo=PRAZO_ENCERRAMENTO):
               'Mesa encerrada antes do fim de uma operação; a próxima partida limpa o que ficou.', flush=True)
 
 
+def _avisar_inativas(root):
+    """The warnings of inactivity of the start's sweep (contract, 4b-4), in a thread: a failure is the sweep's to
+    retry the next day, never the server's to stop for."""
+    registro_acesso.lembrar_raiz(root)  # the audit log of this thread (`email_enviado`, `email_falhou`)
+    try:
+        acesso.avisar_inativas(root)
+    except (ValueError, OSError):
+        pass
+    finally:
+        registro_acesso.encerrar_requisicao()
+
+
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
     parser = argparse.ArgumentParser(description=__doc__)
@@ -1043,8 +1055,10 @@ def main():
                   modo=args.modo, origem=args.origem,
                   extracao=os.environ.get('VLADO_EXTRACAO') or 'processos') as server:
         if server.com_contas:
-            try:  # the daily sweep also runs at the start: invitations past their date, old activity
-                acesso.manutencao(server.root)
+            try:  # the daily sweep also runs at the start: invitations past their date, old activity, inactive accounts
+                acesso.manutencao(server.root, avisar=False)
+                # The warnings of inactivity go by e-mail, one by one: a slow mail server must not hold the start.
+                threading.Thread(target=_avisar_inativas, args=(server.root,), name='vlado-inativas', daemon=True).start()
                 aviso = acesso.conferir_chave_do_fator(server.root)
                 if aviso:  # second factors enrolled and the key of their seeds is not here: the operator must know
                     print(aviso, file=sys.stderr, flush=True)
