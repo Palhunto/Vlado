@@ -45,6 +45,37 @@ class BackupTest(unittest.TestCase):
         with tarfile.open(arquivo) as pacote:
             self.assertIn('segredos/chaves.json', pacote.getnames())
 
+    def test_chave_do_segundo_fator_vai_com_os_segredos_e_nunca_com_as_contas(self):
+        # contrato de contas, seção 7: quem copiar só o banco não gera códigos. A synthetic key, never a real one.
+        chave = 'ab' * 32
+        (self.root / 'segredos' / 'contas.chave').write_text(chave + '\n', encoding='ascii')
+        sem = backup.criar(self.root, self.base / 'sem')
+        with tarfile.open(sem) as pacote:
+            nomes = pacote.getnames()
+            manifesto = json.loads(pacote.extractfile('manifesto_backup.json').read())
+            conteudo = b''.join(pacote.extractfile(m).read() for m in pacote.getmembers() if m.isfile())
+        self.assertFalse([n for n in nomes if n.startswith('segredos') or n.endswith('contas.chave')])
+        self.assertNotIn(chave.encode('ascii'), conteudo)  # not in any file of the package, the manifest included
+        aviso, = [a for a in manifesto['avisos'] if 'contas.chave' in a]
+        self.assertIn('segundos fatores', aviso)  # the copy says what is missing, and never what is in the key
+        self.assertNotIn(chave, json.dumps(manifesto))
+        com = backup.criar(self.root, self.base / 'com', incluir_segredos=True)
+        with tarfile.open(com) as pacote:
+            self.assertIn('segredos/contas.chave', pacote.getnames())
+            self.assertFalse([n for n in pacote.getnames() if n.startswith('acesso') and n.endswith('.chave')])
+            manifesto = json.loads(pacote.extractfile('manifesto_backup.json').read())
+        self.assertFalse([a for a in manifesto['avisos'] if 'contas.chave' in a])
+        self.assertNotIn(chave, json.dumps(manifesto))  # the manifest carries its hash, never its text
+        destino = self.base / 'destino'
+        backup.restaurar(destino, com)
+        self.assertEqual((destino / 'segredos' / 'contas.chave').read_bytes(), (self.root / 'segredos' / 'contas.chave').read_bytes())
+        self.assertFalse((destino / 'acesso' / 'contas.chave').exists())
+
+    def test_sem_chave_do_segundo_fator_o_backup_sem_segredos_nao_avisa_nada(self):
+        with tarfile.open(backup.criar(self.root, self.base / 'copias')) as pacote:
+            manifesto = json.loads(pacote.extractfile('manifesto_backup.json').read())
+        self.assertFalse([a for a in manifesto['avisos'] if 'contas.chave' in a])
+
     def test_restaurar_recusa_sobrescrever_dados_existentes_sem_confirmacao(self):
         arquivo = backup.criar(self.root, self.base / 'copias')
         with self.assertRaisesRegex(ValueError, 'já contém dados'):

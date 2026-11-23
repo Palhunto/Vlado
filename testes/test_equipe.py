@@ -32,11 +32,9 @@ class EquipeTest(cenario.DuasRedacoes):
         """A fresh account of Alfa (or of ``redacao``), signed in: (id, session, login)."""
         type(self).numero += 1
         login = f'{papel}.novo{self.numero}'
-        conta, token = acesso.criar_conta(self.root, f'Pessoa Nova {self.numero}', login, papel=papel, casos=list(casos),
-                                          organizacao=redacao or self.a, por='operador')
-        acesso.ativar(self.root, token, SENHA)
+        cid = self.conta(f'Pessoa Nova {self.numero}', login, papel, casos, redacao)  # dono and editor: with the factor (8.2)
         acesso.limpar_limites()
-        return conta['id'], self._entrar(login), login
+        return cid, self._entrar(login), login
 
     def pessoa(self, quem, cid):
         return next((p for p in self.post(quem, 'equipe-listar', {})[1]['pessoas'] if p['id'] == cid), None)
@@ -108,9 +106,17 @@ class EquipeTest(cenario.DuasRedacoes):
         self.assertFalse({self.ids['dono_b'], self.ids['reporter_b']} & {e['conta'] for e in corpo['eventos']})
         self.sem_sentinela(bruto)
         pagina = self.post('dono', 'equipe-atividade', {'limite': 2})[1]
-        self.assertEqual((len(pagina['eventos']), pagina['proximo']), (2, pagina['eventos'][-1]['n']))
+        self.assertEqual((len(pagina['eventos']), pagina['eventos']), (2, corpo['eventos'][:2]))
         seguinte = self.post('dono', 'equipe-atividade', {'limite': 2, 'antes': pagina['proximo']})[1]
-        self.assertLess(seguinte['eventos'][0]['n'], pagina['proximo'])
+        self.assertEqual(seguinte['eventos'], corpo['eventos'][2:4])
+        # No number of the store, and a cursor that only this newsroom's own activity moves: seven events in Beta
+        # change nothing in what Alfa reads (the row number of the table would jump by seven).
+        self.assertEqual(set(primeiro), {'em', 'tipo', 'conta', 'por', 'conta_nome', 'por_nome'})
+        for papel in ('editor', 'leitor', 'reporter', 'editor', 'leitor', 'reporter', 'editor'):
+            acesso.mudar_papel(self.root, self.ids['reporter_b'], papel, self.ids['dono_b'], self.b)
+        self.assertEqual(self.post('dono', 'equipe-atividade', {'limite': 2})[1], pagina)
+        acesso.mudar_papel(self.root, self.ids['reporter_b'], 'reporter', self.ids['dono_b'], self.b)
+        acesso.definir_responsavel(self.root, 'beta', self.ids['reporter_b'], 'operador', self.b)  # the scenario as it was
         for invalido in ({'limite': 0}, {'limite': 'tudo'}, {'antes': -1}, {'organizacao': self.b}, {'conta': self.ids['dono_b']}):
             self.assertEqual(self.post('dono', 'equipe-atividade', invalido)[0], 400, invalido)
         self.assertNotIn(self.ids['dono'], {e['conta'] for e in self.post('dono_b', 'equipe-atividade', {})[1]['eventos']})
@@ -125,6 +131,10 @@ class EquipeTest(cenario.DuasRedacoes):
         conta = self.get(sessao, '/api/sessao')[1]
         self.assertEqual((conta['conta']['papel'], conta['conta']['casos']), ('editor', ['alpha']))
         self.assertIn('redacao-revisar', conta['capacidades'])
+        # An editor now: in the hosted mode she must have a second factor (contract, 8.2), and until she enrols it
+        # her session only reaches the enrolment.
+        self.assertEqual(self.post(sessao, 'apuracao-nota-salvar', {'caso': 'alpha'})[1].get('codigo'), 'pendencia_de_conta')
+        self.cadastrar_fator(sessao)
         self.assertNotEqual(self.post(sessao, 'apuracao-nota-salvar', {'caso': 'alpha'})[0], 403)  # the same session, the new role
         for papel in ('convidado', 'admin', 'operador', None):
             self.assertEqual(self.post('dono', 'equipe-papel', {'conta': alvo, 'papel': papel})[0], 400, papel)
@@ -137,6 +147,9 @@ class EquipeTest(cenario.DuasRedacoes):
         self.assertEqual(self.pessoa('dono', alvo)['papel'], 'reporter')
         self.assertEqual(self.post(sessao, 'equipe-listar', {})[0], 403)
         self.assertEqual(self.post('dono', 'equipe-papel', {'conta': alvo, 'papel': 'dono', 'senha': SENHA})[0], 200)
+        # A dono now, and a dono of the hosted mode must have a second factor (contract, 8.2).
+        self.recusa(sessao, 'equipe-listar', {}, 403, 'pendencia_de_conta')
+        self.cadastrar_fator(sessao)
         self.assertEqual(self.post(sessao, 'equipe-listar', {})[0], 200)
         # P28, first condition: demoting another dono asks the password of who does it.
         self.recusa('dono', 'equipe-papel', {'conta': alvo, 'papel': 'reporter'}, 403, 'senha_necessaria')
@@ -260,6 +273,16 @@ class EquipeTest(cenario.DuasRedacoes):
                          {'teto_brl': '5', 'cota_mensal_brl': '999'}, {'teto_brl': '5', 'organizacao': self.b}):
             self.assertEqual(self.post('dono', 'equipe-teto', invalido)[0], 400, invalido)
         self.assertEqual(self.post('dono', 'equipe-listar', {})[1]['redacao']['cota_mensal_brl'], None)  # only the operator sets it
+
+    def test_quem_e_retirado_de_uma_apuracao_tem_as_execucoes_dela_paradas(self):
+        # As `contas-atualizar` did before it left: nobody keeps spending the API on a case taken away.
+        alvo, _, _ = self.nova('leitor', casos=('alpha', 'gama'))
+        with patch.object(interface_pesquisa.Handler, '_parar_execucoes') as parar:
+            self.assertEqual(self.post('dono', 'caso-retirar', {'caso': 'alpha', 'conta': alvo})[0], 200)
+        parar.assert_called_once_with(alvo, ('gama',))  # what is kept: the cases the account still reaches
+        with patch.object(interface_pesquisa.Handler, '_parar_execucoes') as parar:
+            self.assertEqual(self.post('dono', 'caso-retirar', {'caso': 'alpha', 'conta': INEXISTENTE})[0], 400)
+        parar.assert_not_called()
 
     def test_campos_fora_da_lista_sao_recusados_sem_efeito(self):
         alvo, _, _ = self.nova('leitor')

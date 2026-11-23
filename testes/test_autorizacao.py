@@ -17,6 +17,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acesso
+import fator_de_teste
 import test_codex_integracao as integracao  # module import: its TestCase is not re-collected here
 from test_acesso import SENHA, hasher_rapido
 from interface_pesquisa import Servidor
@@ -38,8 +39,10 @@ SO_ADMIN = (
     'caderno-listar', 'caderno-detalhe', 'caderno-salvar', 'caderno-cruzar', 'caderno-exportar', 'caderno-original',
     'diligencias-listar', 'diligencias-criar', 'diligencias-atualizar', 'diligencias-responder',
     'diligencias-original', 'codex-observacoes', 'codex-corpus-previa', 'codex-documentos-cadastrar',
-    'codex-caderno-previa', 'codex-diligencias-previa', 'codex-desligar', 'contas-listar', 'contas-criar',
-    'contas-atualizar', 'contas-desativar', 'contas-reativar', 'contas-recuperar',
+    'codex-caderno-previa', 'codex-diligencias-previa', 'codex-desligar',
+    # The team of the newsroom (scripts/rotas_equipe.py): dono only.
+    'equipe-listar', 'equipe-papel', 'equipe-desativar', 'equipe-remover', 'equipe-convidar', 'equipe-recuperar',
+    'equipe-atividade', 'caso-incluir', 'caso-retirar', 'caso-responsavel',
     # Evidence boards (scripts/rotas_evidencia.py): admin only.
     'hipoteses-listar', 'hipoteses-detalhe', 'hipoteses-quadro', 'hipoteses-criar', 'hipoteses-atualizar',
     'linha-tempo-listar', 'linha-tempo-detalhe', 'linha-tempo-criar', 'linha-tempo-atualizar',
@@ -63,7 +66,7 @@ SO_ADMIN = (
 class Http(unittest.TestCase):
     def setUp(self):
         integracao.CodexIntegrationTest.setUp(self)
-        env = patch.dict(os.environ, {'VLADO_ACESSO': '', 'VLADO_AMBIENTE': '', 'VLADO_CONFIAR_PROXY': ''})
+        env = patch.dict(os.environ, {'VLADO_ACESSO': '', 'VLADO_AMBIENTE': '', 'VLADO_CONFIAR_PROXY': '', 'VLADO_SEGREDOS': ''})
         env.start()
         self.addCleanup(env.stop)
         hasher_rapido(self)
@@ -74,6 +77,8 @@ class Http(unittest.TestCase):
         thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         thread.start()
         self.addCleanup(lambda: (self.server.shutdown(), self.server.server_close(), thread.join(3)))
+        self.ids_por_login = {}
+        self.addCleanup(fator_de_teste.esquecer, self.root)
         self.admin_id = self.conta('Editora', 'editora', papel='admin')
         self.ana_id = self.conta('Ana', 'ana', casos=['alpha'], cota=5)
         self.bia_id = self.conta('Bia', 'bia', casos=['beta'], cota=5)
@@ -82,6 +87,11 @@ class Http(unittest.TestCase):
     def conta(self, nome, login, papel='convidado', casos=(), cota=20):
         conta, token = acesso.criar_conta(self.root, nome, login, papel=papel, casos=list(casos), cota_diaria=cota)
         acesso.ativar(self.root, token, SENHA)
+        self.ids_por_login[login] = conta['id']
+        if conta['papel'] in acesso.FATOR_OBRIGATORIO:
+            # Contract, 8.2: in the hosted mode dono and editor must have a second factor, or their session only
+            # reaches its enrolment. The administrator of these tests enrols as a person does.
+            fator_de_teste.cadastrar(self.root, conta['id'], SENHA)
         return conta['id']
 
     def request(self, method, path, body=None, headers=None):
@@ -98,9 +108,7 @@ class Http(unittest.TestCase):
         return status, headers, json.loads(body or b'{}')
 
     def entrar(self, login, senha=SENHA):
-        status, headers, body = self.publico('entrar', {'login': login, 'senha': senha})
-        self.assertEqual(status, 200, body)
-        return headers['Set-Cookie'].split(';')[0], body['csrf']
+        return fator_de_teste.entrar(self.request, self.root, self.ids_por_login.get(login), login, senha, ORIGEM)
 
     def post(self, sessao, operation, data, origin=ORIGEM):
         cookie, csrf = sessao
@@ -248,24 +256,24 @@ class EntrarTest(Http):
 
 
 class AtivacaoTest(Http):
-    def test_admin_cria_conta_e_link_ativa_uma_unica_vez_sem_abrir_sessao(self):
-        status, result = self.post(self.admin, 'contas-criar', {'nome': 'Caio', 'login': 'caio', 'papel': 'convidado',
-                                                                'casos': ['alpha'], 'cota_diaria': 3})
-        self.assertEqual(status, 200, result)
-        self.assertTrue(result['link'].startswith(ORIGEM + '/ativar/'))
-        token = result['link'].rsplit('/', 1)[1]
-        self.assertEqual(result['conta']['situacao'], 'aguardando_senha')
+    def test_link_de_ativacao_do_operador_ativa_uma_unica_vez_sem_abrir_sessao(self):
+        # Activation links are the operator's now (the terminal); in the Mesa people come in by invitation.
+        conta, token = acesso.criar_conta(self.root, 'Caio', 'caio', casos=['alpha'], cota_diaria=3)
+        self.assertEqual(conta['situacao'], 'aguardando_senha')
         status, _, body = self.publico('ativacao-consultar', {'token': token})
         self.assertEqual((status, body['login']), (200, 'caio'))
         self.assertEqual(self.publico('ativar', {'token': token, 'senha': 'curta'})[0], 400)
         status, headers, body = self.publico('ativar', {'token': token, 'senha': SENHA})
         self.assertEqual(status, 200, body)
-        self.assertNotIn('Set-Cookie', headers)
+        # No session; the only cookie is the mark of the browser that used the link (contract, 8.2: known device).
+        self.assertTrue(headers['Set-Cookie'].startswith('vlado_aparelho='))
+        self.assertNotIn('vlado_sessao', headers['Set-Cookie'])
         status, _, body = self.publico('ativar', {'token': token, 'senha': SENHA})
         self.assertEqual((status, body['codigo']), (400, 'ativacao_invalida'))
         self.assertEqual(self.publico('ativacao-consultar', {'token': token})[0], 400)
         self.entrar('caio')
-        listadas = self.post(self.admin, 'contas-listar', {})[1]
+        listadas = self.post(self.admin, 'equipe-listar', {})[1]
+        self.assertIn('caio', [p['login'] for p in listadas['pessoas']])
         texto = json.dumps(listadas)
         self.assertNotIn(token, texto)
         self.assertNotIn('senha_hash', texto)
@@ -317,7 +325,7 @@ class PapeisTest(Http):
         self.assertEqual(self.post(self.ana, 'continuidade-resumo', {'caso': 'alpha'})[0], 403)
 
     def test_admin_alcanca_operacoes_de_administracao(self):
-        for operation in ('contas-listar', 'apuracao-notas', 'caderno-listar', 'gerenciar-listar', 'ia-config'):
+        for operation in ('equipe-listar', 'apuracao-notas', 'caderno-listar', 'gerenciar-listar', 'ia-config'):
             with self.subTest(operation=operation):
                 self.assertNotIn(self.post(self.admin, operation, {'caso': 'alpha'})[0], (401, 403))
         self.assertEqual(self.post(self.admin, 'codex-desligar', {})[0], 403)
@@ -359,8 +367,8 @@ class PapeisTest(Http):
 
     def test_caso_retirado_vale_na_requisicao_seguinte_inclusive_para_conversas_proprias(self):
         conversa = self.perguntar(self.ana)
-        status, _ = self.post(self.admin, 'contas-atualizar', {'id': self.ana_id, 'casos': ['beta']})
-        self.assertEqual(status, 200)
+        self.assertEqual(self.post(self.admin, 'caso-incluir', {'caso': 'beta', 'conta': self.ana_id})[0], 200)
+        self.assertEqual(self.post(self.admin, 'caso-retirar', {'caso': 'alpha', 'conta': self.ana_id})[0], 200)
         self.assertEqual(self.post(self.ana, 'codex-listar', {'caso': 'alpha'})[0], 404)
         for operation in ('codex-eventos', 'codex-cancelar', 'codex-original', 'codex-retomar'):
             with self.subTest(operation=operation):
@@ -371,37 +379,79 @@ class PapeisTest(Http):
         self.assertEqual([c['id'] for c in json.loads(self.get(self.ana, '/api/catalogo')[2])['casos']], ['beta'])
 
     def test_conta_desativada_ou_recuperada_perde_a_sessao_na_requisicao_seguinte(self):
-        self.assertEqual(self.post(self.admin, 'contas-desativar', {'id': self.ana_id})[0], 200)
+        self.assertEqual(self.post(self.admin, 'equipe-desativar', {'conta': self.ana_id})[0], 200)
         self.assertEqual(self.post(self.ana, 'codex-status', {})[0], 401)
         self.assertEqual(self.publico('entrar', {'login': 'ana', 'senha': SENHA})[0], 401)
-        self.assertEqual(self.post(self.admin, 'contas-reativar', {'id': self.ana_id})[0], 200)
+        self.assertEqual(self.post(self.admin, 'equipe-reativar', {'conta': self.ana_id})[0], 200)
         self.entrar('ana')
-        status, result = self.post(self.admin, 'contas-recuperar', {'id': self.bia_id})
-        self.assertEqual(status, 200)
-        self.assertIn('/ativar/', result['link'])
+        # In the hosted service no answer of the Mesa carries a recovery link: without real delivery, and for an
+        # account without e-mail, the recovery is the operator's, at the terminal (contract, 8.2).
+        status, result = self.post(self.admin, 'equipe-recuperar', {'conta': self.bia_id, 'senha': SENHA})
+        self.assertEqual((status, result.get('codigo')), (400, 'recuperacao_pelo_operador'))
+        self.assertNotIn('link', result)
+        self.assertEqual(self.post(self.bia, 'codex-status', {})[0], 200)  # nothing happened to the account
+        acesso.recuperar(self.root, self.bia_id, por='cli')
         self.assertEqual(self.post(self.bia, 'codex-status', {})[0], 401)
 
     def test_papel_rebaixado_perde_administracao_na_requisicao_seguinte(self):
         segundo = self.conta('Chefe', 'chefe', papel='admin')
         chefe = self.entrar('chefe')
-        self.assertEqual(self.post(chefe, 'contas-listar', {})[0], 200)
-        status, _ = self.post(self.admin, 'contas-atualizar', {'id': segundo, 'papel': 'convidado', 'casos': ['alpha']})
+        self.assertEqual(self.post(chefe, 'equipe-listar', {})[0], 200)
+        # Changing the role of a dono, and deactivating one, ask the password (contract, 5.15) ...
+        status, result = self.post(self.admin, 'equipe-papel', {'conta': segundo, 'papel': 'leitor'})
+        self.assertEqual((status, result.get('codigo')), (403, 'senha_necessaria'))
+        self.assertEqual(self.post(self.admin, 'equipe-desativar', {'conta': segundo})[1].get('codigo'), 'senha_necessaria')
+        self.assertEqual(self.post(chefe, 'equipe-listar', {})[0], 200)
+        # ... and nobody is given the legacy guest profile again (contract, 2.3).
+        status, _ = self.post(self.admin, 'equipe-papel', {'conta': segundo, 'papel': 'convidado', 'senha': SENHA})
+        self.assertEqual(status, 400)
+        status, _ = self.post(self.admin, 'equipe-papel', {'conta': segundo, 'papel': 'leitor', 'senha': SENHA})
         self.assertEqual(status, 200)
-        self.assertEqual(self.post(chefe, 'contas-listar', {})[0], 403)
+        self.assertEqual(self.post(chefe, 'equipe-listar', {})[0], 403)
+
+    def test_promover_a_dono_pede_a_senha(self):
+        for senha, codigo in (({}, 'senha_necessaria'), ({'senha': 'senha-errada-de-teste'}, 'senha_atual_incorreta')):
+            status, result = self.post(self.admin, 'equipe-papel', {'conta': self.ana_id, 'papel': 'dono', **senha})
+            self.assertEqual((status, result.get('codigo')), (403, codigo))
+        self.assertEqual(self.post(self.admin, 'equipe-papel', {'conta': self.ana_id, 'papel': 'admin', 'senha': SENHA})[0], 400)
+        status, result = self.post(self.admin, 'equipe-convidar', {'email': 'outra.chefe@exemplo.test', 'papel': 'dono'})
+        self.assertEqual((status, result.get('codigo')), (403, 'senha_necessaria'))
+        self.assertEqual(self.post(self.ana, 'equipe-listar', {})[0], 403)  # still a guest
+        self.assertEqual(self.post(self.admin, 'equipe-listar', {})[1]['convites'], [])
+        self.assertEqual(self.post(self.admin, 'equipe-papel', {'conta': self.ana_id, 'papel': 'dono', 'senha': SENHA})[0], 200)
+        # A dono now, and in the hosted mode a dono must have a second factor (contract, 8.2): until she enrols it,
+        # her session only reaches the enrolment.
+        status, result = self.post(self.ana, 'equipe-listar', {})
+        self.assertEqual((status, result.get('codigo'), result.get('pendencias')), (403, 'pendencia_de_conta', ['segundo_fator']))
+        segredo = self.post(self.ana, 'conta-fator-iniciar', {'senha': SENHA})[1]['segredo']
+        self.assertEqual(self.post(self.ana, 'conta-fator-confirmar', {'codigo': fator_de_teste.do_aplicativo(segredo)})[0], 200)
+        self.assertEqual(self.post(self.ana, 'equipe-listar', {})[0], 200)
+
+    def test_as_contas_antigas_sairam_com_o_convite(self):
+        # Withdrawn (P30): the old account operations answer as any operation that does not exist.
+        for operation, dados in (('contas-listar', {}), ('contas-criar', {'nome': 'X', 'login': 'xis', 'papel': 'admin'}),
+                                 ('contas-atualizar', {'id': self.ana_id, 'papel': 'admin'}),
+                                 ('contas-desativar', {'id': self.bia_id}), ('contas-reativar', {'id': self.bia_id}),
+                                 ('contas-recuperar', {'id': self.bia_id})):
+            for sessao in (self.admin, self.ana):
+                self.assertEqual(self.post(sessao, operation, dados)[0], 404, operation)
+        self.assertEqual(self.post(self.bia, 'codex-status', {})[0], 200)
+        self.assertNotIn('xis', [p['login'] for p in self.post(self.admin, 'equipe-listar', {})[1]['pessoas']])
 
     def test_ultimo_admin_protegido_pela_interface(self):
-        status, result = self.post(self.admin, 'contas-desativar', {'id': self.admin_id})
-        self.assertEqual(status, 400)
+        status, result = self.post(self.admin, 'equipe-desativar', {'conta': self.admin_id, 'senha': SENHA})
+        self.assertEqual((status, result.get('codigo')), (400, 'ultimo_dono'))
         self.assertIn('último', result['erro'])
-        status, _ = self.post(self.admin, 'contas-atualizar', {'id': self.admin_id, 'papel': 'convidado', 'casos': ['alpha']})
-        self.assertEqual(status, 400)
+        status, result = self.post(self.admin, 'equipe-papel', {'conta': self.admin_id, 'papel': 'leitor', 'senha': SENHA})
+        self.assertEqual((status, result.get('codigo')), (400, 'ultimo_dono'))
 
-    def test_contas_criar_valida_casos_existentes(self):
-        status, result = self.post(self.admin, 'contas-criar', {'nome': 'X', 'login': 'xis', 'papel': 'convidado',
-                                                                'casos': ['inexistente'], 'cota_diaria': 3})
+    def test_convite_e_participacao_validam_apuracoes_existentes(self):
+        status, result = self.post(self.admin, 'equipe-convidar', {'email': 'xis@exemplo.test', 'papel': 'leitor',
+                                                                   'casos': ['inexistente']})
         self.assertEqual(status, 400, result)
-        status, result = self.post(self.admin, 'contas-atualizar', {'id': self.ana_id, 'casos': ['inexistente']})
-        self.assertEqual(status, 400, result)
+        status, result = self.post(self.admin, 'caso-incluir', {'caso': 'inexistente', 'conta': self.ana_id})
+        self.assertEqual(status, 404, result)
+        self.assertEqual(self.post(self.admin, 'equipe-listar', {})[1]['convites'], [])
 
     def test_autoria_de_notas_vem_da_conta_da_sessao(self):
         status, result = self.post(self.admin, 'apuracao-nota-salvar', {'caso': 'alpha', 'requisicao_id': 'a' * 32,
@@ -411,10 +461,28 @@ class PapeisTest(Http):
         self.assertEqual(result['nota']['criado_por']['origem'], 'conta_autenticada_da_mesa')
 
     def test_cota_diaria_por_conta(self):
-        self.post(self.admin, 'contas-atualizar', {'id': self.ana_id, 'cota_diaria': 1})
-        self.perguntar(self.ana)
-        status, erro = self.post(self.ana, 'codex-perguntar', {'caso': 'alpha', 'pergunta': 'Outra.'})
+        acesso.atualizar(self.root, self.ana_id, por='cli', cota_diaria=1)  # the legacy daily quota is the operator's
+        # The quota is of the UTC day. With the clock of the accounts stopped the two questions fall on the same
+        # day even when the suite runs across 00:00 UTC: there the second one was counted on a new day, passed the
+        # quota and met the first one still running (`pergunta_em_andamento`, which has no `parametros`).
+        with patch('acesso.agora', return_value=acesso.agora()):
+            self.perguntar(self.ana)
+            status, erro = self.post(self.ana, 'codex-perguntar', {'caso': 'alpha', 'pergunta': 'Outra.'})
         self.assertEqual((status, erro['codigo'], erro['parametros']), (400, 'cota_diaria_esgotada', {'cota': 1}))
+
+    def test_cota_diaria_e_do_dia_em_utc_e_recomeca_a_meia_noite(self):
+        acesso.atualizar(self.root, self.ana_id, por='cli', cota_diaria=1)
+        fim_do_dia = acesso.agora().replace(hour=23, minute=59, second=30, microsecond=0)
+        with patch('acesso.agora', return_value=fim_do_dia):
+            ana = self.entrar('ana')  # a session of that moment
+            self.perguntar(ana)
+        with patch('acesso.agora', return_value=fim_do_dia + timedelta(seconds=10)):  # the same day: the quota refuses
+            status, erro = self.post(ana, 'codex-perguntar', {'caso': 'alpha', 'pergunta': 'Outra.'})
+            self.assertEqual((status, erro['codigo'], erro['parametros']), (400, 'cota_diaria_esgotada', {'cota': 1}))
+        with patch('acesso.agora', return_value=fim_do_dia + timedelta(minutes=1)):  # 00:00:30 UTC of the next day
+            # The quota lets it through again; what refuses it now is yesterday's question, still running.
+            status, erro = self.post(ana, 'codex-perguntar', {'caso': 'alpha', 'pergunta': 'Outra.'})
+            self.assertEqual((status, erro['codigo']), (400, 'pergunta_em_andamento'))
 
     def test_convidado_nao_envia_corpo_grande(self):
         cookie, csrf = self.ana
@@ -425,9 +493,8 @@ class PapeisTest(Http):
 
 class SegredosTest(Http):
     def test_eventos_e_registro_nao_guardam_senhas_tokens_ou_links(self):
-        status, criada = self.post(self.admin, 'contas-criar', {'nome': 'Fia', 'login': 'fia', 'papel': 'convidado',
-                                                                'casos': ['alpha'], 'cota_diaria': 3})
-        token = criada['link'].rsplit('/', 1)[1]
+        _, token = acesso.criar_conta(self.root, 'Fia', 'fia', casos=['alpha'], cota_diaria=3)
+        criada = {'link': ORIGEM + '/ativar/' + token}
         self.publico('ativar', {'token': token, 'senha': 'senha-da-fia-123'})
         self.publico('entrar', {'login': 'fia', 'senha': 'senha-errada-da-fia'})
         fia = self.entrar('fia', 'senha-da-fia-123')
@@ -438,8 +505,9 @@ class SegredosTest(Http):
         eventos = json.dumps(acesso.eventos(self.root, 1000))
         self.assertNotIn('$argon2', eventos)
         self.assertNotIn(fia[1], eventos)
-        listados = self.post(self.admin, 'contas-listar', {})[1]
-        self.assertNotIn('csrf', json.dumps(listados.get('eventos', [])))
+        listados = self.post(self.admin, 'equipe-atividade', {})[1]
+        self.assertTrue(listados['eventos'])
+        self.assertNotIn('csrf', json.dumps(listados))
 
 
 if __name__ == '__main__':

@@ -46,8 +46,12 @@ DE_LIXEIRA = frozenset({'gerenciar-listar', 'restaurar', 'lixeira-alcance', 'lix
 CAMPOS_RESTRITOS = {'codex-perguntar': {'caso', 'pergunta', 'conversa'}, 'codex-retomar': {'conversa'}}
 MENSAGEM_CAMPOS = {'codex-perguntar': 'Esta conta envia somente a pergunta e a conversa.',
                    'codex-retomar': 'Esta conta envia somente a conversa a retomar.'}
-# Operações que uma conta com pendência (segundo fator obrigatório, termos) ainda alcança.
+# O que uma conta com pendência ainda alcança (seção 4.2): a própria sessão e o que resolve cada pendência.
 SEM_PENDENCIA = frozenset({'sessao-sair', 'GET:/api/sessao'})
+RESOLVE_PENDENCIA = {'segundo_fator': frozenset({'conta-ver', 'conta-fator-iniciar', 'conta-fator-confirmar'})}
+# A página que resolve cada pendência: com ela, `GET /` responde 303 para cá (da família do Entrar, sem dado de conta).
+PAGINA_DA_PENDENCIA = {'segundo_fator': '/conta/segundo-fator'}
+FATOR_OBRIGATORIO = 'O segundo fator é obrigatório para o seu papel neste serviço e não pode ser removido.'
 ID_CONVERSA = re.compile(lixeira.ID_CONVERSA)
 
 
@@ -93,13 +97,16 @@ MATRIZ: dict[str, Regra] = {}
 _linhas(MATRIZ, 'nenhum', 'L', TODOS, 'GET:/ GET:/api/sessao GET:/api/integracao GET:/api/catalogo GET:/api/cota')
 _linhas(MATRIZ, 'lote+caso+nenhum', 'L', TODOS, 'GET:/api/fila')
 # 5.4 A própria conta.
-_linhas(MATRIZ, 'nenhum', 'A', TODOS, 'sessao-sair conta-senha-trocar conta-sessao-encerrar conta-sessoes-encerrar-outras')
+_linhas(MATRIZ, 'nenhum', 'A', TODOS, 'sessao-sair conta-senha-trocar conta-sessao-encerrar conta-sessoes-encerrar-outras '
+                                      'conta-email-trocar conta-fator-iniciar conta-fator-confirmar conta-fator-codigos '
+                                      'conta-fator-remover')  # remover: negado onde o fator é obrigatório (`_recusa_do_modo`)
 _linhas(MATRIZ, 'nenhum', 'L', TODOS, 'conta-ver conta-sessoes')
 _linhas(MATRIZ, 'nenhum', 'E', TODOS, 'conta-atualizar')
 # 5.5 A redação.
 _linhas(MATRIZ, 'nenhum', 'L', SO_DONO, 'ia-config equipe-listar equipe-atividade')
 _linhas(MATRIZ, 'nenhum', 'A', SO_DONO, 'ia-config-salvar codex-desligar equipe-papel equipe-desativar equipe-reativar '
-                                        'equipe-remover equipe-teto')
+                                        'equipe-remover equipe-teto equipe-convidar equipe-convite-reenviar '
+                                        'equipe-convite-cancelar equipe-recuperar equipe-recuperar-confirmar')
 _linhas(MATRIZ, 'nenhum', 'L', DONO_E_REPORTER, 'ambiente')
 _linhas(MATRIZ, 'nenhum', 'L', TODOS, 'codex-status')
 # 5.6 Apurações: criação, participação e lixeira.
@@ -159,19 +166,16 @@ _linhas(MATRIZ, 'caso', 'E', 'sim|sim|—|—|—', 'redacao-revisar')
 _linhas(MATRIZ, 'caso', 'E', TODOS, 'rascunhos-salvar rascunhos-ler rascunhos-listar rascunhos-descartar')
 _linhas(MATRIZ, 'caso', 'L', MESA, 'continuidade-resumo')
 
-# Operações retiradas pelo contrato (nota da seção 5.5), que continuam até a tela Equipe entrar: só o dono, e só
-# sobre a própria redação. Saem daqui e de OPERACOES_API na mesma integração em que `equipe-*` entrar.
+# Operações em retirada: nenhuma. As seis `contas-*` (nota da seção 5.5) saíram com o convite por e-mail (P30) e
+# respondem 404 como qualquer operação inexistente; `equipe-*`, `caso-*` e o convite as substituem.
 TRANSITORIAS: dict[str, Regra] = {}
-_linhas(TRANSITORIAS, 'nenhum', 'A', SO_DONO, 'contas-listar contas-criar contas-atualizar contas-desativar '
-                                              'contas-reativar contas-recuperar')
-# Operações que o contrato já define e que entram nas próximas entregas (conta própria, equipe, convites, senha).
+RETIRADAS = ('contas-listar', 'contas-criar', 'contas-atualizar', 'contas-desativar', 'contas-reativar', 'contas-recuperar')
+# Operações que o contrato já define e que entram nas próximas entregas (segundo fator, ciclo de vida).
 PENDENTES = frozenset((
-    'entrar-segundo-fator convite-consultar convite-aceitar senha-esqueci senha-redefinir '
-    'conta-email-trocar conta-fator-iniciar conta-fator-confirmar conta-fator-codigos conta-fator-remover '
-    'conta-termos-aceitar conta-exportar conta-excluir '
-    'equipe-convidar equipe-convite-reenviar equipe-convite-cancelar equipe-recuperar equipe-recuperar-confirmar').split())
+    'conta-termos-aceitar conta-exportar conta-excluir').split())
 # Antes da sessão (seção 5.3): sem papel, conferidas em `rotas_contas._publico`.
-PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin')
+PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin', 'convite-consultar', 'convite-aceitar',
+            'senha-esqueci', 'senha-redefinir', 'email-confirmar', 'entrar-segundo-fator')
 _REGRAS = {**MATRIZ, **TRANSITORIAS}
 
 
@@ -226,11 +230,21 @@ def papel_para_interface(principal: dict) -> str:
     return 'admin' if principal.get('papel') == 'dono' else str(principal.get('papel') or '')
 
 
-def capacidades(principal: dict) -> list[str]:
-    """As operações que o papel alcança em alguma situação, para a interface esconder o resto (ela nunca decide)."""
+def capacidades(root: Path, modo: str, principal: dict) -> list[str]:
+    """As operações que a conta alcança em alguma situação, para a interface esconder o resto (ela nunca decide):
+    as da célula do papel, menos as que o modo recusa. A regra por modo é a mesma função que o portão usa
+    (``_recusa_do_modo``), de modo que a interface nunca mostra um botão que o servidor recusa por ela."""
     papel = principal.get('papel')
     return sorted({nome.split('#')[0] for nome, regra in _REGRAS.items()
-                   if not nome.startswith('GET:') and regra.celulas.get(papel, NEGADO) != NEGADO})
+                   if not nome.startswith('GET:') and regra.celulas.get(papel, NEGADO) != NEGADO
+                   and _recusa_do_modo(root, modo, papel, nome.split('#')[0]) is None})
+
+
+def pagina_da_pendencia(recusa: 'Recusa') -> str | None:
+    """Para onde `GET /` manda a conta que o portão recusou por pendência: a página que resolve a primeira delas."""
+    if recusa.codigo != 'pendencia_de_conta':
+        return None
+    return next((PAGINA_DA_PENDENCIA[p] for p in recusa.corpo.get('pendencias', ()) if p in PAGINA_DA_PENDENCIA), None)
 
 
 def corpo_grande(modo: str, principal: dict, operacao: str) -> bool:
@@ -306,16 +320,32 @@ def _lote(root: Path, lote) -> str | None:
         raise Recusa(400, {'erro': str(exc)}, 'lote_inexistente', 'inexistente') from exc
 
 
+def _recusa_do_modo(root: Path, modo: str, papel, operacao: str) -> Recusa | None:
+    """O que o modo recusa a quem a célula do papel deixaria passar (as observações das tabelas 5.4 e 5.5). Um
+    lugar só, lido pelo portão e por ``capacidades``."""
+    if modo == 'local':
+        return _proibida('Contas só existem nos modos com login.') if operacao.startswith(('caso-', 'conta-', 'equipe-')) else None
+    if modo != 'piloto':
+        return None
+    if operacao == 'codex-desligar':
+        return _proibida('O serviço hospedado não pode ser encerrado pela interface.', 'servico_nao_encerravel')
+    if operacao == 'conta-fator-remover' and papel in acesso.FATOR_OBRIGATORIO:
+        return _proibida(FATOR_OBRIGATORIO)  # onde o fator é obrigatório, quem é obrigado não o remove (seção 8.2)
+    return None
+
+
 def conferir(root: Path, modo: str, principal: dict, operacao: str, dados: dict) -> Acesso:
     """Decide um pedido. Levanta ``Recusa`` (a resposta pronta) ou ``ValueError`` (apuração na lixeira, com a
     mensagem de sempre). Não grava nada: quem registra a posse de uma apuração nova é ``registrar_novo``."""
     root = Path(root)
+    if modo == 'local' or operacao == 'codex-desligar':
+        # O modo local não tem contas; e encerrar o serviço hospedado é recusado a todo papel com a mesma resposta,
+        # antes de olhar a conta (observação da tabela 5.5).
+        recusa = _recusa_do_modo(root, modo, None, operacao)
+        if recusa:
+            raise recusa
     if modo == 'local':
-        if operacao in TRANSITORIAS or operacao.startswith(('caso-', 'conta-', 'equipe-')):
-            raise _proibida('Contas só existem nos modos com login.')
         return Acesso(operacao, dados, dados.get('caso') if isinstance(dados.get('caso'), str) else None)
-    if modo == 'piloto' and operacao == 'codex-desligar':
-        raise _proibida('O serviço hospedado não pode ser encerrado pela interface.', 'servico_nao_encerravel')
     casos, papel, conta = principal.get('casos'), principal.get('papel'), principal.get('conta')
     if casos is None or papel not in PAPEIS or not conta:
         # Fora do modo local ninguém tem "todas as apurações": um principal assim é defeito, e não passa.
@@ -325,8 +355,9 @@ def conferir(root: Path, modo: str, principal: dict, operacao: str, dados: dict)
     if (principal.get('organizacao') or {}).get('situacao') != 'ativa' and operacao != 'sessao-sair':
         raise _proibida('A redação desta conta está suspensa. Fale com quem administra o serviço.', 'redacao_suspensa',
                         'redacao_suspensa')
-    if principal.get('pendencias') and operacao not in SEM_PENDENCIA:
-        raise Recusa(403, {'estado': 'proibido', 'codigo': 'pendencia_de_conta', 'pendencias': list(principal['pendencias']),
+    pendencias = principal.get('pendencias') or ()
+    if pendencias and operacao not in SEM_PENDENCIA.union(*(RESOLVE_PENDENCIA.get(p, ()) for p in pendencias)):
+        raise Recusa(403, {'estado': 'proibido', 'codigo': 'pendencia_de_conta', 'pendencias': list(pendencias),
                            'erro': 'Conclua o que falta na sua conta antes de continuar.'}, 'pendencia_de_conta', 'papel')
     regra = _REGRAS.get(_variante(operacao, dados))
     if regra is None:
@@ -334,15 +365,9 @@ def conferir(root: Path, modo: str, principal: dict, operacao: str, dados: dict)
     celula = regra.celulas[papel]
     if celula == NEGADO:
         raise _proibida()
-    if modo == 'piloto' and operacao == 'ia-config-salvar' and acesso.total_redacoes(root) > 1:
-        # Enquanto a chave própria de cada redação não existe, a do serviço não se troca pela Mesa numa instalação
-        # com mais de uma redação: seria uma redação mudando a conexão de todas.
-        raise _proibida('A conexão com a IA deste serviço é definida por quem o administra.')
-    if operacao == 'contas-criar' and acesso.total_redacoes(root) > 1:
-        # The login is unique in the whole installation, so "this login already exists" would tell one newsroom
-        # that another has an account with it. Where there is more than one newsroom, nobody chooses a login in
-        # the Mesa: people come in by the operator's terminal until the invitation by e-mail replaces this.
-        raise _proibida('Neste serviço, as contas novas são criadas por quem o administra, até o convite por e-mail entrar.')
+    recusa = _recusa_do_modo(root, modo, papel, operacao)  # o papel passa, e o modo não
+    if recusa:
+        raise recusa
     if papel in RESTRITOS and operacao in CAMPOS_RESTRITOS and set(dados) - CAMPOS_RESTRITOS[operacao]:
         raise _proibida(MENSAGEM_CAMPOS[operacao], 'campos_nao_permitidos')
     novo = 'novo' in regra.resolvedor
@@ -442,10 +467,12 @@ def filtrar(root: Path, modo: str, principal: dict, operacao: str, resposta):
         return {**resposta, 'lotes': lotes}
     if operacao == 'ambiente' and modo == 'piloto':
         return {k: v for k, v in resposta.items() if k != 'python'}
-    if operacao == 'ia-config' and modo == 'piloto' and acesso.total_redacoes(root) > 1:
-        # Da chave do serviço, uma redação sabe só que existe.
-        chaves = {provedor: {'configurada': bool(chave.get('configurada')), 'final': None,
-                             'origem': 'servico' if chave.get('configurada') else None}
+    if operacao in ('ia-config', 'ia-config-salvar') and modo == 'piloto':
+        # A rota já devolve só a chave da própria redação (`rotas_gestao.resumo_da_redacao`). Aqui fica a segunda
+        # trava: nada que tenha origem na chave do serviço sai com os quatro últimos caracteres.
+        chaves = {provedor: chave if chave.get('origem') == 'redacao' else
+                  {'configurada': bool(chave.get('configurada')), 'final': None,
+                   'origem': 'servico' if chave.get('configurada') else None}
                   for provedor, chave in (resposta.get('chaves') or {}).items() if isinstance(chave, dict)}
         return {**resposta, 'chaves': chaves}
     if principal.get('papel') == 'leitor' and operacao in ('codex-listar', 'codex-eventos'):

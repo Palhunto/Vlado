@@ -254,7 +254,7 @@ class SessaoLocalTest(LocalContasHttp):
         self.assertEqual((status, headers.get('Location')), (303, '/entrar'))
         self.assertEqual(self.request('GET', '/api/catalogo')[0], 401)
         self.assertEqual(self.request('GET', '/api/sessao')[0], 401)
-        for operacao in ('ambiente', 'cadastrar', 'contas-listar', 'codex-desligar'):
+        for operacao in ('ambiente', 'cadastrar', 'equipe-listar', 'codex-desligar'):
             status, _, _ = self.request('POST', '/api/' + operacao, '{}',
                                         {'Content-Type': 'application/json', 'Origin': self.origem})
             self.assertEqual(status, 401, operacao)
@@ -271,8 +271,8 @@ class SessaoLocalTest(LocalContasHttp):
         self.assertIn(b'data-papel="admin"', corpo)
         self.assertNotIn('Strict-Transport-Security', headers)
         self.assertEqual(self.post(sessao, 'ambiente', {})[0], 200)
-        status, contas = self.post(sessao, 'contas-listar', {})
-        self.assertEqual(status, 200, contas)
+        status, equipe = self.post(sessao, 'equipe-listar', {})
+        self.assertEqual((status, [p['login'] for p in equipe['pessoas']]), (200, ['editora']), equipe)
         self.assertEqual(self.post(sessao, 'sessao-sair', {})[0], 200)
         self.assertEqual(self.post(sessao, 'ambiente', {})[0], 401)
 
@@ -296,16 +296,15 @@ class SessaoLocalTest(LocalContasHttp):
 
     def test_convidado_restrito_ao_caso_e_a_perguntar(self):
         admin = self.entrar()
-        status, corpo = self.post(admin, 'contas-criar', {'nome': 'Ana', 'login': 'ana', 'casos': ['alpha'],
-                                                          'cota_diaria': 3})
-        self.assertEqual(status, 200, corpo)
-        self.assertTrue(corpo['link'].startswith(self.origem + '/ativar/'))
-        token = corpo['link'].rsplit('/', 1)[1]
+        # The legacy guest profile is no longer created in the Mesa (contas-* left with the invitation): the account
+        # comes from the operator's terminal, as the ones migrated from before.
+        self.assertEqual(self.post(admin, 'contas-criar', {'nome': 'Ana', 'login': 'ana', 'casos': ['alpha'], 'cota_diaria': 3})[0], 404)
+        _, token = acesso.criar_conta(self.root, 'Ana', 'ana', casos=['alpha'], cota_diaria=3)
         self.assertEqual(self.publico('ativar', {'token': token, 'senha': SENHA})[0], 200)
         ana = self.entrar('ana')
         _, _, corpo = self.request('GET', '/', headers={'Cookie': ana[0].split(';')[0]})
         self.assertIn(b'data-papel="convidado"', corpo)
-        for operacao in ('cadastrar', 'ambiente', 'contas-listar', 'codex-desligar', 'ia-config-salvar',
+        for operacao in ('cadastrar', 'ambiente', 'equipe-listar', 'codex-desligar', 'ia-config-salvar',
                          'caderno-listar', 'gerenciar-listar'):
             status, _ = self.post(ana, operacao, {'caso': 'alpha'})
             self.assertEqual(status, 403, operacao)

@@ -85,6 +85,7 @@ COPY scripts/acesso.py \
      scripts/custo.py \
      scripts/conferencia_redacao.py \
      scripts/continuidade.py \
+     scripts/correio.py \
      scripts/criar_caso.py \
      scripts/dados_sinteticos.py \
      scripts/diligencias.py \
@@ -128,6 +129,7 @@ COPY scripts/acesso.py \
      scripts/rotas_redacao.py \
      scripts/rotas_tabelas.py \
      scripts/segredos.py \
+     scripts/segundo_fator.py \
      scripts/semear_ambiente.py \
      scripts/tabelas_apuracao.py \
      scripts/tetos_extracao.py \

@@ -233,7 +233,8 @@ class NaoAmpliacaoTest(Base):
                 ops_antes = operacoes_de_antes if admin else set(interface_pesquisa.OPERACOES_CONVIDADO)
                 registro = {c['id']: c for c in acesso.listar(self.root)}[cid]
                 casos_depois = set(acesso.alcance(self.root, cid)[0])
-                ops_depois = set(autorizacao.capacidades({'papel': registro['papel']}))
+                # The cells of the role alone (the mode with accounts that refuses nothing of its own).
+                ops_depois = set(autorizacao.capacidades(self.root, 'local-contas', {'papel': registro['papel']}))
                 if not conta['ativa']:
                     self.assertEqual(casos_depois, set())
                 self.assertLessEqual(casos_depois, casos_antes)
@@ -249,7 +250,9 @@ class NaoAmpliacaoTest(Base):
         for operacao, dados, codigo in (('codex-listar', {'caso': 'beta'}, 'caso_indisponivel'),
                                         ('apuracao-notas', {'caso': 'alpha'}, 'operacao_proibida'),
                                         ('achados-catalogo', {'caso': 'alpha'}, 'operacao_proibida'),
-                                        ('contas-listar', {}, 'operacao_proibida'),
+                                        ('equipe-listar', {}, 'operacao_proibida'),
+                                        ('equipe-convidar', {'email': 'x@exemplo.test', 'papel': 'dono'}, 'operacao_proibida'),
+                                        ('contas-listar', {}, 'operacao_inexistente'),  # withdrawn with the invitation
                                         ('cadastrar', {'novo': True}, 'operacao_proibida')):
             with self.subTest(operacao=operacao), self.assertRaises(autorizacao.Recusa) as recusa:
                 autorizacao.conferir(self.root, 'piloto', principal, operacao, dados)

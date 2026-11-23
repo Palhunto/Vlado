@@ -12,3 +12,5 @@ anthropic==2.8.0
 openai==3.50.0
 # Hash de senha das contas da Mesa hospedada (argon2id).
 argon2-cffi==25.1.0
+# Cifra da semente do segundo fator das contas (AES-GCM; scripts/segundo_fator.py).
+cryptography==50.0.2

@@ -61,7 +61,12 @@ class ContaPropriaTest(cenario.DuasRedacoes):
                 self.assertEqual((corpo['conta']['id'], corpo['conta']['nome'], corpo['conta']['papel'], corpo['conta']['idioma']),
                                  (self.ids[papel], nome, papel, 'pt'))
                 self.assertEqual(corpo['organizacao'], {'id': self.a, 'nome': 'Redação Alfa'})
-                self.assertEqual(corpo['segundo_fator'], {'ativo': False})
+                if papel in acesso.FATOR_OBRIGATORIO:
+                    # Contract, 8.2: mandatory for dono and editor in the hosted mode; the scenario enrols it.
+                    self.assertTrue(corpo['segundo_fator']['ativo'] and corpo['segundo_fator']['ativado_em'])
+                    self.assertIn(corpo['segundo_fator']['codigos_restantes'], range(1, 11))
+                else:
+                    self.assertEqual(corpo['segundo_fator'], {'ativo': False, 'ativado_em': None, 'codigos_restantes': 0})
                 self.assertRegex(corpo['sessao'], r'^[0-9a-f]{16}$')
                 self.sem_sentinela(bruto)
                 for segredo in ('senha_hash', '$argon2', self.sessoes[papel][0].split('=', 1)[1], self.sessoes[papel][1]):
@@ -172,7 +177,8 @@ class ContaPropriaTest(cenario.DuasRedacoes):
         for papel in ('leitor', 'convidado'):
             self.assertEqual(self.post(papel, 'conta-sessoes', {})[0], 200, papel)
             self.assertEqual(self.post(papel, 'equipe-listar', {})[0], 403, papel)
-            self.assertEqual(set(autorizacao.capacidades({'papel': papel})) & {'equipe-listar', 'equipe-papel', 'contas-listar'}, set())
+            self.assertEqual(set(autorizacao.capacidades(self.root, 'piloto', {'papel': papel}))
+                             & {'equipe-listar', 'equipe-papel', 'contas-listar'}, set())
 
 
 if __name__ == '__main__':
