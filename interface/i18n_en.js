@@ -1750,6 +1750,8 @@ window.VLADO_I18N_EN = {
     "Exportar meus dados": "Export my data",
     "Preparando o arquivo…": "Preparing the file…",
     "Ainda não traz: {itens}.": "Not yet included: {itens}.",
+    "notas, revisões e conversas que você criou": "notes, reviews and conversations you created",
+    "acessos do registro de auditoria": "accesses in the audit log",
     "Excluir a conta": "Delete the account",
     "Excluir a sua conta?": "Delete your account?",
     "Excluindo…": "Deleting…",

@@ -9,6 +9,8 @@
 (() => {
   const t = (pt, vars) => (window.I18N ? window.I18N.t(pt, vars) : String(pt).replace(/\{(\w+)\}/g, (todo, nome) => vars?.[nome] ?? todo));
   const NOME_PADRAO = 'vlado-meus-dados.json';
+  // O arquivo diz o que ainda não traz em códigos fixos (contrato de contas, 4b-2, ressalva E4); a tela os traduz. Código que a Mesa não conhece aparece como veio.
+  const NAO_TRAZ = {itens_criados: 'notas, revisões e conversas que você criou', registro_de_acesso: 'acessos do registro de auditoria'};
   const ULTIMO_DONO = 'A redação precisa de ao menos um dono ativo. Antes de excluir a sua conta, torne outra pessoa dono na Equipe.';
   const TEXTO_DA_EXCLUSAO = 'Você sai da Mesa agora e não entra mais com esta conta. Suas notas, revisões e conversas ficam com a redação, e a Mesa passa a mostrar o autor como «Conta excluída». O seu nome continua gravado nos registros já feitos e nos backups, que não podem ser reescritos.';
 
@@ -60,7 +62,7 @@
     const arquivo = await resposta.blob();
     const nome = nomeDoArquivo(resposta.headers?.get?.('Content-Disposition'));
     let incompleto = [];
-    try { const lido = JSON.parse(await arquivo.text()); if (Array.isArray(lido?.incompleto)) incompleto = lido.incompleto.map(String); } catch (_) { /* o arquivo vale mesmo assim */ }
+    try { const lido = JSON.parse(await arquivo.text()); if (Array.isArray(lido?.incompleto)) incompleto = lido.incompleto.map(String).map(codigo => NAO_TRAZ[codigo] || codigo); } catch (_) { /* o arquivo vale mesmo assim */ }
     // Gerado no navegador: o arquivo baixado é o do servidor, sem rede a mais.
     const endereco = URL.createObjectURL(arquivo), ancora = document.createElement('a');
     ancora.href = endereco; ancora.download = nome; ancora.rel = 'noopener';

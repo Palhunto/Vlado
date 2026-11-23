@@ -60,7 +60,7 @@ test('Exportar meus dados: baixa o JSON com o nome do servidor e diz "Arquivo ba
 
 test('Exportar: com o arquivo `incompleto`, a linha de estado acrescenta "Ainda não traz: …"', async () => {
   const f = abrir(); await esperar(f.mesa);
-  pedirArquivo(f, arquivo({incompleto: ['notas, revisões e conversas que você criou', 'acessos do registro de auditoria']}));
+  pedirArquivo(f, arquivo({incompleto: ['itens_criados', 'registro_de_acesso']}));
   botaoPorTexto(cartao(f.mesa), 'Exportar meus dados').click(); await esperar(f.mesa); await esperar(f.mesa);
   assert.ok(texto(estado(f.mesa)).includes('Arquivo baixado.'), texto(estado(f.mesa)));
   assert.ok(texto(estado(f.mesa)).includes('Ainda não traz: notas, revisões e conversas que você criou; acessos do registro de auditoria.'), texto(estado(f.mesa)));
