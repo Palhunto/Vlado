@@ -9,7 +9,7 @@ const {esperar, texto, botaoPorTexto, digitar, recusa, contaVer} = require('./co
 const VIGENTE = {versao: '2026-12-01', endereco: 'https://vlado.example/termos'};
 const comTermos = (extra = {}) => ({...contaVer('dono'), termos: null, termos_vigente: VIGENTE, ...extra});
 
-function pagina({api = () => undefined, pendencias = ['termos'], idioma = 'pt'} = {}) {
+function pagina({api = () => undefined, pendencias = ['termos'], idioma = 'pt', semLista = false} = {}) {
   const sair = [], abrir = [], pedidos = [];
   const mesa = criarMesa({scripts: ['i18n_en.js', 'i18n.js', 'estados.js', 'dialogo.js', 'dados_conta.js', 'termos.js'], idioma, armazenamento: idioma === 'en' ? {'vlado-idioma': 'en'} : {}, api: () => ({})});
   const alvo = mesa.doc.createElement('div'); mesa.doc.body.append(alvo);
@@ -20,7 +20,7 @@ function pagina({api = () => undefined, pendencias = ['termos'], idioma = 'pt'} 
     if (r !== undefined) return r;
     return operacao === 'conta-ver' ? comTermos() : {};
   };
-  mesa.janela.Termos.pagina(alvo, {chamar, pendencias, sair: () => sair.push(1), abrirMesa: () => abrir.push(1)});
+  mesa.janela.Termos.pagina(alvo, {chamar, ...(semLista ? {} : {pendencias}), sair: () => sair.push(1), abrirMesa: () => abrir.push(1)});
   return {mesa, alvo, sair, abrir, pedidos};
 }
 const caixa = p => p.alvo.querySelector('input[type="checkbox"]');
@@ -98,6 +98,13 @@ test('com a pendência do fator também aberta, no lugar dos links fica "Depois 
   assert.ok(texto(p.alvo).includes('Depois de cadastrar o segundo fator, você poderá baixar seus dados ou excluir a conta.'));
   assert.ok(!texto(p.alvo).includes('Prefere não aceitar?'));
   assert.deepEqual(p.alvo.querySelectorAll('.termos-nao-aceitar button').length, 0);
+});
+
+test('chamada sem a lista de pendências: lado seguro, sem os links de dados e com a frase de depois do fator (V1 da Coruja)', async () => {
+  const p = pagina({semLista: true}); await esperar(p.mesa);
+  assert.equal(p.alvo.querySelectorAll('.termos-nao-aceitar button').length, 0); assert.equal(botaoPorTexto(p.alvo, 'excluir a conta'), undefined);
+  assert.ok(texto(p.alvo).includes('Depois de cadastrar o segundo fator, você poderá baixar seus dados ou excluir a conta.'));
+  assert.ok(!texto(p.alvo).includes('Prefere não aceitar?'));
 });
 
 test('"Sair" chama sessao-sair e a saída', async () => {

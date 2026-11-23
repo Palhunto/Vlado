@@ -3,7 +3,7 @@
 // Quem não aceita ainda leva os próprios dados e pode excluir a conta (ressalva B2 do contrato); com a pendência do segundo fator também aberta, o servidor recusa as duas (403
 // pendencia_de_conta): então os dois links só aparecem sem ela, e no lugar fica a frase "Depois de cadastrar o segundo fator, ..." (B1 da Coruja). Não depende de conta.js nem de estados.js; "Excluir a conta" pede dialogo.js e dados_conta.js (que vêm antes).
 //
-//   Termos.pagina(alvo, {chamar, sair, abrirMesa, pendencias})   o conteúdo do cartão. `pendencias` é o de GET /api/sessao; `chamar` é como o `api` da Mesa (padrão: a sessão aberta);
+//   Termos.pagina(alvo, {chamar, sair, abrirMesa, pendencias})   o conteúdo do cartão. `pendencias` é o de GET /api/sessao (sem a lista, os links de dados não aparecem); `chamar` é como o `api` da Mesa (padrão: a sessão aberta);
 //                                                               `abrirMesa()` vai a "/" (o servidor manda à pendência seguinte); `sair()` vai ao Entrar depois de sessao-sair
 (() => {
   const t = (pt, vars) => (window.I18N ? window.I18N.t(pt, vars) : String(pt).replace(/\{(\w+)\}/g, (todo, nome) => vars?.[nome] ?? todo));
@@ -35,9 +35,10 @@
     return resultado;
   }
 
-  function pagina(alvo, {chamar = window.DadosConta.chamadorDaSessao(), sair, abrirMesa, pendencias = []} = {}) {
+  function pagina(alvo, {chamar = window.DadosConta.chamadorDaSessao(), sair, abrirMesa, pendencias} = {}) {
     alvo.classList.add('fator-pagina', 'termos-pagina');
-    const fatorPendente = pendencias.includes('segundo_fator');
+    // Sem a lista de pendências (quem chama não a leu), vale o lado seguro: trata-se como pendência do fator desconhecida e os links de dados não aparecem (V1 da Coruja).
+    const fatorPendente = !Array.isArray(pendencias) || pendencias.includes('segundo_fator');
     const comSaidas = !fatorPendente && !!window.DadosConta && !!window.Dialogo;
     let enviando = false;
 
