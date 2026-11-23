@@ -339,8 +339,9 @@ button[aria-disabled="true"]{cursor:progress}
 .fator-chave-bloco{display:flex;flex-direction:column;gap:var(--espaco-2);align-items:flex-start}
 .fator-chave-rotulo{margin:0;font-size:var(--text-md);font-weight:600;color:var(--theme-muted)}
 .fator-chave{margin:0;font-size:var(--text-base);font-weight:600;letter-spacing:1px;font-variant-numeric:tabular-nums;user-select:all;overflow-wrap:anywhere}
-.fator-codigos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--espaco-2) var(--espaco-4);margin:0;padding:var(--espaco-3);list-style:none;border:1px dashed var(--theme-input-line);border-radius:var(--raio-controle)}
-.fator-codigo{font-size:var(--text-base);font-weight:600;letter-spacing:1px;font-variant-numeric:tabular-nums;user-select:all}
+/* Código nunca quebra: duas colunas só quando cada uma cabe um código de 19 caracteres inteiro (o cartão da pendência, de 440 px, fica com uma). */
+.fator-codigos{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));gap:var(--espaco-2) var(--espaco-4);margin:0;padding:var(--espaco-3);list-style:none;border:1px dashed var(--theme-input-line);border-radius:var(--raio-controle)}
+.fator-codigo{white-space:nowrap;font-size:var(--text-base);font-weight:600;letter-spacing:1px;font-variant-numeric:tabular-nums;user-select:all}
 .fator-rodape{margin:0}
 .fator-link{min-height:44px;padding:0 var(--espaco-2);border:0;background:none;color:var(--theme-accent);font-size:var(--text-md);font-weight:600;text-decoration:underline;cursor:pointer}
 @media (max-width:719px) {

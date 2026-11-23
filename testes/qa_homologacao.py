@@ -17,6 +17,7 @@ anterior antes e depois do segundo lote. O resultado fica em `PASTA/resultado.js
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -37,7 +38,9 @@ from proxy_tls_teste import ProxyTLS  # noqa: E402
 from interface_pesquisa import Servidor  # noqa: E402
 from comum import sha256, ler_json  # noqa: E402
 import acesso  # noqa: E402
+import correio  # noqa: E402
 import apuracao  # noqa: E402
+import ocr  # noqa: E402
 import dados_sinteticos  # noqa: E402
 
 # Search terms tried, in order, when the fixture's default term finds nothing in the selected corpus.
@@ -99,11 +102,13 @@ def _senha() -> str:
     return secrets.token_urlsafe(24)
 
 
-def _conta(root: Path, nome: str, login: str, papel: str, casos=()) -> dict:
+def _conta(root: Path, nome: str, login: str, papel: str, casos=(), email: str | None = None) -> dict:
     registro, token = acesso.criar_conta(root, nome, login, papel=papel, casos=list(casos), por='qa_homologacao')
     senha = _senha()
     acesso.ativar(root, token, senha)
-    return {'id': registro['id'], 'login': login, 'senha': senha, 'nome': nome}
+    if email:   # a Equipe só recupera por e-mail quem tem um: o endereço entra pelo mesmo caminho de Minha conta (pedido + link de confirmação)
+        acesso.confirmar_email(root, acesso.pedir_troca_de_email(root, registro['id'], email, senha)['token'])
+    return {'id': registro['id'], 'login': login, 'senha': senha, 'nome': nome, 'email': email}
 
 
 def _arquivos(pasta: Path) -> dict[str, str]:
@@ -128,6 +133,11 @@ class Canal:
             pasta = self.root / 'execucoes' / caso / rodada
             self.instantaneos[pedido['nome']] = (pasta, _arquivos(pasta))
             return {'arquivos': len(self.instantaneos[pedido['nome']][1])}
+        if cmd == 'link_recuperacao':   # o link da mensagem de recuperação que a Equipe mandou a essa pessoa; vai só ao roteiro, que o abre e não o grava
+            enviadas = [m for m in correio.caixa() if m['tipo'] == 'recuperacao' and m['para'] == pedido['para']]
+            if not enviadas:
+                raise ValueError('nenhuma mensagem de recuperação para essa pessoa')
+            return {'link': enviadas[-1]['link']}
         if cmd == 'comparar':
             pasta, antes = self.instantaneos[pedido['nome']]
             depois = _arquivos(pasta)
@@ -174,9 +184,9 @@ def _conferencias_finais(root: Path, contas: dict, saida: Path) -> list[str]:
     feitas = []
     por_login = {c['login']: c for c in acesso.listar(root)}
     assert por_login[contas['b']['login']]['situacao'] == 'desativada', por_login[contas['b']['login']]
-    assert por_login[contas['a']['login']]['situacao'] == 'aguardando_senha', por_login[contas['a']['login']]
     assert por_login[contas['a']['login']]['casos'] == ['beta'], por_login[contas['a']['login']]
-    feitas.append('Registro de acesso: B desativado, A aguardando nova senha (recuperação) e só com o caso beta.')
+    assert por_login[contas['a']['login']]['situacao'] == 'ativa', por_login[contas['a']['login']]
+    feitas.append('Registro de acesso: B desativado e A só com o caso beta, ativa com a senha nova depois de usar o link de recuperação.')
     registro = (saida / 'resultado.json')
     dados = ler_json(registro)
     conversas_a = [p for p in (root / 'conversas').glob('*/conversa.json')
@@ -220,14 +230,20 @@ def main() -> int:
     os.environ['VLADO_ACESSO'] = str(root / 'acesso' / 'acesso.json')
     os.environ['VLADO_AMBIENTE'] = 'homologacao'
     acesso.limpar_limites()
+    # O correio é o simulado (em memória): a recuperação de acesso manda um link por e-mail e só o Python o lê, a pedido do roteiro (nunca é impresso).
+    pilha = contextlib.ExitStack()
+    pilha.enter_context(correio.usar('simulado'))
+    correio.limpar_caixa()
     server = proxy = thread = None
     try:
         lotes = dados_sinteticos.gerar(Path(externo.name) / 'corpus')
         esperado = {'lotes': {lote: [{'caminho': str(p), 'nome': p.name, 'sha256': sha256(p)} for p in arquivos]
                               for lote, arquivos in lotes.items()},
-                    'digitalizado': lotes['lote1'][1].name}
+                    'digitalizado': lotes['lote1'][1].name,
+                    # Sem Tesseract e os idiomas, o PDF digitalizado fica "Sem texto lido": o roteiro não exige OCR, e diz que pulou.
+                    'ocr_disponivel': bool(ocr._tesseract_disponivel())}
         contas = {'admin': _conta(root, 'Administração QA', 'admin.qa', 'admin'),
-                  'a': _conta(root, 'Convidada A', 'convidada.a', 'convidado', ['alpha']),
+                  'a': _conta(root, 'Convidada A', 'convidada.a', 'convidado', ['alpha'], email='convidada.a@exemplo.org'),
                   'b': _conta(root, 'Convidado B', 'convidado.b', 'convidado', ['beta'])}
         # The proxy needs the server port and the server needs the proxy origin: open the proxy first,
         # with its destination filled in once the server is bound (it is read per connection).
@@ -254,6 +270,7 @@ def main() -> int:
             thread.join(3)
         if proxy:
             proxy.fechar()
+        pilha.close()
         for chave, valor in ambiente_antes.items():
             if valor is None:
                 os.environ.pop(chave, None)

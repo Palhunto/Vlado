@@ -19,6 +19,7 @@ import acesso
 import interface_pesquisa
 import registro_acesso as reg
 import test_codex_integracao as integracao
+from relogio_fixo import fixar
 
 
 class Base(unittest.TestCase):
@@ -37,6 +38,7 @@ class Base(unittest.TestCase):
         self.addCleanup(ambiente.stop)
         reg._AGREGADOS.clear()
         self.addCleanup(reg._AGREGADOS.clear)
+        fixar(self)  # a linha é por minuto: nada de cruzar a virada no meio do teste
         reg.encerrar_requisicao()
         self.addCleanup(reg.encerrar_requisicao)
         reg._ESTADO['cheio'].clear()

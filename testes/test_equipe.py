@@ -65,21 +65,33 @@ class EquipeTest(cenario.DuasRedacoes):
         da_beta = self.post('dono_b', 'equipe-listar', {})[1]
         self.assertEqual({p['login'] for p in da_beta['pessoas']}, {'dono.sentinela', 'rep.sentinela'})
 
-    def test_gasto_que_soma_redacoes_nao_vai_a_nenhum_dono(self):
-        # Until the cost module counts by newsroom, its "organization" is the whole installation: with two newsrooms
-        # that number adds both, and it goes to nobody (contrato de contas, 4.5).
-        self.assertEqual(custo.chaves_orcamento(self.ids['dono'])['organizacao'], custo.ORGANIZACAO)
-        self.assertIsNone(self.post('dono', 'equipe-listar', {})[1]['gasto'])
-        cota = self.get('dono', '/api/cota')
-        self.assertEqual(cota[0], 200)
-        self.assertIn('conta', cota[1])
-        self.assertNotIn('organizacao', cota[1])
-        with patch.object(custo, 'chaves_orcamento', lambda conta: {'conta': conta, 'organizacao': self.a}):
-            self.assertIn('organizacao', self.get('dono', '/api/cota')[1])  # counted by newsroom: its dono sees it
-            self.assertEqual(set(self.post('dono', 'equipe-listar', {})[1]['gasto']),
-                             {'mes', 'gasto_brl', 'teto_brl', 'saldo_brl', 'esgotada'})
-            self.assertNotIn('organizacao', self.get('dono_b', '/api/cota')[1])  # and the other newsroom's dono does not
-            self.assertNotIn('organizacao', self.get('editor', '/api/cota')[1])
+    def test_cada_dono_ve_so_o_gasto_da_propria_redacao(self):
+        # The cost module counts by newsroom (Plataforma P1): the "organizacao" block is the newsroom's own, so each
+        # dono gets the own newsroom's number, never the other's nor a sum (contrato de contas, 4.5 and 8.5).
+        cinco = {'mes', 'gasto_brl', 'teto_brl', 'saldo_brl', 'esgotada'}
+        with patch.object(custo, 'mes', return_value='2031-01'):  # a month of its own: nothing else spent in it
+            custo.somar_gasto(self.root, self.ids['reporter'], 3_250_000)
+            custo.somar_gasto(self.root, self.ids['reporter_b'], 7_750_000)
+            for dono, proprio, alheio in (('dono', '3.25', '7.75'), ('dono_b', '7.75', '3.25')):
+                with self.subTest(dono=dono):
+                    status, cota, _ = self.get(dono, '/api/cota')
+                    self.assertEqual(status, 200)
+                    self.assertEqual(cota['organizacao']['gasto_brl'], proprio)
+                    self.assertNotIn('instalacao', cota)
+                    corpo = self.post(dono, 'equipe-listar', {})[1]
+                    self.assertEqual(set(corpo['gasto']), cinco)
+                    self.assertEqual(corpo['gasto']['gasto_brl'], proprio)
+                    self.assertNotIn(alheio, json.dumps(cota) + json.dumps(corpo['gasto']))
+                    self.assertNotIn('11.00', json.dumps(cota) + json.dumps(corpo['gasto']))  # never the sum
+                    for pessoa in corpo['pessoas']:
+                        self.assertEqual(set(pessoa['gasto']), cinco)
+            for quem in ('editor', 'reporter', 'leitor', 'convidado', 'reporter_b'):
+                with self.subTest(quem=quem):
+                    status, cota, _ = self.get(quem, '/api/cota')
+                    self.assertEqual(status, 200)
+                    self.assertIn('conta', cota)
+                    self.assertNotIn('organizacao', cota)
+            self.assertEqual(self.get('reporter', '/api/cota')[1]['conta']['gasto_brl'], '3.25')  # the own spend, always
 
     def test_atividade_e_so_da_propria_redacao_e_nunca_traz_recusas_do_portao(self):
         alvo, _, _ = self.nova('leitor')

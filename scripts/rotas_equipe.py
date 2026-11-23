@@ -54,12 +54,24 @@ def _gasto(root, conta, da_redacao=False):
         return None
 
 
+def _chave_propria(root, conta, da_redacao=False):
+    """P40 (Viga, with this file's owner's consent): what the newsroom's own key paid this month, in reais, apart
+    from the service's quota; None when the spend record cannot be read (the team screen still opens)."""
+    try:
+        return custo.gasto_chave_propria_brl(root, conta, da_redacao=da_redacao)
+    except (ValueError, OSError, KeyError):
+        return None
+
+
 def _listar(root, redacao, principal, gasto_da_redacao):
     resposta = acesso.equipe(root, redacao)
     for pessoa in resposta['pessoas']:
         pessoa['gasto'] = _gasto(root, pessoa['id'])
+        pessoa['gasto_chave_propria_brl'] = _chave_propria(root, pessoa['id'])  # apart: the 5 keys of 'gasto' stay
     # The newsroom's spend only when the cost module counts it by newsroom: a number that adds newsrooms never goes.
     resposta['gasto'] = _gasto(root, principal['conta'], da_redacao=True) if gasto_da_redacao else None
+    resposta['gasto_chave_propria_brl'] = (_chave_propria(root, principal['conta'], da_redacao=True)
+                                           if gasto_da_redacao else None)
     return resposta
 
 

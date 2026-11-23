@@ -77,792 +77,792 @@
       "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
     ]
   },
-  "gerado_em_utc": "2026-11-22T06:00:16Z",
+  "gerado_em_utc": "2026-11-23T04:03:30Z",
   "tolerancia": {
     "canal": 4,
     "pixels": 8
   },
-  "total_bytes": 17377899,
+  "total_bytes": 17104743,
   "capturas": {
     "achados__1024__claro": {
       "largura": 1024,
       "altura": 2174,
-      "bytes": 255810,
-      "sha256": "8e1ea07a96b56cc726a203cf6b80613aacb6a06ac39e113aa6abc096ad31a946"
+      "bytes": 254153,
+      "sha256": "433b238618aec72137670d74feaf9c300bf83edc7b1fbfbe1eef818e3f774e8d"
     },
     "achados__1024__escuro": {
       "largura": 1024,
       "altura": 2174,
-      "bytes": 257086,
-      "sha256": "ffa88cdc16356896b9ee6500e1cfe918bcd908eb13d8266a76fe7a16a293b17f"
+      "bytes": 255011,
+      "sha256": "9199a48a609fb8a0558d5de5dc91e8d32eab3d555da36fa8b306b3c071be466c"
     },
     "achados__1440__claro": {
       "largura": 1440,
       "altura": 2050,
-      "bytes": 285364,
-      "sha256": "4ac6aa2cc6bfb4dda1d0c538bde7dde7ee290bc79720ce3ba93c22c8dc984dea"
+      "bytes": 285026,
+      "sha256": "f04ac6ac7fa68adc8d0b104c6be4a3eeefa9c41bceed118e49ac352d5f94a99a"
     },
     "achados__1440__escuro": {
       "largura": 1440,
       "altura": 2050,
-      "bytes": 286357,
-      "sha256": "afd4f8c703a17e67c905b7f34fb177ecd17e354b81f2c4350eff925f193ee566"
+      "bytes": 285202,
+      "sha256": "83a3cbd4db89ddc5e7976a888cfa4870de59a8f59d88061b1c692ca7643b13b2"
     },
     "achados__375__claro": {
       "largura": 375,
-      "altura": 2773,
-      "bytes": 170177,
-      "sha256": "80b9c2437ea2e3c140eb98d993b119dd4a2b229a67e15eeda664de7f6e7228a6"
+      "altura": 2731,
+      "bytes": 170162,
+      "sha256": "30dcc46672ef4998f610dfa1c1da31e50c6c71a63ccc3478d6bf21c04a82983d"
     },
     "achados__375__escuro": {
       "largura": 375,
-      "altura": 2773,
-      "bytes": 170501,
-      "sha256": "fe36f295239b7ee34f9732f2fff9ed4613437dd5921e0b255ac1ed804afbd6f4"
+      "altura": 2731,
+      "bytes": 170039,
+      "sha256": "6fc09e55038ecae525e79d396f2b9e06fa4bb6fe1454651dc197f1c83d98055a"
     },
     "achados__768__claro": {
       "largura": 768,
-      "altura": 2154,
-      "bytes": 180600,
-      "sha256": "2c9fe5429cbee393fc2f45a13c15759f9f0fd3b9639d3e9975f46b88e5fe6414"
+      "altura": 2126,
+      "bytes": 181293,
+      "sha256": "61590f9fbae7e8470157249b13dee7b593b82b62ea40aac1bda345929f7b83d1"
     },
     "achados__768__escuro": {
       "largura": 768,
-      "altura": 2154,
-      "bytes": 181034,
-      "sha256": "cb2d035ac33abaf09c9c3246a49324586f15e796b0c91bac11c571753bae1728"
+      "altura": 2126,
+      "bytes": 181068,
+      "sha256": "f91eb2dfe3d9a45511de3efc057b45e60456906486589b16a7b2a9daf04c4223"
     },
     "apuracao__1024__claro": {
       "largura": 1024,
       "altura": 1370,
-      "bytes": 126830,
-      "sha256": "65f9a7d8dc0f30f54e86d4bb0ce6b4ada7d99e183901e19ac2aaa095c2bcb147"
+      "bytes": 127160,
+      "sha256": "500b300e6e02c04556b18a5dfb918fb41e299a1248bc4631a0c7258ff47418ef"
     },
     "apuracao__1024__escuro": {
       "largura": 1024,
       "altura": 1370,
-      "bytes": 127442,
-      "sha256": "96aaceff5619e39452101b1e9df2f0281d3ea6793a74d2024875f8e33c4d4075"
+      "bytes": 127559,
+      "sha256": "510dcfb440944c100fb5668746aeff81737683e254ab856175d6b7c49ae23b74"
     },
     "apuracao__1440__claro": {
       "largura": 1440,
       "altura": 1325,
-      "bytes": 156609,
-      "sha256": "6c61389a8c216d195b49aac164815f99caf120af5278c5d6b79f9665c83d99c5"
+      "bytes": 156674,
+      "sha256": "62c78fe6a968088f29ba644fce29a1d936e5f0e46db93fa45427e6173112db0d"
     },
     "apuracao__1440__escuro": {
       "largura": 1440,
       "altura": 1325,
-      "bytes": 157796,
-      "sha256": "bac1c29d1dfafc5cddc80f52011046a12f4e436362c4bae243744a083bd4736b"
+      "bytes": 157829,
+      "sha256": "ec23cf64479bd94313cb92d7dfe1b886abcd3f88831297b3a98af83fd7cbc531"
     },
     "apuracao__375__claro": {
       "largura": 375,
       "altura": 1681,
-      "bytes": 106006,
-      "sha256": "df6ef68d6e40a8022e5f1936481c0c8fa46397fcafe9a4dcb8dd5965356715d6"
+      "bytes": 106187,
+      "sha256": "80cd5a56d4efd49e67e5150c88d01fa9025cccbb98bb6d8d7c602660d3443f3b"
     },
     "apuracao__375__escuro": {
       "largura": 375,
       "altura": 1681,
-      "bytes": 107028,
-      "sha256": "9a22b57b28b015a24fa73247102d4d87c4573caaba0441bafb4edc03245bb9cd"
+      "bytes": 107127,
+      "sha256": "c7c6a159a363b420f1b1888ee95a4a1da7b609dbb65bbff5e689437ecdb9fc82"
     },
     "apuracao__768__claro": {
       "largura": 768,
       "altura": 1409,
-      "bytes": 107995,
-      "sha256": "1446b2ad1fe906af07217e4d78ab39ae1e73f0e284d612d583d53a920ab6d3a2"
+      "bytes": 108303,
+      "sha256": "0e860e89ab5455e1121e38e88a10fcccd89b1e19773804da01e3cea80f3160ff"
     },
     "apuracao__768__escuro": {
       "largura": 768,
       "altura": 1409,
-      "bytes": 108462,
-      "sha256": "f358238ec517b5ae7cbee454b8d873b7f58abe2927c397b771e51708007952b9"
-    },
-    "cadastro__1024__claro": {
-      "largura": 1024,
-      "altura": 886,
-      "bytes": 82886,
-      "sha256": "3ef027914e8f3f631f8dd99838fd0aa5262bbf3547e6dbc191a8738f5da69703"
-    },
-    "cadastro__1024__escuro": {
-      "largura": 1024,
-      "altura": 894,
-      "bytes": 84709,
-      "sha256": "91daa2196908f43eb3f9648e3abbbf5e28265d0389e343f529c9e12c70ef475d"
-    },
-    "cadastro__1440__claro": {
-      "largura": 1440,
-      "altura": 900,
-      "bytes": 103179,
-      "sha256": "f906f0ac1e8ee948071fcbd03e2a567b408e8662d8289dde0cc201c360c2bf8a"
-    },
-    "cadastro__1440__escuro": {
-      "largura": 1440,
-      "altura": 900,
-      "bytes": 105633,
-      "sha256": "75acf2d802870bb1738a4c39bd4a010eb2e38bbfa1c37f3a6641854ddf61a6a2"
-    },
-    "cadastro__375__claro": {
-      "largura": 375,
-      "altura": 1116,
-      "bytes": 75293,
-      "sha256": "0548b1b8644606455b5f6720a27b60655a77e3af3bbcbe9c834058332e647334"
-    },
-    "cadastro__375__escuro": {
-      "largura": 375,
-      "altura": 1124,
-      "bytes": 75915,
-      "sha256": "8dad33cce84057d459828a93753e558cf3ebdb0d542e952c51a08ea042501cd2"
-    },
-    "cadastro__768__claro": {
-      "largura": 768,
-      "altura": 1024,
-      "bytes": 81329,
-      "sha256": "ce1bda0ef815cfa1384d2762111d549225dfdef239752931f1ebc52166cecf79"
-    },
-    "cadastro__768__escuro": {
-      "largura": 768,
-      "altura": 1024,
-      "bytes": 79511,
-      "sha256": "80f095844ac2867102d3ce0420bdc4878ec11cc188e0e66444edba12ee32ed62"
+      "bytes": 108820,
+      "sha256": "c34d78f41d14022fd8e699b6f7c460314f68b7e50d433896661147e0e810e9e0"
     },
     "caderno__1024__claro": {
       "largura": 1024,
       "altura": 1248,
-      "bytes": 114818,
-      "sha256": "355addc52f1f9255ef8c4489bb51c197f1b87618b6adac8e599052659f8d5998"
+      "bytes": 115278,
+      "sha256": "81dc175ea45e6f7c0f43604da89e9f58f9b265a3e72044e009923bd54887c043"
     },
     "caderno__1024__escuro": {
       "largura": 1024,
       "altura": 1248,
-      "bytes": 115995,
-      "sha256": "87b464f32dd1cf999e10376d17e06177c12dadbc1bc94c6901f2a03274026aa6"
+      "bytes": 116007,
+      "sha256": "5bd252e4a0ab418198bfb3cb99010f951ff1cbe8a2c2d349cd527c20c78133ce"
     },
     "caderno__1440__claro": {
       "largura": 1440,
       "altura": 1248,
-      "bytes": 134654,
-      "sha256": "c2cab0d9390dea5b459a28a0cf3870cde18e5e8e59e40a5f7592ecc05d8649b2"
+      "bytes": 134814,
+      "sha256": "79adca82f82d8dd64ffd0855c28e389d8433f00039419c466a25b794081cd51d"
     },
     "caderno__1440__escuro": {
       "largura": 1440,
       "altura": 1248,
-      "bytes": 136047,
-      "sha256": "1d8ce22a23192acc34e3e127dc5bedeb40c8074248db9e71cecf98c5fd8a711d"
+      "bytes": 135807,
+      "sha256": "19a187fccf2c514141cdd8adae50aa00f7e58932d38ae70a889cfd4b64db4b8e"
     },
     "caderno__375__claro": {
       "largura": 375,
       "altura": 1599,
-      "bytes": 107037,
-      "sha256": "d605b10e0f4f037ce4cdb40fbae9d6594a729cb011298de17ff0b35ef0887ab1"
+      "bytes": 107362,
+      "sha256": "527297f8cabb1e94a8b8ea1c8cd0ed9df68313859fa839d53c82e2a53841a331"
     },
     "caderno__375__escuro": {
       "largura": 375,
       "altura": 1599,
-      "bytes": 107817,
-      "sha256": "223b904675fffa65ffad0809cd7fbb9b02e05be4e2f141d170975d482f51b342"
+      "bytes": 107811,
+      "sha256": "70908dec9523adb0bddb912a24cf52197a5c1891ac07b6ad634fd69017ba4525"
     },
     "caderno__768__claro": {
       "largura": 768,
       "altura": 1325,
-      "bytes": 111948,
-      "sha256": "cd7030ed0acc74923e461e29d2867fe6b2b0bc37d4f613ecd77e54a0122e06d4"
+      "bytes": 112728,
+      "sha256": "437925a27feee9945afa684fe03d0e6f269e5a2700529ddda9971999a0d8cfa3"
     },
     "caderno__768__escuro": {
       "largura": 768,
       "altura": 1325,
-      "bytes": 112671,
-      "sha256": "2200f505d79ffe47bfb161dfbdf60ba98ad27f5db3e574ccd661335f69761fc2"
+      "bytes": 113488,
+      "sha256": "de222b856e0657fa0e435caf90bf2c8111b4a7876904b9312b1f09332e2da2ea"
     },
     "codex__1024__claro": {
       "largura": 1024,
       "altura": 2134,
-      "bytes": 196912,
-      "sha256": "7afc6ee4b01815f2b6d4c99f6df52be64b5599c740fe67afb011a6a09a0471d8"
+      "bytes": 198149,
+      "sha256": "05ec69de4bd984033a7baaf02cb3b287262d2211688bc88bf7269d8992216f6c"
     },
     "codex__1024__escuro": {
       "largura": 1024,
       "altura": 2134,
-      "bytes": 197029,
-      "sha256": "6198a8a0da39542fff0fd27e5653c2f8017122c86eb0a165254b3d18e1bc4e51"
+      "bytes": 198509,
+      "sha256": "3c5a748ec8f7fd1e9f01e512e1877e3ab83f10a007d3ba2ce2a38ed50cb75b25"
     },
     "codex__1440__claro": {
       "largura": 1440,
       "altura": 2134,
-      "bytes": 220373,
-      "sha256": "2cffabd54f52e7dbf7548bbfc6555ef079a8d16c7762ad0283e7ef7c31761404"
+      "bytes": 221468,
+      "sha256": "02e87045c3577ddc9c9f5b2a240a01244f58f79356fb3d56699fb796916f80d3"
     },
     "codex__1440__escuro": {
       "largura": 1440,
       "altura": 2134,
-      "bytes": 220682,
-      "sha256": "17068cb86cca1ea751759c811e0dfc695833bc8ecb72ad3ed6d68bfbeae4e0c9"
+      "bytes": 221747,
+      "sha256": "c6d4d2f7ad608e39054348101ecd77d3cd32d3cd10b85950e21556e959af6e41"
     },
     "codex__375__claro": {
       "largura": 375,
       "altura": 2609,
-      "bytes": 172006,
-      "sha256": "620b15f9b2ff4d4c491016920e545dc7041d49764797d1aa34503c423c79f1bc"
+      "bytes": 172452,
+      "sha256": "e0b98dc511b6500f110d009802e80800c38834c20b05ab6e3e4a7d5ca89b8cd2"
     },
     "codex__375__escuro": {
       "largura": 375,
       "altura": 2609,
-      "bytes": 172660,
-      "sha256": "7c56d490bf8f587cb0f5a2fd23b3650463582b997347f09b9fe7e0266e40ffc3"
+      "bytes": 172618,
+      "sha256": "dc8a547490d8a322a6d6e8222bef484432a97b27f3be83f822396487cbf3a64e"
     },
     "codex__768__claro": {
       "largura": 768,
       "altura": 2267,
-      "bytes": 184265,
-      "sha256": "84c26fedbbfb68cd8d808504fdea2f47f8b850a492b3e8f9598cf2004dbceaae"
+      "bytes": 185545,
+      "sha256": "d9a7f8aebec89ff5cfcb5f8a174c295cab2e9a354314d5db40eda767260acad4"
     },
     "codex__768__escuro": {
       "largura": 768,
       "altura": 2267,
-      "bytes": 184006,
-      "sha256": "96101c18d98eca0dd7e1d55405d5ed33e912f2ca59bdde1a085bf09bf84d81a7"
+      "bytes": 185298,
+      "sha256": "150e3a1d5ae719b5e94d74560ad1f6f6b0dc8dd610de6a1d96b85d749ca9e486"
     },
     "configuracoes__1024__claro": {
       "largura": 1024,
       "altura": 768,
-      "bytes": 41768,
-      "sha256": "24bd4fbb894430b95e38ba519f2dd3e2c970d09747d09ad0bb80197abeefca11"
+      "bytes": 41087,
+      "sha256": "da5b4a2b354ec301ee11ec246c3da8b8f11eb25fc4c938aef9c72e6e02bda57a"
     },
     "configuracoes__1024__escuro": {
       "largura": 1024,
       "altura": 768,
-      "bytes": 42208,
-      "sha256": "5b9de220970a5e9c51f1cf3ce8d66246d6d2ed49dcd0421d20ede7b11f45fe65"
+      "bytes": 41187,
+      "sha256": "73a21737d2cd7f5370a52f7c02cc427e8f02ebf515e813b9fb733c20d88aad5a"
     },
     "configuracoes__1440__claro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 62056,
-      "sha256": "f8fad600fcf57f1c74b229be4e750021c16123885ccf942ff61680661146cc45"
+      "bytes": 60702,
+      "sha256": "86d51715fe20a3165dbdfc653644315f2642cc27c296bcf4651e7b366d18a317"
     },
     "configuracoes__1440__escuro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 62533,
-      "sha256": "46e3b7979e4150a9133fd072f5907698db7304ed4d6300be207b505d605c5762"
+      "bytes": 61130,
+      "sha256": "814e4ff7d64db4381f8a320b407e8885ea6f325d82e4bcb11766fd06d4e8c442"
     },
     "configuracoes__375__claro": {
       "largura": 375,
       "altura": 812,
-      "bytes": 34763,
-      "sha256": "9d374f3279f4de7f244e83a6b6c4170fcd3b5814ac516611ef38b5706ce50a6b"
+      "bytes": 33018,
+      "sha256": "1ea93aec4b51c0b00a5e042289dc84338cdf8ba3791503d6a9a479464b6f90da"
     },
     "configuracoes__375__escuro": {
       "largura": 375,
       "altura": 812,
-      "bytes": 34740,
-      "sha256": "9e2bdd58b892e6987ce95bb3355f87b102438631b7a6f0f65dafe58fe4a4b6cd"
+      "bytes": 33040,
+      "sha256": "dd8349ed81ad9b1a61794043841eead9b921f08825d6df255bc1370582eafcc6"
     },
     "configuracoes__768__claro": {
       "largura": 768,
       "altura": 1024,
-      "bytes": 39691,
-      "sha256": "f6cebca403f83f543f3c3c3c447fa9c062efdaed1fb8297d8fa34f9ab6645973"
+      "bytes": 38950,
+      "sha256": "4d7c7648b3db2a671d0f9b0adf52bc286d8940ca73275bb422236b96b04fbe17"
     },
     "configuracoes__768__escuro": {
       "largura": 768,
       "altura": 1024,
-      "bytes": 39414,
-      "sha256": "afc6f6851e51704c8d924dc6ceebdfa7d2910374ba388c809cc8d36e84894dea"
+      "bytes": 38671,
+      "sha256": "492f16a6f9dae432de2271d5b5a1021f3a1f55e346cade2647a4b05d348554f8"
     },
     "diligencias__1024__claro": {
       "largura": 1024,
       "altura": 1398,
-      "bytes": 164460,
-      "sha256": "9825ec5d8a6a280310378c54225800076984137d2d44d5a3e55aee3a90c1a4b4"
+      "bytes": 165780,
+      "sha256": "5e3005667bbc5348eb5dc7953cc0d2c48626dd0c2c9bccedf8c41ac6b12d0738"
     },
     "diligencias__1024__escuro": {
       "largura": 1024,
       "altura": 1398,
-      "bytes": 164311,
-      "sha256": "46b9fcfee701e19946b7d8e0b2c8ab4e2d059cd026afcc2f0d34b014e3d9a1e7"
+      "bytes": 165509,
+      "sha256": "d1ee824ec8723156119107af8cedd68c48b6c96c6e1f2d9846834487f1b4faf7"
     },
     "diligencias__1440__claro": {
       "largura": 1440,
       "altura": 1375,
-      "bytes": 183996,
-      "sha256": "0c2c3e590f8d6024f5bb33ef1dc17b1acec0b77102a18793448d524348b321cd"
+      "bytes": 184746,
+      "sha256": "5b951c6eeaf4100b1a491e7a3df8cb2f6207d0d1653c23fe824c6b598271711e"
     },
     "diligencias__1440__escuro": {
       "largura": 1440,
       "altura": 1375,
-      "bytes": 183872,
-      "sha256": "f713857f99f1de0e6530f0df06a140bfc88279e5e47457063f0e634981d61291"
+      "bytes": 184528,
+      "sha256": "4f9d6591da8c0957ebe918ec33834b186dc231c6bd4232d53b8d72609bf2e244"
     },
     "diligencias__375__claro": {
       "largura": 375,
       "altura": 2477,
-      "bytes": 160549,
-      "sha256": "1626ff623f169eada1aefd923e3d2c2bdd790efcc0fa04fa8724630c8d63bf4f"
+      "bytes": 160968,
+      "sha256": "c894732dfa12b02de53275e813c9c8ccd8cf363c242cb78bd52702b3a4958056"
     },
     "diligencias__375__escuro": {
       "largura": 375,
       "altura": 2477,
-      "bytes": 159411,
-      "sha256": "55662071ae55f9e0d8109e959fa16e5e08621b4d1f403e33451958aeb4d7f210"
+      "bytes": 160150,
+      "sha256": "98e57b64698e19e723e43796d413953ffb25193940376a05cb703d924bb6a4fc"
     },
     "diligencias__768__claro": {
       "largura": 768,
       "altura": 1921,
-      "bytes": 159943,
-      "sha256": "976453953e4c69ca6c69052319285b5b2bc827771a7558b29c79b29caff7ea47"
+      "bytes": 160609,
+      "sha256": "9d811b78c9ce4dfc28c0c7e8c17c8bdfb3c5154ed1c77e96188bba47caf8f44d"
     },
     "diligencias__768__escuro": {
       "largura": 768,
       "altura": 1921,
-      "bytes": 160013,
-      "sha256": "b7a2d679a1e02bf2c0d4a244cb04e5e5c0b56a867bc4d6aaf6eb3e18c916b2a6"
+      "bytes": 161081,
+      "sha256": "22a50f681e2ed35d9600452e1d66b15ee11fd26e8074232a70dc7586cf691b0e"
     },
     "documentos__1024__claro": {
       "largura": 1024,
-      "altura": 1060,
-      "bytes": 128783,
-      "sha256": "799324060b44d23dd1701834476cba627d85a123352cca224f8186299c9ef438"
+      "altura": 1035,
+      "bytes": 105736,
+      "sha256": "5838516d6aec45e7cf98ccaccdfe7507e5b7f8354e546bf6d49944f85c93e4b3"
     },
     "documentos__1024__escuro": {
       "largura": 1024,
-      "altura": 1060,
-      "bytes": 128881,
-      "sha256": "89f20da9760bb43522c3ccd39940884bac043d49441d357a3f18c125b0c534be"
+      "altura": 1035,
+      "bytes": 106269,
+      "sha256": "ce7c5e0b464b239531f7f83772295a55d0b1ea6fa20b002b43e8abf4fc0bb87f"
     },
     "documentos__1440__claro": {
       "largura": 1440,
-      "altura": 1037,
-      "bytes": 150297,
-      "sha256": "ead796ef9f2d8b75c571af7fb5a9057cf4ec3fa179d30b5accff5a83dc7a9a47"
+      "altura": 1035,
+      "bytes": 126658,
+      "sha256": "8c92b1438812cca4b52e05ebcb9ac625b764825f2e9d9737b06b77f92b0fa1fa"
     },
     "documentos__1440__escuro": {
       "largura": 1440,
-      "altura": 1037,
-      "bytes": 150224,
-      "sha256": "78579f31afa3133a02f55e8aa9e37323744642818a59064f59c38b2391a43009"
+      "altura": 1035,
+      "bytes": 127208,
+      "sha256": "3bcd03e6de636b41e9dc73fa83654fd11b23f2fec7b9851b28635cc16b0e6a6b"
     },
     "documentos__375__claro": {
       "largura": 375,
-      "altura": 1482,
-      "bytes": 106130,
-      "sha256": "22b303ed27e6cb0d284d77ffa05239fab305f981852328427782950f69544516"
+      "altura": 1520,
+      "bytes": 91470,
+      "sha256": "b2aa69ad94a05fba32a0422a9342f89742235122d08ae9ffe6eea81e21f10dbc"
     },
     "documentos__375__escuro": {
       "largura": 375,
-      "altura": 1482,
-      "bytes": 106277,
-      "sha256": "b4ee262fadaa6366a3860554a1a3909a0df7e89eafd24f29cd87ccc46c33c066"
+      "altura": 1520,
+      "bytes": 92069,
+      "sha256": "7e258d507429b645648f8f9a233e7236f333ff4553f8b5370a59261ba558086d"
     },
     "documentos__768__claro": {
       "largura": 768,
-      "altura": 1079,
-      "bytes": 120265,
-      "sha256": "fe29d6296692779a36a08c0fd9aa7fac350f10fb7a13ad1d5350dd0c4019d418"
+      "altura": 1059,
+      "bytes": 103698,
+      "sha256": "17c7ba8e1cc3265beddf0187ddaff18154dc2a5a3fba73d1d70e171cc4484e71"
     },
     "documentos__768__escuro": {
       "largura": 768,
-      "altura": 1079,
-      "bytes": 120037,
-      "sha256": "a21bf050b2cb71ebac358b996e37e6b6aad9c72dd938fee8f23c9338367b9ab4"
+      "altura": 1059,
+      "bytes": 103690,
+      "sha256": "9228eeaa4cead09a25e58ab19d99d08d7987b59619b86626e0cf3222ce0ba684"
     },
     "entrar__1024__claro": {
       "largura": 1024,
-      "altura": 783,
-      "bytes": 28265,
-      "sha256": "3f5fb67ecfb64cda2ad7b08c0a020a32e0fad9b05d25b34f602641f2acfd34ee"
+      "altura": 830,
+      "bytes": 49079,
+      "sha256": "681ab3053b9422a22a99c0f351a9ac4b8d16ec32bc381d03c454a4d1f9e776b3"
     },
     "entrar__1024__escuro": {
       "largura": 1024,
-      "altura": 783,
-      "bytes": 28200,
-      "sha256": "8c027c5ec65f7e1b9ecec0c21296573df209a52eed556b763574a9683ed7f515"
+      "altura": 830,
+      "bytes": 48852,
+      "sha256": "545de03378d63240e8af0a768fc61f080662057c8c34fafde76bb3a30a5f7080"
     },
     "entrar__1440__claro": {
       "largura": 1440,
       "altura": 920,
-      "bytes": 30967,
-      "sha256": "13c6bb7a31b18fbd6f0c0c7ce66896c60c1b1e0bfde2307b6bea02398b0923c4"
+      "bytes": 51927,
+      "sha256": "f2ffbee89755d5f38abe261f6392f519c0636ba087b2e1392134157108cb38e6"
     },
     "entrar__1440__escuro": {
       "largura": 1440,
       "altura": 920,
-      "bytes": 30917,
-      "sha256": "5b2839988db9efcbb287f132fc024e47b61c9ab189e0673a32e0c8b71269e15e"
+      "bytes": 51691,
+      "sha256": "1eb566c5f549d858e3e126ffacec801a49aa18cd8ed94131c8d7e584f73df9ce"
     },
     "entrar__375__claro": {
       "largura": 375,
-      "altura": 814,
-      "bytes": 25788,
-      "sha256": "65d3761f172d68ed92a19766c1ae6561e3753aff4df56db43766511999b24fe5"
+      "altura": 913,
+      "bytes": 45464,
+      "sha256": "281dd9a55b6bf86d447965ae77fb8a20ee6055c3ae5ae89ef4971572ff06d75a"
     },
     "entrar__375__escuro": {
       "largura": 375,
-      "altura": 814,
-      "bytes": 25832,
-      "sha256": "a16bff9266f98ce8adc7177053e1610547a44044d2f9d90483d4be34a78117e7"
+      "altura": 913,
+      "bytes": 45243,
+      "sha256": "a460cafb960412c989859155cac474a8144108000d69ed5317c6237c02150762"
     },
     "entrar__768__claro": {
       "largura": 768,
       "altura": 1049,
-      "bytes": 28653,
-      "sha256": "cec58c4ff859c14fcd4f369d9c17f1fa281d753fe8266fe5fa5db2cf5ba70cb0"
+      "bytes": 49024,
+      "sha256": "d447d0ef2b31b36f3de6d9ce35db4f5372259bbde4c2e8909967b1d559aa6c3a"
     },
     "entrar__768__escuro": {
       "largura": 768,
       "altura": 1049,
-      "bytes": 28633,
-      "sha256": "ded5d0f05f7704155a6450ede00ff37ab43a919cf759846957a8e27d2f3200a0"
+      "bytes": 48798,
+      "sha256": "1efe470c89d0f6b80a1ae89f3fa797caca54a42314375375ba4564bd91bd81b9"
     },
     "foco_entrar_botao__1440__claro": {
       "largura": 1440,
       "altura": 920,
-      "bytes": 31763,
-      "sha256": "464729a4c60db194cf510a1d0ebe155a01fe958eb6ece7e2404ae983200fc9f8"
+      "bytes": 52833,
+      "sha256": "dbfd7f24a976c2abfd01d90db2b6c98194425a912b1930025952e8b0b233019c"
     },
     "foco_entrar_botao__1440__escuro": {
       "largura": 1440,
       "altura": 920,
-      "bytes": 31779,
-      "sha256": "b75b65331f77a459ef17550f5c7308914e20ffffa5bb5b8a049dfc0c13004679"
+      "bytes": 52673,
+      "sha256": "a6dfaaa4ecaf6608408aa39ecd767656ae6262e691c59334e1dc98d916c456a3"
     },
     "foco_entrar_botao__375__claro": {
       "largura": 375,
-      "altura": 814,
-      "bytes": 26680,
-      "sha256": "4c943c17ccbea9d089ed0bf07c8b12bbc97ab009bbcadc05a7ef20c77b66ca0e"
+      "altura": 913,
+      "bytes": 46355,
+      "sha256": "a8ce7957b119df43db8bd1676ad22d230444f906e00160544da47a0764ee500f"
     },
     "foco_entrar_botao__375__escuro": {
       "largura": 375,
-      "altura": 814,
-      "bytes": 26710,
-      "sha256": "44cfe201bff8907835e1d1d9be28989febe61ac20cff2dd75c6516221112d943"
+      "altura": 913,
+      "bytes": 46094,
+      "sha256": "9b3c81b40ffbdd8a979c039014c2afda3ab7e2a06f16d8ef230a6e852c6726d9"
     },
     "foco_entrar_campo__1440__claro": {
       "largura": 1440,
       "altura": 920,
-      "bytes": 31761,
-      "sha256": "fd8475efa37c4614a4bef71a49cac8ddc8a922f2b40922d59226aac030a10369"
+      "bytes": 52941,
+      "sha256": "38a85a634e16264e0478d57a82ba802053323d270ab8d2a417d945fe13a4b502"
     },
     "foco_entrar_campo__1440__escuro": {
       "largura": 1440,
       "altura": 920,
-      "bytes": 31594,
-      "sha256": "446f590fc0dac1fc6fa5fdb703522a8d9bdf4b61b5336bd8b0fabab6214da17a"
+      "bytes": 52521,
+      "sha256": "077c1335b66d854340ceee60da9eb7838188a424c7b30ae5fbe9a0522e94a7d6"
     },
     "foco_entrar_campo__375__claro": {
       "largura": 375,
-      "altura": 814,
-      "bytes": 26644,
-      "sha256": "49e6c7bdbfa3e32b8ed2282873bf8971861490a9476ce7208978f9db81da484e"
+      "altura": 913,
+      "bytes": 46354,
+      "sha256": "3781d8a96c488d77ed06271390167baebf7eb0e9776655efb7852d180ac96020"
     },
     "foco_entrar_campo__375__escuro": {
       "largura": 375,
-      "altura": 814,
-      "bytes": 26713,
-      "sha256": "e3fa0cc43bb12f3f33fce2f31323efd4ece7eb8505c4b97fedb9c2926cb7f1b3"
+      "altura": 913,
+      "bytes": 46030,
+      "sha256": "28c1d9a19f9b37a3aea04fc31c12ca7599083540333de5fbd2491309bf312bed"
     },
     "foco_mesa_barra__1440__claro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 104135,
-      "sha256": "e39fb6391429e6e3187cd38b667f167756e661253b981eb449c477f8104995f9"
+      "bytes": 89209,
+      "sha256": "3cb65a4e2dc836aad5f4a578b8514909a7ae8d92b23c47900bd98550b09cd294"
     },
     "foco_mesa_barra__1440__escuro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 106656,
-      "sha256": "e986005730084ce12e79ddac6b879838b5c132e9d8156741896115024d7e1c76"
+      "bytes": 89469,
+      "sha256": "aedd92f1fc1b5146715f13e6aef5aed8ccc5efea39ca36d51094be68150496b9"
     },
     "foco_mesa_botao__1440__claro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 104139,
-      "sha256": "6eb59ff445e443ca3defecaf44e1f4163cdd0f5104cf52bca7aa611825988c43"
+      "bytes": 89416,
+      "sha256": "a7041fa720dac4b4d0f8f5af1fd4b5181f89d69fb679e7ff66ca7153940b6bf5"
     },
     "foco_mesa_botao__1440__escuro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 106619,
-      "sha256": "a869c4ebdda888fbeb4a0e0231132ad7c3a114daeee676a2a2724438896035a5"
+      "bytes": 89674,
+      "sha256": "d04490a3b26d644731c9f11b8f39440852db1d5a3e663d3d2186de3d8e4cfe07"
     },
     "foco_mesa_botao__375__claro": {
       "largura": 375,
-      "altura": 1116,
-      "bytes": 74188,
-      "sha256": "781d2695df9e8458af0f6225f07f0c182c1e2384cce33f2d453bc0a97fdbc8be"
+      "altura": 905,
+      "bytes": 57731,
+      "sha256": "990d870c9a2a5308dae2964e34bb9dca7252881c213a292dd35a834307bed7d8"
     },
     "foco_mesa_botao__375__escuro": {
       "largura": 375,
-      "altura": 1124,
-      "bytes": 74786,
-      "sha256": "614d959816d6dd3ba662b866c9283e5ce3adefb8f13dd4bbd7ba5ea31f0e7419"
+      "altura": 905,
+      "bytes": 57894,
+      "sha256": "e3260bd0e52fd5da74f10c1828846641b50537a79140ae71578e7174c9bab62d"
     },
     "foco_mesa_campo__1440__claro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 104107,
-      "sha256": "238ef063222876271efe4034ec4cf42b44c8c7cd0f6ee2e8db55fa5d2a10c6f9"
+      "bytes": 89359,
+      "sha256": "52a5db418c1123c6a3a86c735e9cba8cd04c2e8f8107c202b25e1caca08de249"
     },
     "foco_mesa_campo__1440__escuro": {
       "largura": 1440,
       "altura": 900,
-      "bytes": 106580,
-      "sha256": "13422fbf009e20d5ad47f3008e1b144ad5f7c08d810010fef879830ee30224f3"
+      "bytes": 89639,
+      "sha256": "e5d2df9c510a83d1247b3b36f6d9765643b12cb5f6b1a37cd54ef3086c25a7df"
     },
     "foco_mesa_campo__375__claro": {
       "largura": 375,
-      "altura": 1116,
-      "bytes": 76124,
-      "sha256": "56d0f8ee0fb6d9267f6302c932ae7ec46414f4c27ae6c444b8950879c0c6a80b"
+      "altura": 905,
+      "bytes": 57688,
+      "sha256": "db83b3b75be9911034fe558475a63850fcb6f63e8d20dfd750868bac7d161cfd"
     },
     "foco_mesa_campo__375__escuro": {
       "largura": 375,
-      "altura": 1124,
-      "bytes": 76796,
-      "sha256": "73e2c65a4fabaeee1574549d9449c639c9e42b369a78ed9e788d14e66e7bd700"
+      "altura": 905,
+      "bytes": 57861,
+      "sha256": "ffdb86d2251ef0546ca66791f2b602ec84a7d763e651fcb0c43bbc84526953fb"
     },
     "gerenciar__1024__claro": {
       "largura": 1024,
       "altura": 1313,
-      "bytes": 109758,
-      "sha256": "efd89bbee2cda944e0e1185b215139c42da195377ca44da1c9807bed67b3c327"
+      "bytes": 110601,
+      "sha256": "17abc16f9c54bf2c57553cc7e165a06595af7ca91525b1c9a066d7f79cd1b945"
     },
     "gerenciar__1024__escuro": {
       "largura": 1024,
       "altura": 1313,
-      "bytes": 110290,
-      "sha256": "016bac6b840202c91b76bf21e1ec0c759a45269ee85a2befc7c975e0bb113d7c"
+      "bytes": 110907,
+      "sha256": "6bf10275a8fe6e6403d4b7bfe2a8e3f5113a3f883be71c34589da8846ad4075c"
     },
     "gerenciar__1440__claro": {
       "largura": 1440,
       "altura": 1290,
-      "bytes": 128480,
-      "sha256": "bb445b7c1a6146b0c5bbc0563e24542e6633d1ee9cb9c573a36b262767d1b34f"
+      "bytes": 128988,
+      "sha256": "03442379688bba39ee8f8cbab8f006bb801c8d0871f2f0765fffa9419494f23e"
     },
     "gerenciar__1440__escuro": {
       "largura": 1440,
       "altura": 1290,
-      "bytes": 129179,
-      "sha256": "fc373c06f263af3f73c229784dd4320694aaedbec92006299a45801a3c01f75e"
+      "bytes": 129523,
+      "sha256": "efb0cd8cac9c0210966dffd10a3cec8fed7d6f2f706e2e0889a49528958e7625"
     },
     "gerenciar__375__claro": {
       "largura": 375,
       "altura": 1716,
-      "bytes": 99567,
-      "sha256": "0df5efbaa91cea2920b31f568cec249933b514bb74de64122c1def074dccc217"
+      "bytes": 99832,
+      "sha256": "bdcf921c14dd1f579fa009bff4efafabfea12f1f9795a9989e96ca7bcfb11400"
     },
     "gerenciar__375__escuro": {
       "largura": 375,
       "altura": 1716,
-      "bytes": 99581,
-      "sha256": "9eae84fe666b95ebcd7a9652489113abafa23e4c938e40b01374a51b9415071f"
+      "bytes": 99531,
+      "sha256": "ec822c3a56e55f00fdfc212fe3301f513454cd30d19384a3655208816db5c023"
     },
     "gerenciar__768__claro": {
       "largura": 768,
       "altura": 1383,
-      "bytes": 109822,
-      "sha256": "60bfa5ddc06ce076e2e0d0e56163e508b3c03567fe06a524a5628c58576dbbad"
+      "bytes": 110247,
+      "sha256": "886e53d74a8a7b5272ad3c8c5e6a67717f03f4242e3fcaa74bf7f78364ee999c"
     },
     "gerenciar__768__escuro": {
       "largura": 768,
       "altura": 1383,
-      "bytes": 109975,
-      "sha256": "5e88d71c502c6e6a79c4eeb668ae3016dcf397d43d37acd9ac3feb6ccca38446"
+      "bytes": 110679,
+      "sha256": "f922027cd9fcf33768247f3d109e262a820472e1358e911a419fd70d8046854b"
     },
     "inicio__1024__claro": {
       "largura": 1024,
       "altura": 1298,
-      "bytes": 137777,
-      "sha256": "64ab3ccd3bdfb0df483d8a49734800acc1f81d81a0be4ca9d0392b90a3ce6e92"
+      "bytes": 138321,
+      "sha256": "5a7e5499d681b390db9c6b1f1a6ca654f2555865cd478b8490d1b5efb1dba4c5"
     },
     "inicio__1024__escuro": {
       "largura": 1024,
       "altura": 1298,
-      "bytes": 137691,
-      "sha256": "5f693acebeae0c9f7d2ac929b20beda0b1242e10ed61cf59af7bb0387d455ce4"
+      "bytes": 138196,
+      "sha256": "30ed431561d7edae4a7202c01d7432c8ba8bec43969198739e6b888e330cddf8"
     },
     "inicio__1440__claro": {
       "largura": 1440,
       "altura": 1199,
-      "bytes": 155506,
-      "sha256": "e619974fba71d5dbee4b9899bb656d0e145781b7d9cfb8d10c3ac7aaaa733926"
+      "bytes": 155819,
+      "sha256": "1b04b02b91cec46d71c8c4b3670757ca5c1c84ac7dd589f83d94f5fd34889388"
     },
     "inicio__1440__escuro": {
       "largura": 1440,
       "altura": 1199,
-      "bytes": 155495,
-      "sha256": "5532045c4df666012f60176b0290ed422ec33906eede61d47c7c39d966b20b93"
+      "bytes": 155413,
+      "sha256": "5b12a5866b780a93d737d79599f98df8d6b8690bdbb97a2aad876187a09c7e03"
     },
     "inicio__375__claro": {
       "largura": 375,
       "altura": 1831,
-      "bytes": 125600,
-      "sha256": "58818626ef600616e53f8afc16b1d90f0263d10d3ca5eb3b8f69f780c2f05441"
+      "bytes": 125824,
+      "sha256": "4a51fe29a885eddb2c0707f2a80e906e61197375e5ceeff590738184e1fe9656"
     },
     "inicio__375__escuro": {
       "largura": 375,
       "altura": 1831,
-      "bytes": 125215,
-      "sha256": "97100a3882cb51ae2059b5c2f5d8ebbd5b485724b41cf252f05895de8842d4d2"
+      "bytes": 125547,
+      "sha256": "73c46d7a145d827fc88ac96bc70ae636088cd46e0a4e4331c36df9f70f80e0ff"
     },
     "inicio__768__claro": {
       "largura": 768,
       "altura": 1604,
-      "bytes": 143453,
-      "sha256": "7b9a8461c44de3de2582e938ff3347ca732fafaf4b7725f689094fed0f159e81"
+      "bytes": 143247,
+      "sha256": "e5054c6a95a385a4e8aef30a1d99c3a6c8edd9e3f2a9dadbf4571d706cfe4076"
     },
     "inicio__768__escuro": {
       "largura": 768,
       "altura": 1604,
-      "bytes": 142407,
-      "sha256": "bfc7f6c14670041e104d0a4b13a3dce0bba041964b09730fdf7e6dfc8cc1b3ac"
+      "bytes": 142402,
+      "sha256": "a7461796838d4723ffe1e93dc99909afa25f411e1db1db1ffbf6bf92bea1d777"
+    },
+    "nova__1024__claro": {
+      "largura": 1024,
+      "altura": 797,
+      "bytes": 68630,
+      "sha256": "b8c743b477aa971fe9fce24914e17f82b4572030e1b1750f2933b631c3c3609d"
+    },
+    "nova__1024__escuro": {
+      "largura": 1024,
+      "altura": 797,
+      "bytes": 68839,
+      "sha256": "8aa050f444e9e55cf452f52c10249c1eb4f809dfd9f8831ebc372a62c355bdfe"
+    },
+    "nova__1440__claro": {
+      "largura": 1440,
+      "altura": 900,
+      "bytes": 88505,
+      "sha256": "7655ffc58fa71aea3c838b3cf2d2bf90e2ea32d4b959786776e56c75aa65158a"
+    },
+    "nova__1440__escuro": {
+      "largura": 1440,
+      "altura": 900,
+      "bytes": 88761,
+      "sha256": "ec456542b65cf7904f29da20435a95993d18c50ef540b2df8b4dfec6081d1782"
+    },
+    "nova__375__claro": {
+      "largura": 375,
+      "altura": 905,
+      "bytes": 56864,
+      "sha256": "4dfe6bc937cec79a1de4ffc18200082a97b240156ad53ab9bd9f8918ec5daa08"
+    },
+    "nova__375__escuro": {
+      "largura": 375,
+      "altura": 905,
+      "bytes": 57005,
+      "sha256": "52aa81fbdcffd0aabc548555ac36ecb1b5d6370597d2c05ed70c1aab817f76a1"
+    },
+    "nova__768__claro": {
+      "largura": 768,
+      "altura": 1024,
+      "bytes": 66322,
+      "sha256": "e87d0f1b284ee9b67e38297323f9ab5f012b25f624f31838368a82da9f5813de"
+    },
+    "nova__768__escuro": {
+      "largura": 768,
+      "altura": 1024,
+      "bytes": 66238,
+      "sha256": "6a71beb4f792ea29d44baa37981e4ffba4fe9cb74939c9ff8a0a6c5c37a8aff9"
     },
     "quadros__1024__claro": {
       "largura": 1024,
       "altura": 2675,
-      "bytes": 267713,
-      "sha256": "f7c1c5a983943b6ac3e5f0d07fafd0272fec188d0c09915aba287bc78f47bdf5"
+      "bytes": 268721,
+      "sha256": "51f07ebfa7e718941a773ee185a6974015a91772a3d3c58372d94203d1988921"
     },
     "quadros__1024__escuro": {
       "largura": 1024,
       "altura": 2675,
-      "bytes": 268014,
-      "sha256": "e3453458f1de4bc5d0525a1c44eafac51c7ee1896777225c218c2994d40f7e68"
+      "bytes": 268529,
+      "sha256": "cd5b6a662fa534f2f0fa4234c2f952352c18d9a929af12e63dd8cf91bae64895"
     },
     "quadros__1440__claro": {
       "largura": 1440,
       "altura": 2574,
-      "bytes": 280652,
-      "sha256": "88fa4cb81df7ce15692075aced39fa1083a826bc3e95f02f2d1c56164b60550d"
+      "bytes": 282417,
+      "sha256": "888382c87b4c9d246ee2f90b1e8c1fd3a4624fffe76aae8ad1ba6ef349416061"
     },
     "quadros__1440__escuro": {
       "largura": 1440,
       "altura": 2574,
-      "bytes": 281110,
-      "sha256": "4e9539ec78f1baaa30eb02157e691122785797b096402f66c88ee026f7ec7b18"
+      "bytes": 282628,
+      "sha256": "4080b4b58b08a5cd399baba795c0f38dab73474cb29a4ba6b395c8ee93987182"
     },
     "quadros__375__claro": {
       "largura": 375,
       "altura": 4019,
-      "bytes": 246494,
-      "sha256": "f46e1084708a973d11abdb86ea7720be80041a3030008529b4a3061b2b1c464c"
+      "bytes": 248345,
+      "sha256": "cda9064f8ab28dafcd53f01e3a542d31e736b10abf80d56b8421241c9d8dd2ae"
     },
     "quadros__375__escuro": {
       "largura": 375,
       "altura": 4019,
-      "bytes": 245561,
-      "sha256": "bec26342012786a8abe1acf54070ede51f920447a8452cba250a140e6f0ea379"
+      "bytes": 247686,
+      "sha256": "dfdf9143eaca34507ee30c4cf66906075f87d841aaa30ea2cba9a272872b82b7"
     },
     "quadros__768__claro": {
       "largura": 768,
       "altura": 3255,
-      "bytes": 261535,
-      "sha256": "7dc8412936032e2a432d53e5257e71b6bac8077012d1ac1feb51d58ff339ab1a"
+      "bytes": 263551,
+      "sha256": "9de87bdd4c59a14e2607ffee6a15dee9c2f54589dfc58c79d79ca5dd2d27d2ba"
     },
     "quadros__768__escuro": {
       "largura": 768,
       "altura": 3255,
-      "bytes": 260622,
-      "sha256": "50976a76530515e7b98c2a60c34f3c3b924c16294855cebec2317449cf4cc74d"
+      "bytes": 263323,
+      "sha256": "5976db5912aa16841b58e870b59b18110cbbe883b3db8a4d87ed7b53458aa356"
     },
     "quadros_linha__1024__claro": {
       "largura": 1024,
-      "altura": 1938,
-      "bytes": 206046,
-      "sha256": "6461e3ea5383ff135c842d6b59ff42ba2a4f65c22b3a7bbceedd8f9f8feca8dd"
+      "altura": 1372,
+      "bytes": 181950,
+      "sha256": "c6d090ffe6e19b250e9c3daa2843ec68317a8d75cf60e639fb3ed6ac22f187f5"
     },
     "quadros_linha__1024__escuro": {
       "largura": 1024,
-      "altura": 1938,
-      "bytes": 206141,
-      "sha256": "e7baa09ca91454f5271c62e0ab2d7af37ff3eb412009896b9792f850fd1c0868"
+      "altura": 1372,
+      "bytes": 182820,
+      "sha256": "ad54b1e3c0f7105a81432a1893ef311c1b7369e398162a7e48cf8ccf3441b43c"
     },
     "quadros_linha__1440__claro": {
       "largura": 1440,
-      "altura": 1890,
-      "bytes": 227028,
-      "sha256": "5804238b3b8e1ac5cd27cd09a79cbfb3b2e6a0f0ed4111582cfeae68d4d65621"
+      "altura": 1324,
+      "bytes": 199587,
+      "sha256": "793e38883b0ad7487d074ff79e547d3e3ece9999579a57a0528f48700ae4e580"
     },
     "quadros_linha__1440__escuro": {
       "largura": 1440,
-      "altura": 1890,
-      "bytes": 227082,
-      "sha256": "2d234f5c58a14ba2bc2e87e75f860cd482b12b0950fe6cb9b06d296e871933b2"
+      "altura": 1324,
+      "bytes": 200728,
+      "sha256": "d8179a614ed1f4b4e09d59910b0b45da3670bdfcc8f54737dc949650a40a9f10"
     },
     "quadros_linha__375__claro": {
       "largura": 375,
-      "altura": 2175,
-      "bytes": 165053,
-      "sha256": "ccc90dc7bc2e9e1193092848c4ca6a9ab1ca2dd0ae4f61ca90b4a72b2bbabc35"
+      "altura": 2388,
+      "bytes": 179631,
+      "sha256": "461f77970369220d7a7441bdebe693ae3835d95bff84e6407f60fdb3ebf77100"
     },
     "quadros_linha__375__escuro": {
       "largura": 375,
-      "altura": 2175,
-      "bytes": 164147,
-      "sha256": "3afe80e5e1b3afa46a5f4488eb9f3dd1c4c8b98ac5cb678058ee1b9ebc7845f4"
+      "altura": 2388,
+      "bytes": 179840,
+      "sha256": "5a0b4eb21c1932191fb96b98fbf9a6ba479e43e7c07ca50924b381e092364716"
     },
     "quadros_linha__768__claro": {
       "largura": 768,
-      "altura": 2009,
-      "bytes": 204821,
-      "sha256": "637d937680cdf2fb9dbbf830e94c5d19a2ecd08250bc4ff8ee414a974eff557b"
+      "altura": 1547,
+      "bytes": 187403,
+      "sha256": "7846b5c0f4e0cc758e5fddfdc17287d67c8c332c2c76d5a2751626641a3833f0"
     },
     "quadros_linha__768__escuro": {
       "largura": 768,
-      "altura": 2009,
-      "bytes": 204347,
-      "sha256": "9ecc1eee49b2195ba71b0bdae9663f7d6994fc71e5017840fcc372ea649a309a"
+      "altura": 1547,
+      "bytes": 188088,
+      "sha256": "63e0934f0da307660e21cebd2014346aae2f08c277ee451e8f17a92b03a84773"
     },
     "quadros_mapa__1024__claro": {
       "largura": 1024,
-      "altura": 1660,
-      "bytes": 205646,
-      "sha256": "62680aeba5da88f8def1c0e18847a8191f5b70e428cb608d75107932c90cbbf9"
+      "altura": 1971,
+      "bytes": 204383,
+      "sha256": "33830146c8ed1a9f21432c49afd839d37ec56fd749686ead813466c759b7cdb0"
     },
     "quadros_mapa__1024__escuro": {
       "largura": 1024,
-      "altura": 1660,
-      "bytes": 206406,
-      "sha256": "871e252eedaa95bed69727c53d3577772ab180a6438eea99b04bc4825de928a8"
+      "altura": 1971,
+      "bytes": 205057,
+      "sha256": "461f6e8548badd8ecdfdf0b5bfdb0a971eeabef836830259cdf32102c2e8df87"
     },
     "quadros_mapa__1440__claro": {
       "largura": 1440,
-      "altura": 1559,
-      "bytes": 227145,
-      "sha256": "88811cb0cb61846c130e1aaad1d3bddd492bcbb49efda5dedf8ffed22bc70d46"
+      "altura": 1862,
+      "bytes": 223199,
+      "sha256": "0cabe3e3d52f3b6a9924d4251679147adf3015fcc3abd7a54c115c34f6b0e6d1"
     },
     "quadros_mapa__1440__escuro": {
       "largura": 1440,
-      "altura": 1559,
-      "bytes": 228838,
-      "sha256": "33a56f7ab655c5cba51dfd4b38dd6b75dfb537c4acf0ece6798b01695c3a430a"
+      "altura": 1862,
+      "bytes": 224128,
+      "sha256": "68085c91870e550251c6f4f0a4e857d0a89a6b8c1bba9a1d08fa4cf24d8fcc15"
     },
     "quadros_mapa__375__claro": {
       "largura": 375,
       "altura": 1934,
-      "bytes": 155925,
-      "sha256": "f65969ba4d20bc31c4d2a9afc62ec2acedb5c218f390439a508dfcf26230cb17"
+      "bytes": 156833,
+      "sha256": "694199f8a90e5c4670ed2adfdcc22a556eb62529e62a14d16788d8aa28b58687"
     },
     "quadros_mapa__375__escuro": {
       "largura": 375,
       "altura": 1934,
-      "bytes": 155916,
-      "sha256": "2a04f115338f6b0a46da18933c2347a11318915c58b7b9cf182570f4d12d4321"
+      "bytes": 156537,
+      "sha256": "43129c2b096af719ef89cb6eae73a917c7bac47757a0d4e6acc64eeea7fc0f2a"
     },
     "quadros_mapa__768__claro": {
       "largura": 768,
-      "altura": 2070,
-      "bytes": 199528,
-      "sha256": "ac9d39c2970865562ea3855c40f8daa969d8507f942cd059aded02fe05dcfed7"
+      "altura": 1555,
+      "bytes": 170282,
+      "sha256": "a6e9b91b22dcdbe0899ac601889998e751a1b14560766596eefd10321a7e1f1e"
     },
     "quadros_mapa__768__escuro": {
       "largura": 768,
-      "altura": 2070,
-      "bytes": 200210,
-      "sha256": "1ee1e1e97171c7012cd285b7b3e03d16f9f0c648f8d724fa18e8cb4c07e1397d"
+      "altura": 1555,
+      "bytes": 170369,
+      "sha256": "249fe0772813a37336feb8e653120c69fbaa8dbd80890e564d81ae42f362361c"
     }
   }
 }

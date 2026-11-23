@@ -8,7 +8,6 @@
     registros_achados:'Registros dos achados', revisoes_humanas:'Conferências humanas', conversas:'Conversas',
     caderno:'Trechos com fonte', diligencias:'Diligências', notas:'Notas do caderno',
     quadros_evidencia:'Quadros de evidência', fontes_web:'Fontes web capturadas', rascunhos:'Rascunhos'};
-  const admin = document.body.dataset.papel !== 'convidado';
   // A permanent delete left half done: only the next start of the Mesa settles it, and until then the server refuses to restore or delete
   // the item (and the other items of the same investigation). The text is the server's, kept whole.
   const PENDING = 'Um apagamento definitivo desta apuração ficou pela metade e só se resolve na próxima partida da Mesa. Até lá, não é possível restaurar nem apagar este item; feche os programas que usem esses arquivos e reinicie a Mesa.';
@@ -83,7 +82,7 @@
       const caseTitle = data.casos.find(c => c.id === item.caso)?.titulo || data.lixeira.find(c => c.tipo === 'caso' && c.caso === item.caso)?.titulo || 'Apuração preservada';
       const pending = item.apagamento_pendente === true;
       const actions = [{text:'Restaurar', kind:'secondary', blocked:blocked || pending, run:() => mutate('restaurar', {item:item.id})}];
-      if (admin) actions.push({text:'Apagar definitivamente…', kind:'danger', blocked:pending, run:button => openDelete(item, title, button)});
+      if (window.Sessao.pode('lixeira-apagar')) actions.push({text:'Apagar definitivamente…', kind:'danger', blocked:pending, run:button => openDelete(item, title, button)});
       const line = row(title, `${caseTitle} · Excluído em ${date}${blocked ? ' · Restaure a apuração primeiro' : ''}`, actions, item);
       if (pending) { const note = element('p', t(PENDING), 'notice'); note.setAttribute('role', 'status'); line.firstChild.append(note); }
       $('gerenciar-lixeira').append(line);

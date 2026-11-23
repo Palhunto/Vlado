@@ -18,31 +18,30 @@
   <main id="conteudo" class="entrar-cartao">
     <header class="entrar-topo">
       <span class="brand" translate="no">Vlado<span>.</span></span>
-      <div class="entrar-preferencias">
-        <button id="entrar-idioma" class="secondary" type="button" translate="no">English</button>
-        <button id="entrar-tema" class="secondary" type="button">Modo claro</button>
-      </div>
+      <p class="entrar-frase" data-t="frase_marca">Apuração documental com a fonte de cada afirmação à vista.</p>
     </header>
 
     <section id="entrar-secao" hidden aria-labelledby="entrar-titulo">
       <h1 id="entrar-titulo" data-t="titulo_entrar">Entrar na Mesa de apuração</h1>
-      <p class="small" data-t="intro_entrar">Use o login e a senha da sua conta.</p>
       <form id="entrar-form" novalidate>
-        <label for="entrar-login"><span data-t="rotulo_login">Login</span>
+        <label for="entrar-login"><span data-t="rotulo_email_login">E-mail ou login</span>
           <input id="entrar-login" name="username" type="text" autocomplete="username" autocapitalize="none"
                  autocorrect="off" spellcheck="false" inputmode="text" maxlength="64" required>
         </label>
-        <label for="entrar-senha"><span data-t="rotulo_senha">Senha</span>
-          <span class="entrar-senha-linha">
-            <input id="entrar-senha" name="password" type="password" autocomplete="current-password"
-                   maxlength="256" required>
-            <button class="secondary entrar-mostrar" type="button" aria-pressed="false" aria-controls="entrar-senha"
-                    data-t="mostrar">Mostrar</button>
-          </span>
-        </label>
+        <div class="entrar-campo">
+          <label for="entrar-senha"><span data-t="rotulo_senha">Senha</span>
+            <span class="entrar-senha-linha">
+              <input id="entrar-senha" name="password" type="password" autocomplete="current-password"
+                     maxlength="256" required>
+              <button class="secondary entrar-mostrar" type="button" aria-pressed="false" aria-controls="entrar-senha"
+                      data-t="mostrar">Mostrar</button>
+            </span>
+          </label>
+          <button id="entrar-esqueci" class="entrar-link" type="button" data-t="esqueci_link" hidden>Esqueci a senha</button>
+        </div>
         <button id="entrar-enviar" type="submit" data-t="botao_entrar">Entrar</button>
       </form>
-      <p class="small" data-t="esqueci">Esqueceu a senha? Peça à administração um novo link de acesso.</p>
+      <p id="entrar-esqueci-texto" class="small" data-t="esqueci">Esqueceu a senha? Fale com quem administra o serviço.</p>
     </section>
 
     <section id="ativar-secao" hidden aria-labelledby="ativar-titulo">
@@ -100,7 +99,127 @@
       <p id="primeiro-pronto" hidden><a href="/entrar" data-t="ir_entrar_conta">Entrar com a nova conta</a></p>
     </section>
 
+    <section id="esqueci-secao" hidden aria-labelledby="esqueci-titulo">
+      <h1 id="esqueci-titulo" data-t="esqueci_titulo">Criar uma senha nova</h1>
+      <form id="esqueci-form" novalidate>
+        <label for="esqueci-email"><span data-t="rotulo_email">E-mail</span>
+          <input id="esqueci-email" name="email" type="email" autocomplete="email" autocapitalize="none" autocorrect="off"
+                 spellcheck="false" inputmode="email" maxlength="254" required>
+        </label>
+        <button id="esqueci-enviar" type="submit" data-t="botao_enviar_link">Enviar link</button>
+      </form>
+      <div id="esqueci-enviado" hidden>
+        <p id="esqueci-resposta" role="status" data-t="esqueci_enviado">Se houver uma conta com esse e-mail, enviamos um link para criar uma senha nova. Ele vale por 1 hora e uma única vez. Confira também a caixa de spam.</p>
+        <p class="small" data-t="esqueci_nota">Entra com um login antigo, sem e-mail? Fale com quem administra o serviço.</p>
+      </div>
+      <p class="entrar-links"><a id="esqueci-voltar" href="/entrar" data-t="voltar_entrada">Voltar para a entrada</a></p>
+    </section>
+
+    <section id="pendencia-secao" hidden></section>
+
+    <section id="fator-secao" hidden aria-labelledby="fator-titulo">
+      <h1 id="fator-titulo" data-t="fator_titulo">Confirme que é você</h1>
+      <p id="fator-texto" data-t="fator_texto">Digite o código de 6 dígitos do aplicativo autenticador.</p>
+      <form id="fator-form" novalidate>
+        <div class="entrar-grupo">
+        <label for="fator-codigo"><span id="fator-rotulo" data-t="fator_rotulo">Código do aplicativo</span>
+          <input id="fator-codigo" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" autocapitalize="none"
+                 autocorrect="off" spellcheck="false" maxlength="40" required>
+        </label>
+        <button id="fator-reserva" class="entrar-link-linha" type="button" data-t="fator_usar_reserva">Usar um código de reserva</button>
+        <p class="small" data-t="fator_apoio">Você tem 5 minutos para digitar o código.</p>
+        </div>
+        <button id="fator-enviar" type="submit" data-t="botao_entrar">Entrar</button>
+      </form>
+      <p class="entrar-links"><button id="fator-outra" class="entrar-link-linha" type="button" data-t="fator_outra">Entrar com outra conta</button></p>
+    </section>
+
+    <section id="aceitar-secao" hidden aria-labelledby="aceitar-titulo">
+      <div id="aceitar-espera"></div>
+      <div id="aceitar-cartao" hidden>
+        <p id="aceitar-rubrica" class="entrar-rubrica" data-t="rubrica_convite">CONVITE</p>
+        <h1 id="aceitar-titulo"></h1>
+        <p id="aceitar-texto"></p>
+        <p id="aceitar-validade" class="small"></p>
+        <form id="aceitar-form" novalidate>
+          <input id="aceitar-email" class="sr-only" name="username" type="text" autocomplete="username" readonly tabindex="-1" aria-hidden="true" translate="no">
+          <label for="aceitar-nome"><span data-t="rotulo_seu_nome">Seu nome</span>
+            <input id="aceitar-nome" name="name" type="text" autocomplete="name" maxlength="120" required>
+          </label>
+          <label for="aceitar-senha"><span data-t="rotulo_crie_senha">Crie uma senha</span>
+            <span class="entrar-senha-linha">
+              <input id="aceitar-senha" name="new-password" type="password" autocomplete="new-password"
+                     minlength="12" maxlength="256" required aria-describedby="aceitar-dica">
+              <button class="secondary entrar-mostrar" type="button" aria-pressed="false" aria-controls="aceitar-senha"
+                      data-t="mostrar">Mostrar</button>
+            </span>
+          </label>
+          <p id="aceitar-dica" class="small" data-t="dica_senha_convite">De 12 a 256 caracteres. Pode colar ou usar o gerenciador de senhas.</p>
+          <label id="aceitar-termos-rotulo" class="entrar-termos" for="aceitar-termos" hidden>
+            <input id="aceitar-termos" type="checkbox"><span><span data-t="termos_antes">Li e aceito os </span><a href="/termos" target="_blank" rel="noopener" data-t="termos_uso" data-nova-aba>termos de uso</a><span data-t="termos_e"> e a </span><a href="/privacidade" target="_blank" rel="noopener" data-t="termos_priv" data-nova-aba>política de privacidade</a><span data-t="termos_fim"> do teste.</span></span>
+          </label>
+          <button id="aceitar-enviar" type="submit" data-t="botao_aceitar">Criar conta e entrar</button>
+          <div class="entrar-aviso">
+            <p class="entrar-aviso-titulo" data-t="aviso_titulo">Antes de começar</p>
+            <p class="small" data-t="aviso_teste">O Vlado está em teste. Use só documentos públicos: trechos são enviados ao provedor de IA.</p>
+          </div>
+        </form>
+        <p id="aceitar-sair" class="entrar-links" hidden><a href="/entrar" data-t="ir_entrada">Ir para a entrada</a></p>
+      </div>
+    </section>
+
+    <section id="redefinir-secao" hidden aria-labelledby="redefinir-titulo">
+      <h1 id="redefinir-titulo" data-t="titulo_redefinir">Crie uma senha nova</h1>
+      <form id="redefinir-form" novalidate>
+        <input id="redefinir-usuario" class="sr-only" name="username" type="text" autocomplete="username" readonly tabindex="-1" aria-hidden="true" translate="no">
+        <label for="redefinir-senha"><span data-t="rotulo_senha_nova">Senha nova</span>
+          <span class="entrar-senha-linha">
+            <input id="redefinir-senha" name="new-password" type="password" autocomplete="new-password"
+                   minlength="12" maxlength="256" required aria-describedby="redefinir-dica">
+            <button class="secondary entrar-mostrar" type="button" aria-pressed="false" aria-controls="redefinir-senha"
+                    data-t="mostrar">Mostrar</button>
+          </span>
+        </label>
+        <p id="redefinir-dica" class="small" data-t="dica_senha_convite">De 12 a 256 caracteres. Pode colar ou usar o gerenciador de senhas.</p>
+        <div id="redefinir-codigo-campo" hidden>
+          <p class="small" data-t="fator_redefinir_texto">Esta conta tem segundo fator. Digite o código do aplicativo ou um código de reserva.</p>
+          <label for="redefinir-codigo"><span data-t="fator_redefinir_rotulo">Código do aplicativo ou de reserva</span>
+            <input id="redefinir-codigo" name="otp" type="text" autocomplete="one-time-code" autocapitalize="none" autocorrect="off"
+                   spellcheck="false" maxlength="40">
+          </label>
+        </div>
+        <button id="redefinir-enviar" type="submit" data-t="botao_redefinir">Salvar a senha nova</button>
+      </form>
+      <div id="redefinir-pronto" hidden>
+        <p role="status" data-t="redefinido">Senha nova salva. As sessões abertas desta conta foram encerradas. Entre com a senha nova.</p>
+        <button id="redefinir-entrar" type="button" data-t="botao_entrar">Entrar</button>
+      </div>
+      <div id="redefinir-sem-efeito" hidden>
+        <p data-t="link_sem_efeito_texto">Link inválido, usado ou vencido. Peça outro em Esqueci a senha.</p>
+        <p class="entrar-links"><a id="redefinir-outro" href="/entrar" data-t="pedir_outro">Pedir outro link</a></p>
+      </div>
+    </section>
+
+    <section id="confirmar-secao" hidden aria-labelledby="confirmar-titulo">
+      <div id="confirmar-espera"></div>
+      <div id="confirmar-cartao" hidden>
+        <h1 id="confirmar-titulo"></h1>
+        <p id="confirmar-texto" role="status"></p>
+        <p class="entrar-links"><a id="confirmar-destino" href="/"></a></p>
+      </div>
+    </section>
+
     <p id="entrar-mensagem" class="entrar-mensagem" role="alert" aria-live="assertive" tabindex="-1" hidden></p>
+    <div id="entrar-teste" class="entrar-aviso entrar-teste" hidden>
+      <p class="entrar-aviso-titulo" data-t="teste_titulo">O Vlado está em teste com redações convidadas</p>
+      <p class="small" data-t="teste_texto">O acesso chega por convite, no e-mail da sua redação. Recebeu um? Abra o link do convite para criar a conta.</p>
+    </div>
+    <footer class="entrar-rodape">
+      <p class="small" data-t="rodape_texto">Use só documentos públicos. Trechos são enviados ao provedor de IA para análise.</p>
+      <p class="entrar-rodape-links small">
+        <button id="entrar-idioma" class="entrar-link-rodape" type="button" translate="no">English</button><span aria-hidden="true"> · </span><button id="entrar-tema" class="entrar-link-rodape" type="button">Modo claro</button>
+      </p>
+    </footer>
     <noscript><p>Ative o JavaScript para entrar. / Enable JavaScript to sign in.</p></noscript>
   </main>
 </body>

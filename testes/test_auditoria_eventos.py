@@ -10,6 +10,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from collections import Counter
 from contextlib import redirect_stderr
 from datetime import datetime, timedelta, timezone
 from io import StringIO
@@ -20,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acesso
 import interface_pesquisa
 import registro_acesso as reg
+from relogio_fixo import fixar, hoje_as, relogio
 from test_acesso import SENHA
 from test_autorizacao import Http, ORIGEM
 
@@ -54,7 +56,7 @@ class Auditoria(Http):
         reg._AGREGADOS.clear()
         self.addCleanup(reg._AGREGADOS.clear)
         super().setUp()
-        self.inicio = len(self.todas())
+        self.marcar()
 
     def todas(self) -> list[dict]:
         saida = []
@@ -62,8 +64,21 @@ class Auditoria(Http):
             saida += [json.loads(l) for l in arquivo.read_text(encoding='ascii').splitlines()]
         return saida
 
+    def brutas(self) -> list[str]:
+        saida = []
+        for arquivo in reg.arquivos(self.pasta_registro):
+            saida += arquivo.read_text(encoding='ascii').splitlines()
+        return saida
+
     def novas(self, evento=None, **filtros) -> list[dict]:
-        linhas = self.todas()[self.inicio:]
+        """As linhas gravadas depois do último `marcar()`, separadas pelo CONTEÚDO (uma linha por vez que já estava lá sai da conta), não
+        pela posição: o registro tem um arquivo por dia, e um relógio de teste num dia diferente do real põe linhas novas antes das antigas."""
+        vistas, linhas = Counter(self._vistas), []
+        for bruta in self.brutas():
+            if vistas[bruta] > 0:
+                vistas[bruta] -= 1
+            else:
+                linhas.append(json.loads(bruta))
         return [l for l in linhas if (evento is None or l['evento'] == evento)
                 and all(l.get(k) == v for k, v in filtros.items())]
 
@@ -82,7 +97,7 @@ class Auditoria(Http):
         return self.novas(evento)
 
     def marcar(self):
-        self.inicio = len(self.todas())
+        self._vistas = Counter(self.brutas())
 
 
 class AutenticacaoTest(Auditoria):
@@ -134,6 +149,7 @@ class AutenticacaoTest(Auditoria):
         self.assertEqual((ultima['motivo'], ultima['conta']), ('bloqueado', self.bia_id))
 
     def test_limite_de_tentativas_por_ip_vira_uma_linha_agregada_por_ip_e_minuto(self):
+        fixar(self)  # a linha é por minuto: nada de cruzar a virada no meio do teste (só a hora; o dia é o de hoje)
         acesso.limpar_limites()
         for numero in range(45):
             self.publico('entrar', {'login': f'ninguem{numero}', 'senha': SENHA})
@@ -210,16 +226,46 @@ class DiaCheioTest(Auditoria):
         convite = self.novas('convite_enviado')[0]
         self.assertEqual((convite['por'], convite['papel'], convite['operacao']), (self.admin_id, 'dono', 'equipe-convidar'))
 
-    def test_inundar_com_pedidos_anonimos_nao_chega_perto_do_teto(self):
-        """Os 300 mil pedidos da prova da revisão: do mesmo IP, agora, são poucas linhas."""
+    def inundar(self, momento_do_pedido):
+        """400 pedidos anônimos do mesmo IP; `momento_do_pedido(n)` diz que horas o registro acha que são no pedido n. A agregação é por
+        minuto, e com o relógio de verdade um teste cruza a virada do minuto de vez em quando (o CI cruzou) e sai com duas linhas.
+        Devolve só as linhas da inundação, separadas das do setUp pelo conteúdo."""
+        atual = [momento_do_pedido(0)]
         acesso.limpar_limites()
-        antes = len(self.todas())
-        for numero in range(400):
-            self.publico('entrar', {'login': f'ninguem{numero}', 'senha': SENHA})
-        reg.descarregar(tudo=True)
-        novas = self.todas()[antes:]
-        self.assertLessEqual(len(novas), 21, '400 pedidos do mesmo IP: 20 falhas e uma linha agregada')
+        self.marcar()
+        with patch.object(reg, 'datetime', relogio(lambda: atual[0])):
+            for numero in range(400):
+                atual[0] = momento_do_pedido(numero)
+                self.publico('entrar', {'login': f'ninguem{numero}', 'senha': SENHA})
+            reg.descarregar(tudo=True)
+        return self.novas()
+
+    def confere_inundacao(self, novas, dia, maximo, agregadas):
+        self.assertTrue(all(l['em'].startswith(dia) for l in novas), 'só linhas da inundação, nenhuma do setUp')
+        self.assertTrue(all(l['evento'] == 'login_falha' for l in novas))
+        self.assertLessEqual(len(novas), maximo)
+        self.assertEqual(len([l for l in novas if l.get('quantidade')]), agregadas, 'uma linha agregada por minuto ocupado')
         self.assertEqual(sum(l.get('quantidade', 1) for l in novas), 400)
+
+    def test_inundar_com_pedidos_anonimos_nao_chega_perto_do_teto(self):
+        """Os 300 mil pedidos da prova da revisão: do mesmo IP, no mesmo minuto, são poucas linhas. Hora fixa, no dia de hoje."""
+        fixo = hoje_as(12, 30, 20)
+        novas = self.inundar(lambda n: fixo)
+        self.confere_inundacao(novas, fixo.strftime('%Y-%m-%d'), 21, agregadas=1)  # 20 falhas e uma linha agregada
+
+    def test_a_virada_do_minuto_no_meio_da_inundacao_so_acrescenta_uma_linha_agregada(self):
+        """O que o CI mostrou: se os pedidos cruzam o minuto saem DUAS linhas agregadas (uma por minuto), nunca uma por pedido."""
+        antes, depois = hoje_as(12, 30, 30), hoje_as(12, 31, 30)
+        novas = self.inundar(lambda n: antes if n < 200 else depois)
+        self.confere_inundacao(novas, antes.strftime('%Y-%m-%d'), 22, agregadas=2)
+
+    def test_um_dia_fixo_diferente_do_real_nao_muda_quais_linhas_se_contam(self):
+        """Rodar amanhã é o mesmo que fixar o dia de ontem: as linhas da inundação vão para outro arquivo, e a contagem continua sendo só
+        delas (as do setUp, no arquivo do dia real, ficam de fora)."""
+        outro_dia = hoje_as(12, 30, 20) - timedelta(days=2)
+        novas = self.inundar(lambda n: outro_dia)
+        self.confere_inundacao(novas, outro_dia.strftime('%Y-%m-%d'), 21, agregadas=1)
+        self.assertGreater(len(reg.arquivos(self.pasta_registro)), 1, 'o setUp e a inundação estão em arquivos de dias diferentes')
 
 
 class AdministracaoTest(Auditoria):

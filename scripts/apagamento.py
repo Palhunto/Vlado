@@ -46,6 +46,9 @@ ESPERA_S = 0.05
 ESTADOS_ATIVOS = ('preparando', 'executando', 'cancelando', 'publicando')
 AVISO_BACKUP = ('Cópias que já estejam em backups feitos com scripts/backup.py não são apagadas por esta ação. '
                 'Elas permanecem até expirar conforme a retenção de backups definida pelo operador.')
+PENDENTE = ('Um apagamento definitivo desta apuração ficou pela metade e só se resolve na próxima partida da Mesa. '
+            'Até lá, não é possível restaurar nem apagar este item; feche os programas que usem esses arquivos e '
+            'reinicie a Mesa.')
 
 
 def _eh_link(path: Path) -> bool:
@@ -186,6 +189,7 @@ def alcance(root, identificador: str) -> dict:
             'raizes': sorted(escopo['raizes']), 'conversas': escopo['conversas'],
             'rodadas': escopo['rodadas'], 'rodadas_preservadas': escopo['preservadas'],
             'registros': registros, 'aviso_backup': AVISO_BACKUP,
+            'apagamento_pendente': pendente(root, item),
             'confirmacao': _token(item, entradas, pastas),
             '_entradas': sorted(entradas), '_pastas': sorted(pastas)}
 
@@ -283,6 +287,41 @@ def _manifesto(root: Path, item_id: str) -> Path:
     return dentro(root, f'{MANIFESTOS}/{item_id}.json')
 
 
+def _interrompidos(root: Path) -> dict[str, str | None]:
+    """Item id -> case of each deletion the next start still has to settle. A manifest in "renomeando"
+    outside `apagar` is a rename undone only in part: its case too (an item of the same case may hold roots
+    in that quarantine). Any other manifest, or one that cannot be read: by its id only."""
+    pasta = dentro(root, MANIFESTOS)
+    achados: dict[str, str | None] = {}
+    for caminho in pasta.glob('*.json') if pasta.is_dir() else []:
+        try:
+            manifesto = ler_json(caminho)
+            item = manifesto['item']
+            achados[item['id']] = item.get('caso') if manifesto['fase'] == 'renomeando' else None
+        except (OSError, ValueError, KeyError, TypeError):
+            achados[caminho.stem] = None
+    return achados
+
+
+def pendente(root, item: dict, interrompidos: dict | None = None) -> bool:
+    """True while a deletion of this item, or a half-undone one of its case, waits for the next start:
+    restoring or deleting it then would bring back or leave behind part of what was set aside."""
+    if interrompidos is None:
+        interrompidos = _interrompidos(Path(root).resolve())
+    return item['id'] in interrompidos or item.get('caso') in {c for c in interrompidos.values() if c}
+
+
+def marcar_pendentes(root, itens: list[dict]) -> list[dict]:
+    """The trash list with ``apagamento_pendente`` on each item (the interface disables its buttons)."""
+    interrompidos = _interrompidos(Path(root).resolve())
+    return [{**item, 'apagamento_pendente': pendente(root, item, interrompidos)} for item in itens]
+
+
+def conferir_sem_pendencia(root, item: dict) -> None:
+    if pendente(root, item):
+        raise ValueError(PENDENTE)
+
+
 def _gravar_manifesto(root: Path, manifesto: dict) -> None:
     from cadastrar_documentos import _atomico, _bytes
     caminho = _manifesto(root, manifesto['item']['id'])
@@ -332,6 +371,8 @@ def _registrado(root: Path, item_id: str, confirmacao: str) -> bool:
 def _concluir_registros(root: Path, manifesto: dict) -> None:
     """Catalog, trash and the deletion record, after the point of no return; idempotent."""
     item, resumo = manifesto['item'], manifesto['resumo']
+    if manifesto.get('sem_registro'):
+        return  # concluded and recorded before (see _concluir_ilegivel)
     _atualizar_registros(root, item)
     if not _registrado(root, item['id'], resumo['confirmacao']):
         _registrar(root, item, manifesto['quem'], resumo)
@@ -389,14 +430,54 @@ def aguardar(prazo: float | None = None) -> bool:
         threads[0].join(resta)
 
 
-def retomar(root, *, segundo_plano: bool = False) -> dict:
+def _concluir_ilegivel(root: Path, item_id: str) -> dict:
+    """A manifest that cannot be read: it exists only after the person confirmed the deletion, so the
+    deletion is concluded from the trash entry (when it is still there). Under the lock, like any
+    deletion, only the quick part: the item's roots still in place go to the quarantine too, a readable
+    manifest in ``removendo`` replaces the unreadable one, and catalog, trash and a record that says so.
+    Returns that manifest; its files are removed outside the lock. OSError leaves it for the next try."""
+    log.warning('Apagamento definitivo %s: manifesto ilegível; o item já tinha sido confirmado para apagar, '
+                'então o apagamento é concluído a partir da lixeira.', item_id)
+    item = next((i for i in lixeira.ativos(root) if i['id'] == item_id), None)
+    raizes = []
+    if item is not None:
+        try:
+            raizes = _escopo(root, item)['raizes']
+        except (ValueError, KeyError, OSError):
+            raizes = []
+    pares = []
+    for volume in VOLUMES:  # what the unreadable manifest had already moved
+        pasta = dentro(root, f'{volume}/{QUARENTENA}/{item_id}')
+        for parte in sorted(pasta.iterdir()) if pasta.is_dir() else []:
+            pares.append([None, f'{volume}/{QUARENTENA}/{item_id}/{parte.name}'])
+    for numero, origem in enumerate(raizes):  # and what was still in place
+        if os.path.lexists(_alvo(root, origem)):
+            destino = f'{origem.split("/")[0]}/{QUARENTENA}/{item_id}/i{numero}'
+            _renomear(root, origem, destino)
+            pares.append([origem, destino])
+    identidade = ({k: item.get(k) for k in ('id', 'tipo', 'caso', 'conversa', 'rodada')} if item is not None
+                  else {'id': item_id, 'tipo': None, 'caso': None, 'conversa': None, 'rodada': None})
+    manifesto = {'esquema': 1, 'item': identidade, 'fase': 'removendo', 'quem': 'partida da Mesa (manifesto ilegível)',
+                 'em_utc': datetime.now(timezone.utc).isoformat(), 'raizes': pares,
+                 'resumo': {'conversas': [], 'rodadas': [], 'categorias': {}, 'totais': {},
+                            'confirmacao': 'manifesto_ilegivel'},
+                 # Gone from the trash already: its registries were concluded, and recorded, before.
+                 'sem_registro': item is None}
+    _gravar_manifesto(root, manifesto)  # readable from here on: a crash during the removal concludes it
+    _concluir_registros(root, manifesto)
+    return manifesto
+
+
+def retomar(root, *, segundo_plano: bool = False, espera: float | None = None) -> dict:
     """At the Mesa's start: finish what a crash left. Phase ``renomeando``: the roots go back and the
     item stays whole in the trash. Phase ``removendo``: catalog, trash and record (without repeating),
-    then the removal. A quarantine with no manifest (only this module writes there) is removed."""
+    then the removal. A manifest that cannot be read: concluded from the trash (``_concluir_ilegivel``).
+    A quarantine with no manifest (only this module writes there) is removed. ``espera``: how long to
+    wait for the cadastro lock (the default of ``trava_cadastro`` when None)."""
     from cadastrar_documentos import _trava
     root = Path(root).resolve()
-    resumo, pendentes = {'desfeitos': 0, 'concluidos': 0, 'orfas': 0}, []
-    with _trava(root):
+    resumo, pendentes = {'desfeitos': 0, 'concluidos': 0, 'orfas': 0, 'ilegiveis': 0}, []
+    with _trava(root, **({} if espera is None else {'espera': espera})):
         pasta = dentro(root, MANIFESTOS)
         conhecidos = set()
         for caminho in sorted(pasta.glob('*.json')) if pasta.is_dir() else []:
@@ -404,8 +485,16 @@ def retomar(root, *, segundo_plano: bool = False) -> dict:
                 manifesto = ler_json(caminho)
                 item_id, fase = manifesto['item']['id'], manifesto['fase']
             except (OSError, ValueError, KeyError, TypeError):
-                log.warning('Apagamento definitivo: manifesto ilegível %s; ficou como está.', caminho.name)
                 conhecidos.add(caminho.stem)
+                if not re.fullmatch(lixeira.ID_CONVERSA, caminho.stem):
+                    log.warning('Apagamento definitivo: manifesto %s fora do padrão; ficou como está.', caminho.name)
+                    continue
+                try:
+                    pendentes.append(_concluir_ilegivel(root, caminho.stem))  # its files: outside the lock
+                    resumo['ilegiveis'] += 1
+                except OSError as exc:
+                    log.warning('Apagamento definitivo %s: não concluído (%s); a próxima partida tenta de novo.',
+                                caminho.stem, exc.strerror or exc)
                 continue
             conhecidos.add(item_id)
             if fase == 'renomeando':
@@ -422,26 +511,60 @@ def retomar(root, *, segundo_plano: bool = False) -> dict:
                 _concluir_registros(root, manifesto)
                 pendentes.append(manifesto)
                 resumo['concluidos'] += 1
+        # A quarantine with no manifest (what a half-undone rename left): under the lock only a readable
+        # manifest in "removendo" for it, with no record (there is no confirmed item to record); its files
+        # are removed outside the lock, like any other, and a crash during that concludes it next time.
+        orfas: dict[str, list] = {}
         for volume in VOLUMES:
             quarentena = dentro(root, f'{volume}/{QUARENTENA}')
             for orfa in sorted(quarentena.iterdir()) if quarentena.is_dir() else []:
                 if orfa.name in conhecidos or not re.fullmatch(lixeira.ID_CONVERSA, orfa.name):
                     continue
-                rel = f'{volume}/{QUARENTENA}/{orfa.name}'
-                entradas: dict[str, tuple[str, int]] = {}
-                pastas: list[str] = []
-                try:
-                    _varrer(root, rel, entradas, pastas)
-                    _remover(root, sorted(entradas), pastas)
-                    resumo['orfas'] += 1
-                except OSError as exc:
-                    log.warning('Apagamento definitivo: quarentena %s não removida (%s).', orfa.name, exc.strerror or exc)
+                orfas.setdefault(orfa.name, []).append([None, f'{volume}/{QUARENTENA}/{orfa.name}'])
+        for item_id, raizes in orfas.items():
+            log.warning('Apagamento definitivo: quarentena %s sem manifesto; removida fora da trava.', item_id)
+            manifesto = {'esquema': 1, 'item': {'id': item_id, 'tipo': None, 'caso': None, 'conversa': None, 'rodada': None},
+                         'fase': 'removendo', 'quem': 'partida da Mesa (quarentena sem manifesto)',
+                         'em_utc': datetime.now(timezone.utc).isoformat(), 'raizes': raizes,
+                         'resumo': {'conversas': [], 'rodadas': [], 'categorias': {}, 'totais': {},
+                                    'confirmacao': 'sem_manifesto'},
+                         'sem_registro': True}
+            try:
+                _gravar_manifesto(root, manifesto)
+            except OSError as exc:
+                log.warning('Apagamento definitivo: quarentena %s não registrada (%s); a próxima partida tenta de novo.',
+                            item_id, exc.strerror or exc)
+                continue
+            pendentes.append(manifesto)
+            resumo['orfas'] += 1
     for manifesto in pendentes:
         if segundo_plano:
             _em_segundo_plano(root, manifesto)
         else:
             _remover_quarentena(root, manifesto)
     return resumo
+
+
+def retomar_na_partida(root, *, espera: float = 2.0, intervalo: float = 30.0):
+    """``retomar`` for the Mesa's start, which never falls for it: the summary, or None when it could not
+    run now (cadastro lock busy, a file in use, anything else): then it tries again every ``intervalo``
+    seconds in the background until it runs, and the next operation that takes the lock is unaffected."""
+    try:
+        return retomar(root, segundo_plano=True, espera=espera)
+    except Exception as exc:  # noqa: BLE001 - the start goes on; this is retried below
+        log.warning('Apagamento definitivo: retomada na partida não concluída (%s); tenta de novo em segundo plano.', exc)
+
+    def tentar_depois():
+        while True:
+            time.sleep(intervalo)
+            try:
+                retomar(root, segundo_plano=True)
+                log.warning('Apagamento definitivo: retomada concluída em segundo plano.')
+                return
+            except Exception as exc:  # noqa: BLE001 - keeps trying; the Mesa goes on
+                log.warning('Apagamento definitivo: retomada ainda não concluída (%s).', exc)
+    threading.Thread(target=tentar_depois, daemon=True, name='vlado_apagamento_retomada').start()
+    return None
 
 
 def apagar(root, identificador: str, confirmacao: str, *, quem: str, gerenciador=None, ativa=None,
@@ -465,6 +588,8 @@ def apagar(root, identificador: str, confirmacao: str, *, quem: str, gerenciador
             pilha.enter_context(gerenciador.lock)
         pilha.enter_context(_trava(root))
         item = _item(root, identificador)
+        # A new manifest would overwrite the one the next start needs to put the set-aside roots back.
+        conferir_sem_pendencia(root, item)
         if _ativo(root, item, gerenciador, ativa):
             raise ValueError('Há uma execução em andamento. Cancele-a e aguarde o encerramento antes de apagar definitivamente.')
         atual = alcance(root, identificador)
@@ -487,7 +612,12 @@ def apagar(root, identificador: str, confirmacao: str, *, quem: str, gerenciador
             try:
                 _desfazer(root, feitas)
             except OSError:
-                pass  # the manifest stays in "renomeando": the next start puts them back
+                # The manifest stays in "renomeando": the next start puts them back. Say so.
+                log.warning('Apagamento definitivo %s: renomeação desfeita só em parte; a partida termina.', item['id'])
+                raise ValueError('Não foi possível apagar (arquivo em uso ou sem permissão), e parte do item já tinha '
+                                 'sido separada para apagar: ela volta à lixeira na próxima partida da Mesa. Até lá, '
+                                 'não restaure nem apague este item; feche os programas que usem esses arquivos e '
+                                 'reinicie a Mesa.') from exc
             else:
                 _limpar_quarentena_vazia(root, item['id'])
                 _manifesto(root, item['id']).unlink(missing_ok=True)

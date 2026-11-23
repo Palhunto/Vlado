@@ -291,7 +291,7 @@
     const button=element('button','Retomar trabalho →');button.type='button';button.addEventListener('click',()=>$('inicio-retomar').click());next.append(button);target.append(info,next);
     // Resume summary (continuidade.js): done and pending items, each linked to its area. Admin only.
     // Shown only when /api/integracao announces `continuidade_resumo` (Continuidade.disponivel).
-    if(window.Continuidade?.disponivel&&document.body.dataset.papel!=='convidado'){
+    if(window.Continuidade?.disponivel&&window.Sessao.pode('continuidade-resumo')){
       const slot=element('div',undefined,'mesa-resume-progress'),caso=caseData.id;target.append(slot);
       window.Continuidade.disponivel().then(ok=>{if(!ok){slot.remove();return;}if(slot.isConnected&&current()===caso)window.Continuidade.montar(slot,caso);});
     }
@@ -316,16 +316,18 @@
   }
   async function loadInventory(force=false){
     // The guest has no access to the inventory (403): ask nothing and leave the header as it is.
-    if(document.body.dataset.papel==='convidado'){window.barraMesa.definir('documentos','');return;}
+    if(!window.Sessao.pode('inventario')){window.barraMesa.definir('documentos','');return;}
     const caseId=current();if(!force&&loadedCase===caseId)return;
+    if(loadedCase!==caseId){$('documentos-recibo').hidden=true;$('documentos-recibo').replaceChildren();$('codex-recibo-alerta').hidden=true;}   // o recibo é de uma apuração só
     const ticket=++sequence;loadedCase=caseId;inventory=null;loading=!!caseId;$('mesa-acervo-erro').hidden=true;window.barraMesa.definir('documentos','');
     $('mesa-atualizar-acervo').disabled=loading;
     $('mesa-filtrar-documento').value='';$('mesa-filtrar-leitura').value='todos';documentTable();home();
+    window.PreparoDePdf.atualizar(null);window.FontesWeb?.mostrar(null);
     if(!caseId){text('mesa-acervo-status','Selecione a apuração no topo da mesa.');text('mesa-versao','Documentos, achados e fontes');return;}
     text('mesa-acervo-status','Conferindo os documentos cadastrados…');text('mesa-versao','Conferindo acervo…');
     try{
       const result=await api('inventario',{caso:caseId});if(ticket!==sequence||caseId!==current())return;
-      inventory=result;documentTable();home();window.barraMesa.definir('documentos',result.total_documentos?String(result.total_documentos):'');text('mesa-versao',`Versão dos documentos: ${result.corpus_id}`);text('mesa-acervo-status','Os originais estão preservados; a extração não substitui a conferência.');
+      inventory=result;documentTable();home();window.PreparoDePdf.atualizar(result);window.FontesWeb?.mostrar(result);window.barraMesa.definir('documentos',result.total_documentos?String(result.total_documentos):'');text('mesa-versao',`Versão dos documentos: ${result.corpus_id}`);text('mesa-acervo-status','Os originais estão preservados; a extração não substitui a conferência.');
     }catch(error){if(ticket===sequence){$('mesa-acervo-erro').textContent=error.message;$('mesa-acervo-erro').hidden=false;text('mesa-acervo-status','A conferência do acervo falhou. Isso não equivale a um acervo vazio.');text('mesa-versao','Acervo indisponível');}}
     finally{if(ticket===sequence){loading=false;$('mesa-atualizar-acervo').disabled=false;}}
   }
@@ -333,7 +335,7 @@
   let deadlineTicket=0;
   async function countDeadlines(){
     const caseId=current();
-    if(!caseId||document.body.dataset.papel==='convidado'){deadlineTicket++;window.barraMesa.definir('diligencias','','aviso');return;}
+    if(!caseId||!window.Sessao.pode('diligencias-listar')){deadlineTicket++;window.barraMesa.definir('diligencias','','aviso');return;}
     const ticket=++deadlineTicket;
     try{
       const result=await api('diligencias-listar',{caso:caseId});
@@ -366,6 +368,7 @@
       card.dataset.esgotada=String(spent);card.hidden=false;
     }catch(_){card.hidden=true;}
   }
+  window.recarregarAcervo=force=>loadInventory(force);window.definirEstadoAcervo=mensagem=>text('mesa-acervo-status',mensagem);
   window.atualizarCotaBarra=force=>loadQuota(force);   // codex.js chama ao terminar cada pergunta
   loadQuota(true);
   window.addEventListener('focus',()=>loadQuota());
@@ -381,7 +384,7 @@
   function sync(){
     const area=active();
     document.body.dataset.mesaArea=area;navigation();tab();
-    const stages=[['cadastro','Documentos'],['codex','Pergunta'],['achados','Conferência'],['apuracao','Caderno']],stage={cadastro:0,documentos:0,codex:1,achados:2,apuracao:3,caderno:3}[area];
+    const stages=[['documentos','Documentos'],['codex','Pergunta'],['achados','Conferência'],['apuracao','Caderno']],stage={documentos:0,codex:1,achados:2,apuracao:3,caderno:3}[area];
     // Guests only ask questions; every other step is closed to them.
     $('mesa-etapas').hidden=stage===undefined||document.body.dataset.papel==='convidado';
     if(stage!==undefined&&$('mesa-etapas').dataset.stage!==String(stage)){$('mesa-etapas').dataset.stage=String(stage);$('mesa-etapas').replaceChildren(...stages.map(([name,label],i)=>{const a=element('a');a.href=window.enderecoAreaMesa(name);a.dataset.mesaArea=name;a.append(element('span',String(i+1)),document.createTextNode(label));if(i===stage)a.setAttribute('aria-current','step');return a;}));}
@@ -412,16 +415,30 @@
   // Área de envio de Documentos (W02): envia para a apuração escolhida. Sem o envio em fluxo no servidor, o caminho é a tela de Nova apuração.
   if(document.body.dataset.papel==='convidado')$('documentos-zona').hidden=true;
   else window.Documentos.zona($('documentos-zona'),{aoEscolher:files=>{
+    // Passo 2 da Nova apuração: o primeiro envio cria a apuração (cadastrar com novo: true, sem caso) e a tela passa a ela.
+    if(window.NovaApuracao.ativa()){window.NovaApuracao.enviar(files,{aoConcluir:async()=>{await loadInventory(true);text('mesa-acervo-status','Documentos registrados. Aguardando sua pergunta.');},
+      depoisDeCriar:async()=>{await loadInventory(true);}});return;}
     if(!current()){$('contexto-caso').focus();text('mesa-acervo-status','Escolha uma apuração para enviar documentos.');return;}
     window.Documentos.enviar(files,{caso:current(),alvo:$('documentos-envio'),alvoRecibo:$('documentos-recibo'),
       aoConcluir:async()=>{await loadInventory(true);if(typeof loadCatalog==='function')await loadCatalog();text('mesa-acervo-status','Documentos registrados. Aguardando sua pergunta.');},
-      aoIndisponivel:files=>{
-        // Sem o envio em fluxo no servidor, a escolha segue para a tela de Nova apuração (envio em JSON), sem perder os arquivos.
-        try{const lote=new DataTransfer();for(const file of files)lote.items.add(file);$('cadastro-arquivos').files=lote.files;
-          $('cadastro-arquivos').dispatchEvent(new Event('change'));}catch{/* o navegador não deixa: a pessoa escolhe de novo */}
-        $('inicio-adicionar').click();}});
+      aoIndisponivel:async files=>{
+        // Sem o envio em fluxo no servidor, a própria Documentos envia em JSON (um lote de até 50 MB) para a apuração escolhida (F3 da Coruja).
+        const caso=current(),resultado=await window.EnvioJson.enviar(files,{escopo:{novo:false,caso}});
+        if(!resultado)return;
+        window.Envio.renderRecibo($('documentos-recibo'),resultado);
+        await loadInventory(true);if(typeof loadCatalog==='function')await loadCatalog();
+        text('mesa-acervo-status','Documentos registrados. Aguardando sua pergunta.');}});
   }});
-  $('mesa-perguntar').addEventListener('click',()=>{if(!current()){$('contexto-caso').focus();return;}navigate('codex');window.abrirComposicaoMesa?.();});
+  // O recibo do último envio desta visita acompanha a pergunta, recolhido acima da caixa; sem envio, a Pergunta abre sem ele.
+  function reciboJuntoDaPergunta(){
+    const alerta=$('codex-recibo-alerta'),recibo=$('documentos-recibo');
+    if(!recibo||recibo.hidden||!recibo.childNodes.length){alerta.hidden=true;alerta.replaceChildren();return;}
+    const copia=recibo.cloneNode(true);copia.hidden=false;copia.removeAttribute('tabindex');copia.removeAttribute('id');
+    for(const filho of copia.querySelectorAll('[id]'))filho.removeAttribute('id');
+    alerta.replaceChildren(element('summary','Recibo do último envio · confira as limitações antes de perguntar'),copia);
+    alerta.open=false;alerta.hidden=false;
+  }
+  $('mesa-perguntar').addEventListener('click',()=>{if(!current()){$('contexto-caso').focus();return;}reciboJuntoDaPergunta();navigate('codex');window.abrirComposicaoMesa?.();});
   $('mesa-aba-acervo').addEventListener('click',()=>chooseTab('acervo'));
   $('mesa-aba-pesquisa').addEventListener('click',()=>chooseTab('pesquisa'));
   $('documentos-aba').addEventListener('change',tab);

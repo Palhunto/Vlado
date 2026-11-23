@@ -74,6 +74,13 @@ TRAVA_CADASTRO = '.cadastro.trava'
 # marcador, não faz o backup esperar (a remoção pode demorar e nada ali volta a ser dado). Só nestas pastas e só na raiz de cada uma.
 EXCLUIDOS_NA_RAIZ = ('.apagando',)
 PASTAS_COM_QUARENTENA = ('casos', 'conversas', 'execucoes', 'lixeira')
+# Exceção ao parágrafo acima: um apagamento na fase `renomeando` (manifesto `lixeira/.apagando/<item>.json`, apagamento.py) está
+# movendo as raízes do item para a quarentena, e o item só volta inteiro (ou some) quando a fase termina. Um backup nesse meio guardaria
+# o item sem as raízes já movidas. Então esse manifesto É um marcador: o backup espera, como espera a trava. A fase é rápida (sob as
+# travas); um manifesto parado há mais de MARCADOR_IDADE_MAX_S é resto de queda (a próxima partida da Mesa desfaz): não faz esperar e
+# o backup avisa que o item pode estar incompleto.
+MANIFESTOS_DO_APAGAMENTO = 'lixeira/.apagando'
+FASE_RENOMEANDO = 'renomeando'
 # Lock files held with an operating-system lock that always exist: not data and never part of a backup.
 # `casos/.fila/.coordenador` is the extraction queue's single-coordinator lock (CONF-02). The queue itself,
 # `casos/.fila/<lote>/` (uploads not yet published: originals, plan, state), IS part of the backup, taken before the
@@ -180,7 +187,32 @@ def _inspecionar_marcadores(root: Path, pastas: tuple[str, ...]) -> tuple[list[s
                         continue  # gone already
                     (vivos if idade <= limite else abandonados).append(caminho.relative_to(root).as_posix())
             dirs[:] = [d for d in dirs if not _marcador(d)]
+    if 'lixeira' in pastas:
+        for caminho in _apagamentos_renomeando(root):
+            try:
+                idade = agora - caminho.stat().st_mtime
+            except OSError:
+                continue  # gone already
+            (vivos if idade <= limite else abandonados).append(caminho.relative_to(root).as_posix())
     return sorted(vivos), sorted(abandonados)
+
+
+def _apagamentos_renomeando(root: Path) -> list[Path]:
+    """Manifests in `lixeira/.apagando/` whose phase is still `renomeando` (see MANIFESTOS_DO_APAGAMENTO). Read-only; an
+    unreadable manifest is skipped (it is written atomically, so that is a damaged file, not a deletion under way)."""
+    pasta = root / MANIFESTOS_DO_APAGAMENTO
+    achados = []
+    try:
+        candidatos = sorted(pasta.glob('*.json')) if pasta.is_dir() else []
+    except OSError:
+        return []
+    for caminho in candidatos:
+        try:
+            if json.loads(caminho.read_bytes().decode('utf-8-sig')).get('fase') == FASE_RENOMEANDO:
+                achados.append(caminho)
+        except (OSError, ValueError, AttributeError):
+            continue
+    return achados
 
 
 def _marcadores(root: Path, pastas: tuple[str, ...]) -> list[str]:
@@ -356,7 +388,12 @@ def _escrever_pacote(root: Path, pacote: tarfile.TarFile, incluir_segredos: bool
     trabalho = Path(tempfile.mkdtemp(prefix='vlado-backup-')) if dono_tmp else Path(trabalho)
     trabalho.mkdir(parents=True, exist_ok=True)
     arquivos, avisos, chaves, ignorados = {}, [], {}, []
-    avisos += [f'pasta de preparo abandonada, fora do backup: {a}' for a in _inspecionar_marcadores(root, pastas)[1]]
+    for abandonado in _inspecionar_marcadores(root, pastas)[1]:
+        if abandonado.startswith(MANIFESTOS_DO_APAGAMENTO + '/'):
+            avisos.append(f'apagamento interrompido na renomeação ({abandonado}): o item pode estar incompleto neste backup; '
+                          'a Mesa o desfaz na próxima partida')
+        else:
+            avisos.append(f'pasta de preparo abandonada, fora do backup: {abandonado}')
     if not incluir_segredos and (root / SEGREDOS / CHAVE_DAS_CONTAS).is_file():  # only whether it exists; never opened
         avisos.append(f'{SEGREDOS}/{CHAVE_DAS_CONTAS} ficou de fora, com os segredos: sem ela, os segundos fatores das contas '
                       'deste backup não abrem depois de restaurar. Guarde uma cópia dela junto dos segredos.')

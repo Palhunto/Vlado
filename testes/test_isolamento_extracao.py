@@ -30,6 +30,7 @@ from comum import ler_json, sha256  # noqa: E402
 from extrair_pdf import extrair_pdf  # noqa: E402
 import fila_extracao  # noqa: E402
 import tetos_extracao as tetos  # noqa: E402
+import trabalhador_extracao as trabalhador  # noqa: E402
 from test_extracao_cadastro_pdf import HAS_PYPDF, pdf_sintetico  # noqa: E402
 import test_fila_extracao as base_fila  # noqa: E402
 
@@ -336,8 +337,11 @@ class ProcessoIsoladoTest(unittest.TestCase):
         vigiar = ('t.vigiar_cpu(t.tetos.configuracao(), lambda m: print(json.dumps(m, ensure_ascii=False), flush=True))\n'
                   'while True: sum(range(10000))')
         inicio = time.monotonic()
-        codigo, saida, _ = em_processo(self.APLICAR + vigiar, env={'VLADO_EXTRACAO_TETO_CPU_S': '1'}, grupo=True)
-        self.assertLess(time.monotonic() - inicio, 30)
+        # The worker runs below-normal priority and off core 0 (by design), so on a loaded machine 1 s of CPU can take
+        # minutes of wall time (44 to 161 s seen with other agents running). The bound proves the cap ends the process
+        # long before the 7200 s default; it is not a latency target.
+        codigo, saida, _ = em_processo(self.APLICAR + vigiar, env={'VLADO_EXTRACAO_TETO_CPU_S': '1'}, grupo=True, prazo=420)
+        self.assertLess(time.monotonic() - inicio, 360)
         self.assertIn(codigo, (5, -9))  # POSIX ends its own group with signal 9
         mensagem = json.loads(saida.splitlines()[-1])
         self.assertEqual(mensagem['tipo'], 'limite')
@@ -521,6 +525,91 @@ class FilaComArquivosHostisTest(base_fila.Base):
         with mock.patch.object(tetos, 'renderizar_png', aqui):
             self.fila.renderizar_pagina(self.arquivos / 'a.pdf', 1)
         aqui.assert_not_called()
+
+    def test_leitura_visual_pesada_para_no_teto_de_cpu_proprio(self):
+        # The process's own cap (VLADO_LEITURA_VISUAL_TETO_CPU_S) stops a page that costs too much CPU, with
+        # its message; the page here is replaced by an endless computation inside the real worker's main.
+        codigo = ('import sys, trabalhador_extracao as t\n'
+                  'def pesada(pdf, pagina):\n'
+                  '    while True: sum(range(10000))\n'
+                  't.tetos.renderizar_png = pesada\n'
+                  # Normal priority here: the cap and its message are tested, not the priority (tested apart).
+                  't.aplicar_limites = lambda config: {}\n'
+                  't.main()\n')
+        pedido = json.dumps({'renderizar': {'pdf': str(self.arquivos / 'a.pdf'), 'pagina': 1}}) + '\n'
+        inicio = time.monotonic()
+        processo = subprocess.run([sys.executable, '-c', codigo], input=pedido, capture_output=True, text=True,
+                                  encoding='utf-8', timeout=120, cwd=str(SCRIPTS),
+                                  env={**os.environ, 'VLADO_LEITURA_VISUAL_TETO_CPU_S': '1'},
+                                  **({'start_new_session': True} if os.name != 'nt' else {}))
+        self.assertLess(time.monotonic() - inicio, 100)
+        self.assertIn(processo.returncode, (5, -9))  # POSIX ends its own group with signal 9
+        mensagens = [json.loads(l) for l in processo.stdout.splitlines() if l.strip()]
+        limite = next(m for m in mensagens if m['tipo'] == 'limite')
+        self.assertEqual(limite['mensagem'], trabalhador.mensagem_cpu_leitura_visual(1))
+        self.assertIn('excedeu o teto de 1 s de CPU (VLADO_LEITURA_VISUAL_TETO_CPU_S)', limite['mensagem'])
+
+    def test_leitura_visual_sem_cpu_diz_que_o_servidor_esta_ocupado(self):
+        # A process that says it got only 0.3 s of CPU and never answers (a busy server): at the clock limit the
+        # Mesa kills it and says the server is busy, with the CPU it reported, instead of blaming the page.
+        falso = ('import json, sys, time\n'
+                 'sys.stdin.readline()\n'
+                 'print(json.dumps({"tipo": "limites", "aplicado": {}}), flush=True)\n'
+                 'print(json.dumps({"tipo": "cpu", "cpu_s": 0.3}), flush=True)\n'
+                 'time.sleep(600)\n')
+        processos = []
+
+        def abrir():
+            proc = subprocess.Popen([sys.executable, '-c', falso], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                    text=True, encoding='utf-8')
+            processos.append(proc)
+            return proc
+        inicio = time.monotonic()
+        with mock.patch.object(fila_extracao, '_abrir_trabalhador', abrir):
+            with self.assertRaises(ValueError) as recusa:
+                self.fila.renderizar_pagina(self.arquivos / 'a.pdf', 1, prazo=2)
+        self.assertLess(time.monotonic() - inicio, 60)
+        self.assertEqual(str(recusa.exception), fila_extracao.mensagem_leitura_visual_ocupada(2, 0.3, 60))
+        self.assertTrue(str(recusa.exception).startswith(
+            'O servidor está ocupado: em 2 s a leitura visual da página recebeu só 0.3 s de CPU (o teto da página é 60 s).'))
+        self.assertIsNotNone(processos[0].poll(), 'o processo da leitura visual ficou vivo')
+        self.assertIn('10 min', fila_extracao.mensagem_leitura_visual_ocupada(600, 0.0, 60))
+        self.assertEqual(self.fila.config['tempo_leitura_visual'], 600)
+
+    def test_matar_cai_no_proprio_processo_quando_o_grupo_falha(self):
+        # CI (Linux): a process that does not lead its own group makes killpg fail quietly; it must die all the same.
+        proc = mock.Mock(pid=4242)
+        with mock.patch.object(fila_extracao.os, 'killpg', create=True, side_effect=ProcessLookupError) as killpg:
+            fila_extracao._matar_processo(proc, posix=True)
+        killpg.assert_called_once_with(4242, 9)
+        proc.kill.assert_called_once_with()
+        proc = mock.Mock(pid=4243)
+        fila_extracao._matar_processo(proc, posix=False)  # Windows: the process (its job takes the children)
+        proc.kill.assert_called_once_with()
+
+    def test_processo_que_nao_morre_nao_esconde_a_recusa(self):
+        # The final wait past its time is a warning in the log: the busy-server refusal still reaches who asked.
+        falso = ('import json, sys, time\n'
+                 'sys.stdin.readline()\n'
+                 'print(json.dumps({"tipo": "cpu", "cpu_s": 0.3}), flush=True)\n'
+                 'time.sleep(600)\n')
+        processos = []
+
+        def abrir():
+            proc = subprocess.Popen([sys.executable, '-c', falso], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                    text=True, encoding='utf-8')
+            processos.append(proc)
+            self.addCleanup(lambda: (proc.kill(), proc.wait(30), proc.stdin.close(), proc.stdout.close()))
+            return proc
+        with mock.patch.object(fila_extracao, '_abrir_trabalhador', abrir), \
+                mock.patch.object(fila_extracao, '_matar_processo', lambda proc, posix=None: None), \
+                mock.patch.object(fila_extracao, 'ESPERA_MORTE', 0.5), \
+                self.assertLogs('vlado.fila_extracao', 'WARNING') as aviso:
+            with self.assertRaises(ValueError) as recusa:
+                self.fila.renderizar_pagina(self.arquivos / 'a.pdf', 1, prazo=2)
+        self.assertTrue(str(recusa.exception).startswith('O servidor está ocupado'), str(recusa.exception))
+        self.assertIn('não terminou', '\n'.join(aviso.output))
+        self.assertIsNone(processos[0].poll())  # the kill was made to fail here: the refusal came anyway
 
     def test_mesa_liga_a_leitura_visual_da_apuracao_ao_processo_isolado(self):
         from interface_pesquisa import Servidor

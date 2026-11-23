@@ -51,6 +51,16 @@ resto de `lixeira/` (o índice dos itens que a pessoa ainda pode restaurar) cont
 volta. O que já estava em backups anteriores à
 ordem de apagar continua neles até a retenção vencer (como já diz o aviso da tela de apagamento).
 
+**Uma exceção: a fase `renomeando`.** No começo de um apagamento, enquanto as pastas do item são movidas para a quarentena (sob as
+travas, e por isso curto), o manifesto em `lixeira/.apagando/<item>.json` está na fase `renomeando`: o item ainda não está inteiro
+na lixeira nem inteiro na quarentena, e um backup feito nesse meio o guardaria **sem as pastas já movidas**. Por isso, nessa fase,
+o manifesto **é um marcador**, como a trava de cadastro: o backup espera (`VLADO_BACKUP_ESPERA_S`) e, se uma cópia estiver em curso
+quando ele surgir, a descarta e refaz. Passada a fase (`removendo`, o ponto sem volta) volta a valer o que está acima: não espera. Se
+a Mesa caiu nesse meio, o manifesto fica parado em `renomeando` até a próxima partida desfazê-lo; depois de duas horas parado
+(`VLADO_BACKUP_MARCADOR_IDADE_MAX_S`) ele deixa de fazer esperar e o backup segue com um **aviso no manifesto do backup**
+(`apagamento interrompido na renomeação ... o item pode estar incompleto neste backup`). A Mesa desfaz a renomeação ao partir e o
+item volta inteiro à lixeira; o backup seguinte já o guarda inteiro.
+
 ### Registro de auditoria (`registro/`, SEG-02): FORA do backup, de propósito
 
 A Mesa grava os eventos de autenticação, administração e downloads no volume `registro` (ver `MONITORAMENTO.md`). **Decisão: não

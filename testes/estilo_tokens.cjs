@@ -14,11 +14,11 @@ const css = ler('style.css');
 // qualquer subpasta nova (folha nova entra no contrato sozinha, sem lista por nome a esquecer). Exceções explícitas:
 // tokens.css, o lugar onde as cores moram (checado por testes próprios abaixo), e vendor/, que é código de terceiros.
 const FOLHAS_FORA_DO_CONTRATO = ['tokens.css'];
-const PASTAS_FORA_DO_CONTRATO = ['vendor'];
+const PASTAS_FORA_DO_CONTRATO = ['vendor'];   // caminho inteiro a partir de interface/: uma pasta chamada vendor mais fundo NÃO fica de fora
 function folhasEm(pasta, prefixo = '') {
   return fs.readdirSync(pasta, {withFileTypes: true}).flatMap(entrada => {
     const relativo = prefixo + entrada.name;
-    if (entrada.isDirectory()) return PASTAS_FORA_DO_CONTRATO.includes(entrada.name) ? [] : folhasEm(path.join(pasta, entrada.name), relativo + '/');
+    if (entrada.isDirectory()) return PASTAS_FORA_DO_CONTRATO.includes(relativo) ? [] : folhasEm(path.join(pasta, entrada.name), relativo + '/');
     return entrada.name.endsWith('.css') && !FOLHAS_FORA_DO_CONTRATO.includes(relativo) ? [relativo] : [];
   });
 }

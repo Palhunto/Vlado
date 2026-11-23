@@ -1,0 +1,745 @@
+{
+  "navegador": "chromium 159.0.8154.6",
+  "reinicios_do_navegador": 0,
+  "playwright": "?",
+  "plataforma": "windows",
+  "relogio_fixo_utc": "2026-01-15T12:00:00+00:00",
+  "cenarios": {
+    "paisagem": {
+      "width": 812,
+      "height": 375,
+      "escala": 1
+    },
+    "430": {
+      "width": 430,
+      "height": 932,
+      "escala": 1
+    },
+    "zoom200": {
+      "width": 640,
+      "height": 450,
+      "escala": 2
+    },
+    "reflow320": {
+      "width": 320,
+      "height": 640,
+      "escala": 1
+    }
+  },
+  "argumentos_chromium": [
+    "--lang=en-US",
+    "--force-color-profile=srgb",
+    "--font-render-hinting=none",
+    "--disable-lcd-text",
+    "--disable-font-subpixel-positioning",
+    "--hide-scrollbars",
+    "--disable-gpu"
+  ],
+  "rolagem_horizontal": {},
+  "erros_do_navegador": {
+    "apuracao__paisagem__claro": [
+      "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+    ],
+    "apuracao__paisagem__escuro": [
+      "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+    ],
+    "apuracao__430__claro": [
+      "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+    ],
+    "apuracao__430__escuro": [
+      "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+    ],
+    "apuracao__zoom200__claro": [
+      "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+    ],
+    "apuracao__zoom200__escuro": [
+      "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+    ],
+    "apuracao__reflow320__claro": [
+      "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+    ],
+    "apuracao__reflow320__escuro": [
+      "console.error: Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('\u0001-…'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+    ]
+  },
+  "gerado_em_utc": "2026-11-23T03:45:48Z",
+  "tolerancia": {
+    "canal": 4,
+    "pixels": 8
+  },
+  "total_bytes": 19225832,
+  "capturas": {
+    "achados__430__claro": {
+      "largura": 430,
+      "altura": 2696,
+      "bytes": 170727,
+      "sha256": "25ea2d6a97a6d7f50f20d532b8e985fc34b86ab859dfe848ca0b9ca02946816a"
+    },
+    "achados__430__escuro": {
+      "largura": 430,
+      "altura": 2696,
+      "bytes": 170380,
+      "sha256": "efea90aabed84710f0b3d2cdc6894f011e64cd57f673cb3af801825975410b2c"
+    },
+    "achados__paisagem__claro": {
+      "largura": 812,
+      "altura": 2126,
+      "bytes": 179963,
+      "sha256": "97a0eade9d34c256b2445a7207cba3bf052fc4ab559e912af286c6410c761f0c"
+    },
+    "achados__paisagem__escuro": {
+      "largura": 812,
+      "altura": 2126,
+      "bytes": 179977,
+      "sha256": "118117377441af70167f4a6e1f7b4df847439d40b055b3611cb7ea5ee183db6d"
+    },
+    "achados__reflow320__claro": {
+      "largura": 320,
+      "altura": 2802,
+      "bytes": 169239,
+      "sha256": "6b61a3cb5b0455381003f96ed498853f6d8c5190cfeb258bd597b8caf69a0158"
+    },
+    "achados__reflow320__escuro": {
+      "largura": 320,
+      "altura": 2802,
+      "bytes": 169003,
+      "sha256": "45f625691669742e6224a27f59944c5782c73b2893289eeb4ddcf51377ee454e"
+    },
+    "achados__zoom200__claro": {
+      "largura": 1280,
+      "altura": 4846,
+      "bytes": 407911,
+      "sha256": "42cef148437d45d257bdd12968cb724f924ed26f57b9c687758c4c1bc372190c"
+    },
+    "achados__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 4846,
+      "bytes": 408144,
+      "sha256": "81fd80f52c9adb0c61fa0e9ca3713c269c0df00d7debc85606e89b63b415d75f"
+    },
+    "apuracao__430__claro": {
+      "largura": 430,
+      "altura": 1665,
+      "bytes": 108749,
+      "sha256": "22d885466bf574a93b437aeaa8e8071f02a45bda1bd0487f41af576d0fb37c9b"
+    },
+    "apuracao__430__escuro": {
+      "largura": 430,
+      "altura": 1665,
+      "bytes": 109161,
+      "sha256": "6cc2671514bbfb0e93519c22ef7fc562e121ba54df8abaadf6a4d95eca08a6f2"
+    },
+    "apuracao__paisagem__claro": {
+      "largura": 812,
+      "altura": 1355,
+      "bytes": 106932,
+      "sha256": "af7f3f4a4a57416f5ee3cd0c5a5b2525ea61b620ca168e7d18d57f525653ddea"
+    },
+    "apuracao__paisagem__escuro": {
+      "largura": 812,
+      "altura": 1355,
+      "bytes": 107513,
+      "sha256": "2940179e233bea21a13669babd6ac9f240cb3c80044ad9dc4f253d20abd4bde4"
+    },
+    "apuracao__reflow320__claro": {
+      "largura": 320,
+      "altura": 1757,
+      "bytes": 103562,
+      "sha256": "6cb82e10503b0b461b90e9551c13dbaa9389509d61a2ae2ccc2c29f131e7da54"
+    },
+    "apuracao__reflow320__escuro": {
+      "largura": 320,
+      "altura": 1757,
+      "bytes": 104269,
+      "sha256": "d98dcb1e823fd632efd0e37d3ecfcfee96e46d474decc3479a1d9f888463eb59"
+    },
+    "apuracao__zoom200__claro": {
+      "largura": 1280,
+      "altura": 2896,
+      "bytes": 251801,
+      "sha256": "cb2a45e5fec7b56feb58acebcd3a70893abe6c8890986422724695fd65abf2a6"
+    },
+    "apuracao__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 2896,
+      "bytes": 252911,
+      "sha256": "41a5c058d6e9d7a0284ec1312af18058a71255bc45d43a2d12e42591c597b80c"
+    },
+    "caderno__430__claro": {
+      "largura": 430,
+      "altura": 1545,
+      "bytes": 111536,
+      "sha256": "b365826e134fbe658f069459eb5b27635c5a0837b9fb6c600d2611029bbc3b64"
+    },
+    "caderno__430__escuro": {
+      "largura": 430,
+      "altura": 1545,
+      "bytes": 111863,
+      "sha256": "79e8708c477a919f996eae678ef5ca5baa2b82b38fe914508fcf4f829bcbd441"
+    },
+    "caderno__paisagem__claro": {
+      "largura": 812,
+      "altura": 1325,
+      "bytes": 112638,
+      "sha256": "9057470e689a68557a023480a5ea3a174832317c52ff7a55c9b7f934e1fd42a2"
+    },
+    "caderno__paisagem__escuro": {
+      "largura": 812,
+      "altura": 1325,
+      "bytes": 113370,
+      "sha256": "1ee9b04dcc8b674ab84563f61c6d2f64cf7ec15d7c81ab76ad0c703374100b82"
+    },
+    "caderno__reflow320__claro": {
+      "largura": 320,
+      "altura": 1704,
+      "bytes": 105817,
+      "sha256": "1569a262824b7c7b0c85fb1f71823f946ed74fa6cbe7be5d2eb45e3824833a34"
+    },
+    "caderno__reflow320__escuro": {
+      "largura": 320,
+      "altura": 1704,
+      "bytes": 106246,
+      "sha256": "66d0f7ec42fc6ea5600c1fda8afd5d1430987d564064be38e77f5be527059563"
+    },
+    "caderno__zoom200__claro": {
+      "largura": 1280,
+      "altura": 2632,
+      "bytes": 261010,
+      "sha256": "193d85a6403939e40131a0ae87f3686e0e097287c3522af294c926fd9289f673"
+    },
+    "caderno__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 2632,
+      "bytes": 261017,
+      "sha256": "a3b465ee7929f3de6d6d2c5fbb647804b46c29d5f60e1e1b867afed7d96005fa"
+    },
+    "codex__430__claro": {
+      "largura": 430,
+      "altura": 2507,
+      "bytes": 173848,
+      "sha256": "c559e642ce6c3948e8b0bbc7119ffb2f7dec26a4d11a38055cd06cf5025db56f"
+    },
+    "codex__430__escuro": {
+      "largura": 430,
+      "altura": 2507,
+      "bytes": 173985,
+      "sha256": "19a630b36160157ff5dd8437b523fbe4216de03741f1850346aefa820e4b9ade"
+    },
+    "codex__paisagem__claro": {
+      "largura": 812,
+      "altura": 2267,
+      "bytes": 185007,
+      "sha256": "8fb452d549dad3bc4cc6c81faf9b0095421a6f6935ded7068d0145f0ee429f4b"
+    },
+    "codex__paisagem__escuro": {
+      "largura": 812,
+      "altura": 2267,
+      "bytes": 184845,
+      "sha256": "948abbcac196fed7899bb21b083f2d0502bb701fda9e6d73a633a1d9afabfc75"
+    },
+    "codex__reflow320__claro": {
+      "largura": 320,
+      "altura": 2821,
+      "bytes": 171466,
+      "sha256": "37756e5ca20992ede8fe26507fe42a29ce309b63bda4558015b3c96606655cb6"
+    },
+    "codex__reflow320__escuro": {
+      "largura": 320,
+      "altura": 2821,
+      "bytes": 171347,
+      "sha256": "2de569a8d545be7fb7df1958c9c4e50a99fe030ff2f7075c930a637d5097c1f0"
+    },
+    "codex__zoom200__claro": {
+      "largura": 1280,
+      "altura": 4672,
+      "bytes": 420643,
+      "sha256": "32318de9da4e6ac076630c69cee8601205522d63d14082e7000353d6898ec59d"
+    },
+    "codex__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 4672,
+      "bytes": 418373,
+      "sha256": "ea5b2d1b734a357004beb01749c192676000448f76e2ce692046d96079fb3565"
+    },
+    "configuracoes__430__claro": {
+      "largura": 430,
+      "altura": 932,
+      "bytes": 34277,
+      "sha256": "3799cd6ebcf3e0d0f2bf0d7fbc9e3ddae015e09caf7cc9440c6164d50f41e834"
+    },
+    "configuracoes__430__escuro": {
+      "largura": 430,
+      "altura": 932,
+      "bytes": 33973,
+      "sha256": "f80ee95f1f95aaa942810a0c566d32c411199dd410942c15e23028fd3de80206"
+    },
+    "configuracoes__paisagem__claro": {
+      "largura": 812,
+      "altura": 408,
+      "bytes": 35875,
+      "sha256": "01240bc21733f539dd1f61dbf22849b20c0ec9ddbe93bc098fb442f613bc4c4e"
+    },
+    "configuracoes__paisagem__escuro": {
+      "largura": 812,
+      "altura": 408,
+      "bytes": 35673,
+      "sha256": "31ae71055ce340ad47514e45d1f76e9a9db6811bf87363082b3fdb8d969c25f8"
+    },
+    "configuracoes__reflow320__claro": {
+      "largura": 320,
+      "altura": 640,
+      "bytes": 32126,
+      "sha256": "b20cf705e42975d3f7677a4d78bd572af4d9022fda4a42f8ed99244ce2dba26d"
+    },
+    "configuracoes__reflow320__escuro": {
+      "largura": 320,
+      "altura": 640,
+      "bytes": 32158,
+      "sha256": "c0fb733f3f53433d66cd3271522f4cb1d2379ea7e9c2cd27b28e5ed07a4540de"
+    },
+    "configuracoes__zoom200__claro": {
+      "largura": 1280,
+      "altura": 900,
+      "bytes": 79856,
+      "sha256": "4b0a1659467962e614491d5daf208fc02ca30ed92ac63cbaaa8a7e2bafc1e350"
+    },
+    "configuracoes__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 900,
+      "bytes": 79962,
+      "sha256": "18779241e3e93ab9d7b98725c3dc678cf5df3aefa3f80b35847554f83658109f"
+    },
+    "diligencias__430__claro": {
+      "largura": 430,
+      "altura": 2222,
+      "bytes": 157207,
+      "sha256": "8447c05f45ee7d58f1dd5bccb2ed06c14d89b27df28ebdcfb1d0333e1ee0f107"
+    },
+    "diligencias__430__escuro": {
+      "largura": 430,
+      "altura": 2222,
+      "bytes": 157548,
+      "sha256": "70aca3b0e4b4a847f6c2e5c518ddcb428df4a5700ebf76975883c76d0a456498"
+    },
+    "diligencias__paisagem__claro": {
+      "largura": 812,
+      "altura": 1867,
+      "bytes": 157436,
+      "sha256": "4b1b6559c866a4574c5aa59c2568cf182f1006eca7eb025d3cd65d7acb9c4541"
+    },
+    "diligencias__paisagem__escuro": {
+      "largura": 812,
+      "altura": 1867,
+      "bytes": 157870,
+      "sha256": "ce2fe535769d749703160de4c5dc18ea492b344161bb092afc4cf9ac86d793f0"
+    },
+    "diligencias__reflow320__claro": {
+      "largura": 320,
+      "altura": 2585,
+      "bytes": 158014,
+      "sha256": "cb5970a5a86041e70850cd226dcc8ce0f4b612fcd8b3b82285d084faf435b4d2"
+    },
+    "diligencias__reflow320__escuro": {
+      "largura": 320,
+      "altura": 2585,
+      "bytes": 157145,
+      "sha256": "387bb3c8c5459839c0a0b225a2383218631784680940d26e7cf364ca6b3b05fc"
+    },
+    "diligencias__zoom200__claro": {
+      "largura": 1280,
+      "altura": 3964,
+      "bytes": 365626,
+      "sha256": "2bb4451a3fd3e17ccfdb34d9fc5ec250da8bed2bb1de9e585c0bbac290b9b891"
+    },
+    "diligencias__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 3964,
+      "bytes": 364652,
+      "sha256": "5a50ed2eb0f90cefa90d92904b612963136385e2bbf450f312c02d447bf13c47"
+    },
+    "documentos__430__claro": {
+      "largura": 430,
+      "altura": 1474,
+      "bytes": 93081,
+      "sha256": "fd8218a3c4aa79c2e1b4767341e61e4ebbc79306a4bc192524ca79afb3bc8e68"
+    },
+    "documentos__430__escuro": {
+      "largura": 430,
+      "altura": 1474,
+      "bytes": 93389,
+      "sha256": "dab5b3657f5d89c233b143265b1acfea95595f113c87579c8a556c70a5cd5e26"
+    },
+    "documentos__paisagem__claro": {
+      "largura": 812,
+      "altura": 1059,
+      "bytes": 103031,
+      "sha256": "95b2376b5e12be98b13df6d77e8131258fa00335e881686b0b8de2123c6a53bd"
+    },
+    "documentos__paisagem__escuro": {
+      "largura": 812,
+      "altura": 1059,
+      "bytes": 103287,
+      "sha256": "70d0045a3fa5c38d3e7b9167fda3aca558322e584294047b83a6a66ac4b6a188"
+    },
+    "documentos__reflow320__claro": {
+      "largura": 320,
+      "altura": 1544,
+      "bytes": 90287,
+      "sha256": "356e55efb50bb4f597e65f79bfe956deee79eafaf1d9414769fa378c410af0a4"
+    },
+    "documentos__reflow320__escuro": {
+      "largura": 320,
+      "altura": 1544,
+      "bytes": 90243,
+      "sha256": "c39acc41979684d14e7e8345f2207b55237f371d23371bbbee07c9994985aa22"
+    },
+    "documentos__zoom200__claro": {
+      "largura": 1280,
+      "altura": 2776,
+      "bytes": 224493,
+      "sha256": "69e1329d714a5644892ba6f96f58c6196728200372840467d126130379561869"
+    },
+    "documentos__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 2776,
+      "bytes": 224868,
+      "sha256": "d965cb1e94cebc7aa80d3871f1308050a86f3847a816b4d32592a4360594b15d"
+    },
+    "entrar__430__claro": {
+      "largura": 430,
+      "altura": 939,
+      "bytes": 44994,
+      "sha256": "2f41229969d687492db05de5c60c08181d5d1636d90142b6d16dce7e2fd9f2d8"
+    },
+    "entrar__430__escuro": {
+      "largura": 430,
+      "altura": 939,
+      "bytes": 44367,
+      "sha256": "3171b174e30828151c995e05594bdcbf73da716469ec8f91f2f2bf7b10fdf525"
+    },
+    "entrar__paisagem__claro": {
+      "largura": 812,
+      "altura": 815,
+      "bytes": 48028,
+      "sha256": "0540089d94eddc1c1c6742efed9f3d03fe70c7c131d4122e47ba45d851faf3f8"
+    },
+    "entrar__paisagem__escuro": {
+      "largura": 812,
+      "altura": 815,
+      "bytes": 47798,
+      "sha256": "a98f47b000acdf2a1e187bfb63ab6d9bf89a0e4d7b473014387bb12d4af35148"
+    },
+    "entrar__reflow320__claro": {
+      "largura": 320,
+      "altura": 906,
+      "bytes": 45208,
+      "sha256": "0edae45aa88ffd21658b75390e9d309a4240c794e4dfe436bc36d2cbe72e08d0"
+    },
+    "entrar__reflow320__escuro": {
+      "largura": 320,
+      "altura": 906,
+      "bytes": 44795,
+      "sha256": "e492bc199688ff6114409c81f7a7700bdd6adde8dac8f1b75d7c82035335b79d"
+    },
+    "entrar__zoom200__claro": {
+      "largura": 1280,
+      "altura": 1652,
+      "bytes": 112244,
+      "sha256": "1274938de0d90d6f857f4ecf436da5034170725adc23d2c8a2aad7f8b1770e23"
+    },
+    "entrar__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 1652,
+      "bytes": 111769,
+      "sha256": "12334c6a7ba7fcbdb85ed470cd32c250926dcb3d7ec6a7412b67b0595800406b"
+    },
+    "gerenciar__430__claro": {
+      "largura": 430,
+      "altura": 1666,
+      "bytes": 101853,
+      "sha256": "f518d25c4c6cc26463ebd98fb4f86b04c8f5fc5d3427a83b7eb1e1a6e6b96d1b"
+    },
+    "gerenciar__430__escuro": {
+      "largura": 430,
+      "altura": 1666,
+      "bytes": 101006,
+      "sha256": "de92dbdb615c76e0b00b5a4b3ae3b3aa93641836a6b79796755f7ea097ae3561"
+    },
+    "gerenciar__paisagem__claro": {
+      "largura": 812,
+      "altura": 1383,
+      "bytes": 108196,
+      "sha256": "2654ceb8bb27c9d71535c19cf9990d0e35044220b28f1b6f8d7d5779bc961102"
+    },
+    "gerenciar__paisagem__escuro": {
+      "largura": 812,
+      "altura": 1383,
+      "bytes": 108369,
+      "sha256": "6e5eb4873692b4208d1a32f6dcee58a59b7fde214f0afcc90ce03685db68f930"
+    },
+    "gerenciar__reflow320__claro": {
+      "largura": 320,
+      "altura": 1785,
+      "bytes": 102649,
+      "sha256": "63eae670a293ffadb43966375d40bb375c85cd83f3902a9971f3514d051bb6d6"
+    },
+    "gerenciar__reflow320__escuro": {
+      "largura": 320,
+      "altura": 1785,
+      "bytes": 102329,
+      "sha256": "0de7db5ead3753d5264640fc215821bdece347d3090d04152b3d5966b6e51093"
+    },
+    "gerenciar__zoom200__claro": {
+      "largura": 1280,
+      "altura": 2962,
+      "bytes": 251841,
+      "sha256": "aaebbe607d0835425d4c13fe1f5a91dd86aceb49f7254b2bfb1cc2d858c3af8c"
+    },
+    "gerenciar__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 2962,
+      "bytes": 251359,
+      "sha256": "dc136b9e1627c4e4416d619b6b6a2be5e393ceab12b1285ac239ae13de88e68c"
+    },
+    "inicio__430__claro": {
+      "largura": 430,
+      "altura": 1727,
+      "bytes": 127687,
+      "sha256": "a8e92bccad8812ae1e80eaf1a854d597b73c7990bc4a12045d2a0de41e332dc2"
+    },
+    "inicio__430__escuro": {
+      "largura": 430,
+      "altura": 1727,
+      "bytes": 127082,
+      "sha256": "e4d34d5d7ffbdb17136d55d9d1c793834a48994a9031ec5b34bfbcd4438d5401"
+    },
+    "inicio__paisagem__claro": {
+      "largura": 812,
+      "altura": 1578,
+      "bytes": 140973,
+      "sha256": "f849ee9085dd5a9c3c58af9d38e4765f18123dfc9ca06cd109ea7f5165c4a9aa"
+    },
+    "inicio__paisagem__escuro": {
+      "largura": 812,
+      "altura": 1578,
+      "bytes": 140476,
+      "sha256": "7fd3324907251bbada70bab75a134f38f874136c5b2bbc001d567205cc8035fc"
+    },
+    "inicio__reflow320__claro": {
+      "largura": 320,
+      "altura": 1941,
+      "bytes": 126716,
+      "sha256": "fcf29bc0415716c1a5bba6f67ab1c205614b0afa18f53384deb72bcb1b43513d"
+    },
+    "inicio__reflow320__escuro": {
+      "largura": 320,
+      "altura": 1941,
+      "bytes": 125670,
+      "sha256": "0b6cb44a5a254658f1b2d233439a509e1ac78aa1a3d3051570878904e09236c8"
+    },
+    "inicio__zoom200__claro": {
+      "largura": 1280,
+      "altura": 3214,
+      "bytes": 303537,
+      "sha256": "71ef220cd0cde6cbf489ac453d39893ed7f2baa6466f68a812e45b3e6bee261c"
+    },
+    "inicio__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 3214,
+      "bytes": 302449,
+      "sha256": "dfcb9755e97526badcc0b782f8a2bed10ca38b3baf068748a4237badaf0371d5"
+    },
+    "nova__430__claro": {
+      "largura": 430,
+      "altura": 932,
+      "bytes": 57892,
+      "sha256": "d60ae91d087ff28d3f68add1a8af452d29ef1ac43493dafd955f53ef960261a9"
+    },
+    "nova__430__escuro": {
+      "largura": 430,
+      "altura": 932,
+      "bytes": 57669,
+      "sha256": "ade4630ae4766c94f617dcbd7526dedf122ea2ab704d5cf4d1611affa7fd698c"
+    },
+    "nova__paisagem__claro": {
+      "largura": 812,
+      "altura": 820,
+      "bytes": 64519,
+      "sha256": "43822a7850c90cee13af64bf57ac63bf5585b6c6805bf5610302245a6a0d784e"
+    },
+    "nova__paisagem__escuro": {
+      "largura": 812,
+      "altura": 820,
+      "bytes": 64487,
+      "sha256": "2b95b33b00acd6643ad4b6579753e1feb784cacf52845a4020119d98ec11f38f"
+    },
+    "nova__reflow320__claro": {
+      "largura": 320,
+      "altura": 905,
+      "bytes": 56547,
+      "sha256": "080bb03c45022755473bb26bc0d77141608df08a47e072fb6db69e0b640f14c6"
+    },
+    "nova__reflow320__escuro": {
+      "largura": 320,
+      "altura": 905,
+      "bytes": 56819,
+      "sha256": "c87df3684976de382d93888dc9afefec0195b14edc17692dfdbe76c56c81a025"
+    },
+    "nova__zoom200__claro": {
+      "largura": 1280,
+      "altura": 1716,
+      "bytes": 141199,
+      "sha256": "4ac32eaa94b9db2ab41cfcabb3c7b5122254e319d377e51ad97ef6ae02604e5e"
+    },
+    "nova__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 1716,
+      "bytes": 141855,
+      "sha256": "71b0723e688f1d6fe15a2f96732b1ae65d9790f9fb5fcecfaf35fd1c4c077bcc"
+    },
+    "quadros__430__claro": {
+      "largura": 430,
+      "altura": 3807,
+      "bytes": 251970,
+      "sha256": "02400be820c79728f36b445f6b721875ce5c19bbad3949c4b7d78f67a491260d"
+    },
+    "quadros__430__escuro": {
+      "largura": 430,
+      "altura": 3807,
+      "bytes": 250798,
+      "sha256": "9ba8d1ed8eb4cd78795d3e97d8033a3ebbb494655ef7180ad54454a07d4813f9"
+    },
+    "quadros__paisagem__claro": {
+      "largura": 812,
+      "altura": 3255,
+      "bytes": 263651,
+      "sha256": "64f97ebea95634b3bf1f3e68a9b0f075968b732f208c0747a4c06634081dd13c"
+    },
+    "quadros__paisagem__escuro": {
+      "largura": 812,
+      "altura": 3255,
+      "bytes": 263520,
+      "sha256": "59c6cf641ded9993323112d6f1ecf0f6a8d2aa39962c75f455127d9fb6a3c8e4"
+    },
+    "quadros__reflow320__claro": {
+      "largura": 320,
+      "altura": 4632,
+      "bytes": 253190,
+      "sha256": "ebb8f8d5777319b284ab27c8f51205814cf627f79590480afcd782e33e8dff99"
+    },
+    "quadros__reflow320__escuro": {
+      "largura": 320,
+      "altura": 4632,
+      "bytes": 251840,
+      "sha256": "cd81cc72e0746298f3a8a6300ae5a19b9faaa6d37f1ffa95e4744686ee918101"
+    },
+    "quadros__zoom200__claro": {
+      "largura": 1280,
+      "altura": 6506,
+      "bytes": 601314,
+      "sha256": "35a2ad65d164e0d8e565903211b7b0a45e53ae6145a662f67a0a7844a076d797"
+    },
+    "quadros__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 6506,
+      "bytes": 599069,
+      "sha256": "e6d74021903f20d4609a6572eb7088910ec0597f63b7d318646d4eeef5ca9e77"
+    },
+    "quadros_linha__430__claro": {
+      "largura": 430,
+      "altura": 2150,
+      "bytes": 176703,
+      "sha256": "918937b9946bf34304525740e0086f515a47fba8d5087a6dbaadda0e2bf53bca"
+    },
+    "quadros_linha__430__escuro": {
+      "largura": 430,
+      "altura": 2150,
+      "bytes": 176928,
+      "sha256": "5190c79c8470c1a00d19272af3462491b3e894656251712cdab228bee1c6e4a1"
+    },
+    "quadros_linha__paisagem__claro": {
+      "largura": 812,
+      "altura": 1453,
+      "bytes": 183820,
+      "sha256": "18aea3f39df02b296425dc3e40151e871510357c88af96ee5813e6c68fc76244"
+    },
+    "quadros_linha__paisagem__escuro": {
+      "largura": 812,
+      "altura": 1453,
+      "bytes": 184282,
+      "sha256": "a714befa6108f812f15ff01eb3b7d205978f2ac3170545d2fe8e0d90aecc9570"
+    },
+    "quadros_linha__reflow320__claro": {
+      "largura": 320,
+      "altura": 2619,
+      "bytes": 180818,
+      "sha256": "69b939eaaec548ef8cd3ff729a612fd950d392e71376e5de1120d3c6795fb8af"
+    },
+    "quadros_linha__reflow320__escuro": {
+      "largura": 320,
+      "altura": 2619,
+      "bytes": 180624,
+      "sha256": "2566922f3110a87c72876ba152b9f62da8bb1713cbb4f949b8b3da3332cbe5be"
+    },
+    "quadros_linha__zoom200__claro": {
+      "largura": 1280,
+      "altura": 3630,
+      "bytes": 421421,
+      "sha256": "06ed71c236f9673b2bb07852ce01e4b7714e1bdb5f9e4c38314a261d20297fdd"
+    },
+    "quadros_linha__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 3630,
+      "bytes": 418785,
+      "sha256": "9199ec2dfaec9f0c7b7fca12cd844c1781b63d913bc60b9ef8156d05a20f209e"
+    },
+    "quadros_mapa__430__claro": {
+      "largura": 430,
+      "altura": 1745,
+      "bytes": 159790,
+      "sha256": "fb5834a28d87c1685b92d2b2a6761410bc54e6d1ef3421890a415c8a273791ea"
+    },
+    "quadros_mapa__430__escuro": {
+      "largura": 430,
+      "altura": 1745,
+      "bytes": 159865,
+      "sha256": "555ae526f60c689f566771afcf2e4db0fa77361a508bb77549437f4fa712fc5f"
+    },
+    "quadros_mapa__paisagem__claro": {
+      "largura": 812,
+      "altura": 1555,
+      "bytes": 169592,
+      "sha256": "09fe7536a4ad51c8f0ba3c9f6e4d097f75c8a87c231a9bd8fe0ee8489b0388c5"
+    },
+    "quadros_mapa__paisagem__escuro": {
+      "largura": 812,
+      "altura": 1555,
+      "bytes": 169742,
+      "sha256": "ea09ba2716464828c8f6651440b6b2b303df908dabb4287c58f4379d5f301c6d"
+    },
+    "quadros_mapa__reflow320__claro": {
+      "largura": 320,
+      "altura": 2165,
+      "bytes": 160571,
+      "sha256": "daea6d546b48dbcae9eb139c999b83c0ef253616bc4cfb03d352525937debe2b"
+    },
+    "quadros_mapa__reflow320__escuro": {
+      "largura": 320,
+      "altura": 2165,
+      "bytes": 159961,
+      "sha256": "40ca844984401166697a7d01fd1dc4f350121d728a2314875de7b7ba547373fe"
+    },
+    "quadros_mapa__zoom200__claro": {
+      "largura": 1280,
+      "altura": 3198,
+      "bytes": 390028,
+      "sha256": "fc548a9fca25a781a3a4a5487907811d703aac297158bbb1d0c3b8b02456871a"
+    },
+    "quadros_mapa__zoom200__escuro": {
+      "largura": 1280,
+      "altura": 3198,
+      "bytes": 389838,
+      "sha256": "f49339df0e035ec1e74bf3a56b553110239c7dfeb4343ba3f0fedb49a5a77fd0"
+    }
+  }
+}

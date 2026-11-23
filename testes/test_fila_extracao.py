@@ -38,6 +38,8 @@ from selecionar_caso import selecionar  # noqa: E402
 import test_registros as fixtures  # noqa: E402
 from test_extracao_cadastro_pdf import HAS_PYPDF, pdf_sintetico  # noqa: E402
 import trava_cadastro  # noqa: E402
+from apoio_cpu_baixa import (NECESSARIO_ARQUIVO, NECESSARIO_PARA_LER, NECESSARIO_PARA_SAIR,  # noqa: E402
+                             esperar_com_cpu)
 
 AUXILIAR = TESTES / 'apoio_trava_processo.py'
 
@@ -745,11 +747,17 @@ class FilaProcessosTest(Base):
         return caminho.read_bytes()
 
     def lendo(self, lote, tentativas=0, exceto=None, pagina=True):
-        """Wait until an extraction process has the file (and reads its pages); returns its pid."""
-        estado = self.esperar_estado(
-            lote, lambda e: e['arquivos'][0]['estado'] == 'extraindo' and e['arquivos'][0].get('processo')
-            and (e['arquivos'][0].get('pagina') or not pagina) and e['arquivos'][0]['tentativas'] == tentativas
-            and e['arquivos'][0]['processo'] != exceto, 60, 'o processo de extração não começou a ler')
+        """Wait until an extraction process has the file (and reads its pages); returns its pid.
+
+        It runs below normal priority without core 0: on a busy machine it may get no CPU for long. The wait
+        skips only when a probe in the same conditions got no CPU during it (apoio_cpu_baixa), else fails."""
+        def condicao():
+            e = interno(self.root, lote)
+            arquivo = e['arquivos'][0]
+            return e if (arquivo['estado'] == 'extraindo' and arquivo.get('processo')
+                         and (arquivo.get('pagina') or not pagina) and arquivo['tentativas'] == tentativas
+                         and arquivo['processo'] != exceto) else None
+        estado = esperar_com_cpu(self, condicao, 60, NECESSARIO_PARA_LER, 'o processo de extração não começou a ler')
         return estado['arquivos'][0]['processo']
 
     def test_extracao_roda_em_outro_processo(self):
@@ -805,17 +813,18 @@ class FilaProcessosTest(Base):
         lote = corpo['lote']['lote']
         trabalhador = self.lendo(lote)
         self.assertNotEqual(trabalhador, mesa.pid)
-        inicio = time.monotonic()
         mesa.matar()
-        # The extraction process ends with the Mesa (vigia), long before the file would be read
-        # (about 15 s): not because its input closed, which it only reads between files.
-        esperar(lambda: not vivo(trabalhador), 10, 'o processo de extração sobreviveu à Mesa')
-        self.assertLess(time.monotonic() - inicio, 4, 'o processo de extração saiu só ao terminar a leitura')
+        # The extraction process ends with the Mesa (vigia) within 4 s, long before the file would be read
+        # (about 15 s): not because its input closed, which it only reads between files. Waking the vigia
+        # takes low-priority CPU too: the wait fails only if a probe in the same conditions had it.
+        esperar_com_cpu(self, lambda: not vivo(trabalhador), 4, NECESSARIO_PARA_SAIR,
+                        'o processo de extração não saiu com a Mesa (saiu só ao terminar a leitura, ou nunca)')
         self.assertEqual(interno(self.root, lote)['arquivos'][0]['estado'], 'extraindo')
         # The next start reads the file again (one attempt counted) and publishes it.
         nova = Mesa(self, self.root, '--extracao', 'processos')
-        esperar(lambda: interno(self.root, lote).get('estado') == 'publicado', 120,
-                'a Mesa reiniciada não concluiu o lote')
+        # The whole heavy file is read again at low priority (about 15 s of CPU): fail only if it had the CPU.
+        esperar_com_cpu(self, lambda: interno(self.root, lote).get('estado') == 'publicado', 120, NECESSARIO_ARQUIVO,
+                        'a Mesa reiniciada não concluiu o lote')
         arquivo = nova.fila()[0]['arquivos'][0]
         self.assertEqual((arquivo['estado'], arquivo['extracao'], arquivo['tentativas']), ('pronto', 'extraido', 1))
         nova.desligar(self)

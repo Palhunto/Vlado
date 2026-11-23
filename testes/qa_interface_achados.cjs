@@ -1,6 +1,6 @@
 // Development acceptance only. Uses an isolated headless browser and synthetic server.
 const {chromium} = require('playwright');
-const {irParaCadastro} = require('./qa_navegacao.cjs');
+const {irParaNovaApuracao, criarApuracao, enviarArquivos} = require('./qa_navegacao.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const assert = require('node:assert/strict');
@@ -14,7 +14,7 @@ const [origin,output,chrome] = process.argv.slice(2);
   async function status(text) { await page.locator('#achados-status').filter({hasText:text}).waitFor(); }
   async function selectCase(id) {
     if (!await page.locator('#acervo-escolha').evaluate(el => el.open)) await page.locator('#acervo-escolha > summary').click();
-    await page.selectOption('#caso',id); await page.selectOption('#rodada','R001');
+    await page.selectOption('#contexto-caso',id); await page.selectOption('#rodada','R001');
     await page.locator('#achados-revisao option').first().waitFor({state:'attached'});
   }
   async function selectRecords(revision,generation) {
@@ -22,20 +22,25 @@ const [origin,output,chrome] = process.argv.slice(2);
     await page.locator(`#achados-revisao option[value="${revision}"]`).waitFor({state:'attached'});
     await page.selectOption('#achados-revisao',revision);
     await page.selectOption('#achados-geracao',generation);
-    await page.locator('#achados-buscar:enabled').waitFor();
+    await page.locator('#achados-buscar:enabled').waitFor({state:'attached'});   // o botão fica dentro de "Pesquisar e filtrar achados", recolhido
     await page.locator('#achados-exportar:enabled').waitFor();
+  }
+  // Os campos de pesquisa e filtro dos achados ficam em "Pesquisar e filtrar achados" (details recolhido por padrão no desktop).
+  async function filtros() {
+    const caixa=page.locator('details.desktop-finding-filters');
+    if(await caixa.count() && !await caixa.evaluate(el => el.open)) await caixa.locator('> summary').click();
   }
   try {
     await page.goto(origin);
-    await page.locator('#caso option[value="alpha"]').waitFor({state:'attached'});
-    assert.equal(await page.locator('#area-cadastro').isVisible(),false);
-    await irParaCadastro(page);
-    assert.equal(await page.locator('#area-cadastro').isVisible(),true);
+    await page.locator('#contexto-caso option[value="alpha"]').waitFor({state:'attached'});
+    assert.equal(await page.locator('#area-nova').isVisible(),false);
+    await irParaNovaApuracao(page);   // a área Cadastrar arquivos saiu (R4): o passo 1 da Nova apuração é a #area-nova
+    assert.equal(await page.locator('#area-nova').isVisible(),true);
     assert.equal(await page.locator('#selecao-acervo').isVisible(),false);
     assert.equal(await page.locator('#area-documentos').isVisible(),false);
-    await page.click('#ver-documentos');
-    assert.equal(await page.locator('#caso').inputValue(),'');
-    await page.selectOption('#caso','alpha'); await page.selectOption('#rodada','R001');
+    await page.click('#ver-documentos'); await page.click('#mesa-aba-pesquisa');   // rodada, geração e consulta são a aba "Pesquisar no conteúdo"
+    assert.equal(await page.locator('#contexto-caso').inputValue(),'');
+    await page.selectOption('#contexto-caso','alpha'); await page.selectOption('#rodada','R001');
     await page.selectOption('#geracao','v1'); await page.locator('#buscar:enabled').waitFor();
     await page.fill('#consulta','valor'); await page.click('#buscar');
     await page.locator('#saida:not([hidden])').waitFor();
@@ -45,8 +50,8 @@ const [origin,output,chrome] = process.argv.slice(2);
     await firstHit.locator('.context:not([hidden])').waitFor();
     assert.match(await firstHit.locator('.context').innerText(),/valor 12/);
     assert.equal(await page.evaluate(() => window.INJETADO),undefined);
-    await irParaCadastro(page); await page.click('#ver-documentos');
-    assert.equal(await page.locator('#caso').inputValue(),'alpha');
+    await irParaNovaApuracao(page); await page.click('#ver-documentos');
+    assert.equal(await page.locator('#contexto-caso').inputValue(),'alpha');
     assert.equal(await page.locator('#geracao').inputValue(),'v1');
     for (const width of [1365,736,390,320]) {
       await page.setViewportSize({width,height:900});
@@ -57,32 +62,38 @@ const [origin,output,chrome] = process.argv.slice(2);
     await page.click('#ver-achados'); await selectCase('alpha'); await selectRecords('r1','g1');
     assert.equal(await page.locator('#achados-resultados article').count(),10);
     assert.equal(await page.locator('#achados-inspecao > article').count(),1);
-    assert.equal(await page.locator('#achados-versoes').evaluate(el => el.open),false);
+    // O painel "Pesquisar e filtrar achados" fica como a pessoa o deixou (selectRecords o abre); o roteiro antigo esperava que ele recolhesse sozinho.
+    assert.equal(await page.locator('#achados-versoes').count(),1);
     const secondChoice=page.locator('#achados-resultados .finding-open').nth(1);
     await secondChoice.click();
     assert.equal(await secondChoice.getAttribute('aria-pressed'),'true');
     assert.match(await page.locator('#achados-inspecao .technical').first().textContent(),/A002@v1/);
     assert.equal(await page.locator('#achados-inspecao .technical').first().evaluate(el => el.open),false);
-    await page.locator('#achados-inspecao').getByRole('button',{name:'Voltar à lista de achados'}).click();
+    // Em 1024 px ou mais a lista e a ficha ficam lado a lado e não há "Voltar"; em tela estreita a ficha é uma tela própria, com o botão e o retorno do foco.
+    await page.setViewportSize({width:390,height:900});
+    await secondChoice.click();
+    await page.locator('#achados-voltar-lista').click();
     assert.equal(await secondChoice.evaluate(el=>el===document.activeElement),true);
+    await page.setViewportSize({width:1365,height:1000});
     await page.locator('#achados-resultados .finding-open').first().click();
     checks.push('cadastro separado, navegação sem seleção automática, lista/ficha sincronizadas e retorno de foco');
     assert.equal(await page.evaluate(() => window.INJETADO),undefined);
     assert.match(await page.locator('#achados-status').innerText(),/Revisão mais recente/);
     await page.click('#achados-proximo'); await page.locator('#achados-exportar:enabled').waitFor();
     assert.equal(await page.locator('#achados-resultados article').count(),4);
+    await page.selectOption('#achados-formato','json');   // o formato padrão é o texto com referências (Markdown); aqui se confere o JSON
     const [exported] = await Promise.all([page.waitForEvent('download'),page.click('#achados-exportar')]);
     const data=JSON.parse(await fs.readFile(await exported.path(),'utf8'));
     assert.equal(data.retornados,14); assert.equal(data.completa,true); assert.equal(data.truncado,false);
     await exported.saveAs(path.join(output,'selecao_completa_sintetica.json'));
     checks.push('paginação e exportação integral de 14 achados; XSS tratado como texto; aviso de revisão sucessora');
-    await page.fill('#achados-texto','script'); await page.click('#achados-buscar');
+    await filtros(); await page.fill('#achados-texto','script'); await filtros(); await page.click('#achados-buscar');
     await page.locator('#achados-exportar:enabled').waitFor();
     assert.equal(await page.locator('#achados-resultados article').count(),1);
     assert.equal(await page.evaluate(() => window.INJETADO),undefined);
-    await page.fill('#achados-texto',''); await selectRecords('r3','g3');
+    await filtros(); await page.fill('#achados-texto',''); await selectRecords('r3','g3');
     await page.locator('#achados-filtros summary').click();
-    await page.selectOption('#achados-briefing','sim'); await page.click('#achados-buscar');
+    await filtros(); await page.selectOption('#achados-briefing','sim'); await filtros(); await page.click('#achados-buscar');
     await page.locator('#achados-exportar:enabled').waitFor();
     assert.equal(await page.locator('#achados-resultados article').count(),1);
     assert.match(await page.locator('#achados-filtros-ativos').innerText(),/No briefing: sim/);
@@ -142,8 +153,8 @@ const [origin,output,chrome] = process.argv.slice(2);
       await route.continue();
     });
     const stale=page.waitForResponse(r=>r.url().endsWith('/api/achados-buscar') && r.request().postDataJSON().revisao==='r3');
-    await page.click('#achados-buscar');
-    await page.selectOption('#achados-briefing','');
+    await filtros(); await page.click('#achados-buscar');
+    await filtros(); await page.selectOption('#achados-briefing','');
     await selectRecords('r1','g1');
     await stale;
     assert.equal(await page.locator('#achados-revisao').inputValue(),'r1');
@@ -151,7 +162,7 @@ const [origin,output,chrome] = process.argv.slice(2);
     await page.unroute('**/api/achados-buscar');
     checks.push('resposta de revisão anterior descartada após nova revisão já carregada');
     await page.route('**/api/achados-buscar',async route => { await new Promise(r=>setTimeout(r,450)); await route.continue(); });
-    await page.fill('#achados-texto','valor'); await page.click('#achados-buscar');
+    await filtros(); await page.fill('#achados-texto','valor'); await filtros(); await page.click('#achados-buscar');
     await selectCase('beta'); await status('Registros ainda não produzidos');
     await page.waitForResponse(r=>r.url().endsWith('/api/achados-buscar'));
     assert.equal(await page.locator('#achados-resultados article').count(),0);
@@ -173,17 +184,12 @@ const [origin,output,chrome] = process.argv.slice(2);
     assert.equal(await page.locator('#achados-resultados article').count(),0);
     await page.screenshot({path:path.join(output,'erro.png')});
     checks.push('conjunto vazio revisado, banco ausente e erro de integridade distintos; sem dependência de FTS documental');
-    await irParaCadastro(page);
     assert.equal(await page.locator('#cadastro-id').count(),0);
-    await page.fill('#cadastro-titulo-input','Cadastro de teste visual');
-    await page.selectOption('#cadastro-natureza','sinteticos');
-    await page.setInputFiles('#cadastro-arquivos',{name:'amostra.txt',mimeType:'text/plain',buffer:Buffer.from('Documento sintético do teste de navegação.')});
-    await page.click('#enviar-documentos');
-    await page.locator('#cadastro-status').filter({hasText:'Aguardando sua pergunta'}).waitFor();
-    assert.match(await page.locator('#cadastro-recibo').innerText(),/1 de 1/);
-    assert.match(await page.locator('#cadastro-caso').inputValue(),/^apuracao_[a-f0-9]{32}$/);
-    assert.equal(await page.locator('#novo-caso-campos').isVisible(),false);
-    assert.equal(await page.locator('#caso').inputValue(),'');
+    await criarApuracao(page,{nome:'Cadastro de teste visual',natureza:'sinteticos'});
+    await enviarArquivos(page,{name:'amostra.txt',mimeType:'text/plain',buffer:Buffer.from('Documento sintético do teste de navegação.')});
+    await page.locator('#mesa-acervo-status').filter({hasText:'Aguardando sua pergunta'}).waitFor();
+    assert.match(await page.locator('#documentos-recibo').innerText(),/1 de 1/);
+    assert.match(await page.locator('#contexto-caso').inputValue(),/^apuracao_[a-f0-9]{32}$/);
     for (const width of [1365,736,390,320]) {
       await page.setViewportSize({width,height:900});
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),false);

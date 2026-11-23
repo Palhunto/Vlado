@@ -43,7 +43,7 @@ window.IndicadorSalvamento = (() => {
   // Resume summary at the top of the evidence boards (collapsed, admins only).
   async function retomada() {
     const area = $('area-quadros');
-    if (!area || document.body.dataset.papel === 'convidado' || typeof window.Continuidade?.montar !== 'function') return;
+    if (!area || !window.Sessao.pode('continuidade-resumo') || typeof window.Continuidade?.montar !== 'function') return;
     let caixa = $('quadros-retomada');
     const caso = window.contextoCaso?.() || '';
     const anunciado = window.Quadros ? await window.Quadros.disponivel('continuidade_resumo') : false;
