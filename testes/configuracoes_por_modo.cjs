@@ -4,14 +4,32 @@
 // perfil, Sair nem abas. Com contas, dono, editor, repórter e leitor têm o botão e o perfil; o convidado só o perfil (Minha conta). DOM sintético.
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const {criarMesa, Evento} = require('./dom_minimo.cjs');
 
+// As capacidades de cada papel são as do servidor de verdade (testes/fixtures/capacidades_por_papel.json, conferida por test_capacidades_fixture.py): quem não tem `ia-config` não vê o botão.
+const CAPACIDADES = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'capacidades_por_papel.json'), 'utf8'));
+const sessaoDe = papel => ({conta: {id: 'a'.repeat(16), nome: 'Ana Lima', email: 'ana@redacao.org', login: 'ana.lima', papel, casos: papel === 'dono' ? null : ['alfa']},
+  organizacao: {id: 'o1', nome: 'Redação Serena'}, pendencias: [], capacidades: CAPACIDADES[papel], csrf: 'x', ambiente: 'homologacao', modo: 'piloto', expira_em: null});
+const recusa = (codigo, erro) => Object.assign(new Error(erro), {result: {estado: 'proibido', codigo, erro}});
+
 const ESTADO = {provedor: 'anthropic', modelo_preferido: null, modelos_padrao: {anthropic: 'claude-sonnet-5-5', openai: 'gpt'}, chaves: {anthropic: {configurada: false}, openai: {configurada: false}}};
-async function abrir(modo, papel, {ia = ESTADO, idioma = 'pt'} = {}) {
-  const mesa = criarMesa({desktop: true, modo, papel, idioma, url: 'http://127.0.0.1:8765/?area=inicio', api: operacao => (operacao === 'ia-config' ? ia : {})});
-  await mesa.esperar(10);
+// `capacidades`: com contas a sessão traz a lista do papel, como o servidor; o modo local não a manda (nada se esconde). `status`: a resposta de codex-status.
+async function abrir(modo, papel, {ia = ESTADO, idioma = 'pt', capacidades = false, status = {}} = {}) {
+  const proprio = capacidades ? papel : null;
+  const mesa = criarMesa({desktop: true, modo, papel: papel === 'dono' ? 'admin' : papel, idioma, url: 'http://127.0.0.1:8765/?area=inicio',
+    api: operacao => {
+      if (operacao === 'sessao' && proprio) return sessaoDe(proprio);
+      if (operacao === 'ia-config') { if (proprio && !CAPACIDADES[proprio].includes('ia-config')) throw recusa('operacao_proibida', 'Operação não permitida para este acesso.'); return ia; }
+      if (operacao === 'codex-status') return status;
+      return {};
+    }});
+  await mesa.esperar(12);
   return mesa;
 }
+// Perguntar abre: o codex.js lê o codex-status (provedor e modelo reais, para qualquer papel).
+const abrirPerguntar = async mesa => { mesa.janela.dispatchEvent(new Evento('codex-abrir')); await mesa.esperar(12); return mesa; };
 
 test('o formulário da chave de IA mora só em Configurações, em todos os modos, e Perguntar ficou com a linha e o link', async () => {
   for (const [modo, papel] of [['local', 'admin'], ['local-contas', 'admin'], ['piloto', 'dono']]) {
@@ -63,16 +81,35 @@ test('"Alterar em Configurações" abre a página com o foco no título do paine
   assert.ok(mesa.doc.activeElement === mesa.$('ia-titulo'), 'o foco vai ao título do painel');
 });
 
-test('modos com contas: dono, editor, repórter e leitor têm o botão do cabeçalho e o perfil; o convidado só o perfil', async () => {
+test('com contas cada papel vê o que as capacidades reais dão: só quem tem ia-config vê o botão e o link; todos têm o perfil, Sair e a linha de Perguntar', async () => {
   for (const modo of ['local-contas', 'piloto']) {
-    for (const papel of ['admin', 'dono', 'editor', 'reporter', 'leitor']) {
-      const mesa = await abrir(modo, papel);
-      assert.equal(mesa.$('mesa-configuracoes').hidden, false, `${modo}/${papel}: botão do cabeçalho`);
+    for (const papel of ['dono', 'editor', 'reporter', 'leitor']) {
+      const tem = CAPACIDADES[papel].includes('ia-config');
+      const mesa = await abrirPerguntar(await abrir(modo, papel, {capacidades: true, status: {autenticado: true, provedor: 'anthropic', modelo: 'claude-sonnet-5-5', versao: '1'}}));
+      assert.equal(mesa.$('mesa-configuracoes').hasAttribute('data-sem-capacidade'), !tem, `${modo}/${papel}: botão do cabeçalho ${tem ? 'aparece' : 'some'}`);
+      assert.equal(mesa.$('ia-alterar').hasAttribute('data-sem-capacidade'), !tem, `${modo}/${papel}: link de Perguntar ${tem ? 'aparece' : 'some'}`);
       assert.equal(mesa.$('ver-configuracoes').hidden, false, `${modo}/${papel}: perfil`);
       assert.equal(mesa.$('mesa-sair').hidden, false, `${modo}/${papel}: Sair`);
+      assert.equal(mesa.$('ia-resumo-linha').hidden, false, `${modo}/${papel}: a linha do que está em uso aparece`);
     }
-    const convidado = await abrir(modo, 'convidado');
+    const convidado = await abrir(modo, 'convidado', {capacidades: true});
     assert.equal(convidado.$('mesa-configuracoes').hidden, true, `${modo}/convidado: sem botão`);
     assert.equal(convidado.$('ver-configuracoes').hidden, false, `${modo}/convidado: Minha conta`);
   }
+  assert.ok(CAPACIDADES.dono.includes('ia-config') && !CAPACIDADES.editor.includes('ia-config'), 'o fixture diferencia os papéis (o teste não é vazio)');
+});
+
+test('P1 da Coruja: quem não tem ia-config vê o provedor e o modelo reais pelo codex-status, e sem eles a linha fica escondida (nunca um texto fixo)', async () => {
+  const real = await abrirPerguntar(await abrir('piloto', 'editor', {capacidades: true, status: {autenticado: true, provedor: 'openai', modelo: 'gpt-x', versao: '1'}}));
+  assert.equal(real.$('ia-resumo-linha').hidden, false);
+  assert.equal(real.$('ia-resumo').textContent, 'IA: OpenAI (GPT), modelo gpt-x.');
+  assert.ok(real.$('ia-alterar').hasAttribute('data-sem-capacidade'), 'sem o link');
+  const ingles = await abrirPerguntar(await abrir('piloto', 'editor', {capacidades: true, idioma: 'en', status: {autenticado: true, provedor: 'anthropic', modelo: 'claude-sonnet-5-5'}}));
+  ingles.janela.I18N.aplicar(ingles.$('codex-conexao'));
+  assert.equal(ingles.$('ia-resumo').textContent, 'AI: Anthropic (Claude), model claude-sonnet-5-5.');
+  const sem = await abrirPerguntar(await abrir('piloto', 'leitor', {capacidades: true, status: {autenticado: true}}));
+  assert.equal(sem.$('ia-resumo-linha').hidden, true, 'sem provedor e modelo, a linha não aparece');
+  assert.equal(sem.$('ia-resumo').textContent, '');
+  const dono = await abrirPerguntar(await abrir('piloto', 'dono', {capacidades: true, status: {autenticado: true, provedor: 'openai', modelo: 'gpt-x'}}));
+  assert.equal(dono.$('ia-resumo').textContent, 'IA: Anthropic (Claude), modelo padrão.', 'quem pode mudar vê o que a configuração diz');
 });
