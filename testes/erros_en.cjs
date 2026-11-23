@@ -30,7 +30,7 @@ test('código conhecido aparece em inglês, com os parâmetros', async () => {
 
 test('falha do provedor (ia_*) e a trava do original também têm texto em inglês', async () => {
   assert.equal((await falha('en', {erro: 'A conversa excedeu a janela de contexto do modelo. Abra uma nova conversa.', codigo: 'ia_contexto'})).message,
-    "The conversation went past the model's context window. Open a new conversation.");
+    "The conversation went past the model’s context window. Open a new conversation.");
   const trava = await falha('en', {erro: 'Para marcar “Conferida no original”, abra antes o original de cada trecho citado (faltam: E001, E002).',
     codigo: 'conferencia_sem_original', faltam: ['E001', 'E002']});
   assert.equal(trava.message, 'To mark “Checked against the original”, first open the original of each cited excerpt (missing: E001, E002).');
