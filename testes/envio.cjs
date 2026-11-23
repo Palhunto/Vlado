@@ -473,7 +473,7 @@ test('se o servidor diz que a apuração nova não existe, o envio para e avisa:
   aceitar(mesa, 0, 'L1');
   await livre(mesa); await livre(mesa); await livre(mesa);
   assert.equal(mesa.pedidos.length, 2);
-  mesa.pedidos[1].responder(400, {estado: 'erro', erro: 'Caso inexistente; não cadastrar em outro caso automaticamente.'});
+  mesa.pedidos[1].responder(400, {estado: 'erro', codigo: 'caso_inexistente', erro: 'Caso inexistente; não cadastrar em outro caso automaticamente.'});
   const final = await promessa;
   assert.equal(mesa.pedidos.length, 2, 'o terceiro lote não foi enviado');
   assert.ok(final.erro, 'o resultado traz o erro');
@@ -537,7 +537,7 @@ test('R2: o aviso "A apuração nova não foi criada" só aparece para a recusa 
   const final = await promessa;
   assert.notEqual(final.incerto, true);
   // e a recusa que diz isso, por código ou por texto, para o envio
-  for (const corpo of [{estado: 'erro', erro: 'Caso inexistente; não cadastrar em outro caso automaticamente.'}, {estado: 'indisponivel', codigo: 'caso_indisponivel', erro: 'Apuração indisponível para esta conta.'}]) {
+  for (const corpo of [{estado: 'erro', codigo: 'caso_inexistente', erro: 'Caso inexistente; não cadastrar em outro caso automaticamente.'}, {estado: 'indisponivel', codigo: 'caso_indisponivel', erro: 'Apuração indisponível para esta conta.'}]) {
     const outro = abrir({fila: id => ({lote: id, caso: CASO_DO_SERVIDOR, estado: 'falha', motivo: 'x', arquivos: []})});
     const envio = outro.janela.Envio.enviar({escopo: {novo: true, titulo: 'T'}, arquivos: [arquivo('a.pdf', 40 * MB), arquivo('b.pdf', 40 * MB), arquivo('c.pdf', 40 * MB)], alvo: outro.$('alvo')});
     await livre(outro); aceitar(outro, 0, 'L1');

@@ -838,12 +838,14 @@ window.NovaApuracao = (() => {
 
   const fontes = () => [...document.querySelectorAll('input[name="nova-fontes"]')].find(opcao => opcao.checked)?.value || 'somente_documental';
   function desenharEtapas() {
+    delete document.body.dataset.novaEtapas;
     for (const id of ['nova-etapas-1', 'nova-etapas-2']) {
       const alvo = $(id);
       alvo.replaceChildren();
       const aqui = id === 'nova-etapas-1' ? fluxo === 'passo1' : currentArea === 'documentos';
       alvo.hidden = !etapa || !aqui;
       if (alvo.hidden) continue;
+      document.body.dataset.novaEtapas = '1';   // a linha de etapas da Nova apuração toma o lugar da linha de Documentos, Pergunta, Conferência e Caderno
       ETAPAS.forEach((nome, i) => {
         const passo = element('span', undefined, 'nova-etapa');
         passo.append(element('b', String(i + 1)), ' ', t(nome));
@@ -940,14 +942,17 @@ window.NovaApuracao = (() => {
     return window.Documentos.enviar(arquivos, {escopo, alvo: $('documentos-envio'), alvoRecibo: $('documentos-recibo'),
       // O servidor aceitou o primeiro lote: a apuração existe. O seletor do topo passa a ela e a tela vira a Documentos comum.
       aoCriar: async caso => {
+        const nome = dados.nome;
         fluxo = null; dados = null; delete document.body.dataset.nova;
         $('nova-aviso').hidden = true;
+        // O catálogo só ganha a apuração quando o lote é publicado (depois da leitura dos arquivos): até lá, o título vem do que a pessoa digitou.
         if (typeof loadCatalog === 'function') await loadCatalog();
+        if (!cases.some(c => c.id === caso)) cases.push({id: caso, titulo: nome, rodadas: []});
         window.definirContextoCaso?.(caso, {force: true});
         areaHeading(); desenharEtapas();
         await extra.depoisDeCriar?.(caso);
       },
-      aoConcluir: async resultado => { etapa = 3; desenharEtapas(); await extra.aoConcluir?.(resultado); },
+      aoConcluir: async resultado => { etapa = 3; desenharEtapas(); if (typeof loadCatalog === 'function') await loadCatalog(); await extra.aoConcluir?.(resultado); },
       aoIndisponivel: extra.aoIndisponivel,
       aoTerminar: resultado => {
         if (fluxo === 'passo2' && resultado && !resultado.recebidos && resultado.incerto) {

@@ -41,7 +41,7 @@
 :root{
  color-scheme:light;
  --theme-background:var(--vlado-papel-100);--theme-surface:var(--vlado-papel-50);--theme-sidebar:var(--vlado-papel-200);
- --theme-text:var(--vlado-tinta-900);--theme-muted:var(--vlado-tinta-600);--theme-accent:var(--vlado-verde-700);
+ --theme-text:var(--vlado-tinta-900);--theme-muted:var(--vlado-tinta-600);--theme-disabled-text:var(--vlado-tinta-600);--theme-accent:var(--vlado-verde-700);
  --theme-primary-hover:var(--vlado-verde-600);--theme-on-primary:var(--vlado-branco);
  --theme-line:var(--vlado-papel-300);--theme-input-line:var(--vlado-tinta-500);--theme-accent-line:var(--vlado-verde-400);--theme-focus:var(--vlado-ocre-700);
  --theme-soft:var(--vlado-verde-50);--theme-reading:var(--vlado-papel-150);--theme-active:var(--vlado-verde-100);
@@ -55,7 +55,7 @@
 :root[data-theme=dark]{
  color-scheme:dark;
  --theme-background:var(--vlado-noite-900);--theme-surface:var(--vlado-noite-800);--theme-sidebar:var(--vlado-noite-950);
- --theme-text:var(--vlado-papel-250);--theme-muted:var(--vlado-tinta-300);--theme-accent:var(--vlado-verde-300);
+ --theme-text:var(--vlado-papel-250);--theme-muted:var(--vlado-tinta-300);--theme-disabled-text:var(--vlado-tinta-500);--theme-accent:var(--vlado-verde-300);
  --theme-primary-hover:var(--vlado-verde-200);--theme-on-primary:var(--vlado-verde-950);
  --theme-line:var(--vlado-noite-700);--theme-input-line:var(--vlado-tinta-400);--theme-accent-line:var(--vlado-verde-350);--theme-focus:var(--vlado-ocre-300);
  --theme-soft:var(--vlado-verde-800);--theme-reading:var(--vlado-noite-750);--theme-active:var(--vlado-verde-800);

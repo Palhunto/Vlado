@@ -1070,7 +1070,7 @@ A resposta é sempre `{estado: "confirmacao_enviada"}`, para endereço livre e p
 
 | Estado | Linha | Ações |
 |---|---|---|
-| Desligado (`ativo: false`) | "○ Segundo fator desligado" e, em 14 `--theme-muted`, "Um código do aplicativo autenticador, além da senha, na entrada." Para dono e editor, também "Obrigatório para o seu papel." | "Cadastrar" (secundário) |
+| Desligado (`ativo: false`) | "○ Segundo fator desligado" e, em 14 `--theme-muted`, "Um código do aplicativo autenticador, além da senha, na entrada." Quando `GET /api/sessao` não traz `conta-fator-remover` em `capacidades` (dono e editor, em todo modo), vem também "Depois de cadastrado, o segundo fator não pode ser removido no seu papel." A tela não diz que o fator é obrigatório: no `local-contas` ele é opcional, e onde é obrigatório quem não o tem não chega a Minha conta, porque vai à [página da pendência](#pendencia-fator) (B1 da Coruja sobre `8ce862e`). | "Cadastrar" (secundário) |
 | Ligado | "✓ Código do autenticador ativo" e, em 14 `--theme-muted`, "desde 12 de nov. · 8 códigos de reserva" (`ativado_em`, `codigos_restantes`) | "Gerar novos códigos" e "Trocar de aparelho" (secundários); "Remover" (destrutivo) só quando `GET /api/sessao` traz `conta-fator-remover` em `capacidades`, que nunca vem para dono e editor |
 | Ligado, com 3 códigos ou menos | igual ao anterior, mais a linha "! Restam 2 códigos de reserva. Gere novos." em 14/600 `--theme-warning` | as mesmas |
 
