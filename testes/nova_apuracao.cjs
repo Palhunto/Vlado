@@ -102,12 +102,16 @@ test('erros junto ao campo: nome em branco, site em branco, e site inválido (es
   assert.equal(avisos(mesa)[0].textContent, 'Falta o nome. Dê um nome à apuração.');
   assert.equal(mesa.$('nova-nome').getAttribute('aria-invalid'), 'true'); assert.ok(mesa.doc.activeElement === mesa.$('nova-nome'));
   assert.equal(area(mesa), 'nova', 'não avança');
+  const filhos = [...mesa.$('nova-form').children], rotulo = mesa.$('nova-nome').closest('label');
+  assert.deepEqual([filhos.indexOf(avisos(mesa)[0]) - filhos.indexOf(rotulo), filhos.indexOf(mesa.$('nova-nome-dica')) - filhos.indexOf(avisos(mesa)[0])], [1, 1], 'o erro vem logo depois do campo e o apoio depois do erro');
   digitar(mesa.$('nova-nome'), 'Transporte escolar');
   const [somenteDocs, web] = [...mesa.doc.querySelectorAll('input[name="nova-fontes"]')];
   somenteDocs.checked = false; web.checked = true; web.dispatchEvent(new Evento('change', {bubbles: true}));
   await enviar(mesa);
   assert.equal(avisos(mesa)[0].textContent, 'Falta o site. Escreva o domínio, por exemplo prefeitura.sp.gov.br.');
   assert.equal(mesa.$('nova-site').getAttribute('aria-invalid'), 'true');
+  const interno = [...mesa.$('nova-site-campo').children];
+  assert.deepEqual(interno.map(no => no.tagName.toLowerCase() + (no.classList.contains('campo-erro') ? '.erro' : '')), ['label', 'p.erro', 'p'], 'no site também: campo, erro, apoio');
   for (const invalido of ['https://prefeitura.sp.gov.br', 'prefeitura.sp.gov.br/transporte', 'localhost', '10.0.0.5', 'prefeitura sp.gov.br', 'prefeitura.sp.gov.br:8080', '.gov.br']) {
     digitar(mesa.$('nova-site'), invalido);
     await enviar(mesa);

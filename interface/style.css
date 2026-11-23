@@ -2673,3 +2673,11 @@ body[data-nova="passo2"] #area-documentos :is(.docs-avisos,.docs-paginas){displa
 /* (c) Seletor de apuração do topo, sem caixa como no canvas (P34): o que o identifica é o rótulo, o nome e a seta, todos em --theme-text; o fundo ao passar o mouse só reforça. */
 .persistent-context select{color:var(--theme-text)}
 .persistent-context select:hover{background:var(--theme-soft)}
+
+/* Nova apuração: o erro de campo vem primeiro, a 4 px do campo, e o apoio depois (componentes.md#nova-apuracao). A dica "Páginas de <domínio>" não vira flex (o espaço é do texto). */
+.nova-cartao>.campo-erro,.nova-cartao>.nova-dica{margin-top:calc(var(--espaco-1) - var(--espaco-4))}
+.nova-dica{margin-bottom:0}
+#nova-site-campo{display:flex;flex-direction:column}
+#nova-site-campo[hidden]{display:none}
+#nova-site-campo>.nova-dica{margin-top:var(--espaco-1)}
+.docs-paginas .estado-titulo{display:block}
