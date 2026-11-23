@@ -344,21 +344,40 @@ def _encerrar_tudo(codigo):
     os._exit(codigo)
 
 
-def vigiar_cpu(config, enviar):
-    """End the file's processing, saying why, once it used more CPU seconds than the cap."""
-    limite = config['cpu_s']
+BATIMENTO_S = 2.0  # a page image's process says its own CPU this often (the Mesa cannot read it from outside)
+
+
+def mensagem_cpu_leitura_visual(limite) -> str:
+    return (f'A leitura visual da página excedeu o teto de {limite} s de CPU (VLADO_LEITURA_VISUAL_TETO_CPU_S): '
+            'a página é pesada demais para virar imagem. Consulte o original na interface.')
+
+
+def vigiar_cpu(config, enviar, limite=None, mensagem=None):
+    """End the file's processing, saying why, once it used more CPU seconds than the cap (``limite``: another
+    cap than the extraction's, with its own ``mensagem``)."""
+    limite = config['cpu_s'] if limite is None else limite
+    mensagem = mensagem or (f'O arquivo excedeu o teto de {limite} s de CPU da extração (VLADO_EXTRACAO_TETO_CPU_S). '
+                            'O original está preservado; o texto não foi extraído.')
 
     def vigiar():
         while True:
             time.sleep(0.25)
             if _cpu_usado() > limite:
                 try:
-                    enviar({'tipo': 'limite', 'mensagem': (
-                        f'O arquivo excedeu o teto de {limite} s de CPU da extração (VLADO_EXTRACAO_TETO_CPU_S). '
-                        'O original está preservado; o texto não foi extraído.')})
+                    enviar({'tipo': 'limite', 'mensagem': mensagem})
                 finally:
                     _encerrar_tudo(5)
     threading.Thread(target=vigiar, daemon=True, name='vigia_de_cpu').start()
+
+
+def bater(enviar, intervalo=BATIMENTO_S):
+    """Send this process's own CPU seconds every ``intervalo`` s. On Windows the Mesa holds the pid of the .venv
+    launcher, whose child is this Python: only this process can say how much CPU it got."""
+    def batimento():
+        while True:
+            time.sleep(intervalo)
+            enviar({'tipo': 'cpu', 'cpu_s': round(_cpu_usado(), 2)})
+    threading.Thread(target=batimento, daemon=True, name='batimento_de_cpu').start()
 
 
 def vigiar_pai(pid):
@@ -430,7 +449,6 @@ def main():
 
     if len(sys.argv) == 3 and sys.argv[1] == '--pai' and sys.argv[2].isdigit():
         vigiar_pai(int(sys.argv[2]))
-    vigiar_cpu(config, enviar)
     enviar({'tipo': 'limites', 'aplicado': aplicado})
     entrada = open(sys.stdin.fileno(), 'r', encoding='utf-8', closefd=False)
     for linha in entrada:
@@ -439,6 +457,13 @@ def main():
         pedido = json.loads(linha)
         if pedido.get('tipo') == 'sair':
             break
+        # The CPU cap starts with the request, before anything of the file is read: a page image has its own.
+        if 'renderizar' in pedido:
+            limite = config['cpu_leitura_visual_s']
+            vigiar_cpu(config, enviar, limite, mensagem_cpu_leitura_visual(limite))
+            bater(enviar)
+        else:
+            vigiar_cpu(config, enviar)
         try:
             _responder(pedido, enviar)
         except MemoryError:

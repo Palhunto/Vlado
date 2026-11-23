@@ -28,6 +28,7 @@ class CodigosTest(unittest.TestCase):
             'O conteúdo do item mudou desde a conferência. Revise o alcance e confirme novamente.': ('alcance_alterado', {}),
             'Não foi possível apagar tudo (arquivo em uso ou sem permissão).': ('apagamento_incompleto', {}),
             'Apuração não liberada para esta conta.': ('caso_nao_liberado', {}),
+            'Caso inexistente; não cadastrar em outro caso automaticamente.': ('caso_inexistente', {}),
             'Selecione uma apuração para os quadros de evidência.': ('quadro_sem_caso', {}),
             'Campos inválidos no pedido do quadro.': ('quadro_campos_invalidos', {}),
             'Registro não encontrado nesta apuração.': ('registro_inexistente', {}),

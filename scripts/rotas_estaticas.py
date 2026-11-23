@@ -96,14 +96,9 @@ ARQUIVOS = {'/': ('index.html', 'text/html; charset=utf-8'),
             '/quadros.js': ('quadros.js', 'text/javascript; charset=utf-8'),
             '/analise.js': ('analise.js', 'text/javascript; charset=utf-8'),
             '/indicador_salvamento.js': ('indicador_salvamento.js', 'text/javascript; charset=utf-8'),
-            # Fonts cut to Latin (the Lume's part C) and the Vitral's files (Onda 3, parts B and D):
-            # listed before they land; until then, 404.
+            # Fonts cut to Latin (the Lume's part C).
             '/fonts/SourceSerif4-latin.woff2': ('fonts/SourceSerif4-latin.woff2', 'font/woff2'),
-            '/fonts/SourceSans3-latin.woff2': ('fonts/SourceSans3-latin.woff2', 'font/woff2'),
-            '/dialogo.js': ('dialogo.js', 'text/javascript; charset=utf-8'),
-            '/estados.js': ('estados.js', 'text/javascript; charset=utf-8'),
-            '/envio.js': ('envio.js', 'text/javascript; charset=utf-8'),
-            '/componentes_o3.css': ('componentes_o3.css', 'text/css; charset=utf-8')}
+            '/fonts/SourceSans3-latin.woff2': ('fonts/SourceSans3-latin.woff2', 'font/woff2')}
 
 MARCADOR = re.compile(rb'__V:([0-9A-Za-z_./-]{1,160})__')
 VERSOES = b'__VERSOES__'

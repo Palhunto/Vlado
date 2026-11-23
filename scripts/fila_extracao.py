@@ -117,6 +117,9 @@ def configuracao(modo='local', **valores) -> dict:
     config = {'modo': modo, 'processos': inteiro('VLADO_EXTRACAO_PROCESSOS', 2, 1, 16),
               'paginas': inteiro('VLADO_EXTRACAO_PAGINAS', min(4, os.cpu_count() or 1), 1, 64),
               'tempo_maximo': inteiro('VLADO_EXTRACAO_TEMPO_MAXIMO', 4 * 3600, 30, 7 * 24 * 3600),
+              # Clock limit of one page image (the model's visual reading): only so that a question is never held
+              # for ever. A heavy page is stopped by its CPU cap (tetos: VLADO_LEITURA_VISUAL_TETO_CPU_S) first.
+              'tempo_leitura_visual': inteiro('VLADO_LEITURA_VISUAL_TEMPO_MAXIMO', 600, 10, 24 * 3600),
               # What may wait in casos/.fila (C4): batches and megabytes, per case and in all. The
               # bytes keep one account from filling the volume; the counts bound the waiting line.
               'lotes_por_caso': inteiro('VLADO_FILA_LOTES_POR_CASO', 20, 1, 1000),
@@ -150,6 +153,16 @@ def motivo_da_saida(codigo) -> str:
     if codigo in (3221225477, -1073741819):  # STATUS_ACCESS_VIOLATION
         return 'O processo de extração caiu com violação de acesso ao ler o arquivo (código 0xC0000005).'
     return f'O processo de extração terminou sem resposta (código {codigo}).'
+
+
+def _duracao(segundos) -> str:
+    return f'{segundos // 60} min' if segundos >= 60 and segundos % 60 == 0 else f'{segundos} s'
+
+
+def mensagem_leitura_visual_ocupada(prazo, cpu, teto) -> str:
+    """The clock limit of a page image reached while its process got little CPU: the server is busy."""
+    return (f'O servidor está ocupado: em {_duracao(prazo)} a leitura visual da página recebeu só {cpu:.1f} s de CPU '
+            f'(o teto da página é {teto} s). Tente de novo mais tarde ou consulte o original na interface.')
 
 
 def _agora():
@@ -547,39 +560,74 @@ class Fila:
     def consultar(self, *, lote=None, caso=None):
         return consultar(self.root, lote=lote, caso=caso)
 
-    def renderizar_pagina(self, pdf, numero, prazo=60):
+    def renderizar_pagina(self, pdf, numero, prazo=None):
         """PNG of one PDF page for the model's visual reading (SEG-01), within the pixel caps.
 
         Mode ``processos``: in a new isolated extraction process (the PDF is untrusted input and
-        MuPDF runs in it, not in the Mesa). Mode ``local``: in this process, with the same caps.
-        ValueError with the reason.
+        MuPDF runs in it, not in the Mesa), below normal priority. A heavy page is stopped by the
+        process's own CPU cap (``VLADO_LEITURA_VISUAL_TETO_CPU_S``, 60 s); ``prazo`` (clock seconds,
+        ``VLADO_LEITURA_VISUAL_TEMPO_MAXIMO``, 10 min) only keeps a busy server that gives the process
+        no CPU from holding the question for ever, and says so with the CPU the process reported.
+        Mode ``local``: in this process, with the same caps. ValueError with the reason.
         """
         if self.config['modo'] != 'processos':
             return tetos_extracao.renderizar_png(Path(pdf), int(numero))
+        prazo = self.config['tempo_leitura_visual'] if prazo is None else prazo
         proc = _abrir_trabalhador()
-        pedido = json.dumps({'renderizar': {'pdf': str(pdf), 'pagina': int(numero)}}, ensure_ascii=False) + '\n'
-        try:
-            saida, _ = proc.communicate(pedido, timeout=prazo)
-        except subprocess.TimeoutExpired:
+        linhas = queue.Queue()
+
+        def ler():
             try:
-                if os.name == 'nt':
-                    proc.kill()
-                else:
-                    os.killpg(proc.pid, 9)
-            except (OSError, ProcessLookupError):
+                for linha in proc.stdout:
+                    linhas.put(linha)
+            except (OSError, ValueError):
                 pass
-            proc.communicate()
-            raise ValueError(f'A leitura visual da página excedeu {prazo} s; consulte o original na interface.') from None
-        for linha in saida.splitlines():
+            finally:
+                linhas.put(None)
+        threading.Thread(target=ler, daemon=True, name='vlado_leitura_visual').start()
+        cpu = 0.0
+        try:
             try:
-                mensagem = json.loads(linha)
-            except ValueError:
-                continue
-            if mensagem.get('tipo') == 'imagem':
-                return base64.b64decode(mensagem['png'])
-            if mensagem.get('tipo') in ('erro', 'limite'):
-                raise ValueError(mensagem.get('mensagem') or 'A página não pôde ser lida como imagem.')
-        raise ValueError(motivo_da_saida(proc.returncode) + ' Consulte o original na interface.')
+                proc.stdin.write(json.dumps({'renderizar': {'pdf': str(pdf), 'pagina': int(numero)}},
+                                            ensure_ascii=False) + '\n')
+                proc.stdin.close()
+            except (OSError, ValueError):
+                pass  # the process ended at once: its exit code says why, below
+            limite = time.monotonic() + prazo
+            while True:
+                restante = limite - time.monotonic()
+                if restante <= 0:
+                    raise ValueError(mensagem_leitura_visual_ocupada(
+                        prazo, cpu, self.config['tetos']['cpu_leitura_visual_s']))
+                try:
+                    linha = linhas.get(timeout=restante)
+                except queue.Empty:
+                    continue
+                if linha is None:
+                    break
+                try:
+                    mensagem = json.loads(linha)
+                except ValueError:
+                    continue
+                if mensagem.get('tipo') == 'cpu' and isinstance(mensagem.get('cpu_s'), (int, float)):
+                    cpu = float(mensagem['cpu_s'])
+                elif mensagem.get('tipo') == 'imagem':
+                    return base64.b64decode(mensagem['png'])
+                elif mensagem.get('tipo') in ('erro', 'limite'):
+                    raise ValueError(mensagem.get('mensagem') or 'A página não pôde ser lida como imagem.')
+            proc.wait(30)
+            raise ValueError(motivo_da_saida(proc.returncode) + ' Consulte o original na interface.')
+        finally:
+            if proc.poll() is None:
+                try:
+                    if os.name == 'nt':
+                        proc.kill()
+                    else:
+                        os.killpg(proc.pid, 9)
+                except (OSError, ProcessLookupError):
+                    pass
+                proc.wait(30)
+            proc.stdout.close()
 
     # ciclo de vida -------------------------------------------------------------------------------
     def iniciar(self):

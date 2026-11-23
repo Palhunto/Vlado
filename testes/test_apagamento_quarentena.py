@@ -168,32 +168,143 @@ class QuedaTest(Base):
         apagamento.retomar(self.root)  # the next start: the file is free now
         self.assert_apagado_sem_sobra()
 
+    def test_renomeacao_e_desfazer_que_falham_dizem_a_verdade_e_a_partida_devolve(self):
+        real, feitas = os.rename, [0]
+
+        def em_uso(origem, destino):
+            if apagamento.QUARENTENA in Path(origem).parts:  # putting a root back: in use too
+                raise PermissionError(13, 'arquivo em uso')
+            feitas[0] += 1
+            if feitas[0] > 1:  # the second root is in use
+                raise PermissionError(13, 'arquivo em uso')
+            return real(origem, destino)
+        with mock.patch('apagamento.ESPERA_S', 0), mock.patch('apagamento.os.rename', side_effect=em_uso), \
+                self.assertLogs('vlado.apagamento', 'WARNING'):
+            with self.assertRaisesRegex(ValueError, 'volta à lixeira na próxima partida') as recusa:
+                apagamento.apagar(self.root, self.item['id'], self.token(), quem='admin')
+        self.assertNotIn('continua na lixeira', str(recusa.exception))  # not the whole truth any more
+        self.assertEqual([m['fase'] for m in self.manifestos()], ['renomeando'])
+        apagamento.retomar(self.root)  # the next start
+        self.assert_inteiro_na_lixeira()
+
+    def test_manifesto_ilegivel_conclui_o_apagamento_confirmado_pela_lixeira(self):
+        real, vezes = os.rename, [0]
+
+        def cai_na_segunda(origem, destino):
+            vezes[0] += 1
+            if vezes[0] == 2:
+                raise Queda()
+            return real(origem, destino)
+        with mock.patch('apagamento.os.rename', side_effect=cai_na_segunda), self.assertRaises(Queda):
+            apagamento.apagar(self.root, self.item['id'], self.token(), quem='admin')
+        manifesto = self.root / apagamento.MANIFESTOS / f'{self.item["id"]}.json'
+        manifesto.write_text('{quebrado', encoding='utf-8')  # unreadable, with a root in the quarantine
+        with self.assertLogs('vlado.apagamento', 'WARNING') as aviso:
+            self.assertEqual(apagamento.retomar(self.root)['ilegiveis'], 1)
+        self.assertIn('manifesto ilegível', '\n'.join(aviso.output))
+        self.assertEqual(self.retrato(), {})  # the quarantined root and the ones still in place: all gone
+        self.assertEqual((lixeira.ativos(self.root), self.no_catalogo()), ([], False))
+        self.assertEqual((self.quarentena(), self.manifestos()), ([], []))
+        self.assertEqual([(r['item_id'], r['confirmacao']) for r in self.registros()],
+                         [(self.item['id'], 'manifesto_ilegivel')])
+
+    def test_remocao_de_um_ilegivel_fica_fora_da_trava(self):
+        # The Coruja's proof: with an unreadable manifest the files were removed inside the cadastro lock.
+        from cadastrar_documentos import _trava
+        real, vezes = os.rename, [0]
+
+        def cai_na_segunda(origem, destino):
+            vezes[0] += 1
+            if vezes[0] == 2:
+                raise Queda()
+            return real(origem, destino)
+        with mock.patch('apagamento.os.rename', side_effect=cai_na_segunda), self.assertRaises(Queda):
+            apagamento.apagar(self.root, self.item['id'], self.token(), quem='admin')
+        (self.root / apagamento.MANIFESTOS / f'{self.item["id"]}.json').write_text('{quebrado', encoding='utf-8')
+        desfeito = os.unlink
+
+        def devagar(caminho, *args, **kwargs):  # about 70 files at 50 ms: some seconds of removal
+            if na_quarentena(caminho):
+                time.sleep(0.05)
+            return desfeito(caminho, *args, **kwargs)
+        self.addCleanup(apagamento.aguardar, 60)
+        with mock.patch('apagamento.os.unlink', side_effect=devagar), self.assertLogs('vlado.apagamento', 'WARNING'):
+            self.assertEqual(apagamento.retomar(self.root, segundo_plano=True)['ilegiveis'], 1)
+            self.assertTrue(self.quarentena())  # still being removed
+            inicio = time.monotonic()
+            with _trava(self.root, espera=1.0):  # another taking of the lock gets it
+                pass
+            self.assertLess(time.monotonic() - inicio, 1.0)
+            self.assertTrue(self.quarentena(), 'a remoção terminou antes da conferência: o teste não mediu nada')
+            self.assertTrue(apagamento.aguardar(60))
+        self.assertEqual(self.retrato(), {})
+        self.assertEqual((lixeira.ativos(self.root), self.no_catalogo()), ([], False))
+        self.assertEqual((self.quarentena(), self.manifestos()), ([], []))
+        self.assertEqual([(r['item_id'], r['confirmacao']) for r in self.registros()],
+                         [(self.item['id'], 'manifesto_ilegivel')])
+
+    def test_partida_nunca_cai_e_tenta_de_novo_em_segundo_plano(self):
+        import trava_cadastro
+        chamadas, feito = [], threading.Event()
+
+        def ocupada_na_primeira(root, **opcoes):
+            chamadas.append(opcoes)
+            if len(chamadas) == 1:
+                raise trava_cadastro.TravaOcupada('trava de cadastro ocupada por outro processo')
+            feito.set()
+            return {'desfeitos': 0, 'concluidos': 0, 'orfas': 0, 'ilegiveis': 0}
+        with mock.patch.object(apagamento, 'retomar', side_effect=ocupada_na_primeira), \
+                self.assertLogs('vlado.apagamento', 'WARNING'):
+            self.assertIsNone(apagamento.retomar_na_partida(self.root, intervalo=0.05))  # no exception
+            self.assertTrue(feito.wait(5), 'a retomada não foi tentada de novo')
+        self.assertEqual(chamadas[0].get('espera'), 2.0)  # the start waits little for the lock
+
     def test_quarentena_sem_manifesto_e_removida_e_o_resto_fica(self):
         orfa = self.root / 'casos' / apagamento.QUARENTENA / ('d' * 32) / '0'
         orfa.mkdir(parents=True)
         (orfa / 'sobra.txt').write_text('sobra sintética', encoding='utf-8')
         alheia = self.root / 'casos' / apagamento.QUARENTENA / 'nao-e-um-item'
         alheia.mkdir()
-        self.assertEqual(apagamento.retomar(self.root)['orfas'], 1)
+        with self.assertLogs('vlado.apagamento', 'WARNING'):
+            self.assertEqual(apagamento.retomar(self.root)['orfas'], 1)
         self.assertFalse(orfa.parent.exists())
         self.assertTrue(alheia.exists())  # not a name this module writes: left alone
         self.assertEqual(self.retrato(), self.antes)
+        self.assertEqual((self.manifestos(), self.registros()), ([], []))  # nothing to record
+
+    def test_remocao_de_quarentena_sem_manifesto_fica_fora_da_trava(self):
+        # The Coruja's second proof: a leftover with no manifest was removed inside the cadastro lock.
+        from cadastrar_documentos import _trava
+        sobra = self.root / 'conversas' / apagamento.QUARENTENA / ('e' * 32) / '0'
+        sobra.mkdir(parents=True)
+        for numero in range(70):
+            (sobra / f'sobra_{numero:02}.txt').write_text('sobra sintética', encoding='utf-8')
+        desfeito = os.unlink
+
+        def devagar(caminho, *args, **kwargs):  # 70 files at 50 ms: about 3.5 s of removal
+            if na_quarentena(caminho):
+                time.sleep(0.05)
+            return desfeito(caminho, *args, **kwargs)
+        self.addCleanup(apagamento.aguardar, 60)
+        with mock.patch('apagamento.os.unlink', side_effect=devagar), self.assertLogs('vlado.apagamento', 'WARNING'):
+            self.assertEqual(apagamento.retomar(self.root, segundo_plano=True)['orfas'], 1)
+            self.assertTrue(self.quarentena())  # still being removed
+            inicio = time.monotonic()
+            with _trava(self.root, espera=1.0):  # another taking of the lock gets it
+                pass
+            self.assertLess(time.monotonic() - inicio, 1.0)
+            self.assertTrue(self.quarentena(), 'a remoção terminou antes da conferência: o teste não mediu nada')
+            self.assertTrue(apagamento.aguardar(60))
+        self.assertFalse(sobra.parent.exists())
+        self.assertEqual((self.quarentena(), self.manifestos(), self.registros()), ([], [], []))
+        self.assertEqual(self.retrato(), self.antes)  # the item in the trash untouched
 
 
-class MesaRespondeTest(Base):
-    """Through the server: the deletion's answer comes back at once and other operations that take
-    the cadastro lock and the conversations' lock answer while the files are still being removed."""
-
-    def setUp(self):
-        super().setUp()
+class ComMesa(Base):
+    def subir_mesa(self):
         import http.client
         from interface_pesquisa import Servidor
         self.http = http.client
-        grande = self.root / 'casos/alpha/derivados_grandes'
-        grande.mkdir()
-        for numero in range(1500):
-            (grande / f'f{numero:05}.txt').write_bytes(b'x' * 64)
-        self.antes = self.retrato()
         self.server = Servidor(('127.0.0.1', 0), self.root)
         thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         thread.start()
@@ -210,6 +321,100 @@ class MesaRespondeTest(Base):
             return resposta.status, json.loads(resposta.read() or b'{}')
         finally:
             con.close()
+
+
+class PendenteTest(ComMesa):
+    """The Coruja's remark: after a rename undone only in part, the trash kept offering Restore and Delete for
+    the item while the refusal said not to. Now it flags the item and refuses both until the next start."""
+
+    def pela_metade(self):
+        real, feitas = os.rename, [0]
+
+        def em_uso(origem, destino):
+            if apagamento.QUARENTENA in Path(origem).parts:  # putting a root back: in use too
+                raise PermissionError(13, 'arquivo em uso')
+            feitas[0] += 1
+            if feitas[0] > 1:  # the second root is in use
+                raise PermissionError(13, 'arquivo em uso')
+            return real(origem, destino)
+        with mock.patch('apagamento.ESPERA_S', 0), mock.patch('apagamento.os.rename', side_effect=em_uso), \
+                self.assertLogs('vlado.apagamento', 'WARNING'), \
+                self.assertRaisesRegex(ValueError, 'volta à lixeira na próxima partida'):
+            apagamento.apagar(self.root, self.item['id'], self.token(), quem='admin')
+        self.assertEqual([m['fase'] for m in self.manifestos()], ['renomeando'])
+
+    def pendentes(self):
+        return {i['id']: i['apagamento_pendente'] for i in apagamento.marcar_pendentes(self.root, lixeira.ativos(self.root))}
+
+    def test_item_pela_metade_sinalizado_e_recusado_ate_a_partida(self):
+        self.assertFalse(lixeira.alcance(self.root, self.item['id'])['apagamento_pendente'])
+        self.pela_metade()
+        manifestos = self.manifestos()
+        self.assertTrue(lixeira.alcance(self.root, self.item['id'])['apagamento_pendente'])
+        self.assertEqual(self.pendentes(), {self.item['id']: True})
+        with self.assertRaises(ValueError) as recusa:
+            lixeira.restaurar(self.root, self.item['id'])
+        self.assertEqual(str(recusa.exception), apagamento.PENDENTE)
+        with self.assertRaises(ValueError) as recusa:
+            apagamento.apagar(self.root, self.item['id'], self.token(), quem='admin')
+        self.assertEqual(str(recusa.exception), apagamento.PENDENTE)
+        self.assertEqual(self.manifestos(), manifestos)  # what the next start needs is untouched
+        self.assertEqual([i['id'] for i in lixeira.ativos(self.root)], [self.item['id']])
+        apagamento.retomar(self.root)  # the next start
+        self.assert_inteiro_na_lixeira()
+        self.assertEqual(self.pendentes(), {self.item['id']: False})
+        self.assertFalse(lixeira.alcance(self.root, self.item['id'])['apagamento_pendente'])
+        lixeira.restaurar(self.root, self.item['id'])  # now it can
+        self.assertEqual(lixeira.ativos(self.root), [])
+
+    def test_item_da_mesma_apuracao_tambem_espera_e_o_de_outra_nao(self):
+        # A conversation of the case may have its folder in that quarantine: deleting it now would be
+        # undone by the next start (the folder comes back), so it waits too. Another case does not.
+        conversa = lixeira.adicionar(self.root, 'conversa', 'alpha', 'Pergunta sintética', conversa=CHAT, rodadas=['R001'])
+        outra = lixeira.adicionar(self.root, 'caso', 'beta', 'Título beta')
+        self.pela_metade()
+        self.assertEqual(self.pendentes(), {self.item['id']: True, conversa['id']: True, outra['id']: False})
+        token = lixeira.alcance(self.root, conversa['id'])['confirmacao']
+        with self.assertRaises(ValueError) as recusa:
+            apagamento.apagar(self.root, conversa['id'], token, quem='admin')
+        self.assertEqual(str(recusa.exception), apagamento.PENDENTE)
+        with self.assertRaises(ValueError) as recusa:
+            lixeira.restaurar(self.root, conversa['id'])
+        self.assertEqual(str(recusa.exception), apagamento.PENDENTE)
+        apagamento.retomar(self.root)
+        self.assertEqual(self.pendentes(), {self.item['id']: False, conversa['id']: False, outra['id']: False})
+        self.assertEqual(self.retrato(), self.antes)
+
+    def test_pela_mesa_o_sinal_e_as_recusas_com_codigo(self):
+        self.subir_mesa()
+        self.pela_metade()
+        status, lista = self.post('gerenciar-listar', {})
+        self.assertEqual((status, [(i['id'], i['apagamento_pendente']) for i in lista['lixeira']]),
+                         (200, [(self.item['id'], True)]))
+        status, alcance = self.post('lixeira-alcance', {'item': self.item['id']})
+        self.assertEqual((status, alcance['apagamento_pendente']), (200, True))
+        esperado = (400, apagamento.PENDENTE, 'apagamento_pendente')
+        status, recusa = self.post('restaurar', {'item': self.item['id']})
+        self.assertEqual((status, recusa.get('erro'), recusa.get('codigo')), esperado)
+        status, recusa = self.post('lixeira-apagar', {'item': self.item['id'], 'confirmacao': alcance['confirmacao'],
+                                                      'nome': 'Título alpha'})
+        self.assertEqual((status, recusa.get('erro'), recusa.get('codigo')), esperado)
+        apagamento.retomar(self.root)
+        self.assert_inteiro_na_lixeira()
+
+
+class MesaRespondeTest(ComMesa):
+    """Through the server: the deletion's answer comes back at once and other operations that take
+    the cadastro lock and the conversations' lock answer while the files are still being removed."""
+
+    def setUp(self):
+        super().setUp()
+        grande = self.root / 'casos/alpha/derivados_grandes'
+        grande.mkdir()
+        for numero in range(1500):
+            (grande / f'f{numero:05}.txt').write_bytes(b'x' * 64)
+        self.antes = self.retrato()
+        self.subir_mesa()
 
     def test_mesa_responde_durante_um_apagamento_grande(self):
         real = os.unlink

@@ -17,30 +17,46 @@ O lote longo continua em processamento até o fim: essa é a prova de que ningu�
 **Carga da máquina.** Antes do PDF longo, as dez sessões cadastram um documento cada ao mesmo tempo,
 sem extração nenhuma em curso: o tempo do mais lento é ``T_ref``, medido na mesma máquina e no mesmo
 minuto. Só cadastros, que terminam: uma rodada inteira de referência deixaria dez perguntas em curso
-no provedor simulado e mudaria o que se mede. Com a extração longa, os dez cadastros têm até ``max(LIMITE_CADASTROS, 2·T_ref)``: se a fila
-travasse a Mesa, o tempo saltaria para perto do tempo do arquivo longo (15 s ou mais), enquanto
-``T_ref`` fica perto de 3 s numa máquina livre; numa máquina carregada os dois sobem juntos. Os dois
-tempos saem na saída do teste. Só quando ``T_ref`` passa de ``SATURADA`` o teste pula, com o motivo
-explícito ("máquina saturada: T_ref = X s"): aí a máquina não deixa medir. Fora disso, a falha é
-falha.
+no provedor simulado e mudaria o que se mede. Com a extração longa, os dez cadastros têm até
+``max(LIMITE_CADASTROS, 2·T_ref)``, com ``T_ref`` limitado a ``TETO_REF`` (acima dele, a Mesa está
+lenta para cadastrar): com o teto de 6 s o limite é 12 s, e o 2·T_ref só conta se o teto subir. Se a
+fila travasse a Mesa, o tempo saltaria para perto do tempo do arquivo longo (15 s ou mais). Os dois
+tempos saem na saída do teste.
 
-**Prioridade baixa.** O processo de extração roda abaixo da prioridade normal e sem o núcleo 0
-(SEG-01), para não tirar CPU da Mesa; com a máquina saturada por outros processos ele pode nem
-começar, e ``T_ref`` (a Mesa, de prioridade normal) não vê isso. Só quando o arquivo longo não começa
-a ser lido em 60 s, uma sonda nas mesmas condições (prioridade abaixo do normal, sem o núcleo 0)
-pede ``SONDA_CPU`` s de CPU: se não os tem em ``SONDA_PRAZO`` s, o teste pula com o motivo explícito
-("máquina saturada para processos de prioridade baixa: X s"); se os tem, a extração que não começou
-é falha. Medido no
-Windows de 4 núcleos (22/11): ``T_ref`` de 0,9 a 1,7 s com nenhum, dois ou os quatro núcleos ocupados
-por outros processos; os dez cadastros com a extração longa, de 1,6 a 5,9 s.
+**Diagnóstico na falha.** Durante as sessões, uma thread do processo do teste (onde a Mesa também roda)
+só dorme 0,1 s de cada vez e anota a maior parada que viu, as faltas de página do processo e a memória
+livre da máquina (mínima e máxima). Nada disso decide nada: vai só na mensagem quando um pedido passa do
+limite, para dizer se o processo inteiro parou (a máquina) ou se só os pedidos esperaram (a Mesa).
+
+**Pular só sem CPU, medida na mesma janela.** Lentidão nunca pula por si: uma Mesa que regrida e fique
+lenta falha. Os tempos da própria Mesa (``T_ref`` acima de ``TETO_REF``, o cadastro avulso acima de
+``LIMITE`` e os pedidos das sessões acima dos seus limites) são medidos numa ``JanelaCpu``: falham
+quando, nos mesmos segundos, a máquina deixou ociosos pelo menos 4 vezes o CPU que o processo do teste
+(onde a Mesa roda) gastou neles, sem passar da duração da janela (um núcleo inteiro ocioso) e com
+mínimo de 1 s; pulam com os números quando não deixou (``apoio_cpu_baixa.decidir_por_ociosa``). Uma
+sonda normal tirada depois não servia: com a máquina 93% ocupada ela teve os seus 0,2 s em 0,27 s e
+culpou a Mesa; uma sonda normal durante a janela disputaria os núcleos com a própria Mesa. Com a CPU
+ociosa ilegível, falha. O processo de extração roda abaixo da prioridade normal e sem o núcleo 0 (SEG-01), para não
+tirar CPU da Mesa, e com a máquina saturada por outros processos pode nem começar: a espera de até
+60 s pelo começo da leitura roda, durante toda ela, uma sonda nas mesmas condições dele (prioridade
+abaixo do normal, sem o núcleo 0). Se a sonda teve na janela pelo menos 2 s de CPU (4 vezes os ~0,5 s
+de que a extração precisa até a primeira página) e a leitura não começou, falha; senão, pula com os
+números (``apoio_cpu_baixa``). Uma sonda curta depois do prazo não servia: uma folga basta para ela
+passar, sem dizer o que a extração teve durante a espera. Para fechar a Onda 1, o portão tem de rodar
+sem pular (no CI, ``VLADO_EXIGIR_SEM_PULO=1`` faz de todo pulo uma falha).
+
+Medido no Windows de 4 núcleos (22/11): ``T_ref`` de 0,9 a 1,7 s com nenhum, dois ou os quatro
+núcleos ocupados por outros processos; os dez cadastros com a extração longa, de 1,6 a 5,9 s. Com os
+quatro núcleos ocupados, uma sonda de prioridade baixa sem o núcleo 0 tem 0,06 s de CPU em 10,7 s.
 
 Dados sintéticos; sem rede nem modelo.
 """
 import base64
+import ctypes
 import http.client
 import json
+import os
 from pathlib import Path
-import subprocess
 import sys
 import tempfile
 import threading
@@ -56,35 +72,132 @@ from modelo_pasta import copiar  # noqa: E402
 import test_codex_integracao as integracao  # noqa: E402
 from test_extracao_cadastro_pdf import HAS_PYPDF  # noqa: E402
 from test_fila_extracao import pdf_pesado  # noqa: E402
+from apoio_cpu_baixa import NECESSARIO_PARA_LER, JanelaCpu, esperar_com_cpu  # noqa: E402
 
 SESSOES = 10
 LIMITE = 2.0
 LIMITE_CADASTROS = 12.0
-SATURADA = 6.0  # T_ref above this (measured 0.9 to 1.7 s, even with all 4 cores busy): too loaded to judge
-SONDA_CPU = 0.2  # seconds of CPU the low-priority probe asks for ...
-SONDA_PRAZO = 10.0  # ... within this (a free core gives them in about 0.2 s)
-SONDA = """
-import os, sys, time
-prazo, pedido = float(sys.argv[1]), float(sys.argv[2])
-if os.name == 'nt':
-    import ctypes
-    k32 = ctypes.windll.kernel32
-    k32.GetCurrentProcess.restype = ctypes.c_void_p
-    processo = k32.GetCurrentProcess()
-    k32.SetPriorityClass(ctypes.c_void_p(processo), 0x4000)  # BELOW_NORMAL_PRIORITY_CLASS, as the extraction
-    nucleos = os.cpu_count() or 1
-    if nucleos > 1:  # without core 0, as the extraction
-        k32.SetProcessAffinityMask(ctypes.c_void_p(processo), ctypes.c_size_t(sum(1 << n for n in range(1, min(nucleos, 64)))))
-else:
-    os.nice(10)
-    nucleos = sorted(os.sched_getaffinity(0)) if hasattr(os, 'sched_getaffinity') else []
-    if len(nucleos) > 1:
-        os.sched_setaffinity(0, nucleos[1:])
-inicio, base = time.monotonic(), time.process_time()
-while time.process_time() - base < pedido and time.monotonic() - inicio < prazo:
-    pass
-print(f'{time.monotonic() - inicio:.2f} {time.process_time() - base:.2f}')
-"""
+TETO_REF = 6.0  # T_ref above this (measured 0.9 to 1.7 s, even with all 4 cores busy): the Mesa is slow
+
+
+def faltas_de_pagina():
+    """Page faults of this process so far (Windows: all of them; POSIX: the major ones, from disk), or None."""
+    if os.name == 'nt':
+        class Contadores(ctypes.Structure):
+            _fields_ = [('cb', ctypes.c_ulong), ('PageFaultCount', ctypes.c_ulong)] + [
+                (nome, ctypes.c_size_t) for nome in ('PeakWorkingSetSize', 'WorkingSetSize', 'QuotaPeakPagedPoolUsage',
+                                                     'QuotaPagedPoolUsage', 'QuotaPeakNonPagedPoolUsage',
+                                                     'QuotaNonPagedPoolUsage', 'PagefileUsage', 'PeakPagefileUsage')]
+        contadores = Contadores()
+        contadores.cb = ctypes.sizeof(Contadores)
+        k32 = ctypes.windll.kernel32
+        k32.GetCurrentProcess.restype = ctypes.c_void_p
+        if not ctypes.windll.psapi.GetProcessMemoryInfo(ctypes.c_void_p(k32.GetCurrentProcess()), ctypes.byref(contadores),
+                                                        contadores.cb):
+            return None
+        return contadores.PageFaultCount
+    try:
+        import resource
+        return resource.getrusage(resource.RUSAGE_SELF).ru_majflt
+    except (ImportError, OSError):
+        return None
+
+
+def memoria_livre_mb():
+    """Free physical memory of the machine in MB (Linux: MemAvailable), or None."""
+    if os.name == 'nt':
+        class Estado(ctypes.Structure):
+            _fields_ = [('dwLength', ctypes.c_ulong), ('dwMemoryLoad', ctypes.c_ulong)] + [
+                (nome, ctypes.c_ulonglong) for nome in ('ullTotalPhys', 'ullAvailPhys', 'ullTotalPageFile',
+                                                        'ullAvailPageFile', 'ullTotalVirtual', 'ullAvailVirtual',
+                                                        'ullAvailExtendedVirtual')]
+        estado = Estado()
+        estado.dwLength = ctypes.sizeof(Estado)
+        if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(estado)):
+            return None
+        return estado.ullAvailPhys >> 20
+    try:
+        with open('/proc/meminfo', encoding='ascii') as info:
+            for linha in info:
+                if linha.startswith('MemAvailable:'):
+                    return int(linha.split()[1]) >> 10
+    except OSError:
+        pass
+    return None
+
+
+class Diagnostico:
+    """What the process and the machine did while the sessions ran; only for the failure message.
+
+    A thread that only sleeps ``PASSO`` s at a time notes the longest gap between two wake-ups: a
+    gap far above ``PASSO`` means the whole process stood still (no thread of it ran), not that
+    the requests waited for something of the Mesa."""
+    PASSO = 0.1
+    AMOSTRA = 0.5  # free memory and page faults are read at most this often
+
+    def __init__(self):
+        self.parar = threading.Event()
+        self.maior_parada = 0.0
+        self.faltas_inicio = self.faltas_fim = faltas_de_pagina()
+        self.memoria = []
+        self._anterior = self._amostra = None
+        self._thread = threading.Thread(target=self._rodar, daemon=True, name='diagnostico_portao')
+
+    def anotar(self, agora):
+        """One wake-up at ``agora`` (monotonic seconds)."""
+        if self._anterior is not None:
+            self.maior_parada = max(self.maior_parada, agora - self._anterior)
+        self._anterior = agora
+        if self._amostra is None or agora - self._amostra >= self.AMOSTRA:
+            self._amostra = agora
+            livre = memoria_livre_mb()
+            if livre is not None:
+                self.memoria.append(livre)
+            self.faltas_fim = faltas_de_pagina()
+
+    def _rodar(self):
+        while not self.parar.is_set():
+            self.anotar(time.monotonic())
+            time.sleep(self.PASSO)
+        self.anotar(time.monotonic())
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, *erro):
+        self.parar.set()
+        self._thread.join(5)
+
+    def texto(self):
+        faltas = ('?' if self.faltas_inicio is None or self.faltas_fim is None
+                  else str(self.faltas_fim - self.faltas_inicio))
+        memoria = f'entre {min(self.memoria)} e {max(self.memoria)} MB' if self.memoria else '?'
+        return (f'durante as sessões, no processo do teste: maior parada de uma thread que só dorme '
+                f'{self.PASSO:.1f} s de cada vez {self.maior_parada:.2f} s; faltas de página {faltas}; '
+                f'memória livre da máquina {memoria}')
+
+
+class DiagnosticoTest(unittest.TestCase):
+    """The failure message's diagnostic, fed with chosen wake-up times (no Mesa)."""
+
+    def test_maior_parada_e_texto(self):
+        diagnostico = Diagnostico()
+        for agora in (10.0, 10.1, 10.2, 24.2, 24.3):  # the process stood still for 14 s
+            diagnostico.anotar(agora)
+        self.assertAlmostEqual(diagnostico.maior_parada, 14.0)
+        texto = diagnostico.texto()
+        self.assertIn('maior parada de uma thread que só dorme 0.1 s de cada vez 14.00 s', texto)
+        self.assertRegex(texto, r'faltas de página (\d+|\?); memória livre da máquina (entre \d+ e \d+ MB|\?)$')
+        if os.name == 'nt':  # both counters exist on the machines the gate runs on
+            self.assertNotIn('?', texto)
+
+    def test_roda_e_para(self):
+        with Diagnostico() as diagnostico:
+            time.sleep(0.35)
+        self.assertFalse(diagnostico._thread.is_alive())
+        # It ran and measured; no ceiling on the gap: that would test the machine, not the thread (D1).
+        self.assertGreater(diagnostico.maior_parada, 0.0)
 
 
 @unittest.skipUnless(HAS_PYPDF, 'Instalar requirements.txt para testar extração real')
@@ -165,20 +278,14 @@ class PortaoFilaTest(unittest.TestCase):
         self.assertEqual(len(tempos), SESSOES)
         return max(tempos)
 
-    @staticmethod
-    def sonda_prioridade_baixa():
-        """(wall seconds, CPU seconds) a process at the extraction's priority and cores gets, asking for
-        SONDA_CPU s of CPU within SONDA_PRAZO s."""
-        saida = subprocess.run([sys.executable, '-c', SONDA, str(SONDA_PRAZO), str(SONDA_CPU)], capture_output=True,
-                               text=True, timeout=SONDA_PRAZO + 60, check=True).stdout.split()
-        return float(saida[0]), float(saida[1])
-
     def test_dez_sessoes_com_extracao_longa_em_curso(self):
         # The same ten uploads with no extraction in course: the reference of this machine, this minute.
-        referencia = self.cadastros_simultaneos('referencia')
-        if referencia > SATURADA:
-            self.skipTest(f'máquina saturada: T_ref = {referencia:.2f} s (normal perto de 3 s; acima de '
-                          f'{SATURADA:.0f} s o portão não mede)')
+        # In the same window: the machine's idle CPU and what this process (the Mesa runs in it) spent. A normal
+        # probe would compete with the Mesa and change T_ref itself (apoio_cpu_baixa.JanelaCpu).
+        with JanelaCpu() as janela_ref:
+            referencia = self.cadastros_simultaneos('referencia')
+        if referencia > TETO_REF:
+            janela_ref.decidir(self, f'T_ref = {referencia:.2f} s, acima de {TETO_REF:.0f} s: a Mesa está lenta para cadastrar')
         limite_cadastros = max(LIMITE_CADASTROS, 2 * referencia)
         with tempfile.TemporaryDirectory() as pasta:
             pesado = pdf_pesado(Path(pasta) / 'pesado.pdf')  # about 15 s of reading on one core
@@ -187,35 +294,36 @@ class PortaoFilaTest(unittest.TestCase):
                                                              'arquivos': [{'nome': 'pesado.pdf', 'base64': conteudo}]})
         self.assertEqual(status, 200, corpo)
         lote = corpo['lote']['lote']
-        limite = time.monotonic() + 60
-        while not (fila_extracao._ler(fila_extracao.pasta_fila(self.root) / lote / 'estado.json') or {}).get(
-                'arquivos', [{}])[0].get('pagina'):
-            if time.monotonic() >= limite:
-                demora, cpu = self.sonda_prioridade_baixa()  # only now: whether low priority gets CPU at all
-                if cpu < SONDA_CPU:
-                    self.skipTest(f'máquina saturada para processos de prioridade baixa: {demora:.1f} s para '
-                                  f'{cpu:.2f} s de CPU (pedidos {SONDA_CPU} s; T_ref = {referencia:.2f} s)')
-                self.fail(f'o processo de extração não começou a ler em 60 s, e um processo de prioridade baixa '
-                          f'teve {cpu:.2f} s de CPU em {demora:.2f} s (T_ref = {referencia:.2f} s)')
-            time.sleep(0.05)
+        esperar_com_cpu(self, lambda: (fila_extracao._ler(fila_extracao.pasta_fila(self.root) / lote / 'estado.json')
+                                       or {}).get('arquivos', [{}])[0].get('pagina'),
+                        60, NECESSARIO_PARA_LER, f'o processo de extração não começou a ler (T_ref = {referencia:.2f} s)',
+                        passo=0.05)
         texto = base64.b64encode('Documento sintético avulso.'.encode('utf-8')).decode('ascii')
-        inicio = time.monotonic()
-        status, recibo = self.pedir('POST', '/api/cadastrar', {'caso': 'alpha', 'natureza': 'sinteticos',
-                                                               'arquivos': [{'nome': 'avulso.txt', 'base64': texto}]})
-        avulso = time.monotonic() - inicio
+        with JanelaCpu() as janela_avulso:
+            inicio = time.monotonic()
+            status, recibo = self.pedir('POST', '/api/cadastrar', {'caso': 'alpha', 'natureza': 'sinteticos',
+                                                                   'arquivos': [{'nome': 'avulso.txt', 'base64': texto}]})
+            avulso = time.monotonic() - inicio
         self.assertEqual((status, recibo.get('novos')), (200, 1), recibo)
-        self.assertLess(avulso, LIMITE, 'o cadastro esperou a extração longa')
+        if avulso >= LIMITE:
+            janela_avulso.decidir(self, f'o cadastro avulso levou {avulso:.2f} s (limite {LIMITE:.0f} s): '
+                                        'o cadastro esperou a extração longa')
         tempos, erros = [], []
         sessoes = [threading.Thread(target=self.sessao, args=(n, tempos, erros), daemon=True) for n in range(SESSOES)]
-        for sessao in sessoes:
-            sessao.start()
-        for sessao in sessoes:
-            sessao.join(120)
+        # The window of the sessions, from the first request to the last: it decides a request over its limit.
+        # The Diagnostico only goes in the message.
+        with Diagnostico() as diagnostico, JanelaCpu() as janela_sessoes:
+            for sessao in sessoes:
+                sessao.start()
+            for sessao in sessoes:
+                sessao.join(120)
         self.assertEqual(erros, [])
         self.assertEqual(len(tempos), SESSOES * 6)
         lentos = sorted((t for t in tempos if t[0] >= (limite_cadastros if t[2] == 'cadastro' else LIMITE)), reverse=True)
-        self.assertEqual(lentos, [], f'pedidos acima do limite com a extração longa em curso (T_ref = {referencia:.2f} s, '
-                                     f'limite dos cadastros {limite_cadastros:.2f} s)')
+        if lentos:
+            janela_sessoes.decidir(self, f'pedidos acima do limite com a extração longa em curso: {lentos} '
+                                         f'(T_ref = {referencia:.2f} s, limite dos cadastros {limite_cadastros:.2f} s; '
+                                         f'{diagnostico.texto()})')
         # The long file was still being read the whole time (otherwise the check proves nothing).
         estado = self.pedir('GET', f'/api/fila?lote={lote}')[1]['lote']
         self.assertEqual((estado['estado'], estado['arquivos'][0]['estado']), ('processando', 'extraindo'),

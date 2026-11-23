@@ -218,15 +218,16 @@ def ve_redacao(principal: dict) -> bool:
 
 def gasto_da_redacao(root: Path, modo: str, principal: dict) -> bool:
     """Se o gasto "da organização" que o módulo de custo guarda para esta conta é o da redação dela, e só dela.
-    Nenhuma resposta leva número que some redações (seção 4.5): enquanto o custo contar a instalação inteira, o
-    bloco só vai ao dono quando a instalação tem uma redação só."""
+    Nenhuma resposta leva número que some redações (seção 4.5). O custo conta por redação (P1 da Plataforma): o bloco
+    ``organizacao`` de ``custo.situacao`` é sempre o da redação da conta, nunca o total da instalação; se um dia puder
+    trazer o total, esta função tem de voltar a barrar."""
     if modo == 'local':
         return True
     if not ve_redacao(principal):
         return False
     import custo
     redacao = (principal.get('organizacao') or {}).get('id')
-    return custo.chaves_orcamento(principal.get('conta'))['organizacao'] == redacao or acesso.total_redacoes(root) <= 1
+    return redacao is not None and custo.redacao_do_gasto(root, principal.get('conta')) == redacao
 
 
 def papel_para_interface(principal: dict) -> str:
