@@ -367,11 +367,12 @@
       $('mesa-cota-medidor').setAttribute('aria-label',scope?(spent?`Cota da instalação esgotada: ${value}`:`${pct}% da cota da instalação usada`):(spent?`Cota do mês esgotada: ${value}`:`${pct}% da cota usada`));
       // P40 (b): o gasto com a chave de IA própria da redação, em linha separada: não entra na cota do serviço acima. A pessoa vê o que pagou por ela; o dono vê também o da redação.
       const chave=data.chave_propria,reais=raw=>{const n=Number(raw);return raw!=null&&Number.isFinite(n)?`R$ ${money(n,true)}`:'';};
-      // O bloco aparece quando o servidor manda o gasto na chave (R$ 0,00 se ainda não houve) e some quando a redação não tem chave própria.
-      const dela=reais(chave?.conta_brl),inteira=reais(chave?.organizacao_brl),tr=(pt,vars)=>window.I18N?window.I18N.t(pt,vars):pt;
-      $('mesa-cota-chave-valor').textContent=dela;$('mesa-cota-chave-redacao-valor').textContent=inteira;
-      $('mesa-cota-chave-redacao').hidden=!inteira;$('mesa-cota-chave').hidden=!dela;
-      if(dela)$('mesa-cota-chave').setAttribute('aria-label',inteira?`Gasto na chave própria da redação: você, ${dela}; redação, ${inteira}`:`Gasto na chave própria da redação: você, ${dela}`);
+      // O que a chave própria da redação pagou já está no valor da cota da pessoa: é parte ("dos quais R$ 3,25 com a chave própria"), não acréscimo. Aparece com o gasto mandado
+      // pelo servidor (R$ 0,00 se ainda não houve) e some sem chave própria; o dono vê também o total da redação, que não entra na cota do serviço.
+      const dela=reais(chave?.conta_brl),inteira=reais(chave?.organizacao_brl),mostraParte=!scope&&!!dela;
+      $('mesa-cota-chave').textContent=mostraParte?`dos quais ${dela} com a chave própria`:'';$('mesa-cota-chave').hidden=!mostraParte;
+      $('mesa-cota-chave-redacao-valor').textContent=inteira;$('mesa-cota-chave-redacao').hidden=!inteira;
+      if(mostraParte)$('mesa-cota-medidor').setAttribute('aria-label',`${$('mesa-cota-medidor').getAttribute('aria-label')}, dos quais ${dela} com a chave própria`);
       card.dataset.esgotada=String(spent);card.hidden=false;
     }catch(_){card.hidden=true;}
   }
