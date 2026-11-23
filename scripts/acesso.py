@@ -3249,6 +3249,18 @@ def exportar_conta(root: Path, cid) -> dict:
         }
 
 
+def idioma_gravado(root: Path, cid) -> str | None:
+    """The language the account chose, as stored: 'pt', 'en', or None when it never chose one (P42: the page then
+    follows the browser's Accept-Language). Only this column of the own account, which the caller takes from the
+    session; an unknown or deleted account, or a value outside IDIOMAS, is None, never an error."""
+    if not isinstance(cid, str) or not ID_CONTA.fullmatch(cid):
+        return None
+    with _bd(root) as tx:
+        linha = tx.um('SELECT idioma FROM contas WHERE id = ? AND excluida_em IS NULL', cid)
+    valor = linha['idioma'] if linha else None
+    return valor if valor in IDIOMAS else None
+
+
 def atualizar_perfil(root: Path, cid, *, nome=None, idioma=None) -> dict:
     """The person changes the own name and the language of the e-mails; nothing else is theirs to change here."""
     if nome is None and idioma is None:
