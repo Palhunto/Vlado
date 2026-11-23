@@ -173,11 +173,8 @@ def _rodar_node(args, origem: str, saida: Path, capturas: Path, contas: dict, es
 def _conferencias_finais(root: Path, contas: dict, saida: Path) -> list[str]:
     """Checks on the server state after the browser script, appended to resultado.json."""
     feitas = []
-    por_login = {c['login']: c for c in acesso.listar(root)}
-    assert por_login[contas['b']['login']]['situacao'] == 'desativada', por_login[contas['b']['login']]
-    assert por_login[contas['a']['login']]['situacao'] == 'aguardando_senha', por_login[contas['a']['login']]
-    assert por_login[contas['a']['login']]['casos'] == ['beta'], por_login[contas['a']['login']]
-    feitas.append('Registro de acesso: B desativado, A aguardando nova senha (recuperação) e só com o caso beta.')
+    # O registro de acesso (B desativado, A aguardando nova senha e só com o caso beta) dependia dos passos da tela "Contas de acesso",
+    # que saiu (P30); volta com a Equipe e o Convidar do Vitral.
     registro = (saida / 'resultado.json')
     dados = ler_json(registro)
     conversas_a = [p for p in (root / 'conversas').glob('*/conversa.json')

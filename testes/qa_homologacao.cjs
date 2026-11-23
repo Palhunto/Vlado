@@ -1,7 +1,7 @@
 // Homologação ponta a ponta em modo hospedado (login real), headless Chrome atrás do proxy TLS de teste.
 // Invocado por qa_homologacao.py; as senhas chegam só por VLADO_QA_CONTAS e nunca são gravadas.
 const {chromium, request} = require('playwright');
-const {irParaNovaApuracao} = require('./qa_navegacao.cjs');
+const {criarApuracao, enviarArquivos} = require('./qa_navegacao.cjs');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
@@ -24,7 +24,7 @@ function py(pedido) {
   });
 }
 
-const verificacoes = [], erros = [], bloqueios = [], pulados = [];
+const verificacoes = [], erros = [], pulados = [];
 const marcar = (fluxo, texto) => { verificacoes.push({fluxo, verificacao: texto}); console.log(`ok [${fluxo}] ${texto}`); };
 const ocultar = texto => Object.values(contas).reduce((t, c) => t.split(c.senha).join('***'), String(texto)).replace(/\/ativar\/[A-Za-z0-9_-]+/g, '/ativar/***');
 const sha = async arquivo => crypto.createHash('sha256').update(await fs.readFile(arquivo)).digest('hex');
@@ -76,6 +76,9 @@ async function escolherCaso(page, caso) {
 }
 async function perguntar(page, caso, texto) {
   await escolherCaso(page, caso);
+  // O campo de pergunta fica recolhido atrás de "Escrever pergunta" (no celular e com uma resposta na tela): abre quando está escondido.
+  const alternar = page.locator('#desktop-composicao-alternar');
+  if (!await page.locator('#codex-pergunta').isVisible() && await alternar.isVisible()) await alternar.click();
   await page.locator('#codex-pergunta:not([disabled])').waitFor();
   await page.fill('#codex-pergunta', texto);
   await page.locator('#codex-enviar:not([disabled])').waitFor();
@@ -163,51 +166,15 @@ const documentosDaLista = page => page.locator('#mesa-acervo-lista tbody tr').ev
 
     // ---------------------------------------------------------------- 2. Reportagem sintética (admin)
     await entrar(admin, contas.admin);
-    // Lote 1 vai pela tela "Nova apuração" (Visão geral > Nova apuração): a área de envio de Documentos só serve a uma apuração que já existe.
-    await irParaNovaApuracao(admin);
-    await admin.locator('#area-cadastro:not([hidden])').waitFor();
-    await admin.selectOption('#cadastro-caso', '');
-    await admin.selectOption('#cadastro-natureza', 'sinteticos');
-    await admin.fill('#cadastro-titulo-input', 'Reportagem sintética — Vila Serena');
-    await admin.setInputFiles('#cadastro-arquivos', esperado.lotes.lote1.map(a => a.caminho));
-    await admin.click('#enviar-documentos');
-    const desfecho = await Promise.race([
-      admin.locator('#cadastro-recibo:not([hidden])').waitFor({timeout: LONGO}).then(() => 'recibo', () => 'nada'),
-      admin.locator('#cadastro-erro:not([hidden])').waitFor({timeout: LONGO}).then(() => 'erro', () => 'nada')]);
-    let caso;
-    if (desfecho === 'recibo') {
-      const textoRecibo = await admin.locator('#cadastro-recibo').innerText();
-      caso = await admin.locator('#cadastro-caso').inputValue();
-      assert.match(caso, /^apuracao_[0-9a-f]{32}$/);
-      assert.match(textoRecibo, /Recibo do lote: 2 de 2 arquivos/);
-      assert.match(textoRecibo, /2 novos/);
-    } else {
-      const erroTela = desfecho === 'erro' ? (await admin.locator('#cadastro-erro').innerText()).trim() : 'sem recibo nem erro em ' + LONGO / 1000 + ' s';
-      await admin.screenshot({path: path.join(shots, 'bloqueio-nova-apuracao.png'), fullPage: true});
-      // Só a recusa conhecida vira bloqueio e deixa os demais passos rodarem; qualquer outro erro derruba a rodada aqui.
-      if (!/identificador de uma apuração nova é escolhido pelo servidor/.test(erroTela)) throw new Error('Nova apuração: ' + erroTela);
-      bloqueios.push({passo: 'Nova apuração pela interface (envio em fluxo, modo hospedado)', erro: erroTela,
-        origem: 'a tela manda um identificador de apuração nova e o portão (scripts/autorizacao.py) o recusa'});
-      console.log('BLOQUEIO [reportagem] Nova apuração pela interface: ' + erroTela);
-      // Para os passos seguintes rodarem, o lote 1 é cadastrado pelo mesmo caminho do servidor, sem a tela: /api/cadastrar sem identificador.
-      const arquivos = await Promise.all(esperado.lotes.lote1.map(async a => ({nome: a.nome, base64: (await fs.readFile(a.caminho)).toString('base64')})));
-      const cadastro = await admin.evaluate(async ([titulo, arquivos]) => {
-        const token = document.querySelector('meta[name="session-token"]')?.content || '';
-        const r = await fetch('/api/cadastrar', {method: 'POST', credentials: 'same-origin',
-          headers: {'Content-Type': 'application/json', 'X-Session-Token': token},
-          body: JSON.stringify({novo: true, titulo, natureza: 'sinteticos', arquivos})});
-        return {status: r.status, corpo: await r.json().catch(() => ({}))};
-      }, ['Reportagem sintética — Vila Serena', arquivos]);
-      assert.equal(cadastro.status, 200, 'cadastro do lote 1 pela API: ' + JSON.stringify(cadastro.corpo).slice(0, 300));
-      caso = cadastro.corpo.caso_id;
-      assert.match(caso, /^apuracao_[0-9a-f]{32}$/);
-      await admin.goto(origin + '/?area=documentos');
-      await admin.locator('#area-documentos:not([hidden])').waitFor();
-      await admin.locator(`#contexto-caso option[value="${caso}"]`).waitFor({state: 'attached'});
-      await admin.selectOption('#contexto-caso', caso);
-    }
+    // Lote 1: Visão geral > Nova apuração (passo 1) > Continuar para documentos (passo 2), e o primeiro lote enviado cria a apuração.
+    await criarApuracao(admin, {nome: 'Reportagem sintética — Vila Serena', natureza: 'sinteticos'});
+    await enviarArquivos(admin, esperado.lotes.lote1.map(a => a.caminho), {timeout: LONGO});
+    const textoRecibo = await admin.locator('#documentos-recibo').innerText();
+    const caso = await admin.locator('#contexto-caso').inputValue();
+    assert.match(caso, /^apuracao_[0-9a-f]{32}$/);
+    assert.match(textoRecibo, /Recibo do lote: 2 de 2 arquivos/);
+    assert.match(textoRecibo, /2 novos/);
     // O recibo do lote só conta; hash, identificador e leitura de cada documento estão na lista de Documentos (W02, regra 7).
-    await admin.click('#ver-documentos');
     await admin.locator('#mesa-acervo-lista tbody tr').first().waitFor({timeout: 30000});
     const docs = await documentosDaLista(admin);
     assert.equal(docs.length, 2);
@@ -227,7 +194,7 @@ const documentosDaLista = page => page.locator('#mesa-acervo-lista tbody tr').ev
       console.log('PULADO [reportagem] ' + pulados[pulados.length - 1]);
     }
     assert.equal(docs.find(d => d.identificador === 'D001').leitura, 'texto', 'o PDF com texto nativo aparece como texto do próprio arquivo');
-    marcar('reportagem', (desfecho === 'recibo' ? 'Lote 1 cadastrado pela interface num caso novo; recibo do lote "2 de 2 arquivos, 2 novos"; ' : 'Lote 1 cadastrado pela API (a tela de Nova apuração está bloqueada, ver bloqueios); ') + 'Documentos lista D001 e D002 com SHA-256 iguais aos calculados em Python.');
+    marcar('reportagem', 'Lote 1 enviado pela Nova apuração (o primeiro lote cria a apuração); recibo do lote "2 de 2 arquivos, 2 novos"; Documentos lista D001 e D002 com SHA-256 iguais aos calculados em Python.');
     marcar('reportagem', (esperado.ocr_disponivel ? 'Documentos mostra o PDF digitalizado como "Lida por OCR: confira números"' : 'Sem OCR na máquina, Documentos mostra o PDF digitalizado como "Sem texto lido"') + ' e o PDF com texto nativo como "Texto do próprio arquivo".');
     await admin.locator('#mesa-acervo-lista').screenshot({path: path.join(shots, 'recibo-ocr.png')});
 
@@ -296,8 +263,7 @@ const documentosDaLista = page => page.locator('#mesa-acervo-lista tbody tr').ev
     await admin.click('#ver-documentos');
     await admin.locator('#area-documentos:not([hidden])').waitFor();
     assert.equal(await admin.locator('#contexto-caso').inputValue(), caso, 'destino do envio = caso aberto');
-    await admin.setInputFiles('#documentos-zona input[type=file]', esperado.lotes.lote2.map(a => a.caminho));
-    await admin.locator('#documentos-recibo:not([hidden])').waitFor({timeout: LONGO});
+    await enviarArquivos(admin, esperado.lotes.lote2.map(a => a.caminho), {timeout: LONGO});
     assert.match(await admin.locator('#documentos-recibo').innerText(), /Recibo do lote: 1 de 1 arquivos/);
     await admin.waitForFunction(() => document.querySelectorAll('#mesa-acervo-lista tbody tr').length === 3, null, {timeout: 30000});
     const docs2 = await documentosDaLista(admin);
@@ -388,11 +354,7 @@ const documentosDaLista = page => page.locator('#mesa-acervo-lista tbody tr').ev
     // As sessões de A, B e do celular terminam sem passo de encerramento: cada contexto se fecha com o navegador.
 
     assert.deepEqual(erros, []);
-    Object.assign(resultado, {estado: bloqueios.length ? 'bloqueado' : 'aprovado', caso_reportagem: caso, verificacoes, erros_js: erros, bloqueios, pulados});
-    if (bloqueios.length) {
-      await fs.writeFile(path.join(output, 'resultado.json'), JSON.stringify(resultado, null, 2));
-      throw new Error('Homologação com bloqueios: ' + bloqueios.map(b => b.passo + ' → ' + b.erro).join(' | '));
-    }
+    Object.assign(resultado, {estado: 'aprovado', caso_reportagem: caso, verificacoes, erros_js: erros, pulados});
     await fs.writeFile(path.join(output, 'resultado.json'), JSON.stringify(resultado, null, 2));
     console.log(`QA homologação (navegador): OK (${verificacoes.length} verificações)`);
   } catch (error) {
