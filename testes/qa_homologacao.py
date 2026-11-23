@@ -38,6 +38,7 @@ from interface_pesquisa import Servidor  # noqa: E402
 from comum import sha256, ler_json  # noqa: E402
 import acesso  # noqa: E402
 import apuracao  # noqa: E402
+import ocr  # noqa: E402
 import dados_sinteticos  # noqa: E402
 
 # Search terms tried, in order, when the fixture's default term finds nothing in the selected corpus.
@@ -172,11 +173,8 @@ def _rodar_node(args, origem: str, saida: Path, capturas: Path, contas: dict, es
 def _conferencias_finais(root: Path, contas: dict, saida: Path) -> list[str]:
     """Checks on the server state after the browser script, appended to resultado.json."""
     feitas = []
-    por_login = {c['login']: c for c in acesso.listar(root)}
-    assert por_login[contas['b']['login']]['situacao'] == 'desativada', por_login[contas['b']['login']]
-    assert por_login[contas['a']['login']]['situacao'] == 'aguardando_senha', por_login[contas['a']['login']]
-    assert por_login[contas['a']['login']]['casos'] == ['beta'], por_login[contas['a']['login']]
-    feitas.append('Registro de acesso: B desativado, A aguardando nova senha (recuperação) e só com o caso beta.')
+    # O registro de acesso (B desativado, A aguardando nova senha e só com o caso beta) dependia dos passos da tela "Contas de acesso",
+    # que saiu (P30); volta com a Equipe e o Convidar do Vitral.
     registro = (saida / 'resultado.json')
     dados = ler_json(registro)
     conversas_a = [p for p in (root / 'conversas').glob('*/conversa.json')
@@ -225,7 +223,9 @@ def main() -> int:
         lotes = dados_sinteticos.gerar(Path(externo.name) / 'corpus')
         esperado = {'lotes': {lote: [{'caminho': str(p), 'nome': p.name, 'sha256': sha256(p)} for p in arquivos]
                               for lote, arquivos in lotes.items()},
-                    'digitalizado': lotes['lote1'][1].name}
+                    'digitalizado': lotes['lote1'][1].name,
+                    # Sem Tesseract e os idiomas, o PDF digitalizado fica "Sem texto lido": o roteiro não exige OCR, e diz que pulou.
+                    'ocr_disponivel': bool(ocr._tesseract_disponivel())}
         contas = {'admin': _conta(root, 'Administração QA', 'admin.qa', 'admin'),
                   'a': _conta(root, 'Convidada A', 'convidada.a', 'convidado', ['alpha']),
                   'b': _conta(root, 'Convidado B', 'convidado.b', 'convidado', ['beta'])}

@@ -76,7 +76,12 @@ jobs:
             ghostscript pngquant unpaper
       - name: Dependências Python
         run: python -m pip install -r requirements.txt
-      - name: Suíte lenta (Python)
+      - name: Navegador do portão de contraste (Playwright e Chromium)
+        run: |
+          python -m pip install -r testes/requirements-teste.txt
+          python -m playwright install --with-deps chromium
+      - name: Suíte lenta (Python; inclui o portão do WCAG AA nos dois temas)
         env:
+          VLADO_EXIGIR_PLAYWRIGHT: '1'   # sem Playwright o portão de contraste falha em vez de pular
           VLADO_EXIGIR_SEM_PULO: '1'     # máquina saturada em test_fila_portao e nas esperas de test_fila_extracao vira falha, não pulo (testes/apoio_cpu_baixa.py)
         run: python testes/executar_suite.py --lenta
