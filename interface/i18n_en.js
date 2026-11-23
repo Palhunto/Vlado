@@ -21,6 +21,7 @@ window.VLADO_I18N_EN = {
     "Trocar de apuração": "Switch investigation",
     "Cota do mês": "Monthly quota",
     "Cota esgotada": "Quota used up",
+    "! Cota esgotada": "! Quota used up",
     "Cota da instalação": "Installation quota",
     "Cota da instalação esgotada": "Installation quota used up",
     "Administrador": "Administrator",
@@ -1759,6 +1760,7 @@ window.VLADO_I18N_EN = {
   padroes: [
     // Cota do mês na barra lateral
     ["^R\\$ ([\\d.,]+) de R\\$ ([\\d.,]+)$", "R$ $1 of R$ $2"],
+    ["^R\\$ ([\\d.,]+) de ([\\d.,]+)$", "R$ $1 of $2"],
     ["^(\\d+)% da cota usada$", "$1% of the quota used"],
     ["^Cota do mês esgotada: R\\$ ([\\d.,]+) de R\\$ ([\\d.,]+)$", "Monthly quota used up: R$ $1 of R$ $2"],
     ["^dos quais R\\$ ([\\d.,]+) com a chave própria$", "of which R$ $1 with the newsroom’s own key"],

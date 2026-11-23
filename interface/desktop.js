@@ -189,16 +189,18 @@
   activate();
 })();
 
-// Phones: language, theme and sign-out move into the navigation drawer, leaving the
-// header to the menu and the investigation selector.
+// Phones: Configurações, language, theme and sign-out move into the navigation drawer, leaving the
+// header to the menu, the investigation selector and the quota (componentes.md#cabecalho-celular).
 (() => {
   const phone = matchMedia('(max-width:719px)');
   const header = document.querySelector('.app-header');
-  const controls = ['mesa-idioma','mesa-sair','mesa-tema'].map(id => $(id));
+  // In the drawer Configurações comes first; in the header it keeps its place between language and sign-out.
+  const inDrawer = ['mesa-configuracoes','mesa-idioma','mesa-sair','mesa-tema'].map(id => $(id));
+  const inHeader = ['mesa-idioma','mesa-configuracoes','mesa-sair','mesa-tema'].map(id => $(id));
   const drawer = element('div', undefined, 'mesa-drawer-controls');
   function place() {
-    if (phone.matches) { drawer.append(...controls); $('mesa-sidebar').querySelector('.areas').after(drawer); }
-    else { header.append(...controls); drawer.remove(); }
+    if (phone.matches) { drawer.append(...inDrawer); $('mesa-sidebar').querySelector('.areas').after(drawer); }
+    else { header.append(...inHeader); drawer.remove(); }
   }
   phone.addEventListener('change', place);
   place();
@@ -363,6 +365,8 @@
       // Used up is never shown by colour alone (W11, rules 6 and 7): the label changes, a "!" comes first and the aria-label says it.
       $('mesa-cota-rotulo').textContent=scope?(spent?'Cota da instalação esgotada':'Cota da instalação'):(spent?'Cota esgotada':'Cota do mês');
       $('mesa-cota-valor').textContent=value;
+      // No celular a cota vai ao cabeçalho, curta (componentes.md#cabecalho-celular): "R$ 18,40 de 50", ou "! Cota esgotada" no teto; só aparece abaixo de 720 px (CSS).
+      const cabecalho=$('mesa-cota-cabecalho');cabecalho.textContent=spent?'! Cota esgotada':`R$ ${money(used,true)} de ${money(cap,!Number.isInteger(cap))}`;cabecalho.hidden=false;
       $('mesa-cota-medidor').style.setProperty('--uso',(spent?100:pct)+'%');
       $('mesa-cota-medidor').setAttribute('aria-label',scope?(spent?`Cota da instalação esgotada: ${value}`:`${pct}% da cota da instalação usada`):(spent?`Cota do mês esgotada: ${value}`:`${pct}% da cota usada`));
       // P40 (b): o gasto com a chave de IA própria da redação, em linha separada: não entra na cota do serviço acima. A pessoa vê o que pagou por ela; o dono vê também o da redação.
@@ -374,8 +378,9 @@
       $('mesa-cota-chave').textContent=mostraParte?`dos quais ${dela} com a chave própria`:'';$('mesa-cota-chave').hidden=!mostraParte;
       $('mesa-cota-chave-redacao-valor').textContent=inteira;$('mesa-cota-chave-redacao').hidden=!inteira;
       if(mostraParte)$('mesa-cota-medidor').setAttribute('aria-label',`${$('mesa-cota-medidor').getAttribute('aria-label')}, dos quais ${dela} com a chave própria`);
+      $('mesa-cota-cabecalho').setAttribute('aria-label',$('mesa-cota-medidor').getAttribute('aria-label'));
       card.dataset.esgotada=String(spent);card.hidden=false;
-    }catch(_){card.hidden=true;}
+    }catch(_){card.hidden=true;$('mesa-cota-cabecalho').hidden=true;}
   }
   window.recarregarAcervo=force=>loadInventory(force);window.definirEstadoAcervo=mensagem=>text('mesa-acervo-status',mensagem);
   window.atualizarCotaBarra=force=>loadQuota(force);   // codex.js chama ao terminar cada pergunta
