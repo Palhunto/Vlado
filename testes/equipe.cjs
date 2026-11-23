@@ -445,9 +445,9 @@ test('P40: por pessoa, o que a chave própria pagou aparece abaixo do uso do mê
 test('P40: em inglês, a linha da chave própria sai em inglês', async () => {
   const f = await abrirEquipe({...com([ANA(), RUI({gasto_chave_propria_brl: '3.25'})], {gasto_chave_propria_brl: '3.25'}), idioma: 'en'});
   await f.mesa.esperar(20);
-  assert.equal(texto(f.mesa.doc.querySelector('.equipe-chave-propria')), "Newsroom's own keyR$ 3,25");
-  assert.ok(texto(f.mesa.doc.querySelector('[data-cartao="gasto"]')).includes("Paid by the newsroom's key: not part of the service quota."));
-  assert.ok(texto(linhaDe(f.mesa, ID.rui)).includes("of which R$ 3,25 with the newsroom's own key"));
+  assert.equal(texto(f.mesa.doc.querySelector('.equipe-chave-propria')), 'Newsroom’s own keyR$ 3,25');
+  assert.ok(texto(f.mesa.doc.querySelector('[data-cartao="gasto"]')).includes('Paid by the newsroom’s key: not part of the service quota.'));
+  assert.ok(texto(linhaDe(f.mesa, ID.rui)).includes('of which R$ 3,25 with the newsroom’s own key'));
 });
 
 test('P40: o "dos quais" qualifica o valor e fica colado a ele, antes do teto (ressalva do Traço)', async () => {

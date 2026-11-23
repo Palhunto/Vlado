@@ -598,7 +598,8 @@
     const partes = [];
     const vigente = resposta.termos_vigente;
     if (vigente?.versao) {
-      const aceite = resposta.termos?.aceito_em ? t('Termos de uso: versão {versao}, aceita em {dia}.', {versao: vigente.versao, dia: dia(resposta.termos.aceito_em)}) : t('Termos de uso: versão {versao}.', {versao: vigente.versao});
+      // O dia abreviado já termina em ponto ("22 de nov."): o ponto da frase não se repete.
+      const aceite = resposta.termos?.aceito_em ? t('Termos de uso: versão {versao}, aceita em {dia}.', {versao: vigente.versao, dia: dia(resposta.termos.aceito_em)}).replace(/\.\.$/, '.') : t('Termos de uso: versão {versao}.', {versao: vigente.versao});
       const linhaDosTermos = no('p', 'conta-texto conta-termos'); linhaDosTermos.append(aceite);
       const endereco = window.DadosConta?.endereco(vigente.endereco);
       if (endereco) {

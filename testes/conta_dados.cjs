@@ -26,7 +26,7 @@ function pedirArquivo(f, resposta) {
 test('Seus dados, com versão vigente: "Termos de uso: versão … aceita em …" e o link "Ler os termos" em outra aba', async () => {
   const f = abrir({api: comTermos()}); await esperar(f.mesa);
   const linha = cartao(f.mesa).querySelector('.conta-termos');
-  assert.ok(linha, 'a linha dos termos'); assert.ok(texto(linha).startsWith('Termos de uso: versão 2026-12-01, aceita em 22 de nov.'), texto(linha));
+  assert.ok(linha, 'a linha dos termos'); assert.ok(texto(linha).startsWith('Termos de uso: versão 2026-12-01, aceita em 22 de nov. Ler os termos'), texto(linha));  // um ponto só depois de "nov"
   const ler = linha.querySelector('a'); assert.equal(ler.textContent, 'Ler os termos'); assert.equal(ler.getAttribute('href'), 'https://vlado.example/termos');
   assert.equal(ler.getAttribute('target'), '_blank'); assert.ok(/noopener/.test(ler.getAttribute('rel')));
 });
