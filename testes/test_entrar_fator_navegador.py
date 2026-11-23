@@ -54,10 +54,12 @@ class EntrarComFatorNoNavegadorTest(cenario.DuasRedacoes):
         a_redefinir = self.conta('redefine@exemplo.test', 'Pessoa Que Redefine')
         segredo_redefinir, _ = cadastrar(self.root, a_redefinir)
         token, _ = acesso.pedir_redefinicao(self.root, 'redefine@exemplo.test')
+        self.conta('pendente@exemplo.test', 'Pessoa Pendente')
         entrada = {'porta': self.server.server_port, 'origem': cenario.ORIGEM, 'senha': SENHA,
                    'app': {'email': 'com.app@exemplo.test', 'segredo': segredo_app},
                    'reserva': {'email': 'com.reserva@exemplo.test', 'codigo': reservas[0]},
-                   'redefinir': {'token': token, 'segredo': segredo_redefinir, 'senha_nova': NOVA}}
+                   'redefinir': {'token': token, 'segredo': segredo_redefinir, 'senha_nova': NOVA},
+                   'pendente': {'email': 'pendente@exemplo.test'}}
         if os.environ.get('VLADO_CAPTURAS'):
             entrada['capturas'] = os.environ['VLADO_CAPTURAS']
             # Uma conta com fator e um link de redefinição para cada captura (375 e 1440, claro e escuro): cada link vale uma vez.
@@ -73,7 +75,7 @@ class EntrarComFatorNoNavegadorTest(cenario.DuasRedacoes):
                                       capture_output=True, text=True, encoding='utf-8', timeout=420, cwd=RAIZ)
             correio.aguardar()
         self.assertEqual(processo.returncode, 0, (processo.stdout + processo.stderr)[-3000:])
-        self.assertEqual(json.loads(processo.stdout.strip().splitlines()[-1]), {'app': 'ok', 'reserva': 'ok', 'redefinir': 'ok'})
+        self.assertEqual(json.loads(processo.stdout.strip().splitlines()[-1]), {'app': 'ok', 'reserva': 'ok', 'redefinir': 'ok', 'pendencia': 'ok'})
         # A senha nova vale, e a entrada com ela ainda pede o segundo passo.
         acesso.limpar_limites()
         with self.assertRaises(acesso.PedeSegundoFator):

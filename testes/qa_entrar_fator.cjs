@@ -117,6 +117,41 @@ async function entrarAte2(page, email, senha) {
     assert.deepEqual(erros, []);
     await ctx.close();
 
+    // 4b. a página da pendência (/conta/segundo-fator): o servidor ainda não marca a pendência nem serve o caminho, então o roteiro faz as duas coisas por fora
+    // (o caminho serve o entrar.html de verdade; GET /api/sessao ganha `pendencias`) e o resto, a sessão, o token e o início do cadastro, é do servidor de verdade.
+    ctx = await contexto(browser); page = await ctx.newPage(); page.on('pageerror', erro => erros.push(erro.message));
+    let pendente = false;
+    await ctx.route(`${args.origem}/conta/segundo-fator`, async rota => {
+      const resposta = await rota.fetch({url: `http://127.0.0.1:${args.porta}/entrar`, headers: {...rota.request().headers(), host: new URL(args.origem).host}});
+      await rota.fulfill({response: resposta});
+    });
+    await ctx.route(`${args.origem}/api/sessao`, async rota => {
+      const resposta = await rota.fetch({url: `http://127.0.0.1:${args.porta}/api/sessao`, headers: {...rota.request().headers(), host: new URL(args.origem).host}});
+      if (!pendente || resposta.status() !== 200) return rota.fulfill({response: resposta});
+      await rota.fulfill({response: resposta, json: {...(await resposta.json()), pendencias: ['segundo_fator']}});
+    });
+    await page.goto(`${args.origem}/entrar`);
+    await page.waitForSelector('#entrar-secao:not([hidden])');
+    await page.fill('#entrar-login', args.pendente.email); await page.fill('#entrar-senha', args.senha);
+    await Promise.all([page.waitForURL(url => url.pathname !== '/entrar', {timeout: 15000}), page.click('#entrar-enviar')]);
+    pendente = true;
+    await page.goto(`${args.origem}/conta/segundo-fator`);
+    await page.waitForSelector('#pendencia-secao:not([hidden]) h1', {timeout: 15000});
+    assert.equal(await texto(page, '#pendencia-secao h1'), 'Proteja a conta com um segundo passo');
+    assert.equal(await page.isHidden('#entrar-secao'), true, 'o Entrar comum não aparece');
+    assert.match(await texto(page, '#pendencia-secao'), /ANTES DE CONTINUAR/);
+    assert.match(await texto(page, '#pendencia-secao'), /PASSO 1 DE 3/);
+    if (args.capturas) await page.screenshot({path: path.join(args.capturas, 'pendencia-passo1-1440.png'), fullPage: true});
+    await page.fill('#pendencia-secao input[type="password"]', args.senha);
+    await page.click('#pendencia-secao .fator-principal');
+    await page.waitForSelector('#pendencia-secao svg', {timeout: 15000});   // o QR do passo 2, com a chave que o servidor acabou de gerar
+    assert.match(await texto(page, '#pendencia-secao'), /PASSO 2 DE 3/);
+    if (args.capturas) await page.screenshot({path: path.join(args.capturas, 'pendencia-passo2-1440.png'), fullPage: true});
+    await Promise.all([page.waitForURL(url => url.pathname === '/entrar', {timeout: 15000}), page.click('#pendencia-secao .fator-link')]);   // Sair
+    pendente = false;
+    resultado.pendencia = 'ok';
+    await ctx.close();
+
     // 5. capturas do Design (só com `capturas`): cada estado em 375 e 1440 px, nos dois temas; o aviso de entrada expirada só no tema claro
     if (args.capturas && args.extras) {
       fs.mkdirSync(args.capturas, {recursive: true});

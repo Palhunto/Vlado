@@ -894,7 +894,7 @@ window.NovaApuracao = (() => {
   function abrir(valores = null) {
     if (enviando) return;   // com o envio no ar não se volta ao passo 1
     fluxo = 'passo1'; etapa = 1; delete document.body.dataset.nova;
-    $('nova-aviso').hidden = true;
+    $('nova-aviso').hidden = true; mostrarRecomecar(false);
     preencher(valores);
     limpar();
     showArea('nova');
@@ -916,7 +916,7 @@ window.NovaApuracao = (() => {
     if (enviando) saiuComEnvio = true;   // o envio segue por trás; o `dados` fica para o envio terminar
     fluxo = null; if (!enviando) dados = null; etapa = null; incerto = null;
     delete document.body.dataset.nova;
-    $('nova-aviso').hidden = true; $('nova-incerto').hidden = true;
+    $('nova-aviso').hidden = true; $('nova-incerto').hidden = true; mostrarRecomecar(false);
     preencher(null); limpar(); desenharEtapas();
   }
   const preenchido = () => fluxo === 'passo2' || !!$('nova-nome').value.trim() || !!$('nova-site').value.trim();
@@ -942,6 +942,12 @@ window.NovaApuracao = (() => {
     if (passo2) apoio.setAttribute('translate', 'no'); else apoio.removeAttribute('translate');
     return true;
   }
+  // "Recomeçar": o primeiro envio falhou e a apuração não nasceu; volta ao passo 1 com os campos preenchidos.
+  function mostrarRecomecar(visivel) {
+    $('nova-recomecar-linha').hidden = !visivel;
+    if (!visivel && $('nova-incerto').dataset.recomece) { $('nova-incerto').hidden = true; delete $('nova-incerto').dataset.recomece; }
+    if (visivel) $('nova-incerto').dataset.recomece = '1';
+  }
   // O link "‹ Nome e fontes" fica indisponível enquanto o primeiro envio está no ar.
   function marcarEnvio(valor) {
     enviando = valor;
@@ -956,7 +962,8 @@ window.NovaApuracao = (() => {
       incerto = null; $('nova-incerto').hidden = true;
     }
     marcarEnvio(true); saiuComEnvio = false;
-    const nome = dados.nome;
+    mostrarRecomecar(false);
+    const guardados = {...dados}, nome = dados.nome;
     const escopo = {novo: true, titulo: nome, natureza: dados.natureza, modo_fontes: dados.modo_fontes,
       ...(dados.dominio_permitido ? {dominio_permitido: dados.dominio_permitido} : {})};
     // A apuração existe (o servidor aceitou o primeiro lote): o seletor do topo passa a ela e a tela vira a Documentos comum; se a pessoa saiu com o envio
@@ -1007,8 +1014,13 @@ window.NovaApuracao = (() => {
         if (resultado && !resultado.recebidos && criadaAqui && !resultado.incerto && !saiuComEnvio) {
           const perdida = criadaAqui; criadaAqui = null;
           const posicao = cases.findIndex(c => c.id === perdida); if (posicao >= 0 && !cases[posicao].rodadas.length) cases.splice(posicao, 1);
-          window.definirContextoCaso?.('', {force: true}); areaHeading();
+          window.definirContextoCaso?.('', {force: true});
+          // B1 do Traço: a tela volta a ser o passo 2 da Nova apuração (título e nome, o aviso, Recomeçar e o cartão de envio com o erro), não a Documentos comum.
+          dados = guardados; fluxo = 'passo2'; etapa = 2; document.body.dataset.nova = 'passo2'; $('nova-aviso').hidden = false;
+          if (currentArea !== 'documentos') showArea('documentos');
+          desenharEtapas(); titular();
           $('nova-incerto').textContent = t('Esta apuração não chegou a ser criada: o primeiro envio falhou. Recomece a Nova apuração.'); $('nova-incerto').hidden = false;
+          mostrarRecomecar(true);
         }
       }});
     } finally { marcarEnvio(false); }
@@ -1021,6 +1033,12 @@ window.NovaApuracao = (() => {
     encerrar(); showArea('inicio');
   });
   $('nova-voltar').addEventListener('click', () => { if (!enviando) abrir(dados); });
+  $('nova-recomecar').addEventListener('click', () => {
+    if (enviando) return;
+    const valores = dados; incerto = null;
+    $('documentos-envio').replaceChildren(); $('documentos-recibo').hidden = true;   // o cartão do envio que falhou fica para trás
+    abrir(valores);
+  });
   window.addEventListener('envio-recibo-visto', () => { if (etapa === 3) { etapa = null; desenharEtapas(); } });
   // Escolher uma apuração no topo, ou sair da tela Documentos depois da criação, encerra o modo.
   window.addEventListener('mesa-contexto-alterado', () => { if (noFluxo() && window.contextoCaso?.()) encerrar(); });

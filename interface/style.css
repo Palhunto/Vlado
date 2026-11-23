@@ -2660,6 +2660,8 @@ body[data-nova="passo2"] #area-documentos :is(.mesa-tabs,.docs-topo,.mesa-acervo
 .docs-ler{min-height:var(--espaco-6);padding:0;border:0;background:none;color:var(--theme-accent);font-size:var(--text-md);font-weight:600;text-decoration:underline}
 .docs-ler:hover{background:none;color:var(--theme-primary-hover)}
 body[data-nova="passo2"] #area-documentos :is(.docs-avisos,.docs-paginas){display:none}
+.nova-recomecar{margin:0 0 var(--espaco-3)}
+.nova-incerto:not([hidden])+.nova-recomecar:not([hidden]){margin-top:calc(-1 * var(--espaco-1))}
 .nova-incerto{margin:0 0 var(--espaco-3);padding:var(--espaco-3) var(--espaco-4);border:1px solid var(--theme-warning-line);border-radius:var(--raio-controle);background:var(--theme-warning-bg);color:var(--theme-warning)}
 
 /* Portão AA (docs/design/componentes.md#foco-aa). Só tokens.

@@ -316,6 +316,14 @@ test('N3: primeiro lote aceito e depois falho na fila: a tela sai da apuração 
   assert.equal(mesa.$('nova-incerto').hidden, false);
   assert.equal(mesa.$('nova-incerto').textContent, 'Esta apuração não chegou a ser criada: o primeiro envio falhou. Recomece a Nova apuração.');
   assert.ok(!mesa.catalogo.some(c => c.id === CASO_NOVO));
+  // B1 do Traço: continua sendo o passo 2 da Nova apuração, não a Documentos comum
+  assert.equal(mesa.doc.body.dataset.nova, 'passo2'); assert.equal(mesa.$('area-titulo').textContent, 'Nova apuração'); assert.equal(mesa.$('area-descricao').textContent, 'Obra da escola');
+  assert.equal(mesa.$('nova-aviso').hidden, false); assert.equal(mesa.$('nova-recomecar-linha').hidden, false);
+  assert.equal(mesa.$('nova-recomecar').textContent, 'Recomeçar'); assert.ok(mesa.$('nova-recomecar').classList.contains('secondary'));
+  assert.equal(mesa.$('nova-etapas-2').querySelector('[aria-current="step"]').textContent.trim(), '2 Documentos');
+  mesa.$('nova-recomecar').click(); await mesa.esperar(4);
+  assert.equal(mesa.$('area-nova').hidden, false, 'volta ao passo 1'); assert.equal(mesa.$('nova-nome').value, 'Obra da escola', 'com os campos preenchidos');
+  assert.equal(mesa.$('nova-recomecar-linha').hidden, true); assert.equal(mesa.$('nova-incerto').hidden, true); assert.equal(mesa.doc.body.dataset.nova, undefined);
 });
 
 test('N4: com o envio no ar, sair pela barra diz a verdade (a apuração está sendo criada; sair não cancela) e oferece Ficar ou Sair e encontrá-la depois', async () => {

@@ -115,16 +115,20 @@
       <p class="entrar-links"><a id="esqueci-voltar" href="/entrar" data-t="voltar_entrada">Voltar para a entrada</a></p>
     </section>
 
+    <section id="pendencia-secao" hidden></section>
+
     <section id="fator-secao" hidden aria-labelledby="fator-titulo">
       <h1 id="fator-titulo" data-t="fator_titulo">Confirme que é você</h1>
       <p id="fator-texto" data-t="fator_texto">Digite o código de 6 dígitos do aplicativo autenticador.</p>
       <form id="fator-form" novalidate>
+        <div class="entrar-grupo">
         <label for="fator-codigo"><span id="fator-rotulo" data-t="fator_rotulo">Código do aplicativo</span>
           <input id="fator-codigo" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" autocapitalize="none"
                  autocorrect="off" spellcheck="false" maxlength="40" required>
         </label>
         <button id="fator-reserva" class="entrar-link-linha" type="button" data-t="fator_usar_reserva">Usar um código de reserva</button>
         <p class="small" data-t="fator_apoio">Você tem 5 minutos para digitar o código.</p>
+        </div>
         <button id="fator-enviar" type="submit" data-t="botao_entrar">Entrar</button>
       </form>
       <p class="entrar-links"><button id="fator-outra" class="entrar-link-linha" type="button" data-t="fator_outra">Entrar com outra conta</button></p>

@@ -1366,6 +1366,7 @@ window.VLADO_I18N_EN = {
     // Minha conta e Equipe (conta.js, equipe.js) e o diálogo com senha (dialogo.js)
     "Sua senha": "Your password",
     // Nova apuração (passos 1 e 2)
+    "Recomeçar": "Start over",
     "A apuração está sendo criada": "The investigation is being created",
     "Sair não cancela o envio: a apuração nasce assim mesmo, e você a encontra depois na Visão geral.": "Leaving does not cancel the upload: the investigation is created anyway, and you will find it later in the Overview.",
     "Sair e encontrá-la depois": "Leave and find it later",

@@ -75,6 +75,10 @@
 /* Segundo fator: o passo 2 do Entrar e o código da redefinição (docs/design/componentes.md#entrar-fator). O link-botão fica na linha, não no canto do rótulo. */
 .entrar-link-linha{align-self:flex-start;min-height:var(--espaco-6);padding:0;border:0;background:none;color:var(--theme-accent);font-size:var(--text-md);font-weight:600;text-decoration:underline}
 .entrar-link-linha:hover{background:none;color:var(--theme-primary-hover)}
+/* Campo, link e apoio são um grupo só: 8 px do campo ao link e 4 px do link ao apoio; os 18 px do formulário ficam só entre os grupos. */
+.entrar-grupo{display:flex;flex-direction:column}
+.entrar-grupo>.entrar-link-linha{margin-top:var(--espaco-2)}
+.entrar-grupo>.small{margin:var(--espaco-1) 0 0}
 #fator-codigo,#redefinir-codigo{font-size:var(--text-lg);letter-spacing:var(--espaco-1);font-variant-numeric:tabular-nums}
 #redefinir-codigo-campo{display:flex;flex-direction:column;gap:var(--espaco-3)}
 #redefinir-codigo-campo[hidden]{display:none}

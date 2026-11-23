@@ -63,7 +63,7 @@ test('caso documentos + web: lista capturas e mostra o texto como dado, sem HTML
   await mesa.esperar(12);
   await selecionar(mesa, 'alfa');
   assert.equal(mesa.$('fontes-web').hidden, false);
-  assert.match(mesa.$('fontes-web-dominio').textContent, /www\.exemplo\.gov\.br/);
+  assert.match(mesa.$('fontes-web-titulo').textContent, /Páginas de www\.exemplo\.gov\.br/);
   const botoes = mesa.$('fontes-web-lista').querySelectorAll('button');
   assert.equal(botoes.length, 1);
   botoes[0].click();
