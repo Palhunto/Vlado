@@ -84,6 +84,8 @@ CAUSAS_ERRO = {
     'limite_cota_instalacao': ('sem_cota', 'limite_cota_instalacao', None),
     'gasto_nao_registrado': ('erro', 'gasto_nao_registrado', None),
     'modelo_nao_permitido': ('erro', 'modelo_nao_permitido', None),
+    # The newsrooms' keys file became unreadable during the question: no other key stood in (contract 8.5).
+    'chave_redacao_ilegivel': ('erro', 'chave_redacao_ilegivel', None),
 }
 
 

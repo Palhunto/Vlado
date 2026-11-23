@@ -17,7 +17,9 @@ sys.path.insert(0, str(TESTES.parent / 'scripts'))
 sys.path.insert(0, str(TESTES))
 from comum import escrever_json, ler_json  # noqa: E402
 import custo  # noqa: E402
-from inferencia_api import Resposta, ServidorAPI  # noqa: E402
+import erros  # noqa: E402
+import inferencia_api  # noqa: E402
+from inferencia_api import ErroIA, Resposta, ServidorAPI  # noqa: E402
 import segredos  # noqa: E402
 import test_custo_redacoes as redacoes  # noqa: E402
 import test_inferencia_api as base_inferencia  # noqa: E402
@@ -27,8 +29,8 @@ PROPRIA = 'sk-ant-chave-propria-sintetica-da-redacao'
 A, B = 'org' + 'a' * 16, 'org' + 'b' * 16
 
 
-class ChaveNaChamadaTest(base_inferencia.Base):
-    """ServidorAPI: which key reaches the provider, and which the usage event says paid."""
+class ComChaves(base_inferencia.Base):
+    """ServidorAPI with the service's key and the own key of newsroom A; records the keys the provider got."""
 
     def setUp(self):
         self.chaves = []
@@ -54,6 +56,10 @@ class ChaveNaChamadaTest(base_inferencia.Base):
         self.proxima('turn/completed')
         return self.chaves[-1], uso['chavePropria']
 
+
+class ChaveNaChamadaTest(ComChaves):
+    """Which key reaches the provider, and which the usage event says paid."""
+
     def test_a_redacao_com_chave_propria_paga_com_ela(self):
         self.assertEqual(self.perguntar(A), (PROPRIA, True))
 
@@ -67,6 +73,33 @@ class ChaveNaChamadaTest(base_inferencia.Base):
             self.assertIsNone(self.servidor.call('account/read', {'redacao': B})['account'])
             self.assertIsNone(self.servidor.call('account/read', {})['account'])
         self.assertFalse(self.servidor.call('account/read', {'redacao': B})['account']['chave_propria'])
+
+
+class ChavesIlegiveisTest(ComChaves):
+    """C3: the newsrooms' keys file unreadable refuses only the question, and no other key stands in."""
+
+    def estragar(self):
+        segredos.caminho_das_redacoes(self.root).write_text('{ilegível', encoding='utf-8')
+
+    def test_recusa_a_pergunta_sem_cair_na_chave_do_servico(self):
+        self.estragar()
+        with self.assertRaises(ErroIA) as recusa:
+            self.servidor.call('account/read', {'redacao': A})
+        self.assertEqual((str(recusa.exception), recusa.exception.codigo),
+                         (inferencia_api.CHAVE_REDACAO_ILEGIVEL, 'chave_redacao_ilegivel'))
+        self.assertEqual(erros.codigo_de(str(recusa.exception))[0], 'chave_redacao_ilegivel')
+        self.provedor.roteiro = [Resposta('Não deveria responder.', (), {}, 'modelo-sintetico')]
+        thread = self.iniciar_thread()
+        self.servidor.call('turn/start', {'threadId': thread, 'redacao': A,
+                                          'input': [{'type': 'text', 'text': 'Pergunta sintética.'}]})
+        fim = self.proxima('turn/completed')['params']['turn']
+        self.assertEqual((fim['status'], fim['error']['codexErrorInfo']), ('failed', 'chave_redacao_ilegivel'))
+        self.assertEqual(self.chaves, [])  # the provider was never created: no key at all, not the service's
+        self.assertEqual(self.provedor.chamadas, [])
+
+    def test_sem_redacao_a_chave_do_servico_segue(self):
+        self.estragar()  # the service's key never reads the newsrooms' file
+        self.assertEqual(self.perguntar(None), ('sk-ant-sintetica', False))
 
 
 class LancamentoSeparadoTest(redacoes.Redacoes, unittest.TestCase):

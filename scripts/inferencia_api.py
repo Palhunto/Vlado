@@ -51,6 +51,11 @@ def seguro(value) -> str:
     return text[:4000]
 
 
+CHAVE_REDACAO_ILEGIVEL = ('A chave de IA da redação não pôde ser lida, e a pergunta não foi feita. Documentos, '
+                          'conferência e caderno seguem funcionando; o operador precisa restaurar o arquivo de '
+                          'chaves das redações.')
+
+
 class ErroIA(ValueError):
     """User-facing inference failure; `codigo` classifies it (autenticacao, limite, conexao...)."""
 
@@ -296,12 +301,19 @@ class ServidorAPI:
         return segredos.ler_chave(self.root, provedor, redacao) or ''
 
     def _chave_e_origem(self, provedor, redacao=None):
-        """(key, own): ``own`` says whether the key is the newsroom's own, read so that key and origin agree."""
-        for _ in range(3):
-            origem = segredos.origem_da_chave(self.root, provedor, redacao)
-            chave = self._chave(provedor, redacao)
-            if segredos.origem_da_chave(self.root, provedor, redacao) == origem:
-                break
+        """(key, own): ``own`` says whether the key is the newsroom's own, read so that key and origin agree.
+
+        The newsrooms' keys file unreadable (segredos.ChavesIlegiveis): only this question is refused, and no
+        other key stands in (contract 8.5: the service's would carry the newsroom's data and spend without it
+        knowing). The operator is warned at the server's start (segredos, Tranca)."""
+        try:
+            for _ in range(3):
+                origem = segredos.origem_da_chave(self.root, provedor, redacao)
+                chave = self._chave(provedor, redacao)
+                if segredos.origem_da_chave(self.root, provedor, redacao) == origem:
+                    break
+        except segredos.ChavesIlegiveis as exc:
+            raise ErroIA(CHAVE_REDACAO_ILEGIVEL, codigo='chave_redacao_ilegivel') from exc
         return chave, origem == 'redacao' and bool(chave)
 
     @staticmethod
