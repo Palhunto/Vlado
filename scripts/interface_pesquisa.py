@@ -53,6 +53,7 @@ import proxies_confiaveis
 import apagamento
 import registro_acesso
 import lixeira
+import segredos
 import trava_cadastro
 from indice_sqlite import ID_CASO, caminho_rodada, cobertura, ler_passagem, pesquisar
 # Names also imported from here by the launcher, the tests and older callers.
@@ -1045,6 +1046,13 @@ def main():
                     print(aviso, file=sys.stderr, flush=True)
             except (ValueError, OSError):
                 pass  # an unreadable store answers 503 to each request; it does not stop the start
+        if server.modo == 'piloto':  # the newsrooms' own AI keys unreadable: no newsroom asks the AI until restored
+            try:
+                aviso = segredos.conferir_chaves_das_redacoes(server.root)
+                if aviso:
+                    print(aviso, file=sys.stderr, flush=True)
+            except OSError:
+                pass
         print(f'Mesa de apuração ({args.modo}): {server.origin}', flush=True)
         print('Encerre com Ctrl+C.', flush=True)
         if args.modo != 'piloto' and not args.sem_abrir:

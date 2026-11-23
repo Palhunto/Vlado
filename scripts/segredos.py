@@ -72,17 +72,29 @@ def _redacao(redacao) -> str:
     return redacao
 
 
+class ChavesIlegiveis(ValueError):
+    """The file of the newsrooms' keys exists and cannot be read. Whose key it held is unknown, so no newsroom
+    falls on the key of the service in its place (contract of accounts, 8.5): its data would go through the
+    service's provider account and its spend to the quota the service pays, without it knowing. The key of the
+    service, asked without a newsroom, never reads this file."""
+
+
+ILEGIVEIS = ('O arquivo de chaves de IA das redações está ilegível. Restaure-o a partir da cópia guardada com os '
+             'segredos; até lá, nenhuma redação usa a IA pela Mesa e nenhuma chave de redação é gravada.')
+
+
 def _ler_redacoes(root: Path) -> dict:
-    """{newsroom id: {provider: key}}, only what is well formed."""
+    """{newsroom id: {provider: key}}, only what is well formed. Raises `ChavesIlegiveis` when the file is there
+    and is not a JSON object."""
     arquivo = caminho_das_redacoes(root)
     if not arquivo.is_file():
         return {}
     try:
         dados = json.loads(arquivo.read_text(encoding='utf-8'))
     except (OSError, ValueError) as exc:
-        raise ValueError('O arquivo de chaves das redações está ilegível; salve a chave novamente.') from exc
+        raise ChavesIlegiveis(ILEGIVEIS) from exc
     if not isinstance(dados, dict):
-        return {}
+        raise ChavesIlegiveis(ILEGIVEIS)
     return {redacao: {k: v for k, v in chaves.items() if k in CHAVES_AMBIENTE and isinstance(v, str)}
             for redacao, chaves in dados.items() if _REDACAO.fullmatch(str(redacao)) and isinstance(chaves, dict)}
 
@@ -180,3 +192,17 @@ def resumo(root: Path, redacao=None) -> dict:
         else:
             saida[provedor] = {'configurada': bool(valor), 'origem': 'servico' if valor else None, 'final': None}
     return saida
+
+
+def conferir_chaves_das_redacoes(root: Path) -> str | None:
+    """For the start of the server: the warning for the operator when the file of the newsrooms' keys is there
+    and unreadable, or None. It also goes to the audit log (`chaves_ia_ilegiveis`). Nothing is repaired here."""
+    try:
+        _ler_redacoes(root)
+        return None
+    except ChavesIlegiveis:
+        pass
+    import registro_acesso
+    registro_acesso.lembrar_raiz(root)
+    registro_acesso.registrar('chaves_ia_ilegiveis', 'falha')
+    return f'ATENÇÃO: {ILEGIVEIS}'
