@@ -154,3 +154,10 @@ O `zoom200` é a página ampliada, não só a fonte: a CSP da Mesa não deixa in
 faz. Rolagem horizontal não impede gerar: fica no manifesto (`rolagem_horizontal`, hoje vazio nas 84) e `comparar` reprova a que for nova, além de diferença
 de imagem e de pedido a endereço externo. O Vditor do Caderno registra um aviso de CSP (estilo em linha) no manifesto, como na linha de base. Os testes sem
 navegador estão em `test_regressao_visual_extras.py`.
+
+## Pendentes (não valem como aceitas)
+
+As 14 capturas `nova__*` ficam **pendentes** até serem regeradas: 8 na linha de base (`nova__375|768|1024|1440__claro|escuro`) e 6 nas extras
+(`nova__paisagem|430|zoom200__claro|escuro`). O Traço as recusou porque `?area=nova` abre o passo 1 sem a linha de etapas ("1 Nome e fontes, 2 Documentos,
+3 Conferir recibo"). **Dono: Lume** (a correção é da tela). **Motivo: linha de etapas ausente.** Quem regera é a Sonda, depois da correção, numa só janela com as
+demais capturas novas. Até lá essas 14 guardam o estado recusado, só para o comparador ter o que comparar; nenhuma delas é prova de que a tela está certa.
