@@ -29,7 +29,7 @@ EVENTOS = ('acesso_negado', 'caso_criado', 'caso_atribuido', 'participacao_inclu
            # E3 (convite, e-mail, redefinição, troca de e-mail) e E4 (segundo fator, dois passos, ciclo de vida)
            'convite_expirado', 'redefinicao_pedida', 'email_troca_pedida', 'email_trocado', 'email_enviado',
            'email_falhou', 'aparelho_novo', 'login_protegido', 'fator_codigos_gerados', 'conta_inativa_avisada',
-           'fator_bloqueado', 'fator_indisponivel')
+           'fator_bloqueado', 'fator_indisponivel', 'fator_removido_na_recuperacao')
 PAPEIS = ('dono', 'editor', 'reporter', 'leitor')
 CODIGOS = ('caso_indisponivel', 'conversa_indisponivel', 'lote_inexistente', 'redacao_suspensa', 'pendencia_de_conta',
            'operacao_inexistente', 'acesso_indisponivel', 'senha_atual_incorreta', 'ultimo_dono', 'senha_necessaria',
@@ -154,6 +154,14 @@ class ListasDoContratoTest(unittest.TestCase):
         self.assertEqual((linha['evento'], linha['organizacao']), ('fator_bloqueado', ORG))
         self.assertEqual(r.montar('admin_recusada', 'negado', CONTA, codigo='requisicao_invalida')['codigo'],
                          'requisicao_invalida')
+
+    def test_fator_removido_na_recuperacao(self):
+        # Activity event (do_acesso): by the account itself (reset link) or by the operator at the terminal (cli).
+        for por in (CONTA, 'cli'):
+            with self.subTest(por=por):
+                linha = r.montar('fator_removido_na_recuperacao', 'ok', CONTA, por=por, organizacao=ORG)
+                self.assertEqual((linha['evento'], linha['por'], linha['organizacao']),
+                                 ('fator_removido_na_recuperacao', por, ORG))
 
     def test_fora_das_listas_continua_descartado(self):
         linha = r.montar('acesso_negado', 'negado', CONTA, motivo='porque sim', codigo='inventado', nome_caso='Caso X')

@@ -75,6 +75,8 @@ EVENTOS = frozenset({
     'aparelho_novo', 'login_protegido', 'fator_codigos_gerados', 'conta_inativa_avisada',
     # segundo fator (E4): bloqueado por tentativas (atividade); indisponível, sem a chave ou com a semente ilegível
     'fator_bloqueado', 'fator_indisponivel',
+    # o segundo fator retirado ao terminar uma recuperação (pelo link de redefinição ou pelo terminal)
+    'fator_removido_na_recuperacao',
     # downloads
     'download',
     # do próprio registro
