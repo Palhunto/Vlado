@@ -405,3 +405,50 @@ test('a carga da Equipe que chega depois de a pessoa voltar a Minha conta não s
   assert.equal(f.mesa.$('area-titulo').textContent, 'Minha conta', 'o título segue sendo o da aba ativa');
   assert.ok(f.mesa.doc.querySelector('.equipe-acao-titulo') === null, 'o Convidar não volta ao título de Minha conta');
 });
+
+test('P40: o gasto com a chave própria da redação aparece em linha separada no cartão do gasto, sem somar à cota do serviço; nulo ou sem o gasto da redação, a linha some', async () => {
+  const f = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: '3.25'}));
+  const cartao = f.mesa.doc.querySelector('[data-cartao="gasto"]');
+  assert.ok(texto(cartao).includes('R$ 24,50 de R$ 150'), 'o gasto da cota do serviço segue como veio, sem a chave própria somada');
+  const linha = cartao.querySelector('.equipe-chave-propria');
+  assert.ok(linha, 'a linha separada existe'); assert.equal(texto(linha), 'Chave própria da redaçãoR$ 3,25');
+  assert.ok(texto(cartao).includes('Pago pela chave da redação: não entra na cota do serviço.'));
+  assert.ok(!texto(cartao).includes('R$ 27,75'), 'nada de soma');
+  assert.equal(cartao.querySelector('.mesa-medidor').getAttribute('aria-label'), '16% da cota usada', 'o medidor segue só a cota do serviço');
+  const comChave = op => (op === 'ia-config' ? {chaves: {anthropic: {configurada: true, origem: 'redacao', final: 'abcd'}, openai: {configurada: false, origem: null, final: null}}} : undefined);
+  const zero = await abrirEquipe({...com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}), api: (op, d) => (op === 'equipe-listar' ? equipeListar([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}) : comChave(op))});
+  assert.equal(texto(zero.mesa.doc.querySelector('.equipe-chave-propria')), 'Chave própria da redaçãoR$ 0,00', 'com chave própria e sem gasto: "0.00"');
+  const semChave = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}));
+  assert.ok(semChave.mesa.doc.querySelector('.equipe-chave-propria') === null, 'sem chave própria na redação (e sem gasto com ela), nada aparece');
+  const doServico = await abrirEquipe({...com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}), api: (op, d) => (op === 'equipe-listar' ? equipeListar([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}) : op === 'ia-config' ? {chaves: {anthropic: {configurada: true, origem: 'servico', final: null}}} : undefined)});
+  assert.ok(doServico.mesa.doc.querySelector('.equipe-chave-propria') === null, 'só a chave do serviço: nada aparece');
+  const falhou = await abrirEquipe({...com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}), api: (op) => (op === 'equipe-listar' ? equipeListar([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}) : op === 'ia-config' ? recusa('operacao_proibida', 'Não permitido.', 'proibido') : undefined)});
+  assert.ok(falhou.mesa.doc.querySelector('.equipe-chave-propria') === null, 'ia-config falhou: sem chave própria');
+  const nulo = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: null}));
+  assert.ok(nulo.mesa.doc.querySelector('.equipe-chave-propria') === null, 'o razão não pôde ser lido: sem a linha');
+  const semGasto = await abrirEquipe(com([ANA(), RUI()], {gasto: null, gasto_chave_propria_brl: null}));
+  assert.ok(semGasto.mesa.doc.querySelector('.equipe-chave-propria') === null, 'sem o bloco do gasto da redação, sem a linha');
+});
+
+test('P40: por pessoa, o que a chave própria pagou aparece abaixo do uso do mês como "dos quais" (só com gasto): o valor de cima já a inclui, e nada é somado', async () => {
+  const f = await abrirEquipe(com([ANA(), RUI({gasto_chave_propria_brl: '3.25'}), pessoa(ID.davi, 'Davi Melo', 'editor', {gasto_chave_propria_brl: null})]));
+  const uso = id => texto(celulas(linhaDe(f.mesa, id))[3]);
+  assert.equal(uso(ID.rui), 'R$ 18,40dos quais R$ 3,25 com a chave própria', 'o valor de cima fica como veio e já inclui a parte da chave própria: "dos quais"');
+  assert.equal(uso(ID.ana), 'R$ 18,40', '"0.00": nada a mostrar');
+  assert.equal(uso(ID.davi), 'R$ 18,40', 'nulo (razão ilegível): nada a mostrar');
+  assert.ok(!uso(ID.rui).includes('21,65'), 'nada de soma');
+});
+
+test('P40: em inglês, a linha da chave própria sai em inglês', async () => {
+  const f = await abrirEquipe({...com([ANA(), RUI({gasto_chave_propria_brl: '3.25'})], {gasto_chave_propria_brl: '3.25'}), idioma: 'en'});
+  await f.mesa.esperar(20);
+  assert.equal(texto(f.mesa.doc.querySelector('.equipe-chave-propria')), 'Newsroom’s own keyR$ 3,25');
+  assert.ok(texto(f.mesa.doc.querySelector('[data-cartao="gasto"]')).includes('Paid by the newsroom’s key: not part of the service quota.'));
+  assert.ok(texto(linhaDe(f.mesa, ID.rui)).includes('of which R$ 3,25 on the newsroom’s own key'));
+});
+
+test('P40: o "dos quais" qualifica o valor e fica colado a ele, antes do teto (ressalva do Traço)', async () => {
+  const f = await abrirEquipe(com([ANA(), RUI({gasto_chave_propria_brl: '3.25', teto_mensal_brl: '30.00'})], {gasto_chave_propria_brl: '3.25'}));
+  const uso = celulas(linhaDe(f.mesa, ID.rui))[3];
+  assert.deepEqual([...uso.querySelectorAll('span')].map(s => texto(s)), ['R$ 18,40', 'dos quais R$ 3,25 com a chave própria', 'teto R$ 30'], 'valor, depois o dos quais, depois o teto');
+});

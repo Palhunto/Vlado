@@ -348,3 +348,6 @@ button[aria-disabled="true"]{cursor:progress}
   .fator-codigos{grid-template-columns:minmax(0,1fr)}
   .fator-senha-linha input,.fator-mostrar{min-height:48px}
 }
+
+/* Gasto com a chave própria da redação (P40): em linha separada, sem somar à cota do serviço */
+.equipe-chave-propria{margin-top:var(--espaco-1);padding-top:var(--espaco-2);border-top:1px solid var(--theme-line);min-height:0}
