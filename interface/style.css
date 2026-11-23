@@ -546,6 +546,10 @@ h1,h2,h3{font-optical-sizing:auto}
   background:var(--paper);
 }
 .finding-choice .human-review-actions button{flex-direction:row;width:auto;margin:0}
+/* R1 da pré-entrega do Design: o cartão de achado cresce com o conteúdo. Na coluna com altura máxima e rolagem (1024 e 1440 px), o cartão com overflow:hidden
+   encolhia como item flexível e cortava o pé, onde fica o "Conferir". Ele não encolhe: a lista é que rola. */
+.findings-list>.finding-choice{flex:none}
+.finding-choice .human-review-actions button{min-height:44px;padding:0 var(--espaco-4)}   /* o botão secundário do desenho: 44 de altura, preenchimento 0 16 */
 .human-review-note{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--soft);padding:12px 14px;border-radius:var(--raio-cartao)}
 .human-review-dialog{width:min(1120px,calc(100% - 32px));padding:28px;max-height:calc(100% - 40px)}
 .human-review-dialog .section-heading{align-items:start}
@@ -873,7 +877,8 @@ button:active:not(:disabled){transform:translateY(1px)}
 .danger:hover{background:var(--soft);color:var(--theme-danger)}
 .recusa{background:var(--white);border-color:var(--theme-input-line);color:var(--theme-danger);font-weight:400}
 .recusa:hover{background:var(--soft)}
-button:disabled,button:disabled:hover{background:var(--theme-sidebar);border-color:var(--line);color:var(--muted);font-weight:400;cursor:not-allowed}
+/* Indisponível (componentes.md#botao): no escuro o texto do desabilitado é mais apagado que o do habilitado (R2 da pré-entrega: com o texto muted ele parecia habilitado). */
+button:disabled,button:disabled:hover{background:var(--theme-sidebar);border-color:var(--line);color:var(--theme-disabled-text);font-weight:400;cursor:not-allowed}
 /* Campo de texto (docs/design/componentes.md#campo): borda de controle, fundo da superfície, 16 px. */
 input,select,textarea{font-size:var(--text-base);border-color:var(--theme-input-line);background:var(--white);color:var(--ink)}
 ::placeholder{color:var(--muted);opacity:1}
