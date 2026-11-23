@@ -261,7 +261,7 @@ test('Acesso: desativar sem ser dono é a destrutiva sem senha; desativar um don
   assert.ok(texto(dialogo(mesa)).includes('A conta é excluída: a pessoa perde o acesso') && texto(dialogo(mesa)).includes('que não podem ser reescritos.'));
   digitar(dialogo(mesa).querySelector('input'), 'sy'); acoesDoDialogo(mesa)[1].click(); await esperar(mesa);
   assert.deepEqual(dados(mesa.chamadas.find(c => c.operacao === 'equipe-remover').dados), {conta: ID.davi, senha: 'sy'});
-  assert.equal(texto(estado(mesa)), '✓ Davi Melo foi removida da redação.');
+  assert.equal(texto(estado(mesa)), '✓ Davi Melo não faz mais parte da redação.');
   painel = await abrirGerenciar(ID.cora);
   assert.equal(botaoPorTexto(painel, 'Desativar'), undefined, 'conta desativada: Reativar no lugar de Desativar'); assert.ok(botaoPorTexto(painel, 'Remover da redação'));
   botaoPorTexto(painel, 'Reativar').click(); await esperar(mesa);
@@ -322,12 +322,18 @@ test('Atividade recente: cinco últimas, uma frase por evento, "Mostrar mais" tr
 test('Atividade: cada tipo que o servidor grava tem frase (nenhum cai em "Ação de administração"); quem não tem frase cai nela; operador, conta removida e a mesma conta', async () => {
   const TIPOS = ['papel_alterado', 'conta_desativada', 'conta_reativada', 'conta_excluida', 'conta_criada', 'participacao_incluida', 'participacao_retirada', 'responsavel_alterado',
     'teto_alterado', 'senha_trocada', 'senha_definida', 'sessao_encerrada_a_distancia', 'conta_atualizada', 'recuperacao_emitida', 'login_bloqueado', 'sessao_encerrada',
+    'convite_enviado', 'convite_reenviado', 'convite_cancelado', 'convite_aceito', 'convite_expirado', 'recuperacao_pedida', 'recuperacao_confirmada', 'senha_redefinida',
+    'redefinicao_pedida', 'email_troca_pedida', 'email_trocado', 'fator_ativado', 'fator_removido', 'fator_removido_na_recuperacao', 'fator_codigos_gerados', 'aparelho_novo', 'codigo_reserva_usado', 'fator_bloqueado', 'login_protegido',
     'acesso_alterado', 'caso_atribuido', 'caso_criado', 'primeiro_admin', 'migracao_contas', 'redacao_criada', 'redacao_suspensa', 'redacao_reativada', 'redacao_encerrada'];
   const {mesa} = await abrirEquipe(com([ANA(), RUI()]));
   const {Equipe} = mesa.janela;
   const base = {conta: ID.rui, por: ID.ana, conta_nome: 'Rui Castro', por_nome: 'Ana Lima'};
   for (const tipo of TIPOS) assert.notEqual(texto(Equipe.frase({...base, tipo})), 'Ação de administração', tipo);
   assert.equal(texto(Equipe.frase({...base, tipo: 'tipo_que_ninguem_previu'})), 'Ação de administração');
+  // Q2 da Coruja: o fator que cai pela recuperação tem tipo próprio; fator_removido é só de quem remove o próprio
+  assert.equal(texto(Equipe.frase({...base, tipo: 'fator_removido', por: ID.rui, por_nome: 'Rui Castro'})), 'Rui Castro removeu o segundo fator', 'a própria conta removeu');
+  assert.equal(texto(Equipe.frase({...base, tipo: 'fator_removido_na_recuperacao', por: 'operador', por_nome: null})), 'O segundo fator de Rui Castro saiu na recuperação de acesso', 'o operador recuperou o acesso');
+  assert.equal(texto(Equipe.frase({...base, tipo: 'fator_removido_na_recuperacao', por: ID.rui, por_nome: 'Rui Castro'})), 'O segundo fator de Rui Castro saiu na recuperação de acesso', 'o link de redefinição pedido por um dono');
   assert.equal(texto(Equipe.frase({...base, tipo: 'conta_desativada'})), 'Ana Lima desativou a conta de Rui Castro');
   assert.equal(texto(Equipe.frase({...base, tipo: 'senha_trocada', por: ID.rui, por_nome: 'Rui Castro'})), 'Rui Castro trocou a senha');
   assert.equal(texto(Equipe.frase({...base, tipo: 'conta_excluida', conta_nome: null})), 'Ana Lima removeu uma conta removida da redação');
@@ -339,11 +345,21 @@ test('Atividade: cada tipo que o servidor grava tem frase (nenhum cai em "Ação
   assert.equal(hostil.querySelector('img'), null, 'o nome entra como texto');
 });
 
-test('sem atividade: "Nenhuma ação registrada ainda."; sem Convidar: só o texto da exceção abaixo da tabela, e nenhum botão de convite', async () => {
+test('sem atividade: "Nenhuma ação registrada ainda."; o texto da exceção do convite saiu (o convite por e-mail existe), e "Recuperar acesso" não tem tela do Design ainda', async () => {
   const {mesa} = await abrirEquipe(com([ANA()]));
   assert.equal(texto(mesa.doc.querySelector('[data-cartao="atividade"] .conta-cartao-corpo')), 'Nenhuma ação registrada ainda.');
-  assert.equal(texto(painelEquipe(mesa).querySelector('.equipe-convite')), 'Para incluir alguém na redação, fale com quem administra o serviço.');
-  assert.ok(![...painelEquipe(mesa).querySelectorAll('button')].some(b => /convid|recuperar/i.test(b.textContent)), 'sem Convidar, Reenviar nem Recuperar acesso');
+  assert.equal(painelEquipe(mesa).querySelector('.equipe-convite'), null, 'sem o texto de "fale com quem administra o serviço"');
+  assert.ok(![...painelEquipe(mesa).querySelectorAll('button')].some(b => /recuperar/i.test(b.textContent)), 'sem Recuperar acesso: falta a tela do Design');
+});
+
+test('a coluna do papel mantém a largura mínima com a linha de Gerenciar aberta, e em inglês a atividade mostra a frase', async () => {
+  const {mesa} = await abrirEquipe(com([ANA(), CORA()]));
+  const classes = () => celulas(linhaDe(mesa, ID.cora))[1].className;
+  assert.ok(classes().split(' ').includes('equipe-celula-papel'));
+  celulas(linhaDe(mesa, ID.cora))[4].querySelector('button').click(); await esperar(mesa);
+  assert.ok(classes().split(' ').includes('equipe-celula-papel'), 'a classe que fixa a largura continua na célula depois de abrir Gerenciar');
+  const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'interface', 'componentes_o3.css'), 'utf8');
+  assert.ok(/\.equipe-celula-papel\{min-width:calc\(220px/.test(css), 'a regra de 220 px mais o preenchimento está no CSS');
 });
 
 test('abaixo de 1024 px a tabela vira um cartão por pessoa, com "Papel" visível, apurações e uso em 14 e "Gerenciar" em largura cheia', async () => {
@@ -376,4 +392,16 @@ test('em inglês: título, cabeçalhos, estados e frases da atividade saem em in
   assert.ok(texto(painelEquipe(mesa)).includes('Ana Lima changed the role of Rui Castro'));
   assert.ok(texto(painelEquipe(mesa)).includes('1 person still has the old guest profile'));
   assert.equal(celulas(linhaDe(mesa, ID.cora))[1].querySelector('option').textContent, 'Guest (old profile)');
+});
+
+test('a carga da Equipe que chega depois de a pessoa voltar a Minha conta não sobrescreve o título nem põe o Convidar de volta (B1 do Traço)', async () => {
+  let liberar;
+  const lenta = new Promise(resolver => { liberar = resolver; });
+  const f = abrir({api: op => (op === 'equipe-listar' ? lenta.then(() => equipeListar([ANA(), RUI()])) : undefined)});
+  await esperar(f.mesa);
+  f.mesa.$('conta-aba-equipe').click(); await f.mesa.esperar(6);
+  f.mesa.$('conta-aba-conta').click(); await f.mesa.esperar(6);
+  liberar(); await esperar(f.mesa);
+  assert.equal(f.mesa.$('area-titulo').textContent, 'Minha conta', 'o título segue sendo o da aba ativa');
+  assert.ok(f.mesa.doc.querySelector('.equipe-acao-titulo') === null, 'o Convidar não volta ao título de Minha conta');
 });
