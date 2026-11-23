@@ -1,6 +1,6 @@
 // Development acceptance only. Uses an isolated headless browser and synthetic server.
 const {chromium} = require('playwright');
-const {irParaCadastro} = require('./qa_navegacao.cjs');
+const {irParaNovaApuracao, criarApuracao, enviarArquivos} = require('./qa_navegacao.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const assert = require('node:assert/strict');
@@ -14,7 +14,7 @@ const [origin,output,chrome] = process.argv.slice(2);
   async function status(text) { await page.locator('#achados-status').filter({hasText:text}).waitFor(); }
   async function selectCase(id) {
     if (!await page.locator('#acervo-escolha').evaluate(el => el.open)) await page.locator('#acervo-escolha > summary').click();
-    await page.selectOption('#caso',id); await page.selectOption('#rodada','R001');
+    await page.selectOption('#contexto-caso',id); await page.selectOption('#rodada','R001');
     await page.locator('#achados-revisao option').first().waitFor({state:'attached'});
   }
   async function selectRecords(revision,generation) {
@@ -27,15 +27,15 @@ const [origin,output,chrome] = process.argv.slice(2);
   }
   try {
     await page.goto(origin);
-    await page.locator('#caso option[value="alpha"]').waitFor({state:'attached'});
-    assert.equal(await page.locator('#area-cadastro').isVisible(),false);
-    await irParaCadastro(page);
-    assert.equal(await page.locator('#area-cadastro').isVisible(),true);
+    await page.locator('#contexto-caso option[value="alpha"]').waitFor({state:'attached'});
+    assert.equal(await page.locator('#area-nova').isVisible(),false);
+    await irParaNovaApuracao(page);   // a área Cadastrar arquivos saiu (R4): o passo 1 da Nova apuração é a #area-nova
+    assert.equal(await page.locator('#area-nova').isVisible(),true);
     assert.equal(await page.locator('#selecao-acervo').isVisible(),false);
     assert.equal(await page.locator('#area-documentos').isVisible(),false);
-    await page.click('#ver-documentos');
-    assert.equal(await page.locator('#caso').inputValue(),'');
-    await page.selectOption('#caso','alpha'); await page.selectOption('#rodada','R001');
+    await page.click('#ver-documentos'); await page.click('#mesa-aba-pesquisa');   // rodada, geração e consulta são a aba "Pesquisar no conteúdo"
+    assert.equal(await page.locator('#contexto-caso').inputValue(),'');
+    await page.selectOption('#contexto-caso','alpha'); await page.selectOption('#rodada','R001');
     await page.selectOption('#geracao','v1'); await page.locator('#buscar:enabled').waitFor();
     await page.fill('#consulta','valor'); await page.click('#buscar');
     await page.locator('#saida:not([hidden])').waitFor();
@@ -45,8 +45,8 @@ const [origin,output,chrome] = process.argv.slice(2);
     await firstHit.locator('.context:not([hidden])').waitFor();
     assert.match(await firstHit.locator('.context').innerText(),/valor 12/);
     assert.equal(await page.evaluate(() => window.INJETADO),undefined);
-    await irParaCadastro(page); await page.click('#ver-documentos');
-    assert.equal(await page.locator('#caso').inputValue(),'alpha');
+    await irParaNovaApuracao(page); await page.click('#ver-documentos');
+    assert.equal(await page.locator('#contexto-caso').inputValue(),'alpha');
     assert.equal(await page.locator('#geracao').inputValue(),'v1');
     for (const width of [1365,736,390,320]) {
       await page.setViewportSize({width,height:900});
@@ -173,17 +173,12 @@ const [origin,output,chrome] = process.argv.slice(2);
     assert.equal(await page.locator('#achados-resultados article').count(),0);
     await page.screenshot({path:path.join(output,'erro.png')});
     checks.push('conjunto vazio revisado, banco ausente e erro de integridade distintos; sem dependência de FTS documental');
-    await irParaCadastro(page);
     assert.equal(await page.locator('#cadastro-id').count(),0);
-    await page.fill('#cadastro-titulo-input','Cadastro de teste visual');
-    await page.selectOption('#cadastro-natureza','sinteticos');
-    await page.setInputFiles('#cadastro-arquivos',{name:'amostra.txt',mimeType:'text/plain',buffer:Buffer.from('Documento sintético do teste de navegação.')});
-    await page.click('#enviar-documentos');
-    await page.locator('#cadastro-status').filter({hasText:'Aguardando sua pergunta'}).waitFor();
-    assert.match(await page.locator('#cadastro-recibo').innerText(),/1 de 1/);
-    assert.match(await page.locator('#cadastro-caso').inputValue(),/^apuracao_[a-f0-9]{32}$/);
-    assert.equal(await page.locator('#novo-caso-campos').isVisible(),false);
-    assert.equal(await page.locator('#caso').inputValue(),'');
+    await criarApuracao(page,{nome:'Cadastro de teste visual',natureza:'sinteticos'});
+    await enviarArquivos(page,{name:'amostra.txt',mimeType:'text/plain',buffer:Buffer.from('Documento sintético do teste de navegação.')});
+    await page.locator('#mesa-acervo-status').filter({hasText:'Aguardando sua pergunta'}).waitFor();
+    assert.match(await page.locator('#documentos-recibo').innerText(),/1 de 1/);
+    assert.match(await page.locator('#contexto-caso').inputValue(),/^apuracao_[a-f0-9]{32}$/);
     for (const width of [1365,736,390,320]) {
       await page.setViewportSize({width,height:900});
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),false);
