@@ -298,6 +298,38 @@
     campo.focus();
   }));
 
+  // /conta/segundo-fator: a conta tem o segundo fator como pendência (contrato de contas, 4.3) e a Mesa a trouxe até aqui. O cartão é o do Entrar; o conteúdo
+  // (rubrica, título, texto, os três passos com o QR, Sair) é o Fator.pagina do fator.js, que traz seus próprios textos pelo I18N. Os dois ficam fora do Entrar
+  // comum: só esta página os baixa.
+  function carregarScript(endereco) {
+    return new Promise((ok, falha) => {
+      const script = document.createElement('script');
+      script.src = endereco; script.onload = ok; script.onerror = () => falha(new Error(endereco));
+      document.head.append(script);
+    });
+  }
+  async function iniciarPendencia() {
+    let sessao = null;
+    try {
+      const resposta = await fetch('/api/sessao', {headers: {Accept: 'application/json'}, credentials: 'same-origin'});
+      if (resposta.status === 401 || resposta.status === 403) { window.location.replace('/entrar'); return; }   // sem sessão aberta não há conta a proteger
+      sessao = resposta.ok ? await resposta.json() : null;
+    } catch (_) { /* sem rede: o aviso abaixo */ }
+    if (!sessao) { $('entrar-secao').hidden = true; mostrar('erro_rede', false, false); return; }
+    if (!(sessao.pendencias || []).includes('segundo_fator')) { window.location.replace('/'); return; }   // nada pendente (ou já cadastrado): a Mesa
+    try {
+      await carregarScript('/i18n.js');
+      if (lingua === 'en') await carregarScript('/i18n_en.js');
+      await carregarScript('/fator.js');
+    } catch (_) { mostrar('erro_rede', false, false); return; }
+    const secao = $('pendencia-secao');
+    secao.hidden = false;
+    window.Fator.pagina(secao, {abrirMesa: () => window.location.replace('/'), sair: () => window.location.replace('/entrar')});
+    const titulo = secao.querySelector('h1');
+    if (titulo) { titulo.id = 'pendencia-titulo'; secao.setAttribute('aria-labelledby', titulo.id); titulo.tabIndex = -1; titulo.focus(); }
+    redesenhar = () => window.I18N?.definir(lingua);   // o idioma do botão do topo vale também para o conteúdo do fator.js
+  }
+
   async function iniciarEntrar() {
     $('entrar-secao').hidden = false; $('entrar-teste').hidden = false;
     try {  // Already signed in: go straight to the desk.
@@ -653,6 +685,8 @@
     mostrar('erro_ativacao', false, false);
   } else if (window.location.pathname === '/primeiro-acesso') {
     iniciarPrimeiro();
+  } else if (window.location.pathname === '/conta/segundo-fator') {
+    iniciarPendencia();
   } else if (rotaConvite) {
     const [, rota, token] = rotaConvite;
     if (rota === 'aceitar') iniciarAceitar(token);

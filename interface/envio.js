@@ -160,7 +160,7 @@
       const pendentes = partes.length ? `, ${partes.join(', ')}` : '';
       const texto = no('span');
       texto.append(`${t('Recibo do lote')}: `, forte, `${pendentes}. ${t('É conferido antes da primeira pergunta.')}`);
-      const ver = no('a', 'envio-link', t('Ver recibo')); ver.href = '#cadastro-recibo';
+      const ver = no('a', 'envio-link', t('Ver recibo')); ver.href = '#documentos-recibo';
       ver.addEventListener('click', evento => { evento.preventDefault(); ctx.aoVerRecibo?.(); window.dispatchEvent(new Event('envio-recibo-visto')); });
       recibo.replaceChildren(texto, ver);
     }
@@ -324,7 +324,7 @@
     resultado.pendentes = resultado.naoCadastrados + resultado.aConferir;
     resultado.arquivos = ctx.linhas;
     ui.mostrarRecibo(resultado.enviados || resultado.recusados ? {recebidos: resultado.recebidos, total: ctx.linhas.length, naoCadastrados: resultado.naoCadastrados, aConferir: resultado.aConferir} : null);
-    ctx.aoVerRecibo = () => { const detalhe = alvoRecibo || document.getElementById('cadastro-recibo'); if (detalhe && !detalhe.hidden) { detalhe.scrollIntoView({block: 'start'}); detalhe.focus?.(); } };
+    ctx.aoVerRecibo = () => { const detalhe = alvoRecibo || document.getElementById('documentos-recibo'); if (detalhe && !detalhe.hidden) { detalhe.scrollIntoView({block: 'start'}); detalhe.focus?.(); } };
     ui.desenhar();
     return resultado;
   }
@@ -350,10 +350,11 @@
   const comLimitacao = resultado => resultado.arquivos.some(l => l.estado === 'pronto' && ['erro', 'parcial', 'sem_texto'].includes(l.extracao));
 
   // O servidor anuncia o envio em fluxo em /api/integracao (envio_fluxo); um servidor mais antigo fica com o envio em JSON.
-  let integracao = null;
+  // Só a resposta boa fica guardada: uma consulta que falhou (rede, 5xx) é refeita no próximo envio, em vez de valer a visita inteira como "sem envio em fluxo".
+  let consulta = null;
   function disponivel() {
-    integracao ||= fetch('/api/integracao').then(r => r.ok ? r.json() : {}).catch(() => ({}));
-    return integracao.then(dados => dados?.envio_fluxo === true);
+    consulta ||= fetch('/api/integracao').then(r => (r.ok ? r.json() : Promise.reject(new Error('integracao'))));
+    return consulta.then(dados => dados?.envio_fluxo === true, () => { consulta = null; return false; });
   }
 
   window.Envio = {enviar, planejar, recusa, renderRecibo, comLimitacao, disponivel, LIMITE_LOTE, LIMITE_ARQUIVOS};

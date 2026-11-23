@@ -24,14 +24,22 @@ function totp(segredo, desvio = 0) {
   return String(((h[o] & 0x7f) << 24 | h[o + 1] << 16 | h[o + 2] << 8 | h[o + 3]) % 1000000).padStart(6, '0');
 }
 const texto = async (page, seletor) => (await page.textContent(seletor)).replace(/\s+/g, ' ').trim();
+// O redirecionamento que o servidor manda (303 para a página da pendência) volta ao roteador do contexto como uma navegação nova, em vez de ser seguido por fora dele.
+async function responder(rota, resposta) {
+  const destino = resposta.headers().location;
+  if (resposta.status() >= 300 && resposta.status() < 400 && destino) {
+    return rota.fulfill({status: 200, contentType: 'text/html; charset=utf-8', body: `<!doctype html><meta charset="utf-8"><script>location.replace(${JSON.stringify(destino)})</script>`});
+  }
+  return rota.fulfill({response: resposta});
+}
 async function contexto(browser) {
   const ctx = await browser.newContext({viewport: {width: 1440, height: 900}, locale: 'pt-BR'});
   await ctx.addInitScript(() => { try { localStorage.setItem('vlado-idioma', 'pt'); } catch (_) { /* sem armazenamento */ } });
-  await ctx.route(`${args.origem}/**`, async rota => { try {
+  await ctx.route(url => url.host === new URL(args.origem).host, async rota => { try {
     const pedido = rota.request(), endereco = new URL(pedido.url());
     const resposta = await rota.fetch({url: `http://127.0.0.1:${args.porta}${endereco.pathname}${endereco.search}`, headers: {...pedido.headers(), host: new URL(args.origem).host}, maxRedirects: 0});
-    await rota.fulfill({response: resposta});
-  } catch (_) { /* a página fechou com o pedido em voo */ } });
+    await responder(rota, resposta);
+  } catch (erroRota) { console.error('ROTA', String(erroRota.message).slice(0, 160)); } });
   return ctx;
 }
 async function entrarAte2(page, email, senha) {
@@ -117,6 +125,29 @@ async function entrarAte2(page, email, senha) {
     assert.deepEqual(erros, []);
     await ctx.close();
 
+    // 4b. a página da pendência (/conta/segundo-fator): um editor de verdade, sem o segundo fator, que o servidor (9e79e25) leva à página e marca em GET /api/sessao
+    ctx = await contexto(browser); page = await ctx.newPage(); page.on('pageerror', erro => erros.push(erro.message));
+    await page.goto(`${args.origem}/entrar`);
+    await page.waitForSelector('#entrar-secao:not([hidden])');
+    await page.fill('#entrar-login', args.pendente.email); await page.fill('#entrar-senha', args.senha);
+    await Promise.all([page.waitForURL(url => url.pathname !== '/entrar', {timeout: 15000}), page.click('#entrar-enviar')]);
+    await page.waitForURL(url => url.pathname === '/conta/segundo-fator' || url.pathname === '/', {timeout: 15000});
+    await page.goto(`${args.origem}/conta/segundo-fator`);
+    await page.waitForSelector('#pendencia-secao:not([hidden]) h1', {timeout: 15000});
+    assert.equal(await texto(page, '#pendencia-secao h1'), 'Proteja a conta com um segundo passo');
+    assert.equal(await page.isHidden('#entrar-secao'), true, 'o Entrar comum não aparece');
+    assert.match(await texto(page, '#pendencia-secao'), /ANTES DE CONTINUAR/);
+    assert.match(await texto(page, '#pendencia-secao'), /PASSO 1 DE 3/);
+    if (args.capturas) await page.screenshot({path: path.join(args.capturas, 'pendencia-passo1-1440.png'), fullPage: true});
+    await page.fill('#pendencia-secao input[type="password"]', args.senha);
+    await page.click('#pendencia-secao .fator-principal');
+    await page.waitForSelector('#pendencia-secao svg', {timeout: 15000});   // o QR do passo 2, com a chave que o servidor acabou de gerar
+    assert.match(await texto(page, '#pendencia-secao'), /PASSO 2 DE 3/);
+    if (args.capturas) await page.screenshot({path: path.join(args.capturas, 'pendencia-passo2-1440.png'), fullPage: true});
+    await Promise.all([page.waitForURL(url => url.pathname === '/entrar', {timeout: 15000}), page.click('#pendencia-secao .fator-link')]);   // Sair
+    resultado.pendencia = 'ok';
+    await ctx.close();
+
     // 5. capturas do Design (só com `capturas`): cada estado em 375 e 1440 px, nos dois temas; o aviso de entrada expirada só no tema claro
     if (args.capturas && args.extras) {
       fs.mkdirSync(args.capturas, {recursive: true});
@@ -126,11 +157,11 @@ async function entrarAte2(page, email, senha) {
         const conta = args.extras[i], marca = `${rotulo}-${tema}`;
         const c = await browser.newContext({viewport: {width: largura, height: altura}, locale: 'pt-BR', colorScheme: tema});
         await c.addInitScript(t => { try { localStorage.setItem('vlado-idioma', 'pt'); localStorage.setItem('apuracao:tema', t); } catch (_) { /* sem armazenamento */ } }, tema);
-        await c.route(`${args.origem}/**`, async rota => { try {
+        await c.route(url => url.host === new URL(args.origem).host, async rota => { try {
           const pedido = rota.request(), endereco = new URL(pedido.url());
           if (endereco.pathname === '/api/entrar-segundo-fator' && c.__expirar) return await rota.fulfill({status: 401, contentType: 'application/json', body: JSON.stringify({estado: 'credenciais', codigo: 'entrada_expirada', erro: 'A entrada expirou.'})});
           const resposta = await rota.fetch({url: `http://127.0.0.1:${args.porta}${endereco.pathname}${endereco.search}`, headers: {...pedido.headers(), host: new URL(args.origem).host}, maxRedirects: 0});
-          await rota.fulfill({response: resposta});
+          await responder(rota, resposta);
         } catch (_) { /* a página fechou com o pedido em voo */ } });
         const pagina = await c.newPage();
         const foto = nome => pagina.screenshot({path: path.join(args.capturas, `${nome}-${marca}.png`), fullPage: true});
@@ -152,6 +183,60 @@ async function entrarAte2(page, email, senha) {
         await pagina.fill('#redefinir-senha', args.redefinir.senha_nova); await pagina.click('#redefinir-enviar');
         await pagina.waitForSelector('#redefinir-codigo-campo:not([hidden])');
         await foto('fator-5-redefinir-com-codigo');
+        await c.close();
+      }
+    }
+
+    // 6. capturas da página da pendência (só com `capturas`): os passos 1 (senha), 2 (QR, chave e código) e 3 (códigos de reserva e Abrir a Mesa) em 375 e 1440,
+    // nos dois temas; cada captura usa uma conta sem o fator, porque o passo 3 cadastra de verdade. E o 403 pendencia_de_conta que leva a Mesa de volta a ela.
+    if (args.capturas && args.pendentes) {
+      let i = -1;
+      for (const [rotulo, largura, altura] of [['375', 375, 812], ['1440', 1440, 900]]) for (const tema of ['light', 'dark']) {
+        i += 1;
+        const marca = `${rotulo}-${tema}`;
+        const c = await browser.newContext({viewport: {width: largura, height: altura}, locale: 'pt-BR', colorScheme: tema});
+        await c.addInitScript(t => { try { localStorage.setItem('vlado-idioma', 'pt'); localStorage.setItem('apuracao:tema', t); } catch (_) { /* sem armazenamento */ } }, tema);
+        let recusar = false;
+        await c.route(url => url.host === new URL(args.origem).host, async rota => { try {
+          const pedido = rota.request(), endereco = new URL(pedido.url());
+          const cabecalhos = {...pedido.headers(), host: new URL(args.origem).host};
+          if (recusar && endereco.pathname === '/api/codex-status') return await rota.fulfill({status: 403, contentType: 'application/json', body: JSON.stringify({estado: 'pendencia', codigo: 'pendencia_de_conta', pendencias: ['segundo_fator'], erro: 'Falta cadastrar o segundo fator.'})});
+          const resposta = await rota.fetch({url: `http://127.0.0.1:${args.porta}${endereco.pathname}${endereco.search}`, headers: cabecalhos, maxRedirects: 0});
+          await responder(rota, resposta);
+        } catch (_) { /* a página fechou com o pedido em voo */ } });
+        const pagina = await c.newPage(); pagina.on('pageerror', erro => erros.push(erro.message));
+        const foto = nome => pagina.screenshot({path: path.join(args.capturas, `${nome}-${marca}.png`), fullPage: true});
+        await pagina.goto(`${args.origem}/entrar`);
+        await pagina.waitForSelector('#entrar-secao:not([hidden])');
+        await pagina.fill('#entrar-login', args.pendentes[i].email); await pagina.fill('#entrar-senha', args.senha);
+        await Promise.all([pagina.waitForURL(url => url.pathname !== '/entrar', {timeout: 15000}), pagina.click('#entrar-enviar')]);
+        if (i === 0 || i === 2) {   // o 403 pendencia_de_conta: a Mesa abre, a primeira chamada responde a pendência e a página vai para a da pendência (claro, 375 e 1440)
+          recusar = true;
+          await pagina.goto(`${args.origem}/?area=codex`);
+          await pagina.waitForURL(url => url.pathname === '/conta/segundo-fator', {timeout: 15000});
+          recusar = false;
+        } else await pagina.goto(`${args.origem}/conta/segundo-fator`);
+        await pagina.waitForSelector('#pendencia-secao:not([hidden]) h1', {timeout: 15000});
+        await pagina.waitForSelector('#pendencia-secao input[type="password"]');
+        await foto('pendencia-1-senha');
+        await pagina.fill('#pendencia-secao input[type="password"]', args.senha);
+        await pagina.click('#pendencia-secao .fator-principal');
+        await pagina.waitForSelector('#pendencia-secao svg', {timeout: 15000});
+        await foto('pendencia-2-qr-chave-codigo');
+        const chave = (await pagina.evaluate(() => [...document.querySelectorAll('#pendencia-secao *')].map(no => no.children.length ? '' : no.textContent.trim()).find(x => /^[A-Z2-7]{4}( [A-Z2-7]{4}){3,}$/.test(x)) || '')).replace(/\s+/g, '');
+        assert.ok(chave.length >= 16, `a chave em texto aparece: ${chave}`);
+        const campo = (await pagina.$$('#pendencia-secao input[type="text"]')).pop();
+        await campo.fill(totp(chave, 0));
+        await pagina.click('#pendencia-secao .fator-principal');
+        await pagina.waitForSelector('#pendencia-secao .fator-codigos', {timeout: 15000});
+        // B1 do Traço: nenhum código quebra em duas linhas e, no cartão de 440 px, a grade tem uma coluna só
+        const medidas = await pagina.evaluate(() => ({colunas: getComputedStyle(document.querySelector('#pendencia-secao .fator-codigos')).gridTemplateColumns.split(' ').length,
+          quebrados: [...document.querySelectorAll('#pendencia-secao .fator-codigo')].filter(no => no.getClientRects().length > 1 || no.getBoundingClientRect().height > parseFloat(getComputedStyle(no).lineHeight || '0') * 1.6 && parseFloat(getComputedStyle(no).lineHeight || '0') > 0).length}));
+        assert.equal(medidas.colunas, 1, 'a pendência tem uma coluna de códigos'); assert.equal(medidas.quebrados, 0, 'nenhum código quebra');
+        await foto('pendencia-3-codigos-de-reserva');
+        await pagina.click('#pendencia-secao .fator-guardei');
+        await pagina.waitForSelector('#pendencia-secao .fator-pronto', {timeout: 15000});
+        await foto('pendencia-4-abrir-a-mesa');
         await c.close();
       }
     }

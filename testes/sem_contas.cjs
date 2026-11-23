@@ -40,7 +40,7 @@ for (const papel of ['dono', 'editor', 'reporter', 'leitor']) {
     assert.deepEqual(mesa.erros, []);
     assert.equal(mesa.$('acesso-painel'), null);
     const ids = ['ver-inicio', 'ver-documentos', 'ver-codex', 'ver-achados', 'ver-quadros', 'ver-apuracao', 'ver-diligencias', 'ver-gerenciar',
-      'ver-cadastro', 'ver-configuracoes', 'mesa-configuracoes'];
+      'ver-configuracoes', 'mesa-configuracoes'];
     for (const id of ids) {
       const no = mesa.$(id);
       if (no && !no.hidden && !no.hasAttribute('data-sem-capacidade')) { no.click(); await mesa.esperar(6); }

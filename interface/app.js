@@ -61,7 +61,7 @@ async function api(operation, data, binary = false) {
   try { result = await response.json(); }
   catch (cause) {
     if ([502, 503, 504].includes(response.status)) throw networkFailure('Sem conexão com o servidor.', cause);
-    throw new Error(window.I18N?.erro ? window.I18N.erro({}) : 'Não foi possível completar a operação.');
+    throw Object.assign(new Error(window.I18N?.erro ? window.I18N.erro({}) : 'Não foi possível completar a operação.'), {status: response.status});
   }
   if (!response.ok) {
     window.Sessao?.recusada(result);  // 403 redacao_suspensa: o estado vale para a Mesa inteira
@@ -69,7 +69,7 @@ async function api(operation, data, binary = false) {
     if (result?.codigo === 'pendencia_de_conta' && (result.pendencias || []).includes('segundo_fator') && location.pathname !== '/conta/segundo-fator') location.replace('/conta/segundo-fator');
     // One place turns server errors into the interface language (by `codigo` in English).
     const failure = new Error(window.I18N?.erro ? window.I18N.erro(result) : result.erro || 'Não foi possível completar a operação.');
-    failure.result = result;
+    failure.result = result; failure.status = response.status;
     throw failure;
   }
   return result;
@@ -88,10 +88,6 @@ async function loadCatalog() {
     if (!response.ok) throw new Error(data.erro || 'Erro ao carregar os casos.');
     if (version !== epoch) return;
     cases = data.casos;
-    const previousUploadCase = $('cadastro-caso').value;
-    $('cadastro-caso').replaceChildren(new Option('Novo caso', ''), ...cases.map(c => new Option(c.titulo, c.id)));
-    if (cases.some(c => c.id === previousUploadCase)) $('cadastro-caso').value = previousUploadCase;
-    toggleNewCase();
     options('caso', cases.map(c => ({value:c.id, label:c.titulo})), 'Selecione um caso');
     $('acervo-escolha').open = true;
     updateScopeHeading();
@@ -322,159 +318,25 @@ $('proximo').addEventListener('click', () => { if (lastResult?.proximo_deslocame
 $('exportar').addEventListener('click', () => {
   if (lastResult) window.exportarEditorial(lastResult,`pesquisa_${lastResult.caso_id}_${lastResult.rodada}_${lastResult.geracao}`,$('pesquisa-formato').value);
 });
-let inventorySequence = 0, pdfAvailable = false, ocrAvailable = false, cadastroBusy = false;
+let pdfAvailable = false, ocrAvailable = false;
 async function loadPdfEnvironment() {
   try {
     const environment = await api('ambiente', {});
     pdfAvailable = Boolean(environment.extracao_pdf?.disponivel);
     ocrAvailable = Boolean(environment.ocr?.disponivel);
-    $('pdf-ambiente-aviso').textContent = pdfAvailable ? '' : 'O extrator de PDF está indisponível nesta instância. Encerre a Mesa e reabra pelo iniciador atualizado. Os arquivos enviados serão preservados, mas os PDFs ficarão sem texto preparado.';
-    $('pdf-ambiente-aviso').hidden = pdfAvailable;
-    $('pdf-ambiente-tecnico').replaceChildren(Leitura.tecnicos(element('pre', JSON.stringify(environment, null, 2), 'raw-briefing')));
-    // O mesmo aviso, agora como cartão no topo de Documentos (a área Cadastrar arquivos sai).
-    $('docs-pdf-ambiente-texto').textContent = $('pdf-ambiente-aviso').textContent;
+    $('docs-pdf-ambiente-texto').textContent = pdfAvailable ? '' : 'O extrator de PDF está indisponível nesta instância. Encerre a Mesa e reabra pelo iniciador atualizado. Os arquivos enviados serão preservados, mas os PDFs ficarão sem texto preparado.';
     $('docs-pdf-ambiente').hidden = pdfAvailable;
     $('docs-pdf-ambiente-tecnico').replaceChildren(Leitura.tecnicos(element('pre', JSON.stringify(environment, null, 2), 'raw-briefing')));
   } catch (failure) {
     pdfAvailable = false;
-    $('pdf-ambiente-aviso').textContent = 'Não foi possível verificar o extrator de PDF. Encerre e reabra a Mesa pelo iniciador atualizado.';
-    $('pdf-ambiente-aviso').hidden = false;
-    $('docs-pdf-ambiente-texto').textContent = $('pdf-ambiente-aviso').textContent; $('docs-pdf-ambiente').hidden = false;
+    $('docs-pdf-ambiente-texto').textContent = 'Não foi possível verificar o extrator de PDF. Encerre e reabra a Mesa pelo iniciador atualizado.'; $('docs-pdf-ambiente').hidden = false;
   }
-  $('cadastro-preparar').disabled = !pdfAvailable || cadastroBusy;
-}
-function uploadError(message = '') {
-  $('cadastro-erro').textContent = message;
-  $('cadastro-erro').hidden = !message;
-}
-function toggleNewCase() {
-  const isNew = !$('cadastro-caso').value;
-  $('novo-caso-campos').hidden = !isNew;
-  for (const id of ['cadastro-titulo-input']) {
-    $(id).required = isNew;
-    $(id).disabled = !isNew;
-  }
-  window.FontesWeb?.alternarNovo(isNew);
-}
-function extractionMessage(info) {
-  if (!info) return '';
-  const labels = {extraido:'Texto extraído', parcial:'Extração parcial',
-    sem_texto: info.ocr_tentado ? 'Sem texto extraível, mesmo após OCR' : 'Sem texto extraível; pode precisar de OCR',
-    erro: info.protegido ? 'PDF protegido por senha; texto não extraído; original preservado' : 'Falha na extração; original preservado'};
-  let message = labels[info.estado] || 'Extração não informada';
-  if (info.paginas_pdf != null) message += ` · ${info.paginas_com_texto} de ${info.paginas_pdf} página(s) com texto`;
-  if (info.paginas_sem_texto?.length) message += ` · Sem texto: página(s) ${info.paginas_sem_texto.join(', ')}`;
-  if (info.paginas_com_erro?.length) message += ` · Com erro: página(s) ${info.paginas_com_erro.map(p => p.pagina_pdf).join(', ')}`;
-  return message;
-}
-function extractionDetails(info) {
-  // One short line per fact so each line can be translated as a whole.
-  const lines = [], pages = list => list.join(', ');
-  if (!info || info.paginas_pdf == null) return lines;
-  const native = info.paginas_texto_nativo;
-  if (native?.length) lines.push(`Texto nativo: ${native.length} página(s)`);
-  if (info.paginas_ocr?.length) {
-    lines.push(`Reconhecidas por OCR: página(s) ${pages(info.paginas_ocr)}`);
-    const engine = info.ocr_motor;
-    if (engine) lines.push(`Motor de OCR: ${engine.motor} ${Object.entries(engine.versoes || {}).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join(', ')} · idiomas ${engine.idiomas}`);
-    lines.push('O texto de OCR é reconhecimento automático e pode conter erros; confira o original.');
-  }
-  const ocrFailures = (info.paginas_com_erro || []).filter(p => p.etapa === 'ocr').map(p => p.pagina_pdf);
-  if (ocrFailures.length) lines.push(`Falha no OCR: página(s) ${pages(ocrFailures)}`);
-  if (info.ocr_indisponivel && info.paginas_sem_texto?.length) lines.push(`OCR não executado: ${info.ocr_indisponivel}`);
-  return lines;
-}
-function appendExtraction(row, info, limited) {
-  if (!info) return;
-  row.append(element('p', extractionMessage(info), limited ? 'limitation' : 'small'));
-  for (const line of extractionDetails(info)) row.append(element('p', line, 'small'));
 }
 function ocrNeeded(doc) {
   const info = doc.extracao_pdf;
   return Boolean(ocrAvailable && info && info.estado !== 'erro'
     && ((info.paginas_sem_texto?.length && !info.ocr_tentado) || (info.paginas_com_erro || []).some(p => p.etapa === 'ocr')));
 }
-function pageSummary(result) {
-  const s = result.extracao_pdf_resumo;
-  if (!s || s.paginas_ocr === undefined) return null;
-  return `Páginas: ${s.paginas_texto_nativo} com texto nativo · ${s.paginas_ocr} por OCR · ${s.paginas_sem_texto} sem texto · ${s.paginas_com_erro} com falha`;
-}
-function showInventory(data) {
-  const list = element('ul', undefined, 'document-list');
-  for (const doc of data.documentos) {
-    const row = element('li');
-    row.append(element('strong', Leitura.nome(doc)));
-    appendExtraction(row, doc.extracao_pdf, Leitura.lacunas(doc).length);
-    row.append(Leitura.tecnicos(element('pre', JSON.stringify(doc, null, 2), 'raw-briefing')));
-    list.append(row);
-  }
-  $('cadastro-inventario').replaceChildren(element('h3', `${Leitura.quantidade(data.total_documentos, 'documento')} nesta apuração`), list,
-    Leitura.tecnicos(`Apuração: ${data.caso_id} · Corpus: ${data.corpus_id}`));
-  $('cadastro-inventario').hidden = false;
-  const pending = data.documentos.filter(doc => /\.pdf$/i.test(doc.nome_recebido || doc.arquivo || '') && (!doc.extracao_pdf || doc.extracao_pdf.estado === 'erro' || ocrNeeded(doc)));
-  $('cadastro-preparacao').hidden = !pending.length;
-  $('cadastro-preparacao-resumo').textContent = `${Leitura.quantidade(pending.length, 'PDF pendente de preparação', 'PDFs pendentes de preparação')}. Você pode tentar extrair o texto sem enviar os arquivos novamente.`;
-  $('cadastro-preparar').disabled = !pdfAvailable || cadastroBusy;
-  window.FontesWeb?.mostrar(data);
-}
-function renderReceipt(result, preparation = false) {
-  const list = element('ul', undefined, 'document-list');
-  for (const item of result.arquivos) {
-    const row = element('li', `${Leitura.nome(item)} · ${preparation ? 'original já cadastrado' : item.estado === 'duplicado' ? 'duplicata identificada' : 'cadastrado'}`);
-    appendExtraction(row, item.extracao_pdf, Leitura.lacunas(item).length);
-    row.append(Leitura.tecnicos(element('pre', JSON.stringify(item, null, 2), 'raw-briefing')));
-    list.append(row);
-  }
-  $('cadastro-recibo').replaceChildren(element('h3', preparation ? `Preparação conferida: ${Leitura.quantidade(result.recebidos, 'PDF')}` : `Envio conferido: ${result.recebidos} de ${result.arquivos.length} arquivo(s)`),
-    element('p', preparation ? 'Novos derivados registrados, sem alterar os originais.' : `${result.novos} novo(s) · ${result.duplicados} duplicado(s) · ${result.total_documentos} documento(s) no caso.`),
-    ...(pageSummary(result) ? [element('p', pageSummary(result), 'small')] : []),
-    list, Leitura.tecnicos(`Apuração: ${result.caso_id} · Corpus: ${result.corpus_id} · Recibo: ${result.arquivo_recibo}`));
-  $('cadastro-recibo').hidden = false;
-}
-$('cadastro-preparar').addEventListener('click', async () => {
-  const caso = $('cadastro-caso').value;
-  if (!caso || cadastroBusy || !pdfAvailable) return;
-  cadastroBusy = true; ++inventorySequence; uploadError();
-  $('cadastro-preparar').disabled = true;
-  for (const control of $('cadastro').elements) control.disabled = true;
-  $('cadastro-status').textContent = 'Preparando o texto dos PDFs já cadastrados…';
-  try {
-    const result = await api('preparar-pdfs', {caso});
-    renderReceipt(result, true); showInventory(result.inventario);
-    const pdf = result.extracao_pdf_resumo;
-    $('cadastro-status').textContent = pdf.erro || pdf.parcial || pdf.sem_texto
-      ? 'Preparação concluída com limitações. Confira as páginas sem texto e os erros no recibo.'
-      : 'PDFs preparados. Aguardando sua pergunta.';
-  } catch (failure) {
-    uploadError(failure.message);
-    $('cadastro-status').textContent = 'A preparação não foi confirmada. Os originais continuam preservados.';
-  } finally {
-    cadastroBusy = false;
-    for (const control of $('cadastro').elements) control.disabled = false;
-    toggleNewCase(); $('cadastro-preparar').disabled = !pdfAvailable;
-  }
-});
-$('cadastro-caso').addEventListener('change', async () => {
-  const sequence = ++inventorySequence;
-  toggleNewCase(); uploadError();
-  $('cadastro-recibo').hidden = true; $('cadastro-inventario').hidden = true;
-  $('cadastro-preparacao').hidden = true;
-  $('cadastro-status').textContent = '';
-  const caso = $('cadastro-caso').value;
-  if (!caso) return;
-  $('cadastro-status').textContent = 'Conferindo os documentos já cadastrados…';
-  try {
-    const data = await api('inventario', {caso});
-    if (sequence !== inventorySequence) return;
-    showInventory(data); $('cadastro-status').textContent = 'Pronto para receber outro lote neste caso.';
-  } catch (failure) { if (sequence === inventorySequence) uploadError(failure.message); }
-});
-$('cadastro-arquivos').addEventListener('change', () => {
-  const files = Array.from($('cadastro-arquivos').files);
-  $('arquivos-selecionados').textContent = files.length
-    ? `${files.length} arquivo(s) selecionado(s): ${files.map(f => f.name).join(', ')}`
-    : 'Selecione todos os arquivos do lote. Até 50 MB por envio.';
-});
 function encodeFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -483,78 +345,6 @@ function encodeFile(file) {
     reader.readAsDataURL(file);
   });
 }
-// Envio em fluxo (W02, UX-05): cada arquivo com a própria barra e o próprio resultado, em lotes de até 50 MB. Só com um servidor que o anuncia
-// em /api/integracao (envio_fluxo); sem isso vale o envio em JSON de antes.
-let envioIncerto = '';   // o aviso do último envio de apuração nova que não se sabe se criou a apuração: um reenvio pode criar outra
-async function sendByStream(files, scope) {
-  const envio = await Envio.enviar({escopo:scope, arquivos:files, alvo:$('cadastro-envio')});
-  if (!envio.recebidos && envio.incerto) envioIncerto = envio.aviso_incerto;
-  else if (envio.recebidos) envioIncerto = '';
-  if (!envio.recebidos) throw envio.erro || new Error(envio.cancelado ? 'Envio cancelado. Nada foi cadastrado.' : 'Nenhum arquivo foi cadastrado. Confira o resultado de cada arquivo acima.');
-  Envio.renderRecibo($('cadastro-recibo'), envio);
-  return {caso_id:envio.caso_id, inventario:await api('inventario', {caso:envio.caso_id}), limitacao:Envio.comLimitacao(envio) || !!envio.pendentes};
-}
-$('cadastro').addEventListener('submit', async event => {
-  event.preventDefault(); uploadError();
-  if (cadastroBusy) return;
-  const files = Array.from($('cadastro-arquivos').files);
-  if (!files.length) return;
-  // Ocupado antes de qualquer espera: um segundo clique durante a consulta ao servidor não manda o lote duas vezes.
-  cadastroBusy = true;
-  const byStream = !!(window.Envio && await window.Envio.disponivel());
-  if (!byStream && files.reduce((sum, file) => sum + file.size, 0) > 50 * 1024 * 1024) {
-    cadastroBusy = false;
-    uploadError('O lote excede 50 MB. Divida o envio em lotes menores; nenhum arquivo foi enviado.'); return;
-  }
-  // Apuração nova: sem `caso`. O identificador é escolhido pelo servidor (contrato de contas, 4.4; o portão recusa um escolhido aqui) e volta na
-  // resposta (`caso_id`), de onde os lotes seguintes o tomam.
-  const isNew = !$('cadastro-caso').value;
-  if (isNew && envioIncerto) {   // R3: um reenvio pode criar outra apuração; a pessoa vê o aviso e confirma antes
-    const ok = await Dialogo.confirmar({titulo:'Enviar de novo pode criar outra apuração', texto:envioIncerto, acao:'Enviar mesmo assim'});
-    if (!ok) { cadastroBusy = false; uploadError(envioIncerto); return; }
-    envioIncerto = '';
-  }
-  const scope = {novo:isNew, ...(isNew ? {} : {caso:$('cadastro-caso').value}),
-    titulo:$('cadastro-titulo-input').value, natureza:$('cadastro-natureza').value,
-    ...(isNew ? window.FontesWeb?.escopoNovo() : {})};
-  $('cadastro-preparar').disabled = true;
-  ++inventorySequence;
-  for (const control of $('cadastro').elements) control.disabled = true;
-  $('cadastro-recibo').hidden = true; $('cadastro-perguntar').hidden=true;
-  $('cadastro-status').textContent = `Enviando e cadastrando ${files.length} arquivo(s)…`;
-  try {
-    let result;
-    if (byStream) result = await sendByStream(files, scope);
-    else {
-      const arquivos = await Promise.all(files.map(encodeFile));
-      result = await api('cadastrar', {...scope, arquivos});
-      if (result.recebidos !== files.length || result.arquivos.length !== files.length) {
-        throw new Error('Recibo incompleto. Confira o inventário antes de considerar o lote confirmado.');
-      }
-      renderReceipt(result);
-    }
-    showInventory(result.inventario);
-    await loadCatalog();
-    $('cadastro-caso').value = result.caso_id;
-    window.definirContextoCaso?.(result.caso_id);
-    $('cadastro-perguntar').dataset.caso=result.caso_id; $('cadastro-perguntar').hidden=false;
-    toggleNewCase();
-    $('cadastro-arquivos').value = '';
-    $('arquivos-selecionados').textContent = 'Pronto para selecionar outro lote.';
-    const pdf = result.extracao_pdf_resumo;
-    $('cadastro-status').textContent = result.limitacao || pdf && (pdf.erro || pdf.parcial || pdf.sem_texto)
-      ? 'Originais registrados. Confira as limitações de extração no recibo antes da pergunta.'
-      : 'Documentos registrados. Aguardando sua pergunta.';
-  } catch (failure) {
-    uploadError(failure.message);
-    $('cadastro-status').textContent = 'Envio sem confirmação nesta tela. Consulte o inventário antes de continuar; um reenvio identifica arquivos duplicados.';
-  } finally {
-    cadastroBusy = false;
-    for (const control of $('cadastro').elements) control.disabled = false;
-    toggleNewCase();
-    $('cadastro-preparar').disabled = !pdfAvailable;
-  }
-});
 // Findings open on the latest analysis, step and results version. The chip names what is
 // selected and reopens the selectors; an address that names a version wins over the default.
 let findingEpoch = 0, findingSequence = 0, findingCatalog = null, findingQuery = null, findingResult = null;
@@ -649,7 +439,7 @@ function resetFindings() {
   $('achados-status').textContent = 'Escolha uma apuração para ver os achados da análise mais recente.';
 }
 // Each view opens with its area name as the only h1 and the investigation as context.
-const areaNames = {inicio:'Visão geral',nova:'Nova apuração',cadastro:'Cadastrar arquivos',documentos:'Documentos',codex:'Perguntar à IA',
+const areaNames = {inicio:'Visão geral',nova:'Nova apuração',documentos:'Documentos',codex:'Perguntar à IA',
   achados:'Conferir achados',apuracao:'Caderno',caderno:'Caderno',diligencias:'Diligências',quadros:'Quadros de evidência',gerenciar:'Apurações e lixeira',configuracoes:'Configurações'};
 let currentArea = 'inicio';
 function areaHeading() {
@@ -676,7 +466,7 @@ function registrarGanchoArea({antes, forcar, depois}) {
   if (depois) ganchosArea.depois.push(depois);
 }
 function showArea(pedida) {
-  let nome = pedida;
+  let nome = pedida === 'cadastro' ? 'documentos' : pedida;   // endereços antigos (?area=cadastro) abrem Documentos
   for (const gancho of ganchosArea.antes) nome = gancho(nome);
   for (const gancho of ganchosArea.forcar) nome = gancho(nome);
   mostrarAreaBase(nome);
@@ -690,14 +480,13 @@ function mostrarAreaBase(area) {
     $('area-' + name).hidden = area !== name;
     $('ver-' + name).setAttribute('aria-pressed', String(area === name));
   }
-  $('selecao-acervo').hidden = ['inicio','nova','cadastro','codex','gerenciar','configuracoes','caderno','apuracao','diligencias','quadros'].includes(area);
+  $('selecao-acervo').hidden = ['inicio','nova','codex','gerenciar','configuracoes','caderno','apuracao','diligencias','quadros'].includes(area);
   currentArea = area; areaHeading(); versionChip();
   if (area === 'achados' && !defaultAnalysis() && !findingCatalog) loadFindingsCatalog();
   if (area === 'achados' && window.achadosDesatualizados && findingQuery) {
     window.achadosDesatualizados = false;  // a human mark was saved elsewhere: reload badges and counter
     searchFindings({...findingQuery});
   }
-  if (area === 'cadastro') loadPdfEnvironment();  // reverifica o extrator de PDF e o aviso, por qualquer caminho até Cadastro
   if (area === 'gerenciar') window.dispatchEvent(new Event('gerenciar-abrir'));
   if (area === 'caderno') window.dispatchEvent(new Event('caderno-abrir'));
   if (area === 'apuracao') window.dispatchEvent(new Event('apuracao-abrir'));
@@ -724,7 +513,7 @@ window.areaMesa = Object.freeze({ir: showArea, nucleo: mostrarAreaBase});
 //   Sessao.aplicar()         reaplica data-requer e a navegação (depois de criar elementos novos)
 //   Sessao.suspender()       o estado "Redação suspensa" para a Mesa inteira (403 redacao_suspensa em qualquer pedido)
 const CAPACIDADE_DA_AREA = {inicio: '', nova: 'cadastrar', configuracoes: '', documentos: 'inventario', codex: 'codex-listar', achados: 'achados-catalogo',
-  quadros: 'hipoteses-quadro', apuracao: 'apuracao-listar', caderno: 'caderno-listar', diligencias: 'diligencias-listar', cadastro: 'cadastrar',
+  quadros: 'hipoteses-quadro', apuracao: 'apuracao-listar', caderno: 'caderno-listar', diligencias: 'diligencias-listar',
   gerenciar: 'gerenciar-listar'};
 window.Sessao = (() => {
   const SO_PERGUNTA = /^(codex-|conta-|rascunhos-|sessao-sair$)/;
@@ -827,6 +616,32 @@ window.PreparoDePdf = (() => {
   return {atualizar, ambiente, pendentes};
 })();
 
+// Envio em JSON (F3 da Coruja): o caminho de quem está num servidor sem o envio por arquivo (envio_fluxo). Um só lote, até 50 MB, lido no navegador e enviado em `cadastrar`;
+// o recibo é conferido antes de a tela seguir. Serve à Nova apuração (escopo com novo:true) e à Documentos de uma apuração que já existe (escopo com caso).
+window.EnvioJson = (() => {
+  const MAXIMO = 50 * 1024 * 1024;
+  // Uma apuração nova que não se sabe se nasceu (rede, 500, 502 ou 504, como no envio em fluxo): quem chama avisa e pede confirmação antes de um reenvio.
+  const AVISO_INCERTO = 'Não sabemos se a apuração foi criada: a resposta do servidor não chegou. Confira a apuração na Visão geral antes de enviar de novo.';
+  async function enviar(arquivos, {escopo, aoIncerto}) {
+    if (arquivos.reduce((soma, arquivo) => soma + arquivo.size, 0) > MAXIMO) {
+      window.definirEstadoAcervo?.('O lote excede 50 MB. Divida o envio em lotes menores; nenhum arquivo foi enviado.'); return null;
+    }
+    window.definirEstadoAcervo?.(`Enviando e cadastrando ${arquivos.length} arquivo(s)…`);
+    try {
+      const lote = await Promise.all(arquivos.map(encodeFile));
+      const resultado = await api('cadastrar', {...escopo, arquivos: lote});
+      if (resultado.recebidos !== arquivos.length || resultado.arquivos.length !== arquivos.length) throw new Error('Recibo incompleto. Confira o inventário antes de considerar o lote confirmado.');
+      return resultado;
+    } catch (falha) {
+      const incerto = !!escopo.novo && !escopo.caso && (falha.rede === true || [500, 502, 504].includes(falha.status));
+      if (incerto) { const aviso = window.I18N ? window.I18N.t(AVISO_INCERTO) : AVISO_INCERTO; window.definirEstadoAcervo?.(aviso); aoIncerto?.(aviso); }
+      else window.definirEstadoAcervo?.(falha.message);
+      return null;
+    }
+  }
+  return {enviar};
+})();
+
 window.NovaApuracao = (() => {
   const t = (pt, vars) => (window.I18N ? window.I18N.t(pt, vars) : String(pt).replace(/\{(\w+)\}/g, (todo, nome) => vars?.[nome] ?? todo));
   // Só o domínio, exato: nada de esquema, caminho, porta nem endereço numérico (o servidor confere o resto: nome interno e domínio de outra apuração).
@@ -894,7 +709,7 @@ window.NovaApuracao = (() => {
   function abrir(valores = null) {
     if (enviando) return;   // com o envio no ar não se volta ao passo 1
     fluxo = 'passo1'; etapa = 1; delete document.body.dataset.nova;
-    $('nova-aviso').hidden = true;
+    $('nova-aviso').hidden = true; mostrarRecomecar(false);
     preencher(valores);
     limpar();
     showArea('nova');
@@ -916,7 +731,7 @@ window.NovaApuracao = (() => {
     if (enviando) saiuComEnvio = true;   // o envio segue por trás; o `dados` fica para o envio terminar
     fluxo = null; if (!enviando) dados = null; etapa = null; incerto = null;
     delete document.body.dataset.nova;
-    $('nova-aviso').hidden = true; $('nova-incerto').hidden = true;
+    $('nova-aviso').hidden = true; $('nova-incerto').hidden = true; mostrarRecomecar(false);
     preencher(null); limpar(); desenharEtapas();
   }
   const preenchido = () => fluxo === 'passo2' || !!$('nova-nome').value.trim() || !!$('nova-site').value.trim();
@@ -942,6 +757,12 @@ window.NovaApuracao = (() => {
     if (passo2) apoio.setAttribute('translate', 'no'); else apoio.removeAttribute('translate');
     return true;
   }
+  // "Recomeçar": o primeiro envio falhou e a apuração não nasceu; volta ao passo 1 com os campos preenchidos.
+  function mostrarRecomecar(visivel) {
+    $('nova-recomecar-linha').hidden = !visivel;
+    if (!visivel && $('nova-incerto').dataset.recomece) { $('nova-incerto').hidden = true; delete $('nova-incerto').dataset.recomece; }
+    if (visivel) $('nova-incerto').dataset.recomece = '1';
+  }
   // O link "‹ Nome e fontes" fica indisponível enquanto o primeiro envio está no ar.
   function marcarEnvio(valor) {
     enviando = valor;
@@ -956,7 +777,8 @@ window.NovaApuracao = (() => {
       incerto = null; $('nova-incerto').hidden = true;
     }
     marcarEnvio(true); saiuComEnvio = false;
-    const nome = dados.nome;
+    mostrarRecomecar(false);
+    const guardados = {...dados}, nome = dados.nome;
     const escopo = {novo: true, titulo: nome, natureza: dados.natureza, modo_fontes: dados.modo_fontes,
       ...(dados.dominio_permitido ? {dominio_permitido: dados.dominio_permitido} : {})};
     // A apuração existe (o servidor aceitou o primeiro lote): o seletor do topo passa a ela e a tela vira a Documentos comum; se a pessoa saiu com o envio
@@ -980,20 +802,12 @@ window.NovaApuracao = (() => {
     const aoCriar = async caso => { marcarEnvio(false); await criada(caso); };   // a apuração existe: não há mais o risco de criar outra
     // N1: sem o envio por arquivo no servidor, a própria Nova apuração envia em JSON (sem depender da área Cadastrar arquivos).
     const enviarEmJson = async arquivosEscolhidos => {
-      const total = arquivosEscolhidos.reduce((soma, arquivo) => soma + arquivo.size, 0);
-      if (total > 50 * 1024 * 1024) { window.definirEstadoAcervo?.('O lote excede 50 MB. Divida o envio em lotes menores; nenhum arquivo foi enviado.'); return null; }
-      window.definirEstadoAcervo?.(`Enviando e cadastrando ${arquivosEscolhidos.length} arquivo(s)…`);
-      try {
-        const lote = await Promise.all(arquivosEscolhidos.map(encodeFile));
-        const resultado = await api('cadastrar', {...escopo, arquivos: lote});
-        if (resultado.recebidos !== arquivosEscolhidos.length || resultado.arquivos.length !== arquivosEscolhidos.length) throw new Error('Recibo incompleto. Confira o inventário antes de considerar o lote confirmado.');
-        marcarEnvio(false); await criada(resultado.caso_id);
-        window.Envio.renderRecibo($('documentos-recibo'), resultado);
-        etapa = 3; desenharEtapas(); if (typeof loadCatalog === 'function') await loadCatalog(); await extra.aoConcluir?.(resultado);
-        return resultado;
-      } catch (falha) {
-        window.definirEstadoAcervo?.(falha.message); return null;
-      }
+      const resultado = await window.EnvioJson.enviar(arquivosEscolhidos, {escopo, aoIncerto: aviso => { incerto = aviso; $('nova-incerto').textContent = aviso; $('nova-incerto').hidden = false; }});
+      if (!resultado) return null;
+      marcarEnvio(false); await criada(resultado.caso_id);
+      window.Envio.renderRecibo($('documentos-recibo'), resultado);
+      etapa = 3; desenharEtapas(); if (typeof loadCatalog === 'function') await loadCatalog(); await extra.aoConcluir?.(resultado);
+      return resultado;
     };
     try {
     return await window.Documentos.enviar(arquivos, {escopo, alvo: $('documentos-envio'), alvoRecibo: $('documentos-recibo'), aoCriar,
@@ -1007,8 +821,13 @@ window.NovaApuracao = (() => {
         if (resultado && !resultado.recebidos && criadaAqui && !resultado.incerto && !saiuComEnvio) {
           const perdida = criadaAqui; criadaAqui = null;
           const posicao = cases.findIndex(c => c.id === perdida); if (posicao >= 0 && !cases[posicao].rodadas.length) cases.splice(posicao, 1);
-          window.definirContextoCaso?.('', {force: true}); areaHeading();
+          window.definirContextoCaso?.('', {force: true});
+          // B1 do Traço: a tela volta a ser o passo 2 da Nova apuração (título e nome, o aviso, Recomeçar e o cartão de envio com o erro), não a Documentos comum.
+          dados = guardados; fluxo = 'passo2'; etapa = 2; document.body.dataset.nova = 'passo2'; $('nova-aviso').hidden = false;
+          if (currentArea !== 'documentos') showArea('documentos');
+          desenharEtapas(); titular();
           $('nova-incerto').textContent = t('Esta apuração não chegou a ser criada: o primeiro envio falhou. Recomece a Nova apuração.'); $('nova-incerto').hidden = false;
+          mostrarRecomecar(true);
         }
       }});
     } finally { marcarEnvio(false); }
@@ -1021,6 +840,12 @@ window.NovaApuracao = (() => {
     encerrar(); showArea('inicio');
   });
   $('nova-voltar').addEventListener('click', () => { if (!enviando) abrir(dados); });
+  $('nova-recomecar').addEventListener('click', () => {
+    if (enviando) return;
+    const valores = dados; incerto = null;
+    $('documentos-envio').replaceChildren(); $('documentos-recibo').hidden = true;   // o cartão do envio que falhou fica para trás
+    abrir(valores);
+  });
   window.addEventListener('envio-recibo-visto', () => { if (etapa === 3) { etapa = null; desenharEtapas(); } });
   // Escolher uma apuração no topo, ou sair da tela Documentos depois da criação, encerra o modo.
   window.addEventListener('mesa-contexto-alterado', () => { if (noFluxo() && window.contextoCaso?.()) encerrar(); });
@@ -1039,15 +864,10 @@ window.NovaApuracao = (() => {
     try { alvo.click(); } finally { liberado = false; }
   }, true);
   campoDoSite();
-  return {abrir: () => abrir(null), ativa: () => fluxo === 'passo2', enviar, titular, encerrar, dados: () => dados};
+  return {abrir: () => abrir(null), ativa: () => fluxo === 'passo2', enviar, titular, encerrar, dados: () => dados, ocupado: () => enviando};
 })();
-for (const area of ['inicio','nova','cadastro','documentos','achados','codex','gerenciar','configuracoes','caderno','apuracao','diligencias','quadros']) $('ver-' + area).addEventListener('click', () => showArea(area));
-window.addEventListener('acervo-alterado', () => {
-  $('cadastro-recibo').hidden = true; $('cadastro-perguntar').hidden=true;
-  $('cadastro-inventario').hidden = true;
-  $('cadastro-preparacao').hidden = true;
-  loadCatalog();
-});
+for (const area of ['inicio','nova','documentos','achados','codex','gerenciar','configuracoes','caderno','apuracao','diligencias','quadros']) $('ver-' + area).addEventListener('click', () => showArea(area));
+window.addEventListener('acervo-alterado', () => { loadCatalog(); });
 for (const id of ['caso', 'rodada', 'geracao']) $(id).addEventListener('change', () => {
   if ($('area-achados').hidden) return;
   // A new case opens on its latest analysis, which then loads its own catalog.
