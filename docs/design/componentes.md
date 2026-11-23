@@ -116,7 +116,7 @@ Raio 8 px em todas, menos o filtro (pílula).
 | Foco | anel de foco com afastamento de 2 px | canvas ("Em foco") |
 | Ocupado | rótulo troca pelo verbo da ação no gerúndio ("Conferindo…"), largura mantida, `aria-busy="true"`, `aria-disabled="true"`; sem rodinha | derivado de W11 (regra 2) |
 | Erro | o botão não muda; o erro aparece junto ao que falhou (campo ou cartão) | wireframe W11 (regras 4 e 5) |
-| Desabilitado | fundo `--theme-sidebar`, borda 1 px `--theme-line`, texto `--theme-muted` 16/400 | canvas ("Indisponível") |
+| Desabilitado | fundo `--theme-sidebar`, borda 1 px `--theme-line`, texto `--theme-disabled-text` 16/400 (no claro, igual a `--theme-muted`; no escuro, mais apagado, `mudancas-de-token.md`, item 13) | canvas ("Indisponível"); token do escuro de 22/11/2026 |
 | Vazio | não se aplica | — |
 
 <a id="link"></a>
@@ -591,7 +591,7 @@ Os oito `confirm()` de hoje e a variante de cada um (rótulos de ação aprovado
 |---|---|
 | Rótulo | "Sua senha", 16/600 |
 | Campo | o [campo de senha](#campo), com "Mostrar": 44 px no desktop, 48 no celular; `type="password"`, `autocomplete="current-password"`; aceita colar e gerenciador de senhas (W08, regra 4) |
-| Apoio | abaixo do campo, 14 `--theme-muted`: "A senha com que você entra na Mesa." |
+| Apoio | abaixo do campo, 14 `--theme-muted`: "A senha com que você entra na Mesa." Quando há erro, a mensagem de erro vem primeiro, a 4 px do campo, e o apoio depois dela (ressalva sobre `b5b389c`) |
 | Ação | desabilitada com o campo vazio; Enter envia quando ela está habilitada |
 
 Foco inicial no campo. A senha vai só naquele pedido (campo `senha`; `senha_atual` na troca de senha): a Mesa não a guarda, nem entre tentativas, e limpa o campo ao fechar o diálogo. Respostas:
@@ -962,7 +962,7 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
     - "Só documentos" (padrão), com o apoio "Padrão. Nada é buscado na internet."
     - "Documentos e um site", com o apoio "Você indica o site; o Vlado só captura páginas dele, a seu pedido." Escolhida esta opção, aparece "Endereço do site": campo com a dica "prefeitura.sp.gov.br", `translate="no"` e o apoio "Só o domínio, exato. Escolhido só agora: depois de criada, a apuração não troca de site."
 - **Ações:** à direita, "Cancelar" (secundário), que volta à Visão geral sem criar nada, e "Continuar para documentos" (principal).
-- **Erros, junto ao campo:** nome em branco, "Falta o nome. Dê um nome à apuração."; site em branco com a opção escolhida, "Falta o site. Escreva o domínio, por exemplo prefeitura.sp.gov.br."; site inválido, interno ou com caminho, "Site inválido. Use só o domínio, sem https:// nem caminho, por exemplo prefeitura.sp.gov.br." (W01, regra 3). A recusa do servidor no envio vai ao campo a que se refere.
+- **Erros, junto ao campo**, a 4 px dele e antes do texto de apoio: nome em branco, "Falta o nome. Dê um nome à apuração."; site em branco com a opção escolhida, "Falta o site. Escreva o domínio, por exemplo prefeitura.sp.gov.br."; site inválido, interno ou com caminho, "Site inválido. Use só o domínio, sem https:// nem caminho, por exemplo prefeitura.sp.gov.br." (W01, regra 3). A recusa do servidor no envio vai ao campo a que se refere.
 
 **Passo 2, Documentos de uma apuração ainda por criar.** A tela [Documentos](#documentos) muda em poucos pontos:
 
@@ -1051,7 +1051,7 @@ Respostas do servidor:
 - **Texto:** "Enviamos um link ao e-mail novo. O e-mail atual continua valendo, inclusive para entrar, até você abrir o link."
 - **Erros antes do envio:** em branco, "Falta o e-mail novo. Escreva o endereço que quer usar."; sem a forma de endereço, "E-mail inválido. Confira o endereço, por exemplo ana@redacao.org."
 
-A resposta é sempre `{estado: "confirmacao_enviada"}`, para endereço livre e para endereço que já é de outra conta (contrato, 5.4). O diálogo fecha e a linha de estado diz "✓ Confirmação enviada ao e-mail novo. Abra o link em até 60 minutos." A tela não diz mais nada, para não contar se o endereço já tem conta. Com o transporte `tela`, a resposta traz `link`, e o diálogo mostra o link como no convite (limitação da seção 8.1 do contrato). Um pedido a cada 5 minutos: a recusa do servidor vai ao erro do diálogo.
+A resposta é sempre `{estado: "confirmacao_enviada"}`, para endereço livre e para endereço que já é de outra conta (contrato, 5.4). O diálogo fecha e a linha de estado diz "✓ Confirmação enviada ao e-mail novo. Abra o link em até 60 minutos." A tela não diz mais nada, para não contar se o endereço já tem conta. Com o transporte `tela`, a resposta traz `link`, e o diálogo mostra o link como no convite (limitação da seção 8.1 do contrato). O título é "Confirme o e-mail ana@redacao.org" e o texto "Abra o link para confirmar o e-mail novo. Ele vale 60 minutos, uma única vez, e não será mostrado de novo." (proposta do Vitral em `249e5c9`, aceita em 22/11/2026). Um pedido a cada 5 minutos: a recusa do servidor vai ao erro do diálogo.
 
 **Página "Confirmar e-mail"** (`/confirmar-email/<token>`): mais uma seção do Entrar, como [aceitar convite](#aceitar-convite).
 
