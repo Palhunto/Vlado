@@ -573,6 +573,41 @@ class FilaComArquivosHostisTest(base_fila.Base):
         self.assertIn('10 min', fila_extracao.mensagem_leitura_visual_ocupada(600, 0.0, 60))
         self.assertEqual(self.fila.config['tempo_leitura_visual'], 600)
 
+    def test_matar_cai_no_proprio_processo_quando_o_grupo_falha(self):
+        # CI (Linux): a process that does not lead its own group makes killpg fail quietly; it must die all the same.
+        proc = mock.Mock(pid=4242)
+        with mock.patch.object(fila_extracao.os, 'killpg', create=True, side_effect=ProcessLookupError) as killpg:
+            fila_extracao._matar_processo(proc, posix=True)
+        killpg.assert_called_once_with(4242, 9)
+        proc.kill.assert_called_once_with()
+        proc = mock.Mock(pid=4243)
+        fila_extracao._matar_processo(proc, posix=False)  # Windows: the process (its job takes the children)
+        proc.kill.assert_called_once_with()
+
+    def test_processo_que_nao_morre_nao_esconde_a_recusa(self):
+        # The final wait past its time is a warning in the log: the busy-server refusal still reaches who asked.
+        falso = ('import json, sys, time\n'
+                 'sys.stdin.readline()\n'
+                 'print(json.dumps({"tipo": "cpu", "cpu_s": 0.3}), flush=True)\n'
+                 'time.sleep(600)\n')
+        processos = []
+
+        def abrir():
+            proc = subprocess.Popen([sys.executable, '-c', falso], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                    text=True, encoding='utf-8')
+            processos.append(proc)
+            self.addCleanup(lambda: (proc.kill(), proc.wait(30), proc.stdin.close(), proc.stdout.close()))
+            return proc
+        with mock.patch.object(fila_extracao, '_abrir_trabalhador', abrir), \
+                mock.patch.object(fila_extracao, '_matar_processo', lambda proc, posix=None: None), \
+                mock.patch.object(fila_extracao, 'ESPERA_MORTE', 0.5), \
+                self.assertLogs('vlado.fila_extracao', 'WARNING') as aviso:
+            with self.assertRaises(ValueError) as recusa:
+                self.fila.renderizar_pagina(self.arquivos / 'a.pdf', 1, prazo=2)
+        self.assertTrue(str(recusa.exception).startswith('O servidor está ocupado'), str(recusa.exception))
+        self.assertIn('não terminou', '\n'.join(aviso.output))
+        self.assertIsNone(processos[0].poll())  # the kill was made to fail here: the refusal came anyway
+
     def test_mesa_liga_a_leitura_visual_da_apuracao_ao_processo_isolado(self):
         from interface_pesquisa import Servidor
         server = Servidor(('127.0.0.1', 0), self.root, extracao='processos')
