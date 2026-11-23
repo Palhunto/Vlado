@@ -673,6 +673,8 @@ class EsquemaTest(DuasRedacoes):
     def para_a_versao_1(self):
         con = sqlite3.connect(acesso.caminho_bd(self.root))
         try:
+            for coluna in ('ultimo_acesso', 'aviso_inatividade_em'):  # version 9
+                con.execute(f'ALTER TABLE contas DROP COLUMN {coluna}')
             con.execute('DROP TABLE termos_aceites')  # version 8 (and its index)
             con.execute('DROP TABLE aparelhos')  # version 7
             for tabela in ('fatores', 'codigos_reserva', 'entradas'):  # version 6
@@ -712,6 +714,9 @@ class EsquemaTest(DuasRedacoes):
         self.assertEqual(acesso.sessao(self.root, sid)['conta'], self.dono_a)  # the session of before goes on
         self.assertEqual(acesso.sessoes_da_conta(self.root, self.dono_a)[0]['aparelho'], None)
         self.assertEqual(acesso.alcance(self.root, self.rep_a), (frozenset({'caso_a'}), frozenset({'caso_a'})))
+        # Version 9: an account of before counts its inactivity from the migration, never from its creation (4b-4).
+        self.assertTrue(all(c['ultimo_acesso'] and c['aviso_inatividade_em'] is None
+                            for c in self.linhas('SELECT ultimo_acesso, aviso_inatividade_em FROM contas')))
         acesso._PRONTOS.clear()
         self.assertEqual(acesso.listar(self.root), antes)  # a second start changes nothing
 
@@ -1056,6 +1061,24 @@ class ContaPropriaTest(DuasRedacoes):
         self.assertIsNotNone(acesso.sessao(self.root, da_dona))
         self.assertEqual(acesso.encerrar_outras_sessoes(self.root, self.rep_a, atual), 0)
         self.assertIn('sessao_encerrada_a_distancia', self.tipos())
+
+
+class IdiomaGravadoTest(DuasRedacoes):
+    """P42: the page's first language reads the column as stored; an account that never chose has none."""
+
+    def test_coluna_crua_ou_none(self):
+        self.assertIsNone(acesso.idioma_gravado(self.root, self.rep_a))  # never chose: the browser decides
+        self.assertEqual(acesso.ver_conta(self.root, self.rep_a)['conta']['idioma'], 'pt')  # what the profile shows
+        acesso.atualizar_perfil(self.root, self.rep_a, idioma='en')
+        self.assertEqual(acesso.idioma_gravado(self.root, self.rep_a), 'en')
+        acesso.atualizar_perfil(self.root, self.rep_a, idioma='pt')
+        self.assertEqual(acesso.idioma_gravado(self.root, self.rep_a), 'pt')
+        self.gravar("UPDATE contas SET idioma = 'xx' WHERE id = ?", self.rep_b)
+        self.assertIsNone(acesso.idioma_gravado(self.root, self.rep_b))  # outside IDIOMAS: never injected as it came
+        for cid in (None, 7, '', 'admin', 'f' * 16):  # unknown: None, without raising
+            self.assertIsNone(acesso.idioma_gravado(self.root, cid), cid)
+        acesso.remover(self.root, self.rep_b, self.dono_b, self.b, SENHA)
+        self.assertIsNone(acesso.idioma_gravado(self.root, self.rep_b))  # deleted
 
 
 if __name__ == '__main__':
