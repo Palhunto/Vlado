@@ -23,7 +23,10 @@ def main():
         if apagamento.QUARENTENA in partes and 'lixeira' not in partes:
             removidos[0] += 1
             if removidos[0] == 5:
-                marca.write_text('removendo', encoding='utf-8')
+                # atomic, like agente_api_sintetico.marcar: the test sees the mark only whole
+                temporario = marca.with_name(marca.name + '.tmp')
+                temporario.write_text('removendo', encoding='utf-8')
+                os.replace(temporario, marca)
             time.sleep(0.2)
         return real(caminho, *args, **kwargs)
     os.unlink = devagar
