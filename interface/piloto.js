@@ -22,6 +22,8 @@
     // O perfil antigo só pergunta: toda troca de área mostra a conversa, salvo a página da própria conta
     // (Minha conta, W08, que toda pessoa com conta tem). O `name` que os demais ganchos recebem continua sendo o pedido (comportamento de antes).
     registrarGanchoArea({forcar: nome => (nome === 'configuracoes' ? 'configuracoes' : 'codex')});
+    // O perfil abre Minha conta também para ele, só com o que o papel dele alcança (as abas vêm das capacidades da sessão, em conta.js).
+    $('ver-configuracoes').hidden = false;
     const abrir = () => mostrarAreaBase('codex');
     if (document.readyState === 'complete') abrir(); else window.addEventListener('load', abrir);
     return;

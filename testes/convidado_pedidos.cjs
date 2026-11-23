@@ -9,7 +9,7 @@ const path = require('node:path');
 const {criarMesa} = require('./dom_minimo.cjs');
 
 const ALFA = {id: 'alfa', titulo: 'Pauta Alfa', rodadas: []};
-const SO_ADMINISTRADOR = ['ambiente', 'ia-config', 'analises', 'gerenciar-listar', 'inventario', 'apuracao-notas', 'diligencias-listar', 'caderno-listar'];
+const SO_ADMINISTRADOR = ['ambiente', 'ia-config', 'analises', 'gerenciar-listar', 'inventario', 'apuracao-notas', 'diligencias-listar', 'caderno-listar', 'continuidade-resumo'];
 
 async function abrir(papel, desktop) {
   const operacoes = [];

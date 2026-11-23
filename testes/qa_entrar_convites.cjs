@@ -17,12 +17,12 @@ const TEMAS = ['light', 'dark'];
 async function contexto(browser, tela, tema) {
   const ctx = await browser.newContext({viewport: tela, colorScheme: tema, locale: 'pt-BR'});
   // O servidor fala HTTP e se apresenta como a origem https: o navegador vê a origem, e o servidor recebe o pedido com o Host e o Origin certos.
-  await ctx.route(`${args.origem}/**`, async rota => {
+  await ctx.route(`${args.origem}/**`, async rota => { try {
     const pedido = rota.request(), endereco = new URL(pedido.url());
     const resposta = await rota.fetch({url: `http://127.0.0.1:${args.porta}${endereco.pathname}${endereco.search}`,
       headers: {...pedido.headers(), host: new URL(args.origem).host}, maxRedirects: 0});
     await rota.fulfill({response: resposta});
-  });
+  } catch (_) { /* a página fechou com o pedido em voo */ } });
   return ctx;
 }
 async function capturar(page, nome, tela, tema) {

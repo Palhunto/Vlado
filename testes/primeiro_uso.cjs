@@ -27,8 +27,9 @@ for (const desktop of [true, false]) {
     assert.deepEqual(visiveis.map(botao => botao.id), ['inicio-nova'], 'uma única ação');
     assert.equal(mesa.$('inicio-nova').classList.contains('secondary'), false);
     mesa.$('inicio-nova').click();
-    assert.equal(mesa.$('area-cadastro').hidden, false);
-    assert.equal(mesa.doc.activeElement, mesa.$('cadastro-titulo-input'));
+    assert.equal(mesa.$('area-nova').hidden, false, 'abre o passo 1 da Nova apuração (R4)');
+    assert.equal(mesa.$('area-cadastro').hidden, true);
+    assert.equal(mesa.doc.activeElement, mesa.$('nova-nome'));
   });
 }
 

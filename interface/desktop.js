@@ -319,11 +319,12 @@
     const ticket=++sequence;loadedCase=caseId;inventory=null;loading=!!caseId;$('mesa-acervo-erro').hidden=true;window.barraMesa.definir('documentos','');
     $('mesa-atualizar-acervo').disabled=loading;
     $('mesa-filtrar-documento').value='';$('mesa-filtrar-leitura').value='todos';documentTable();home();
+    window.PreparoDePdf.atualizar(null);window.FontesWeb?.mostrar(null);
     if(!caseId){text('mesa-acervo-status','Selecione a apuração no topo da mesa.');text('mesa-versao','Documentos, achados e fontes');return;}
     text('mesa-acervo-status','Conferindo os documentos cadastrados…');text('mesa-versao','Conferindo acervo…');
     try{
       const result=await api('inventario',{caso:caseId});if(ticket!==sequence||caseId!==current())return;
-      inventory=result;documentTable();home();window.barraMesa.definir('documentos',result.total_documentos?String(result.total_documentos):'');text('mesa-versao',`Versão dos documentos: ${result.corpus_id}`);text('mesa-acervo-status','Os originais estão preservados; a extração não substitui a conferência.');
+      inventory=result;documentTable();home();window.PreparoDePdf.atualizar(result);window.FontesWeb?.mostrar(result);window.barraMesa.definir('documentos',result.total_documentos?String(result.total_documentos):'');text('mesa-versao',`Versão dos documentos: ${result.corpus_id}`);text('mesa-acervo-status','Os originais estão preservados; a extração não substitui a conferência.');
     }catch(error){if(ticket===sequence){$('mesa-acervo-erro').textContent=error.message;$('mesa-acervo-erro').hidden=false;text('mesa-acervo-status','A conferência do acervo falhou. Isso não equivale a um acervo vazio.');text('mesa-versao','Acervo indisponível');}}
     finally{if(ticket===sequence){loading=false;$('mesa-atualizar-acervo').disabled=false;}}
   }
@@ -364,6 +365,7 @@
       card.dataset.esgotada=String(spent);card.hidden=false;
     }catch(_){card.hidden=true;}
   }
+  window.recarregarAcervo=force=>loadInventory(force);window.definirEstadoAcervo=mensagem=>text('mesa-acervo-status',mensagem);
   window.atualizarCotaBarra=force=>loadQuota(force);   // codex.js chama ao terminar cada pergunta
   loadQuota(true);
   window.addEventListener('focus',()=>loadQuota());
@@ -410,6 +412,9 @@
   // Área de envio de Documentos (W02): envia para a apuração escolhida. Sem o envio em fluxo no servidor, o caminho é a tela de Nova apuração.
   if(document.body.dataset.papel==='convidado')$('documentos-zona').hidden=true;
   else window.Documentos.zona($('documentos-zona'),{aoEscolher:files=>{
+    // Passo 2 da Nova apuração: o primeiro envio cria a apuração (cadastrar com novo: true, sem caso) e a tela passa a ela.
+    if(window.NovaApuracao.ativa()){window.NovaApuracao.enviar(files,{aoConcluir:async()=>{await loadInventory(true);text('mesa-acervo-status','Documentos registrados. Aguardando sua pergunta.');},
+      depoisDeCriar:async()=>{await loadInventory(true);},aoIndisponivel:()=>{text('mesa-acervo-status','O envio por arquivo não está disponível neste servidor. Atualize a Mesa e tente de novo.');}});return;}
     if(!current()){$('contexto-caso').focus();text('mesa-acervo-status','Escolha uma apuração para enviar documentos.');return;}
     window.Documentos.enviar(files,{caso:current(),alvo:$('documentos-envio'),alvoRecibo:$('documentos-recibo'),
       aoConcluir:async()=>{await loadInventory(true);if(typeof loadCatalog==='function')await loadCatalog();text('mesa-acervo-status','Documentos registrados. Aguardando sua pergunta.');},
@@ -417,7 +422,7 @@
         // Sem o envio em fluxo no servidor, a escolha segue para a tela de Nova apuração (envio em JSON), sem perder os arquivos.
         try{const lote=new DataTransfer();for(const file of files)lote.items.add(file);$('cadastro-arquivos').files=lote.files;
           $('cadastro-arquivos').dispatchEvent(new Event('change'));}catch{/* o navegador não deixa: a pessoa escolhe de novo */}
-        $('inicio-adicionar').click();}});
+        showArea('cadastro');$('cadastro-arquivos').focus();}});
   }});
   $('mesa-perguntar').addEventListener('click',()=>{if(!current()){$('contexto-caso').focus();return;}navigate('codex');window.abrirComposicaoMesa?.();});
   $('mesa-aba-acervo').addEventListener('click',()=>chooseTab('acervo'));

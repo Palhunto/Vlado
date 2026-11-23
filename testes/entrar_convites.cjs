@@ -314,7 +314,7 @@ test('o Entrar tem marca e frase acima do cartão, "Entrar", "E-mail" e "Senha",
   assert.equal(mesa.doc.querySelector('.entrar-topo .brand').textContent, 'Vlado.');
   assert.equal(mesa.doc.querySelector('.entrar-frase').textContent, 'Apuração documental com a fonte de cada afirmação à vista.');
   assert.equal(mesa.$('entrar-titulo').textContent, 'Entrar');
-  assert.equal(mesa.$('entrar-login').closest('label').querySelector('span').textContent, 'E-mail', 'a entrada aceita o e-mail (e o login antigo)');
+  assert.equal(mesa.$('entrar-login').closest('label').querySelector('span').textContent, 'E-mail ou login', 'a entrada aceita o e-mail e o login antigo (E1 da Coruja)');
   assert.equal(mesa.$('entrar-login').getAttribute('autocomplete'), 'username');
   assert.equal(mesa.$('entrar-enviar').textContent, 'Entrar');
   assert.equal(visivel(mesa, 'entrar-teste'), true);

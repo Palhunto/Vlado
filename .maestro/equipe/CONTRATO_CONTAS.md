@@ -689,7 +689,7 @@ O mesmo cuidado vale para todo texto que uma conta escreve e outra lê: nome de 
 
 ## 10. O que muda para os outros agentes
 
-**Arquivos de Contas** (escreve só neles): `scripts/acesso.py`, `scripts/rotas_contas.py`, os demais `scripts/rotas_*.py` e `scripts/interface_pesquisa.py` (nesta onda, pela tabela "Quem escreve onde"), e os módulos novos `scripts/autorizacao.py`, `scripts/correio.py`, `scripts/segundo_fator.py` e `scripts/rotas_equipe.py`. Testes em arquivos novos (`test_matriz_contas.py`, `test_isolamento_redacoes.py`, `test_migracao_contas.py`, `test_convites.py`, `test_redefinicao_senha.py`, `test_recuperacao.py`, `test_segundo_fator.py`, `test_sessoes_conta.py`, `test_equipe.py`, `test_ciclo_conta.py`, `test_correio.py`), mais `test_acesso.py` e `test_autorizacao.py`, que são de autorização.
+**Arquivos de Contas** (escreve só neles): `scripts/acesso.py`, `scripts/rotas_contas.py`, os demais `scripts/rotas_*.py` e `scripts/interface_pesquisa.py` (nesta onda, pela tabela "Quem escreve onde"), e os módulos novos `scripts/autorizacao.py`, `scripts/correio.py`, `scripts/segundo_fator.py` e `scripts/rotas_equipe.py`. Testes em arquivos novos (`test_matriz_contas.py`, `test_isolamento_redacoes.py`, `test_migracao_contas.py`, `test_convites.py`, `test_redefinicao_senha.py`, `test_recuperacao.py`, `test_segundo_fator.py`, `test_sessoes_conta.py`, `test_equipe.py`, `test_senha_gestao.py`, `test_ciclo_conta.py`, `test_correio.py`), mais `test_acesso.py` e `test_autorizacao.py`, que são de autorização.
 
 **Pedidos, um por dono de arquivo. Nenhum é feito por Contas sem o aval do Maestro.**
 
@@ -812,7 +812,7 @@ Do que a entrega 3 decide, além do texto da seção 8.1:
 - `data-papel` leva `admin` para o dono enquanto a interface não conhece os papéis novos; os outros papéis vão com o próprio nome. `GET /api/sessao` já devolve os valores novos e `capacidades`.
 - `pendencias` sai sempre vazia: segundo fator e termos entram com a seção 8.
 - Tentativas de entrada: vale o bloqueio por identificador e endereço de hoje. O teto por identificador, o modo protegido e o aparelho conhecido (seção 8.2) entram com a entrada em dois passos.
-- `lixeira-apagar` e `ia-config-salvar` ainda não pedem a senha (seção 5.15). As telas de hoje não a mandam, e pedir só no servidor deixaria o dono sem apagar de vez e sem gravar a chave. O pedido entra junto com o campo na interface, na mesma integração.
+- `lixeira-apagar` e `ia-config-salvar` pedem a senha onde há contas (seção 5.15; `-p test_senha_gestao.py`). Em `lixeira-apagar` o nome do item é conferido antes: nome errado responde como hoje e não conta como senha errada. No modo `local`, sem contas, nada muda. Esta mudança só é integrada junto com as telas que mandam o campo `senha` (o diálogo de apagar de vez e as Configurações): sem elas, o dono ficaria sem apagar de vez e sem gravar a chave.
 - Chave de IA: numa instalação `piloto` com mais de uma redação, `ia-config-salvar` é recusada a todos e `ia-config` não mostra os quatro últimos caracteres da chave do serviço, até a chave própria de cada redação existir (seção 8.5).
 - O registro de auditoria descarta os códigos, motivos, papéis e eventos novos até as listas fechadas de `registro_acesso.py` os receberem (pedido à Plataforma, seção 10, em andamento). O portão já grava a recusa como `acesso_negado`, com código, motivo e o id da redação (seção 4.3); enquanto a lista da Plataforma não tiver esse evento, a linha não sai. As duas mudanças precisam entrar juntas na integração.
 

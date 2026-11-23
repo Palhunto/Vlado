@@ -136,10 +136,10 @@ const documentosDaLista = page => page.locator('#mesa-acervo-lista tbody tr').ev
     await admin.fill('#entrar-senha', 'qualquer-coisa-longa');
     await admin.click('#entrar-enviar');
     await admin.locator('#entrar-enviar:not([disabled])').waitFor();
-    assert.equal(erroSenha, 'E-mail ou senha não conferem. Confira e tente de novo.');
+    assert.equal(erroSenha, 'E-mail ou login e senha não conferem. Confira e tente de novo.');
     assert.equal(await admin.locator('#entrar-mensagem').innerText(), erroSenha);
     assert.equal(new URL(admin.url()).pathname, '/entrar');
-    marcar('acesso', 'Senha errada e login inexistente mostram o mesmo erro genérico ("E-mail ou senha não conferem. Confira e tente de novo.").');
+    marcar('acesso', 'Senha errada e login inexistente mostram o mesmo erro genérico ("E-mail ou login e senha não conferem. Confira e tente de novo.").');
 
     await entrar(admin, contas.admin);
     await admin.locator('#mesa-ambiente:not([hidden])').waitFor();

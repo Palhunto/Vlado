@@ -38,9 +38,10 @@ function networkFailure(message, cause) {
   failure.rede = true; failure.cause = cause;
   return failure;
 }
-// Operações que o servidor recusa ao papel convidado (fora de OPERACOES_CONVIDADO em scripts/rotas_contas.py). Pedi-las só gera uma linha
-// operacao_negada no registro de acessos; a recusa local tem a mesma forma da do servidor.
-const SO_ADMINISTRADOR = new Set(['ambiente', 'ia-config', 'analises', 'gerenciar-listar', 'inventario', 'apuracao-notas', 'diligencias-listar', 'caderno-listar']);
+// Operações que o servidor recusa a alguns papéis (o convidado, e o leitor em continuidade-resumo). Pedi-las só gera uma linha operacao_negada no
+// registro de acessos; depois que a sessão diz o que o papel alcança, a recusa local tem a mesma forma da do servidor e nada vai à rede.
+const SO_ADMINISTRADOR = new Set(['ambiente', 'ia-config', 'analises', 'gerenciar-listar', 'inventario', 'apuracao-notas', 'diligencias-listar', 'caderno-listar',
+  'continuidade-resumo']);
 async function api(operation, data, binary = false) {
   // Estas operações esperam a sessão (que diz o que o papel alcança): pedi-las antes só geraria uma linha operacao_negada no registro de acessos.
   if (SO_ADMINISTRADOR.has(operation) && window.Sessao) await window.Sessao.pronta;
@@ -319,7 +320,7 @@ $('proximo').addEventListener('click', () => { if (lastResult?.proximo_deslocame
 $('exportar').addEventListener('click', () => {
   if (lastResult) window.exportarEditorial(lastResult,`pesquisa_${lastResult.caso_id}_${lastResult.rodada}_${lastResult.geracao}`,$('pesquisa-formato').value);
 });
-let inventorySequence = 0, draftCaseId = '', pdfAvailable = false, ocrAvailable = false, cadastroBusy = false;
+let inventorySequence = 0, pdfAvailable = false, ocrAvailable = false, cadastroBusy = false;
 async function loadPdfEnvironment() {
   try {
     const environment = await api('ambiente', {});
@@ -328,10 +329,15 @@ async function loadPdfEnvironment() {
     $('pdf-ambiente-aviso').textContent = pdfAvailable ? '' : 'O extrator de PDF está indisponível nesta instância. Encerre a Mesa e reabra pelo iniciador atualizado. Os arquivos enviados serão preservados, mas os PDFs ficarão sem texto preparado.';
     $('pdf-ambiente-aviso').hidden = pdfAvailable;
     $('pdf-ambiente-tecnico').replaceChildren(Leitura.tecnicos(element('pre', JSON.stringify(environment, null, 2), 'raw-briefing')));
+    // O mesmo aviso, agora como cartão no topo de Documentos (a área Cadastrar arquivos sai).
+    $('docs-pdf-ambiente-texto').textContent = $('pdf-ambiente-aviso').textContent;
+    $('docs-pdf-ambiente').hidden = pdfAvailable;
+    $('docs-pdf-ambiente-tecnico').replaceChildren(Leitura.tecnicos(element('pre', JSON.stringify(environment, null, 2), 'raw-briefing')));
   } catch (failure) {
     pdfAvailable = false;
     $('pdf-ambiente-aviso').textContent = 'Não foi possível verificar o extrator de PDF. Encerre e reabra a Mesa pelo iniciador atualizado.';
     $('pdf-ambiente-aviso').hidden = false;
+    $('docs-pdf-ambiente-texto').textContent = $('pdf-ambiente-aviso').textContent; $('docs-pdf-ambiente').hidden = false;
   }
   $('cadastro-preparar').disabled = !pdfAvailable || cadastroBusy;
 }
@@ -467,7 +473,6 @@ $('cadastro-arquivos').addEventListener('change', () => {
     ? `${files.length} arquivo(s) selecionado(s): ${files.map(f => f.name).join(', ')}`
     : 'Selecione todos os arquivos do lote. Até 50 MB por envio.';
 });
-$('cadastro-titulo-input').addEventListener('input', () => { draftCaseId = ''; });
 function encodeFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -478,8 +483,11 @@ function encodeFile(file) {
 }
 // Envio em fluxo (W02, UX-05): cada arquivo com a própria barra e o próprio resultado, em lotes de até 50 MB. Só com um servidor que o anuncia
 // em /api/integracao (envio_fluxo); sem isso vale o envio em JSON de antes.
+let envioIncerto = '';   // o aviso do último envio de apuração nova que não se sabe se criou a apuração: um reenvio pode criar outra
 async function sendByStream(files, scope) {
   const envio = await Envio.enviar({escopo:scope, arquivos:files, alvo:$('cadastro-envio')});
+  if (!envio.recebidos && envio.incerto) envioIncerto = envio.aviso_incerto;
+  else if (envio.recebidos) envioIncerto = '';
   if (!envio.recebidos) throw envio.erro || new Error(envio.cancelado ? 'Envio cancelado. Nada foi cadastrado.' : 'Nenhum arquivo foi cadastrado. Confira o resultado de cada arquivo acima.');
   Envio.renderRecibo($('cadastro-recibo'), envio);
   return {caso_id:envio.caso_id, inventario:await api('inventario', {caso:envio.caso_id}), limitacao:Envio.comLimitacao(envio) || !!envio.pendentes};
@@ -496,9 +504,15 @@ $('cadastro').addEventListener('submit', async event => {
     cadastroBusy = false;
     uploadError('O lote excede 50 MB. Divida o envio em lotes menores; nenhum arquivo foi enviado.'); return;
   }
+  // Apuração nova: sem `caso`. O identificador é escolhido pelo servidor (contrato de contas, 4.4; o portão recusa um escolhido aqui) e volta na
+  // resposta (`caso_id`), de onde os lotes seguintes o tomam.
   const isNew = !$('cadastro-caso').value;
-  if (isNew && !draftCaseId) draftCaseId = 'apuracao_' + crypto.randomUUID().replaceAll('-', '');
-  const scope = {novo:isNew, caso:isNew ? draftCaseId : $('cadastro-caso').value,
+  if (isNew && envioIncerto) {   // R3: um reenvio pode criar outra apuração; a pessoa vê o aviso e confirma antes
+    const ok = await Dialogo.confirmar({titulo:'Enviar de novo pode criar outra apuração', texto:envioIncerto, acao:'Enviar mesmo assim'});
+    if (!ok) { cadastroBusy = false; uploadError(envioIncerto); return; }
+    envioIncerto = '';
+  }
+  const scope = {novo:isNew, ...(isNew ? {} : {caso:$('cadastro-caso').value}),
     titulo:$('cadastro-titulo-input').value, natureza:$('cadastro-natureza').value,
     ...(isNew ? window.FontesWeb?.escopoNovo() : {})};
   $('cadastro-preparar').disabled = true;
@@ -522,7 +536,6 @@ $('cadastro').addEventListener('submit', async event => {
     $('cadastro-caso').value = result.caso_id;
     window.definirContextoCaso?.(result.caso_id);
     $('cadastro-perguntar').dataset.caso=result.caso_id; $('cadastro-perguntar').hidden=false;
-    draftCaseId = '';
     toggleNewCase();
     $('cadastro-arquivos').value = '';
     $('arquivos-selecionados').textContent = 'Pronto para selecionar outro lote.';
@@ -634,11 +647,13 @@ function resetFindings() {
   $('achados-status').textContent = 'Escolha uma apuração para ver os achados da análise mais recente.';
 }
 // Each view opens with its area name as the only h1 and the investigation as context.
-const areaNames = {inicio:'Visão geral',cadastro:'Cadastrar arquivos',documentos:'Documentos',codex:'Perguntar à IA',
+const areaNames = {inicio:'Visão geral',nova:'Nova apuração',cadastro:'Cadastrar arquivos',documentos:'Documentos',codex:'Perguntar à IA',
   achados:'Conferir achados',apuracao:'Caderno',caderno:'Caderno',diligencias:'Diligências',quadros:'Quadros de evidência',gerenciar:'Apurações e lixeira',configuracoes:'Configurações'};
 let currentArea = 'inicio';
 function areaHeading() {
+  if (window.NovaApuracao?.titular()) return;   // os passos 1 e 2 da Nova apuração põem o próprio título
   $('area-titulo').textContent = areaNames[currentArea];
+  $('area-descricao').hidden = false;
   const title = cases.find(c => c.id === window.contextoCaso?.())?.titulo, context = $('area-descricao');
   // A case title is data: it keeps its own language.
   if (title) { context.setAttribute('translate', 'no'); context.textContent = title; }
@@ -673,7 +688,7 @@ function mostrarAreaBase(area) {
     $('area-' + name).hidden = area !== name;
     $('ver-' + name).setAttribute('aria-pressed', String(area === name));
   }
-  $('selecao-acervo').hidden = ['inicio','cadastro','codex','gerenciar','configuracoes','caderno','apuracao','diligencias','quadros'].includes(area);
+  $('selecao-acervo').hidden = ['inicio','nova','cadastro','codex','gerenciar','configuracoes','caderno','apuracao','diligencias','quadros'].includes(area);
   currentArea = area; areaHeading(); versionChip();
   if (area === 'achados' && !defaultAnalysis() && !findingCatalog) loadFindingsCatalog();
   if (area === 'achados' && window.achadosDesatualizados && findingQuery) {
@@ -706,7 +721,7 @@ window.areaMesa = Object.freeze({ir: showArea, nucleo: mostrarAreaBase});
 //   Sessao.areaPermitida(a)  a pessoa alcança a área?
 //   Sessao.aplicar()         reaplica data-requer e a navegação (depois de criar elementos novos)
 //   Sessao.suspender()       o estado "Redação suspensa" para a Mesa inteira (403 redacao_suspensa em qualquer pedido)
-const CAPACIDADE_DA_AREA = {inicio: '', configuracoes: '', documentos: 'inventario', codex: 'codex-listar', achados: 'achados-catalogo',
+const CAPACIDADE_DA_AREA = {inicio: '', nova: 'cadastrar', configuracoes: '', documentos: 'inventario', codex: 'codex-listar', achados: 'achados-catalogo',
   quadros: 'hipoteses-quadro', apuracao: 'apuracao-listar', caderno: 'caderno-listar', diligencias: 'diligencias-listar', cadastro: 'cadastrar',
   gerenciar: 'gerenciar-listar'};
 window.Sessao = (() => {
@@ -758,7 +773,217 @@ window.Sessao = (() => {
   document.addEventListener('DOMContentLoaded', aplicar);
   return {pronta, pode, areaPermitida, aplicar, suspender, recusada, dados: () => dados};
 })();
-for (const area of ['inicio','cadastro','documentos','achados','codex','gerenciar','configuracoes','caderno','apuracao','diligencias','quadros']) $('ver-' + area).addEventListener('click', () => showArea(area));
+
+// --- Nova apuração (W01; docs/design/componentes.md#nova-apuracao) ------------------------------------------------------------------------------
+// Página própria em três passos: 1 Nome e fontes (a área "nova"), 2 Documentos e 3 Conferir recibo (a tela Documentos no modo "apuração por criar").
+// Nada é criado antes do primeiro envio: a apuração nasce nele (`cadastrar` com `novo: true`, SEM `caso`; o servidor escolhe o identificador, contrato de
+// contas 4.4) e, quando o servidor aceita o primeiro lote, a tela passa à apuração criada e vira a Documentos comum.
+//   NovaApuracao.abrir()            o passo 1, vazio
+//   NovaApuracao.ativa()            o passo 2 está aberto (Documentos sem apuração, pronta para o primeiro envio)
+//   NovaApuracao.enviar(arquivos, {aoConcluir, depoisDeCriar})   o primeiro envio, que cria a apuração
+//   NovaApuracao.titular()          título e descrição da tela, enquanto vale o modo; devolve true se os pôs
+//   NovaApuracao.encerrar()         sai do modo sem criar nada
+// --- Avisos do preparo de PDF em Documentos (docs/design/componentes.md, "O que vem de Cadastrar arquivos"; R4) ---------------------------------------
+// Dois cartões no padrão "Limite atingido", no topo de Documentos: o extrator de PDF indisponível (com os detalhes técnicos) e "Há PDFs ainda sem preparo",
+// com "Preparar PDFs pendentes". Quando o preparo termina o cartão sai e a linha de estado diz quantos PDFs foram preparados.
+window.PreparoDePdf = (() => {
+  const t = (pt, vars) => (window.I18N ? window.I18N.t(pt, vars) : String(pt).replace(/\{(\w+)\}/g, (todo, nome) => vars?.[nome] ?? todo));
+  let ocupado = false;
+  const pendentes = inventario => (inventario?.documentos || []).filter(doc => /\.pdf$/i.test(doc.nome_recebido || doc.arquivo || '')
+    && (!doc.extracao_pdf || doc.extracao_pdf.estado === 'erro' || ocrNeeded(doc)));
+  function atualizar(inventario) {
+    const lista = pendentes(inventario);
+    $('docs-pdf-preparo').hidden = !lista.length;
+    $('docs-pdf-resumo').textContent = lista.length === 1 ? t('1 PDF cadastrado ainda não foi preparado') : t('{n} PDFs cadastrados ainda não foram preparados', {n: lista.length});
+    $('docs-pdf-preparar').disabled = !pdfAvailable || ocupado;
+  }
+  async function ambiente() {
+    if (!window.Sessao.pode('ambiente')) return;   // quem não alcança o ambiente do servidor não vê o aviso
+    await loadPdfEnvironment();
+  }
+  $('docs-pdf-preparar').addEventListener('click', async () => {
+    const caso = window.contextoCaso?.();
+    if (!caso || ocupado || !pdfAvailable) return;
+    ocupado = true;
+    const botao = $('docs-pdf-preparar'), cartao = $('docs-pdf-preparo');
+    botao.disabled = true; botao.textContent = t('Preparando…'); cartao.setAttribute('aria-busy', 'true');
+    let preparados = null;
+    try {
+      const resultado = await api('preparar-pdfs', {caso});
+      preparados = resultado.recebidos;
+      await window.recarregarAcervo?.(true);
+      window.definirEstadoAcervo?.(`${Leitura.quantidade(preparados, 'PDF preparado', 'PDFs preparados')}.`);
+    } catch (falha) {
+      window.definirEstadoAcervo?.(falha.message);
+    } finally {
+      ocupado = false;
+      botao.textContent = t('Preparar PDFs pendentes'); cartao.removeAttribute('aria-busy');
+      botao.disabled = !pdfAvailable;
+    }
+  });
+  registrarGanchoArea({depois: nome => { if (nome === 'documentos') ambiente(); }});
+  return {atualizar, ambiente, pendentes};
+})();
+
+window.NovaApuracao = (() => {
+  const t = (pt, vars) => (window.I18N ? window.I18N.t(pt, vars) : String(pt).replace(/\{(\w+)\}/g, (todo, nome) => vars?.[nome] ?? todo));
+  // Só o domínio, exato: nada de esquema, caminho, porta nem endereço numérico (o servidor confere o resto: nome interno e domínio de outra apuração).
+  const DOMINIO = /^(?=.{3,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+  const ETAPAS = ['Nome e fontes', 'Documentos', 'Conferir recibo'];
+  let fluxo = null;      // 'passo1' | 'passo2' | null
+  let dados = null;      // o que o passo 1 coletou: {nome, natureza, modo_fontes, dominio_permitido?}
+  let etapa = null;      // 1, 2 ou 3 enquanto a linha de etapas vale (ela segue até o recibo ser conferido, já com a apuração criada)
+  let liberado = false;  // a saída foi confirmada: o clique que a pediu segue
+  let incerto = null;    // o aviso, enquanto não se sabe se a apuração nasceu num envio que não terminou: um reenvio pode criar outra
+
+  const fontes = () => [...document.querySelectorAll('input[name="nova-fontes"]')].find(opcao => opcao.checked)?.value || 'somente_documental';
+  function desenharEtapas() {
+    for (const id of ['nova-etapas-1', 'nova-etapas-2']) {
+      const alvo = $(id);
+      alvo.replaceChildren();
+      const aqui = id === 'nova-etapas-1' ? fluxo === 'passo1' : currentArea === 'documentos';
+      alvo.hidden = !etapa || !aqui;
+      if (alvo.hidden) continue;
+      ETAPAS.forEach((nome, i) => {
+        const passo = element('span', undefined, 'nova-etapa');
+        passo.append(element('b', String(i + 1)), ' ', t(nome));
+        if (i + 1 === etapa) passo.setAttribute('aria-current', 'step');
+        alvo.append(passo);
+      });
+      alvo.append(element('span', t('Passo {n} de 3 · {nome}', {n: etapa, nome: t(ETAPAS[etapa - 1])}), 'nova-etapa-celular'));
+    }
+  }
+  function limpar() {
+    for (const id of ['nova-nome', 'nova-site']) if ($(id)._estadoErro) window.Estados.limparErroCampo($(id));
+  }
+  function erro(campo, texto) {
+    const aviso = window.Estados.erroCampo(campo, t(texto), {foco: true});
+    campo.closest('label')?.after(aviso);
+  }
+  function validar() {
+    limpar();
+    const nome = $('nova-nome').value.trim();
+    if (!nome) { erro($('nova-nome'), 'Falta o nome. Dê um nome à apuração.'); return null; }
+    const web = fontes() === 'documentos_web';
+    const site = $('nova-site').value.trim().toLowerCase();
+    if (web) {
+      if (!site) { erro($('nova-site'), 'Falta o site. Escreva o domínio, por exemplo prefeitura.sp.gov.br.'); return null; }
+      if (!DOMINIO.test(site)) { erro($('nova-site'), 'Site inválido. Use só o domínio, sem https:// nem caminho, por exemplo prefeitura.sp.gov.br.'); return null; }
+    }
+    return {nome, natureza: $('nova-natureza').value, modo_fontes: web ? 'documentos_web' : 'somente_documental', ...(web ? {dominio_permitido: site} : {})};
+  }
+  function campoDoSite() {
+    const web = fontes() === 'documentos_web';
+    $('nova-site-campo').hidden = !web;
+    $('nova-site').required = web; $('nova-site').disabled = !web;
+  }
+  function preencher(valores) {
+    $('nova-nome').value = valores?.nome || '';
+    $('nova-natureza').value = valores?.natureza || 'publicos';
+    for (const opcao of document.querySelectorAll('input[name="nova-fontes"]')) opcao.checked = opcao.value === (valores?.modo_fontes || 'somente_documental');
+    $('nova-site').value = valores?.dominio_permitido || '';
+    campoDoSite();
+  }
+  function abrir(valores = null) {
+    fluxo = 'passo1'; etapa = 1; delete document.body.dataset.nova;
+    $('nova-aviso').hidden = true;
+    preencher(valores);
+    limpar();
+    showArea('nova');
+    desenharEtapas();
+    $('nova-nome').focus();
+  }
+  function continuar() {
+    const valido = validar();
+    if (!valido) return;
+    dados = valido; fluxo = 'passo2'; etapa = 2;
+    document.body.dataset.nova = 'passo2';
+    window.definirContextoCaso?.('', {force: true});   // sem apuração escolhida: ela nasce no primeiro envio
+    $('nova-aviso').hidden = false;
+    showArea('documentos');
+    desenharEtapas(); titular();
+  }
+  function encerrar() {
+    fluxo = null; dados = null; etapa = null; incerto = null;
+    delete document.body.dataset.nova;
+    $('nova-aviso').hidden = true; $('nova-incerto').hidden = true;
+    preencher(null); limpar(); desenharEtapas();
+  }
+  const preenchido = () => fluxo === 'passo2' || !!$('nova-nome').value.trim() || !!$('nova-site').value.trim();
+  const noFluxo = () => fluxo === 'passo1' || fluxo === 'passo2';
+  // "Sair sem criar a apuração?": só quando o formulário foi preenchido; a Mesa não guarda rascunho de apuração.
+  async function confirmarSaida(gatilho) {
+    if (!preenchido()) return true;
+    return !!(await window.Dialogo.confirmar({titulo: 'Sair sem criar a apuração?', texto: 'Nada foi criado e nada fica guardado.', acao: 'Sair', gatilho}));
+  }
+  function titular() {
+    const passo2 = fluxo === 'passo2' && currentArea === 'documentos';
+    if (!(currentArea === 'nova' || passo2)) return false;
+    $('area-titulo').textContent = t('Nova apuração');
+    $('area-titulo').removeAttribute('translate');
+    const apoio = $('area-descricao');
+    apoio.textContent = passo2 ? dados.nome : '';
+    apoio.hidden = !passo2;
+    if (passo2) apoio.setAttribute('translate', 'no'); else apoio.removeAttribute('translate');
+    return true;
+  }
+  async function enviar(arquivos, extra = {}) {
+    if (fluxo !== 'passo2' || !dados) return null;
+    // R3: depois de um envio que não se sabe se criou a apuração, a pessoa vê o aviso e confirma antes de um reenvio criar outra.
+    if (incerto) {
+      const ok = await window.Dialogo.confirmar({titulo: 'Enviar de novo pode criar outra apuração', texto: incerto, acao: 'Enviar mesmo assim'});
+      if (!ok) return null;
+      incerto = null; $('nova-incerto').hidden = true;
+    }
+    const escopo = {novo: true, titulo: dados.nome, natureza: dados.natureza, modo_fontes: dados.modo_fontes,
+      ...(dados.dominio_permitido ? {dominio_permitido: dados.dominio_permitido} : {})};
+    return window.Documentos.enviar(arquivos, {escopo, alvo: $('documentos-envio'), alvoRecibo: $('documentos-recibo'),
+      // O servidor aceitou o primeiro lote: a apuração existe. O seletor do topo passa a ela e a tela vira a Documentos comum.
+      aoCriar: async caso => {
+        fluxo = null; dados = null; delete document.body.dataset.nova;
+        $('nova-aviso').hidden = true;
+        if (typeof loadCatalog === 'function') await loadCatalog();
+        window.definirContextoCaso?.(caso, {force: true});
+        areaHeading(); desenharEtapas();
+        await extra.depoisDeCriar?.(caso);
+      },
+      aoConcluir: async resultado => { etapa = 3; desenharEtapas(); await extra.aoConcluir?.(resultado); },
+      aoIndisponivel: extra.aoIndisponivel,
+      aoTerminar: resultado => {
+        if (fluxo === 'passo2' && resultado && !resultado.recebidos && resultado.incerto) {
+          incerto = resultado.aviso_incerto; $('nova-incerto').textContent = incerto; $('nova-incerto').hidden = false;
+        }
+      }});
+  }
+
+  $('nova-form').addEventListener('submit', evento => { evento.preventDefault(); continuar(); });
+  for (const opcao of document.querySelectorAll('input[name="nova-fontes"]')) opcao.addEventListener('change', campoDoSite);
+  $('nova-cancelar').addEventListener('click', async () => {
+    if (!(await confirmarSaida($('nova-cancelar')))) return;
+    encerrar(); showArea('inicio');
+  });
+  $('nova-voltar').addEventListener('click', () => { abrir(dados); });
+  window.addEventListener('envio-recibo-visto', () => { if (etapa === 3) { etapa = null; desenharEtapas(); } });
+  // Escolher uma apuração no topo, ou sair da tela Documentos depois da criação, encerra o modo.
+  window.addEventListener('mesa-contexto-alterado', () => { if (noFluxo() && window.contextoCaso?.()) encerrar(); });
+  registrarGanchoArea({depois: nome => {
+    if (nome !== 'documentos' && nome !== 'nova' && fluxo === null) etapa = null;
+    desenharEtapas(); titular();
+  }});
+  // Quem sai da página com o formulário preenchido, por qualquer item da barra, pela marca ou pelo perfil, confirma antes.
+  document.addEventListener('click', async evento => {
+    if (liberado || !noFluxo() || !preenchido()) return;
+    const alvo = evento.target?.closest?.('button, a');
+    if (!alvo || !(alvo.closest('.areas') || alvo.classList.contains('sidebar-brand') || alvo.id === 'ver-configuracoes') || alvo.id === 'ver-nova') return;
+    evento.preventDefault(); evento.stopImmediatePropagation();
+    if (!(await confirmarSaida(alvo))) return;
+    encerrar(); liberado = true;
+    try { alvo.click(); } finally { liberado = false; }
+  }, true);
+  campoDoSite();
+  return {abrir: () => abrir(null), ativa: () => fluxo === 'passo2', enviar, titular, encerrar, dados: () => dados};
+})();
+for (const area of ['inicio','nova','cadastro','documentos','achados','codex','gerenciar','configuracoes','caderno','apuracao','diligencias','quadros']) $('ver-' + area).addEventListener('click', () => showArea(area));
 window.addEventListener('acervo-alterado', () => {
   $('cadastro-recibo').hidden = true; $('cadastro-perguntar').hidden=true;
   $('cadastro-inventario').hidden = true;
@@ -1131,7 +1356,7 @@ async function searchFindings(query) {
       button.addEventListener('click',() => openBriefing(artifact,query,version));
       $('achados-briefings').append(button);
     }
-    $('achados-total').textContent = `${result.total_correspondencias} achado(s) nesta seleção`;
+    $('achados-total').textContent = `${Leitura.quantidade(result.total_correspondencias, 'achado')} nesta seleção`;
     const states = {sem_achados_apos_revisao:'Conjunto sem achados após revisão.',sem_achados_iniciais:'Registro inicial sem achados.',somente_pendencias:'Somente pendências; não há conclusão sustentada.',disponivel:'Consulta concluída.'};
     $('achados-status').textContent = `${states[result.estado]} ${!result.retornados && result.estado === 'disponivel' ? 'Nenhum achado corresponde aos filtros.' : ''}${result.revisoes_sucessoras.length ? ` Revisão mais recente disponível: ${result.revisoes_sucessoras.join(', ')}. A seleção foi mantida.` : ''}`;
     $('achados-intervalo').textContent = result.retornados ? `${result.deslocamento+1}–${result.deslocamento+result.retornados} de ${result.total_correspondencias}` : '0 resultados';
@@ -1165,7 +1390,7 @@ $('achados-exportar').addEventListener('click', async () => {
     const result = await api('achados-exportar', query);
     if (version !== findingEpoch || sequence !== findingSequence) return;
     window.exportarEditorial(result,`achados_${query.caso}_${query.rodada}_${query.revisao}_${query.geracao_achados}_completo`,$('achados-formato').value);
-    $('achados-status').textContent = `Exportados ${result.retornados} achado(s): seleção filtrada inteira, todas as páginas.`;
+    $('achados-status').textContent = `${result.retornados === 1 ? 'Exportado' : 'Exportados'} ${Leitura.quantidade(result.retornados, 'achado')}: seleção filtrada inteira, todas as páginas.`;
   } catch (failure) { if (version === findingEpoch && sequence === findingSequence) findingsError(failure.message); }
   finally { if (version === findingEpoch && sequence === findingSequence) $('achados-exportar').disabled = false; }
 });
