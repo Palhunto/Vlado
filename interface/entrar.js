@@ -310,7 +310,13 @@
       document.head.append(script);
     });
   }
-  async function iniciarPendencia() {
+  // Cada pendência tem a sua página: o módulo que a desenha e o que ele traz (a de termos vem primeiro, contrato 4.3 e 12).
+  const PENDENCIAS = {
+    segundo_fator: {modulo: '/fator.js', objeto: 'Fator'},
+    termos: {modulo: '/termos.js', objeto: 'Termos'},
+  };
+  async function iniciarPendencia(pendencia) {
+    const {modulo, objeto} = PENDENCIAS[pendencia];
     let sessao = null;
     try {
       const resposta = await fetch('/api/sessao', {headers: {Accept: 'application/json'}, credentials: 'same-origin'});
@@ -318,18 +324,18 @@
       sessao = resposta.ok ? await resposta.json() : null;
     } catch (_) { /* sem rede: o aviso abaixo */ }
     if (!sessao) { $('entrar-secao').hidden = true; mostrar('erro_rede', false, false); return; }
-    if (!(sessao.pendencias || []).includes('segundo_fator')) { window.location.replace('/'); return; }   // nada pendente (ou já cadastrado): a Mesa
+    if (!(sessao.pendencias || []).includes(pendencia)) { window.location.replace('/'); return; }   // nada pendente (ou já resolvido): o servidor leva à pendência seguinte ou à Mesa
     try {
       await carregarScript('/i18n.js');
       if (lingua === 'en') await carregarScript('/i18n_en.js');
-      await carregarScript('/fator.js');
+      await carregarScript(modulo);
     } catch (_) { mostrar('erro_rede', false, false); return; }
     const secao = $('pendencia-secao');
     secao.hidden = false;
-    window.Fator.pagina(secao, {abrirMesa: () => window.location.replace('/'), sair: () => window.location.replace('/entrar')});
+    window[objeto].pagina(secao, {abrirMesa: () => window.location.replace('/'), sair: () => window.location.replace('/entrar')});
     const titulo = secao.querySelector('h1');
     if (titulo) { titulo.id = 'pendencia-titulo'; secao.setAttribute('aria-labelledby', titulo.id); titulo.tabIndex = -1; titulo.focus(); }
-    redesenhar = () => window.I18N?.definir(lingua);   // o idioma do botão do topo vale também para o conteúdo do fator.js
+    redesenhar = () => window.I18N?.definir(lingua);   // o idioma do botão do topo vale também para o conteúdo do módulo da pendência
   }
 
   async function iniciarEntrar() {
@@ -704,7 +710,9 @@
   } else if (window.location.pathname === '/primeiro-acesso') {
     iniciarPrimeiro();
   } else if (window.location.pathname === '/conta/segundo-fator') {
-    iniciarPendencia();
+    iniciarPendencia('segundo_fator');
+  } else if (window.location.pathname === '/conta/termos') {
+    iniciarPendencia('termos');
   } else if (rotaConvite) {
     const [, rota, token] = rotaConvite;
     if (rota === 'aceitar') iniciarAceitar(token);
