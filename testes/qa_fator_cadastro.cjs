@@ -26,6 +26,20 @@ const texto = async (page, seletor) => (await page.textContent(seletor)).replace
 const DIALOGO = 'dialog.dialogo[open]';
 const FORMA_DO_CODIGO = /^[A-Z0-9]{4}(-[A-Z0-9]{4}){3}$/;  // 19 caracteres: ABCD-EFGH-JKLM-NPQR
 
+// Entrar de outro navegador, só pela API: a senha (que deve pedir o segundo passo) e o código de reserva. Devolve o que o servidor respondeu a cada passo.
+async function entrarComReserva(browser, login, codigo) {
+  const ctx = await contexto(browser), page = await ctx.newPage();
+  try {
+    await page.goto(`${args.origem}/entrar`);
+    return await page.evaluate(async ({login, senha, codigo}) => {
+      const enviar = async (caminho, corpo) => fetch(`/api/${caminho}`, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(corpo)});
+      const primeira = await enviar('entrar', {login, senha}), corpo = await primeira.json();
+      if (corpo.estado !== 'segundo_fator') return {aposASenha: corpo.estado, status: null};
+      const segunda = await enviar('entrar-segundo-fator', {codigo});
+      return {aposASenha: corpo.estado, status: segunda.status};
+    }, {login, senha: args.senha, codigo});
+  } finally { await ctx.close(); }
+}
 async function contexto(browser) {
   const ctx = await browser.newContext({viewport: {width: 1440, height: 900}, locale: 'pt-BR', acceptDownloads: true});
   await ctx.addInitScript(() => { try { localStorage.setItem('vlado-idioma', 'pt'); localStorage.setItem('apuracao:tema', 'light'); } catch (_) { /* sem armazenamento */ } });
@@ -37,10 +51,24 @@ async function contexto(browser) {
   } catch (_) { /* a página fechou com o pedido em voo */ } });
   return ctx;
 }
-async function entrar(page, login) {
+// `codigo`: um código de reserva, para a conta que já tem o segundo fator (a dona: no piloto ele é obrigatório para dono e editor, e o cenário a cadastra). O segundo passo vai pela API,
+// como a página do Entrar faz, com o bilhete que o servidor põe no cookie.
+async function entrar(page, login, codigo) {
   await page.goto(`${args.origem}/entrar`);
-  await page.fill('#entrar-login', login); await page.fill('#entrar-senha', args.senha);
-  await Promise.all([page.waitForURL(url => url.pathname === '/' || url.pathname === '/index.html', {timeout: 20000}), page.click('#entrar-enviar')]);
+  if (codigo) {
+    const resultado = await page.evaluate(async ({login, senha, codigo}) => {
+      const enviar = async (caminho, corpo) => fetch(`/api/${caminho}`, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(corpo)});
+      let resposta = await enviar('entrar', {login, senha}), corpo = await resposta.json();
+      const aposASenha = corpo.estado;
+      if (aposASenha === 'segundo_fator') { resposta = await enviar('entrar-segundo-fator', {codigo}); corpo = await resposta.json(); }
+      return {aposASenha, status: resposta.status, estado: corpo.estado};
+    }, {login, senha: args.senha, codigo});
+    assert.equal(resultado.aposASenha, 'segundo_fator', `a senha sozinha não abre a sessão de quem tem o fator: ${JSON.stringify(resultado)}`);  // V2 da Coruja
+    assert.equal(resultado.status, 200, JSON.stringify(resultado));
+  } else {
+    await page.fill('#entrar-login', login); await page.fill('#entrar-senha', args.senha);
+    await Promise.all([page.waitForURL(url => url.pathname === '/' || url.pathname === '/index.html', {timeout: 20000}), page.click('#entrar-enviar')]);
+  }
   await page.goto(`${args.origem}/?area=configuracoes`);
   await page.waitForSelector('[data-cartao="seguranca"] .conta-fator', {timeout: 20000});
 }
@@ -137,6 +165,16 @@ async function cadastrar(page, erros) {
     await page.waitForSelector(DIALOGO, {state: 'detached'});
     await semRastro(page, [...novos, ...feito.codigos]);
     resultado.reporter.novos = novos;
+    // Os códigos que a tela mostrou são os do servidor e valem uma vez (V3 da Coruja): um dos novos entra, o mesmo não entra de novo, e um dos antigos, que a geração invalidou, também não.
+    const primeiraEntrada = await entrarComReserva(browser, args.reporter.login, novos[0]);
+    assert.deepEqual(primeiraEntrada, {aposASenha: 'segundo_fator', status: 200}, 'um código de reserva novo, o que a tela mostrou, entra');
+    const repetida = await entrarComReserva(browser, args.reporter.login, novos[0]);
+    assert.equal(repetida.aposASenha, 'segundo_fator'); assert.ok(repetida.status >= 400, `o mesmo código não entra de novo (${repetida.status})`);
+    const antigo = await entrarComReserva(browser, args.reporter.login, feito.codigos[0]);
+    assert.equal(antigo.aposASenha, 'segundo_fator'); assert.ok(antigo.status >= 400, `um código anterior à geração dos novos não entra (${antigo.status})`);
+    const outro = await entrarComReserva(browser, args.reporter.login, novos[1]);
+    assert.deepEqual(outro, {aposASenha: 'segundo_fator', status: 200}, 'e outro dos novos segue valendo');
+    resultado.reporter.usados = [novos[0], novos[1]];
     // remover: o repórter tem a capacidade
     assert.ok(await page.isVisible('.conta-fator-remover'), 'o repórter vê Remover');
     await page.click('.conta-fator-remover');
@@ -149,14 +187,14 @@ async function cadastrar(page, erros) {
     assert.equal(await texto(page, '.conta-estado'), '✓ Segundo fator removido.');
     await ctx.close();
 
-    // 2. quem não pode (dono): cadastra, não vê Remover, e o servidor recusa o pedido feito à mão
+    // 2. quem não pode remover (dono): o fator já vem do cenário (no piloto é obrigatório para ele); a tela o mostra ativo, sem Remover, e o servidor recusa o pedido feito à mão
     ctx = await contexto(browser); page = await ctx.newPage(); page.on('pageerror', erro => erros.push(erro.message));
-    await entrar(page, args.dono.login);
-    const antes = await texto(page, '[data-cartao="seguranca"] .conta-fator');
-    assert.ok(antes.includes('Depois de cadastrado, o segundo fator não pode ser removido no seu papel.'));
+    await entrar(page, args.dono.login, args.dono.codigos[0]);
+    await page.waitForSelector('.conta-fator-ativo', {timeout: 20000});
+    const linhaDoDono = await texto(page, '[data-cartao="seguranca"] .conta-fator');
+    assert.ok(linhaDoDono.includes('✓ Código do autenticador ativo'), linhaDoDono);
     assert.ok(!/obrigat/i.test(await texto(page, '[data-cartao="seguranca"]')), 'a tela não diz que o fator é obrigatório');
-    const doDono = await cadastrar(page, erros);
-    resultado.dono = {segredo: doDono.segredo, codigos: doDono.codigos};
+    resultado.dono = {};
     assert.equal(await page.locator('.conta-fator-remover').count(), 0, 'o dono não vê Remover');
     const recusa = await page.evaluate(async senha => { try { await api('conta-fator-remover', {senha}); return 'removeu'; } catch (erro) { return {status: erro.result?.estado, codigo: erro.result?.codigo}; } }, args.senha);
     assert.deepEqual(recusa, {status: 'proibido', codigo: 'operacao_proibida'}, 'o servidor recusa o pedido feito à mão: o papel não tem a capacidade');
