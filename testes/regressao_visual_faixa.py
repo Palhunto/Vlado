@@ -15,6 +15,7 @@ O que reprova (função `julgar`, testável sem navegador):
   - o elemento que rola por dentro e não é faixa nem tabela, com o item ativo cortado.
 O que só é avisado (vai ao manifesto em `rolagem_interna`): elemento que rola por dentro e não é faixa nem tabela, mesmo com o ativo à vista (uma faixa nova
 que o desktop.js ainda não conheça). Tabela de dados fica de fora: a WCAG 1.4.10 a isenta.
+`troca` (Q5d, o ativo agora vem no quadro seguinte): clica em cada item das faixas de abas que rolam e confere o ativo dois quadros depois.
 O custo da faixa numa conversa longa (Q5d) é medido por `regressao_visual_custo.py`.
 """
 from __future__ import annotations
@@ -192,6 +193,54 @@ def gerar(args, selecao) -> int:
     return 0
 
 
+JS_ITENS_DA_FAIXA = """(seletor) => [...document.querySelectorAll(seletor)].filter(f => f.getBoundingClientRect().width > 0 && f.scrollWidth - f.clientWidth > 1)
+  .map((f, i) => { f.setAttribute('data-prova-faixa', String(i)); return {indice: i, itens: f.querySelectorAll('button,[role=tab]').length}; })"""
+JS_DOIS_QUADROS = "new Promise(ok => requestAnimationFrame(() => requestAnimationFrame(ok)))"
+# Faixas cujos itens trocam de aba por clique (a linha de etapas navega, fica de fora).
+SELETOR_FAIXAS_DE_ABA = '.quadros-abas,.mesa-tabs,.notebook-tabs'
+
+
+def troca(args, selecao) -> int:
+    """Q5d: o ativo agora é trazido no quadro seguinte. Em cada faixa de abas que rola, clica em cada item e, dois quadros depois, o ativo tem de caber inteiro."""
+    from playwright.sync_api import sync_playwright
+    import regressao_visual as rv
+    telas, cenarios, temas = selecao
+    reprovacoes, cliques = [], 0
+    with rv.Servidores(rv.python_do_servidor(args.python_servidor)) as servidores, sync_playwright() as pw:
+        navegador = pw.chromium.launch(args=rv.ARGS_CHROMIUM)
+        try:
+            for cenario in cenarios:
+                for tema in temas:
+                    contexto = navegador.new_context(viewport=CENARIOS_FAIXA[cenario]['viewport'], locale='pt-BR', timezone_id='UTC', color_scheme=rv.TEMAS[tema],
+                                                     reduced_motion='reduce', service_workers='block')
+                    contexto.add_init_script(f"try{{localStorage.setItem('{rv.CHAVE_TEMA}','{rv.TEMAS[tema]}');localStorage.setItem('{rv.CHAVE_IDIOMA}','pt');}}catch(e){{}}")
+                    for tela in telas:
+                        pagina = contexto.new_page()
+                        atividade = rv.AtividadeDeRede(pagina)
+                        url, seletor = rv.destino(servidores, tela)
+                        pagina.goto(url, wait_until='load')
+                        pagina.wait_for_selector(seletor, state='visible', timeout=30000)
+                        atividade.esperar_quieta(pagina)
+                        for faixa_ in pagina.evaluate(JS_ITENS_DA_FAIXA, SELETOR_FAIXAS_DE_ABA):
+                            marca = f"[data-prova-faixa='{faixa_['indice']}']"
+                            for n in range(faixa_['itens']):
+                                item = pagina.locator(f'{marca} :is(button,[role=tab])').nth(n)
+                                item.click()
+                                pagina.evaluate(JS_DOIS_QUADROS)
+                                cliques += 1
+                                nome = f'{tela}__{cenario}__{tema}__troca{n + 1}'
+                                rep, _ = julgar(nome, medir(pagina))
+                                reprovacoes += rep
+                        pagina.close()
+                    contexto.close()
+        finally:
+            navegador.close()
+    for r in reprovacoes:
+        print('  REPROVADA', r)
+    print(f'Troca de aba: {cliques} clique(s) em faixas que rolam, {len(reprovacoes)} reprovação(ões).')
+    return 1 if reprovacoes or not cliques else 0
+
+
 def comparar(args, selecao) -> int:
     import shutil
     import regressao_visual as rv
@@ -226,12 +275,12 @@ def comparar(args, selecao) -> int:
     return 0 if not r['reprovadas'] and not novas else 1
 
 
-COMANDOS = {'provar': provar, 'gerar': gerar, 'comparar': comparar}
+COMANDOS = {'provar': provar, 'gerar': gerar, 'comparar': comparar, 'troca': troca}
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('comando', choices=('provar', 'gerar', 'comparar'))
+    parser.add_argument('comando', choices=('provar', 'gerar', 'comparar', 'troca'))
     parser.add_argument('--cenarios', help='320,390,430 (padrão: os três)')
     parser.add_argument('--temas', help='claro,escuro (padrão: ambos)')
     parser.add_argument('--python-servidor', help='Python do projeto (padrão: .venv do projeto)')
