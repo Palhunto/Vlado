@@ -1529,6 +1529,7 @@ window.VLADO_I18N_EN = {
     "Vazio quer dizer o teto da instalação.": "Empty means the installation ceiling.",
     "Quem administra o serviço": "Whoever runs the service",
     "uma conta removida": "a removed account",
+    "Conta excluída": "Deleted account",
     "Ação de administração": "Administration action",
     "Nenhuma ação registrada ainda.": "No action recorded yet.",
     "Mostrar mais": "Show more",
