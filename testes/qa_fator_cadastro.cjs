@@ -26,6 +26,20 @@ const texto = async (page, seletor) => (await page.textContent(seletor)).replace
 const DIALOGO = 'dialog.dialogo[open]';
 const FORMA_DO_CODIGO = /^[A-Z0-9]{4}(-[A-Z0-9]{4}){3}$/;  // 19 caracteres: ABCD-EFGH-JKLM-NPQR
 
+// Entrar de outro navegador, só pela API: a senha (que deve pedir o segundo passo) e o código de reserva. Devolve o que o servidor respondeu a cada passo.
+async function entrarComReserva(browser, login, codigo) {
+  const ctx = await contexto(browser), page = await ctx.newPage();
+  try {
+    await page.goto(`${args.origem}/entrar`);
+    return await page.evaluate(async ({login, senha, codigo}) => {
+      const enviar = async (caminho, corpo) => fetch(`/api/${caminho}`, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(corpo)});
+      const primeira = await enviar('entrar', {login, senha}), corpo = await primeira.json();
+      if (corpo.estado !== 'segundo_fator') return {aposASenha: corpo.estado, status: null};
+      const segunda = await enviar('entrar-segundo-fator', {codigo});
+      return {aposASenha: corpo.estado, status: segunda.status};
+    }, {login, senha: args.senha, codigo});
+  } finally { await ctx.close(); }
+}
 async function contexto(browser) {
   const ctx = await browser.newContext({viewport: {width: 1440, height: 900}, locale: 'pt-BR', acceptDownloads: true});
   await ctx.addInitScript(() => { try { localStorage.setItem('vlado-idioma', 'pt'); localStorage.setItem('apuracao:tema', 'light'); } catch (_) { /* sem armazenamento */ } });
@@ -45,9 +59,11 @@ async function entrar(page, login, codigo) {
     const resultado = await page.evaluate(async ({login, senha, codigo}) => {
       const enviar = async (caminho, corpo) => fetch(`/api/${caminho}`, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(corpo)});
       let resposta = await enviar('entrar', {login, senha}), corpo = await resposta.json();
-      if (corpo.estado === 'segundo_fator') { resposta = await enviar('entrar-segundo-fator', {codigo}); corpo = await resposta.json(); }
-      return {status: resposta.status, estado: corpo.estado};
+      const aposASenha = corpo.estado;
+      if (aposASenha === 'segundo_fator') { resposta = await enviar('entrar-segundo-fator', {codigo}); corpo = await resposta.json(); }
+      return {aposASenha, status: resposta.status, estado: corpo.estado};
     }, {login, senha: args.senha, codigo});
+    assert.equal(resultado.aposASenha, 'segundo_fator', `a senha sozinha não abre a sessão de quem tem o fator: ${JSON.stringify(resultado)}`);  // V2 da Coruja
     assert.equal(resultado.status, 200, JSON.stringify(resultado));
   } else {
     await page.fill('#entrar-login', login); await page.fill('#entrar-senha', args.senha);
@@ -149,6 +165,16 @@ async function cadastrar(page, erros) {
     await page.waitForSelector(DIALOGO, {state: 'detached'});
     await semRastro(page, [...novos, ...feito.codigos]);
     resultado.reporter.novos = novos;
+    // Os códigos que a tela mostrou são os do servidor e valem uma vez (V3 da Coruja): um dos novos entra, o mesmo não entra de novo, e um dos antigos, que a geração invalidou, também não.
+    const primeiraEntrada = await entrarComReserva(browser, args.reporter.login, novos[0]);
+    assert.deepEqual(primeiraEntrada, {aposASenha: 'segundo_fator', status: 200}, 'um código de reserva novo, o que a tela mostrou, entra');
+    const repetida = await entrarComReserva(browser, args.reporter.login, novos[0]);
+    assert.equal(repetida.aposASenha, 'segundo_fator'); assert.ok(repetida.status >= 400, `o mesmo código não entra de novo (${repetida.status})`);
+    const antigo = await entrarComReserva(browser, args.reporter.login, feito.codigos[0]);
+    assert.equal(antigo.aposASenha, 'segundo_fator'); assert.ok(antigo.status >= 400, `um código anterior à geração dos novos não entra (${antigo.status})`);
+    const outro = await entrarComReserva(browser, args.reporter.login, novos[1]);
+    assert.deepEqual(outro, {aposASenha: 'segundo_fator', status: 200}, 'e outro dos novos segue valendo');
+    resultado.reporter.usados = [novos[0], novos[1]];
     // remover: o repórter tem a capacidade
     assert.ok(await page.isVisible('.conta-fator-remover'), 'o repórter vê Remover');
     await page.click('.conta-fator-remover');
