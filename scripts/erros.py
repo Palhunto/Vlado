@@ -21,6 +21,7 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('operacao_proibida', r'^Operação não permitida'),
     ('servico_nao_encerravel', r'^O serviço hospedado não pode ser encerrado'),
     ('caso_nao_liberado', r'^Apuração não liberada para (este convite|esta conta)'),
+    ('caso_inexistente', r'^Caso inexistente; não cadastrar em outro caso automaticamente\.'),
     ('campos_nao_permitidos', r'^Convidados enviam somente'),
     ('convite_invalido', r'^Convite inválido'),
     ('cota_diaria_esgotada', r'^Limite diário de (?P<cota>\d+) pergunta'),
