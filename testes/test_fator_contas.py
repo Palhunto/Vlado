@@ -13,6 +13,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acesso
+import autorizacao
 import cenario_redacoes as cenario
 import correio
 import segundo_fator as fator
@@ -483,6 +484,19 @@ class ObrigacaoTest(cenario.DuasRedacoes):
                 negado = self.post(sessao, 'conta-fator-remover', {'senha': SENHA})
                 self.assertEqual((negado[0], negado[1].get('codigo')), (403, 'operacao_proibida'))
                 self.assertTrue(self.post(sessao, 'conta-ver', {})[1]['segundo_fator']['ativo'])
+
+    def test_com_a_pendencia_o_corpo_grande_nao_e_lido(self):
+        # R1 of the review: the pending item counts in the body limit as the role does. A body above the small limit
+        # is refused before it is read, and not read and then answered 403 (seção 4.2, passo 3).
+        sessao, _, _ = self.chegar('dono')
+        grande = {'x': 'a' * 40000}
+        for operacao in ('cadastrar', 'codex-status'):
+            status, corpo, bruto = self.post(sessao, operacao, grande)
+            self.assertEqual(status, 400, (operacao, bruto[:200]))
+            self.assertIn('muito grande', corpo.get('erro', ''), operacao)
+        self.assertEqual(self.post(sessao, 'conta-fator-iniciar', {'senha': SENHA})[0], 200)  # what resolves it still passes
+        self.assertTrue(autorizacao.corpo_grande('piloto', {'papel': 'dono', 'pendencias': []}, 'cadastrar'))
+        self.assertFalse(autorizacao.corpo_grande('piloto', {'papel': 'dono', 'pendencias': ['segundo_fator']}, 'cadastrar'))
 
     def test_a_pagina_da_pendencia_e_estatica_e_nao_leva_dado_de_conta(self):
         sessao, conta, email = self.chegar('editor')

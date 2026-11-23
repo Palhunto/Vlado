@@ -32,8 +32,6 @@ NOME = re.compile(r'`([^`]+)`(\\\*)?')
 # Células em que o modo `piloto` do cenário difere da tabela, com a razão; cada uma tem o seu teste abaixo.
 FORA_DA_TABELA = {
     'codex-desligar': 'no piloto o serviço não se encerra pela interface: recusado a todos (observação da linha)',
-    'ia-config-salvar': 'com mais de uma redação, a chave do serviço não se troca pela Mesa até existir a chave própria '
-                        'de cada redação (entrega seguinte)',
     'conta-fator-remover': 'no piloto o segundo fator é obrigatório para dono e editor, que não o removem (observação '
                            'da linha); no local-contas, onde é opcional, a célula vale para todos',
     'sessao-sair': 'encerra a sessão usada pelo próprio teste: conferida à parte, com uma sessão só para isso'}
@@ -137,12 +135,13 @@ class ContratoTest(unittest.TestCase):
             self.assertEqual(autorizacao.MATRIZ[operacao].resolvedor, frozenset({'nenhum'}))
 
     def test_capacidades_saem_da_matriz(self):
-        def de(papel):  # the mode with accounts that refuses nothing of its own: the cells alone
+        def de(papel):  # the mode with accounts that refuses almost nothing of its own: the cells, less the terms
             return autorizacao.capacidades(None, 'local-contas', {'papel': papel})
         self.assertIn('redacao-revisar', de('editor'))
         self.assertNotIn('redacao-revisar', de('reporter'))
         self.assertNotIn('cadastrar', de('editor'))
-        self.assertEqual(set(de('convidado')), set(interface_pesquisa.OPERACOES_CONVIDADO) | set(interface_pesquisa.CONTA_PROPRIA))
+        self.assertEqual(set(de('convidado')), set(interface_pesquisa.OPERACOES_CONVIDADO)
+                         | set(interface_pesquisa.CONTA_PROPRIA) - {'conta-termos-aceitar'})  # no terms in the installed Mesa
         self.assertIn('equipe-papel', de('dono'))
         for papel in ('editor', 'reporter', 'leitor', 'convidado'):
             self.assertFalse([o for o in de(papel) if o.startswith('equipe-')], papel)
@@ -311,19 +310,19 @@ class CelulasTest(cenario.DuasRedacoes):
             status, corpo, _ = self.post(papel, 'codex-desligar', {})
             self.assertEqual((status, corpo.get('codigo')), (403, 'servico_nao_encerravel'), papel)
 
-    def test_chave_do_servico_nao_se_troca_pela_mesa_com_mais_de_uma_redacao(self):
-        for papel in autorizacao.PAPEIS:
-            status, corpo, _ = self.post(papel, 'ia-config-salvar', {'provedor': 'anthropic'})
-            self.assertEqual((status, corpo.get('codigo')), (403, 'operacao_proibida'), papel)
-        self.assertNotIn(self.post('dono', 'ia-config', {})[0], (401, 403, 404))
-        # And what a newsroom reads of the service's key: that it exists, never its last characters.
+    def test_no_piloto_a_mesa_so_toca_a_chave_da_propria_redacao(self):
+        # The cell is the table's (dono only). What the hosted mode adds is in the route: the dono saves the key of
+        # the own newsroom, never the service's (test_chave_da_redacao); and a caller without a newsroom gets
+        # neither, it fails closed. Here, the second lock: nothing that comes from the service's key leaves with its
+        # last characters, whatever the route answered.
         resposta = {'provedor': 'anthropic', 'chaves': {'anthropic': {'configurada': True, 'origem': 'ambiente', 'final': 'abcd'},
-                                                        'openai': {'configurada': False, 'origem': None, 'final': None}}}
+                                                        'openai': {'configurada': True, 'origem': 'redacao', 'final': 'wxyz'}}}
         principal = {'papel': 'dono', 'casos': []}
-        self.assertEqual(autorizacao.filtrar(self.root, 'piloto', principal, 'ia-config', resposta)['chaves'], {
-            'anthropic': {'configurada': True, 'origem': 'servico', 'final': None},
-            'openai': {'configurada': False, 'origem': None, 'final': None}})
-        self.assertEqual(autorizacao.filtrar(self.root, 'local', principal, 'ia-config', resposta), resposta)
+        for operacao in ('ia-config', 'ia-config-salvar'):
+            self.assertEqual(autorizacao.filtrar(self.root, 'piloto', principal, operacao, resposta)['chaves'], {
+                'anthropic': {'configurada': True, 'origem': 'servico', 'final': None},
+                'openai': {'configurada': True, 'origem': 'redacao', 'final': 'wxyz'}}, operacao)
+            self.assertEqual(autorizacao.filtrar(self.root, 'local', principal, operacao, resposta), resposta)
 
     def test_remover_o_fator_e_negado_onde_ele_e_obrigatorio_e_so_ali(self):
         antes = self.retrato()
@@ -363,8 +362,8 @@ class CelulasTest(cenario.DuasRedacoes):
         self.assertEqual(conferidas, len(autorizacao.operacoes_com_sessao()) * 11)
         piloto = set(autorizacao.capacidades(self.root, 'piloto', contas['dono']))
         instalada = set(autorizacao.capacidades(self.root, 'local-contas', contas['dono']))
-        self.assertEqual(instalada - piloto, {'codex-desligar', 'ia-config-salvar', 'conta-fator-remover'})
-        self.assertEqual(piloto - instalada, set())
+        self.assertEqual(instalada - piloto, {'codex-desligar', 'conta-fator-remover'})
+        self.assertEqual(piloto - instalada, {'conta-termos-aceitar'})  # terms of service only in the hosted mode
 
     def test_as_contas_antigas_respondem_como_operacao_inexistente_a_todos_os_papeis(self):
         # Withdrawn with the invitation by e-mail (P30): the same 404 of an operation that never existed, to the
@@ -395,7 +394,8 @@ class CelulasTest(cenario.DuasRedacoes):
                                  (papel, casos, {'id': self.a, 'nome': 'Redação Alfa'}))
                 self.assertEqual(corpo['capacidades'], autorizacao.capacidades(self.root, 'piloto', {'papel': papel}))
                 # What the hosted mode refuses is not offered: the page would show a button that answers 403.
-                self.assertFalse({'codex-desligar', 'ia-config-salvar'} & set(corpo['capacidades']), papel)
+                self.assertNotIn('codex-desligar', corpo['capacidades'], papel)
+                self.assertEqual('ia-config-salvar' in corpo['capacidades'], papel == 'dono', papel)
                 self.assertEqual('conta-fator-remover' in corpo['capacidades'], papel not in acesso.FATOR_OBRIGATORIO, papel)
                 self.assertEqual(corpo['pendencias'], [])  # dono and editor of the scenario have their second factor
                 self.sem_sentinela(bruto)

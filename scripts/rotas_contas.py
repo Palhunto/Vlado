@@ -45,12 +45,12 @@ COOKIE_PILOTO ='vlado_sessao'
 # Each person on the own account (contract, 5.4): the account is always the session's, never one named in the body.
 CONTA_PROPRIA = ('conta-ver', 'conta-atualizar', 'conta-senha-trocar', 'conta-sessoes', 'conta-sessao-encerrar',
                  'conta-sessoes-encerrar-outras', 'conta-email-trocar', 'conta-fator-iniciar', 'conta-fator-confirmar',
-                 'conta-fator-codigos', 'conta-fator-remover')
+                 'conta-fator-codigos', 'conta-fator-remover', 'conta-termos-aceitar')
 _CAMPOS_DA_CONTA = {'conta-ver': set(), 'conta-atualizar': {'nome', 'idioma'}, 'conta-senha-trocar': {'senha_atual', 'senha_nova'},
                     'conta-sessoes': set(), 'conta-sessao-encerrar': {'sessao'}, 'conta-sessoes-encerrar-outras': set(),
                     'conta-email-trocar': {'email', 'senha'}, 'conta-fator-iniciar': {'senha', 'codigo'},
                     'conta-fator-confirmar': {'codigo'}, 'conta-fator-codigos': {'senha', 'codigo'},
-                    'conta-fator-remover': {'senha'}}
+                    'conta-fator-remover': {'senha'}, 'conta-termos-aceitar': {'versao'}}
 COOKIE_APARELHO = 'vlado_aparelho'  # the mark of a device an account already used (contract, 8.2); one year
 APARELHO_SEGUNDOS = 365 * 24 * 3600
 COOKIE_SEGUNDO_PASSO = 'vlado_passo2'  # the ticket between the right password and the second factor (five minutes)
@@ -115,9 +115,10 @@ def _fator(root, operation, conta, data, ip, atual=None):
     return resposta
 
 
-def conta_propria(root, operation, data, principal, ip=None, origem=None, marca=None):
+def conta_propria(root, operation, data, principal, ip=None, origem=None, marca=None, termos=None):
     """``POST /api/conta-*``: the person on the own account. ``principal`` is the session; nothing here takes the id
-    of an account, and the session that asks is told apart by its public id (never the cookie)."""
+    of an account, and the session that asks is told apart by its public id (never the cookie). ``termos`` are the
+    terms in force where the service has them (``acesso.termos_vigentes``, only in the hosted mode)."""
     if operation not in CONTA_PROPRIA or not isinstance(data, dict):
         raise ValueError('Operação de conta desconhecida.')
     if set(data) - _CAMPOS_DA_CONTA[operation]:
@@ -126,7 +127,9 @@ def conta_propria(root, operation, data, principal, ip=None, origem=None, marca=
     if not conta:
         raise ValueError('Contas só existem nos modos com login.')
     if operation == 'conta-ver':
-        return {**acesso.ver_conta(root, conta), 'sessao': atual}
+        return {**acesso.ver_conta(root, conta, termos), 'sessao': atual}
+    if operation == 'conta-termos-aceitar':
+        return {'estado': 'termos_aceitos', 'termos': acesso.aceitar_termos(root, conta, data.get('versao'), termos, ip)}
     if operation == 'conta-atualizar':
         return acesso.atualizar_perfil(root, conta, nome=data.get('nome'), idioma=data.get('idioma'))
     if operation == 'conta-email-trocar':
@@ -161,11 +164,18 @@ class RotasContas:
         if not sid:
             return None, None
         try:
-            # Where the service is hosted the second factor is mandatory for dono and editor (contract, 8.2).
-            return acesso.sessao(self.server.root, sid, ip=self._ip(), obrigar_fator=self.server.modo == 'piloto'), sid
+            # Where the service is hosted the second factor is mandatory for dono and editor (contract, 8.2), and the
+            # terms in force must be accepted (8.4).
+            termos = self._termos()
+            return acesso.sessao(self.server.root, sid, ip=self._ip(), obrigar_fator=self.server.modo == 'piloto',
+                                 termos=termos['versao'] if termos else None), sid
         except (ValueError, OSError):
             self.acesso_indisponivel = True  # answered with 503, never with a dropped connection
             return None, sid
+
+    def _termos(self):
+        """The terms in force: only in the hosted mode (the installed Mesa has no terms of service)."""
+        return acesso.termos_vigentes() if self.server.modo == 'piloto' else None
 
     def _cookie(self, nome):
         cookie = SimpleCookie()
@@ -343,7 +353,7 @@ class RotasContas:
         try:
             if operation in CONTA_PROPRIA:
                 return conta_propria(self.server.root, operation, data, principal, ip=self._ip(), origem=self.server.origin,
-                                     marca=self._cookie(COOKIE_APARELHO))
+                                     marca=self._cookie(COOKIE_APARELHO), termos=self._termos())
             return rotas_equipe.executar(
                 self.server.root, operation, data, principal, ip=self._ip(), parar=self._parar_execucoes,
                 gasto_da_redacao=autorizacao.gasto_da_redacao(self.server.root, self.server.modo, principal),
@@ -419,7 +429,7 @@ class RotasContas:
                 self._json(200, acesso.consultar_ativacao(root, data.get('token')))
             elif operation == 'convite-consultar':
                 acesso.limitar_ip(self._ip(), 'aceitar')
-                self._json(200, acesso.consultar_convite(root, data.get('token')))
+                self._json(200, acesso.consultar_convite(root, data.get('token'), self._termos()))
             elif operation == 'convite-aceitar':
                 # The account is born and its first session opens, as a sign-in does. The e-mail is the invitation's.
                 acesso.limitar_ip(self._ip(), 'aceitar')
@@ -429,7 +439,8 @@ class RotasContas:
                 sid, csrf, conta = acesso.aceitar_convite(
                     root, data.get('token'), data.get('nome'), data.get('senha'), data.get('termos_versao'), ip=self._ip(),
                     cliente=data.get('cliente', 'web'),
-                    aparelho=aparelho(self.headers.get('User-Agent'), data.get('cliente', 'web')), marca=marca)
+                    aparelho=aparelho(self.headers.get('User-Agent'), data.get('cliente', 'web')), marca=marca,
+                    termos=self._termos())
                 self._entrou(sid, csrf, conta, marca, data.get('cliente', 'web'))
             elif operation == 'senha-esqueci':
                 # One answer, in the same time, whether an account has the address or not: the message leaves in
@@ -498,6 +509,8 @@ class RotasContas:
             self._json(400, {'estado': 'erro', 'codigo': 'convite_invalido', 'erro': str(exc)})
         except acesso.LinkInvalido as exc:  # and one for every reset link that changes nothing
             self._json(400, {'estado': 'erro', 'codigo': 'link_invalido', 'erro': str(exc)})
+        except acesso.TermosDesatualizados as exc:  # the invitation accepted with other terms than the ones in force
+            self._json(exc.status, {'estado': 'erro', 'codigo': exc.codigo, 'erro': str(exc)})
         except acesso.SenhaInvalida as exc:  # the password chosen is out of size: the page says so under the field
             if operation == 'ativar':
                 registro_acesso.registrar('ativacao_falha', 'falha', motivo='validacao', acesso_operacao='ativar')

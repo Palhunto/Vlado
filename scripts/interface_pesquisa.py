@@ -53,6 +53,7 @@ import proxies_confiaveis
 import apagamento
 import registro_acesso
 import lixeira
+import segredos
 import trava_cadastro
 from indice_sqlite import ID_CASO, caminho_rodada, cobertura, ler_passagem, pesquisar
 # Names also imported from here by the launcher, the tests and older callers.
@@ -1031,6 +1032,8 @@ def main():
         ambiente = os.environ.get('VLADO_AMBIENTE', '').strip()
         try:  # with real data the hosted service does not start without real e-mail delivery (decision 12)
             correio.conferir_partida(args.modo, ambiente if ambiente in AMBIENTES else 'homologacao')
+            if args.modo == 'piloto':  # terms asked without a readable address: it does not start (4b-1)
+                acesso.termos_vigentes()
         except ValueError as exc:
             raise SystemExit(str(exc)) from None
     # Extraction and OCR in separate processes; VLADO_EXTRACAO=local keeps them in threads.
@@ -1045,6 +1048,13 @@ def main():
                     print(aviso, file=sys.stderr, flush=True)
             except (ValueError, OSError):
                 pass  # an unreadable store answers 503 to each request; it does not stop the start
+        if server.modo == 'piloto':  # the newsrooms' own AI keys unreadable: none is read nor saved until restored
+            try:
+                aviso = segredos.conferir_chaves_das_redacoes(server.root)
+                if aviso:
+                    print(aviso, file=sys.stderr, flush=True)
+            except OSError:
+                pass
         print(f'Mesa de apuração ({args.modo}): {server.origin}', flush=True)
         print('Encerre com Ctrl+C.', flush=True)
         if args.modo != 'piloto' and not args.sem_abrir:
