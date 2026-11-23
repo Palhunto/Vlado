@@ -46,6 +46,24 @@ test('a cota curta no cabeçalho: "R$ 18,40 de 50", "! Cota esgotada" no teto, e
   const ingles = await abrir({desktop: false, cota: conta('18.40', '50.00'), idioma: 'en'});
   ingles.janela.I18N.aplicar(ingles.$('mesa-cota-cabecalho'));
   assert.equal(ingles.$('mesa-cota-cabecalho').textContent, 'R$ 18,40 of 50');
+  // o mesmo bloco do cartão (C1 da Coruja): o administrador cuja instalação tem o menor saldo vê a da instalação, no formato curto e sem a parte da chave própria
+  const instalacao = {...conta('10.00', '50.00'), conta: {gasto_brl: '10.00', teto_brl: '50.00', saldo_brl: '40.00', esgotada: false},
+    organizacao: {gasto_brl: '160.00', teto_brl: '200.00', saldo_brl: '40.00', esgotada: false}, chave_propria: {conta_brl: '3.25', organizacao_brl: '12.00'}};
+  instalacao.organizacao.saldo_brl = '30.00';
+  const adm = await abrir({desktop: false, cota: instalacao});
+  assert.equal(adm.$('mesa-cota-rotulo').textContent, 'Cota da instalação');
+  assert.equal(adm.$('mesa-cota-cabecalho').textContent, 'Cota da instalação R$ 160,00 de 200', 'o número do cabeçalho é o do cartão');
+  assert.equal(adm.$('mesa-cota-valor').textContent, 'R$ 160,00 de R$ 200');
+  assert.ok(!/dos quais|chave/i.test(adm.$('mesa-cota-cabecalho').textContent + adm.$('mesa-cota-cabecalho').getAttribute('aria-label')), 'a chave própria fica só no cartão');
+  assert.equal(adm.$('mesa-cota-cabecalho').getAttribute('aria-label'), '80% da cota da instalação usada');
+  const instalacaoEsgotada = await abrir({desktop: false, cota: {...instalacao, organizacao: {gasto_brl: '200.00', teto_brl: '200.00', saldo_brl: '0.00', esgotada: true}}});
+  assert.equal(instalacaoEsgotada.$('mesa-cota-cabecalho').textContent, '! Cota da instalação esgotada');
+  const pessoaComChave = await abrir({desktop: false, cota: {...conta('18.40', '50.00'), chave_propria: {conta_brl: '3.25'}}});
+  assert.equal(pessoaComChave.$('mesa-cota-cabecalho').textContent, 'R$ 18,40 de 50');
+  assert.equal(pessoaComChave.$('mesa-cota-cabecalho').getAttribute('aria-label'), '37% da cota usada', 'sem a parte da chave própria');
+  const instalacaoEn = await abrir({desktop: false, cota: instalacao, idioma: 'en'});
+  instalacaoEn.janela.I18N.aplicar(instalacaoEn.$('mesa-cota-cabecalho'));
+  assert.equal(instalacaoEn.$('mesa-cota-cabecalho').textContent, 'Installation quota R$ 160,00 of 200');
   const sem = await abrir({desktop: false, cota: new Error('sem rota')});
   assert.equal(sem.$('mesa-cota-cabecalho').hidden, true, 'sem a rota, sem cota no cabeçalho como no cartão');
   assert.equal(sem.$('mesa-cota').hidden, true);
