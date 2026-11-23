@@ -11,6 +11,7 @@ provedor_openai) com o cliente do SDK nas opções da produção (2 novas tentat
 sobre um transporte HTTP falso; o próprio SDK escolhe a exceção e refaz o pedido quando é o caso.
 """
 import json
+import os
 from pathlib import Path
 import re
 import threading
@@ -18,6 +19,15 @@ import time
 
 from agente_fluxo_fixture import entrega
 from inferencia_api import Resposta
+
+
+# Atomic: whoever waits for the mark sees it only whole (a .tmp beside it, then os.replace). Written straight,
+# exists() turned true with the file still empty, and reading it gave JSONDecodeError (CI of the 8th round).
+def marcar(caminho, texto):
+    temporario = Path(f'{caminho}.{os.getpid()}.{threading.get_ident()}.tmp')  # one per writer
+    temporario.write_text(texto, encoding='utf-8')
+    os.replace(temporario, caminho)
+
 
 ETAPA = re.compile(r'Etapa obrigatória atual: ([a-z_]+)\.')
 USO = {'anthropic': {'entrada': 1000, 'saida': 200, 'cache_leitura': 0, 'cache_escrita': 0,
@@ -87,7 +97,7 @@ class AgenteSintetico:
             return falha.gerar(modelo=modelo, instrucoes=instrucoes, historico=historico, ferramentas=ferramentas,
                                max_tokens=max_tokens, ao_texto=ao_texto, cancelado=cancelado)
         if (etapa, passo) == self.parar_em:
-            Path(self.marca).write_text(json.dumps({'respondidas': self.respondidas}), encoding='utf-8')
+            marcar(self.marca, json.dumps({'respondidas': self.respondidas}))
             time.sleep(600)  # killed here
         hit = achado(historico)
         passos = plano(etapa, hit)

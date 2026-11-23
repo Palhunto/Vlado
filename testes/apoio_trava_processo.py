@@ -15,8 +15,10 @@
 """
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
+import threading
 import time
 
 TESTES = Path(__file__).resolve().parent
@@ -28,7 +30,10 @@ def pausar(modulo, nome, marca, segundos):
     original = getattr(modulo, nome)
 
     def pausa(*args, **kwargs):
-        Path(marca).write_text('dentro', encoding='utf-8')
+        # atomic, like agente_api_sintetico.marcar: seen only whole; one .tmp per thread (calls may overlap)
+        temporario = Path(f'{marca}.{os.getpid()}.{threading.get_ident()}.tmp')
+        temporario.write_text('dentro', encoding='utf-8')
+        os.replace(temporario, marca)
         time.sleep(segundos)
         return original(*args, **kwargs)
     setattr(modulo, nome, pausa)

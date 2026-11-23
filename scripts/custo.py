@@ -645,11 +645,26 @@ def _numeros_da_redacao(convidado, ve_redacao) -> bool:
     return bool(ve_redacao) if ve_redacao is not None else not convidado
 
 
-def situacao(root, conta, *, administrador=False) -> dict:
+def _redacao_tem_chave_propria(root, conta) -> bool:
+    """Whether the newsroom of ``conta`` has its own AI key saved now (any provider). An unreadable keys file
+    counts as no: the bar then shows the own-key part only when there was spend with it."""
+    redacao = redacao_do_gasto(root, conta)
+    if redacao is None:
+        return False
+    import segredos
+    try:
+        return any(v.get('origem') == 'redacao' for v in segredos.resumo(Path(root), redacao).values())
+    except ValueError:  # segredos.ChavesIlegiveis, or a newsroom id the keys file does not accept
+        return False
+
+
+def situacao(root, conta, *, administrador=False, piloto=False) -> dict:
     """This month's spend and balance in reais (the quota bar of the interface).
 
     Each account sees its own; whoever sees the newsroom (``administrador``: the dono) also sees it.
-    The installation's total is never shown.
+    The installation's total is never shown. ``piloto``: the server is in the piloto mode, the only one where a
+    newsroom's own key counts (P3c); only there may ``chave_propria`` come, and only when the newsroom has its own
+    key or there was spend with it this month (the bar's part vanishes without an own key).
     """
     orcamento, chaves = ler_orcamento(root), chaves_orcamento(conta, root)
     gastos, limite = gasto(root, conta, chaves), tetos(root, conta, orcamento)
@@ -668,7 +683,14 @@ def situacao(root, conta, *, administrador=False) -> dict:
         resposta['organizacao'] = bloco(usado_org, teto_org)
     # P40: what the newsroom's own key paid, apart (never in the service's quota above): the person's own, and the
     # newsroom's for whoever sees it. The person's block above counts both keys (its ceiling holds for both).
+    # Only in the piloto, and only with an own key now or spend with it this month (> 0): without it, no '0.00'
+    # (the dono's newsroom spend counts for the dono only; the others go by their own spend).
+    if not piloto:
+        return resposta
     propria = gasto_chave_propria(root, conta, chaves)
+    if not (propria['conta'] > 0 or (administrador and propria['organizacao'] > 0)
+            or _redacao_tem_chave_propria(root, conta)):
+        return resposta
     em_reais = lambda micro: str((Decimal(micro) / MICRO).quantize(Decimal('0.01'), ROUND_HALF_UP))  # noqa: E731
     resposta['chave_propria'] = {'conta_brl': em_reais(propria['conta'])}
     if administrador:
