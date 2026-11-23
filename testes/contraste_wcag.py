@@ -189,8 +189,15 @@ JS_PREPARO = r"""() => {
   return true;
 }"""
 
+# Exceções declaradas pelo dono ao contorno de campo (WCAG 1.4.11 pede 3:1 do que IDENTIFICA o componente): id do campo -> referência.
+# Hoje só o seletor de apuração do topo, sem caixa por decisão P34 (22/11/2026): identificam-no o texto e a seta. Em vez da borda, mede-se
+# o texto (já medido como qualquer texto) e a seta, que o Chromium desenha na cor do texto.
+EXCECOES_CAMPO = {'contexto-caso': 'P34'}
+EXPLICACAO_EXCECAO = {'P34': 'Seletor de apuração do topo (select#contexto-caso) sem caixa, por decisão do dono (P34, 22/11/2026): pela WCAG 1.4.11 '
+                             'o que precisa de 3:1 é o que identifica o componente, o texto e a seta. Mede-se o texto e a seta contra o fundo, não a borda.'}
+
 # Mede todo texto visível e os campos. Devolve {itens, nao_medidos, isentos, nos}.
-JS_TEXTO = r"""() => {
+JS_TEXTO = r"""(excecoes = {}) => {
   const vc = window.__vc, itens = [], naoMedidos = [], porMotivo = {};
   let isentos = 0, nos = 0;
   const motivo = (m, e, t) => { porMotivo[m] = (porMotivo[m] || 0) + 1; if (naoMedidos.length < 400) naoMedidos.push({motivo: m, s: vc.desc(e), t: (t || '').slice(0, 50)}); };
@@ -225,7 +232,7 @@ JS_TEXTO = r"""() => {
       if (r < pior) { pior = r; piorBg = bg; piorFg = fg; }
     }
     itens.push({cat: categoria, s: vc.desc(e), t: txt.slice(0, 60), fg: vc.hex(piorFg), bg: vc.hex(piorBg), r: pior,
-                min: grande ? 3 : 4.5, grande, px, peso, grad: f.cand.length > 1, semFundo: f.semFundo});
+                min: grande ? 3 : 4.5, grande, px, peso, grad: f.cand.length > 1, semFundo: f.semFundo, excecao: excecoes[e.id] || null});
     return true;
   }
   const raiz = document.body;
@@ -271,6 +278,18 @@ JS_TEXTO = r"""() => {
     if (tipoBotao) continue;
     // Contorno do campo (WCAG 1.4.11): a borda ou o fundo do campo contra o que o cerca.
     const cs = getComputedStyle(e), lados = ['Top', 'Bottom', 'Left', 'Right'];
+    if (excecoes[e.id]) {
+      // Exceção declarada: sem caixa. Mede a seta (cor do texto, no ponto da seta) contra o fundo, em vez da borda.
+      const ponto = vc.fundoNoPonto(Math.min(rect.right - 12, innerWidth - 1), rect.top + rect.height / 2, e, true);
+      const cor = vc.cor(cs.color);
+      if (ponto.coberto || ponto.desconhecido || !cor) { motivo('seta do seletor sem fundo medível', e, rotulo); continue; }
+      let pior = 1e9, piorBg = null, piorFg = null;
+      for (const bg of ponto.cand) { const fg = vc.sobre([cor[0], cor[1], cor[2], cor[3] * vc.opacidade(e)], bg), r = vc.razao(fg, bg);
+        if (r < pior) { pior = r; piorBg = bg; piorFg = fg; } }
+      itens.push({cat: 'seta', s: vc.desc(e), t: rotulo.slice(0, 60), fg: vc.hex(piorFg), bg: vc.hex(piorBg), r: pior, min: 3, grande: false,
+                  px: parseFloat(cs.fontSize), peso: 400, excecao: excecoes[e.id], detalhe: 'seta do seletor, na cor do texto; sem caixa por ' + excecoes[e.id]});
+      continue;
+    }
     const lado = lados.find(l => cs['border' + l + 'Style'] !== 'none' && parseFloat(cs['border' + l + 'Width']) > 0);
     const cx = rect.left + rect.width / 2;
     const ptos = [[cx, rect.top - 3], [cx, rect.bottom + 3]].filter(([x, y]) => y >= 0 && y < innerHeight);
@@ -408,7 +427,7 @@ def indicador_alternativo(item: dict, snap_foco: dict, snap_sem: dict | None, co
 def medir_tela(pagina, nome: str, problemas: list, maximo_tab: int = 250) -> dict:
     pagina.evaluate(JS_PREPARO)
     pagina.evaluate('window.scrollTo(0, 0)')
-    texto = pagina.evaluate(JS_TEXTO)
+    texto = pagina.evaluate(JS_TEXTO, EXCECOES_CAMPO)
     pagina.evaluate('window.scrollTo(0, 0)')
     pagina.evaluate("document.activeElement && document.activeElement.blur && document.activeElement.blur()")
     focos, invisiveis, isentos_foco, em_corpo = [], 0, 0, 0
@@ -577,15 +596,16 @@ def resumir(dados: dict) -> dict:
                             'campo': 0, 'campo_reprovado': 0, 'isentos': 0, 'nao_medidos': 0}
     for nome, r in sorted(dados['resultados'].items()):
         itens = r['texto']['itens']
+        excecoes_da_tela = [i for i in itens if i.get('excecao')]
         textos = [i for i in itens if i['cat'] in ('texto', 'campo-texto', 'placeholder')]
-        campos = [i for i in itens if i['cat'] == 'campo']
+        campos = [i for i in itens if i['cat'] in ('campo', 'seta')]
         focos = r['focos']
         falhas = [i for i in itens + focos if reprovado(i)]
         nao = sum(r['texto']['por_motivo'].values())
         por_tela[nome] = {'textos': len(textos), 'textos_reprovados': sum(reprovado(i) for i in textos),
                           'campos': len(campos), 'campos_reprovados': sum(reprovado(i) for i in campos),
                           'focos': len(focos), 'focos_reprovados': sum(reprovado(i) for i in focos),
-                          'isentos': r['texto']['isentos'] + r['focos_isentos'], 'nao_medidos': nao, 'nao_medidos_detalhe': r['texto']['nao_medidos'],
+                          'excecoes': excecoes_da_tela, 'isentos': r['texto']['isentos'] + r['focos_isentos'], 'nao_medidos': nao, 'nao_medidos_detalhe': r['texto']['nao_medidos'],
                           'motivos': r['texto']['por_motivo'], 'falhas': agrupar(falhas)}
         totais['medidas'] += len(itens) + len(focos)
         totais['reprovadas'] += len(falhas)
@@ -637,6 +657,23 @@ def escrever_relatorio(dados: dict, pasta: Path) -> Path:
         linhas += [f"### {nome}", ''] + [f'- {_linha_falha(g)}' for g in r['falhas']] + ['']
     if not algum:
         linhas += ['Nenhuma reprovação.', '']
+    decl = {}
+    for nome, r in resumo['por_tela'].items():
+        for i in r['excecoes']:
+            d = decl.setdefault(i['excecao'], {'medidas': 0, 'reprovadas': 0, 'piores': {}})
+            d['medidas'] += 1
+            d['reprovadas'] += reprovado(i)
+            chave = i['cat']
+            if chave not in d['piores'] or i['r'] < d['piores'][chave][0]:
+                d['piores'][chave] = (i['r'], nome, i.get('fg'), i.get('bg'), i['min'])
+    if decl:
+        linhas += ['## Exceções declaradas', '']
+        for ref, d in sorted(decl.items()):
+            linhas.append(f"- **{ref}**: {EXPLICACAO_EXCECAO.get(ref, '')} {d['medidas']} medidas, {d['reprovadas']} reprovadas.")
+            for cat, (r, nome, fg, bg, minimo) in sorted(d['piores'].items()):
+                rotulo = 'seta' if cat == 'seta' else 'texto'
+                linhas.append(f"  - pior {rotulo}: {arredondar(r):.2f}:1 ({fg} sobre {bg}, mínimo {minimo:g}:1) em {nome}")
+        linhas.append('')
     nao = [(n, r['motivos']) for n, r in resumo['por_tela'].items() if r['motivos']]
     if nao:
         linhas += ['## Não medidos', '', 'Texto que não tem como ser medido pelo fundo (o que não entra nas reprovações acima):', '']

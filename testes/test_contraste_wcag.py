@@ -42,6 +42,8 @@ p{margin:8px}
 <button id="desativado" disabled>Desativado</button>
 <svg width="300" height="40"><rect width="300" height="40" fill="#ffffff"/><text id="svgt" x="10" y="25" fill="#222222">Texto SVG sobre retângulo claro</text></svg>
 <button class="d">Anel interno branco</button><span class="vizinho"></span><button class="e">Anel interno preto</button><span class="vizinho"></span>
+<p><select id="contexto-caso" style="border:0;background:transparent;color:#222222"><option>Vila Serena</option></select>
+<select id="sem-excecao" style="border:0;background:transparent;color:#222222"><option>Outro campo</option></select></p>
 <button class="a">Foco branco</button><button class="b">Foco preto</button><button class="c">Sem foco</button>
 """
 
@@ -82,6 +84,23 @@ class MatematicaTest(unittest.TestCase):
         self.assertTrue(cw.reprovado(r))
 
 
+class RelatorioTest(unittest.TestCase):
+    def test_excecao_declarada_aparece_no_relatorio_com_o_pior_caso(self):
+        import tempfile
+        from pathlib import Path
+        seta = {'cat': 'seta', 's': 'select#contexto-caso', 't': 'x', 'fg': '#222222', 'bg': '#ffffff', 'r': 15.9, 'min': 3, 'excecao': 'P34'}
+        texto = {'cat': 'campo-texto', 's': 'select#contexto-caso', 't': 'x', 'fg': '#222222', 'bg': '#ffffff', 'r': 15.9, 'min': 4.5, 'excecao': 'P34'}
+        dados = {'navegador': 'x', 'problemas': [], 'gerado_em_utc': 'hoje',
+                 'resultados': {'inicio__375__claro': {'tela': 'inicio', 'largura': 375, 'tema': 'claro', 'focos': [], 'focos_invisiveis': 0, 'focos_isentos': 0,
+                                                       'texto': {'itens': [seta, texto], 'nao_medidos': [], 'por_motivo': {}, 'isentos': 0, 'nos': 2}}}}
+        with tempfile.TemporaryDirectory() as tmp:
+            md = cw.escrever_relatorio(dados, Path(tmp)).read_text(encoding='utf-8')
+        self.assertIn('## Exceções declaradas', md)
+        self.assertIn('P34', md)
+        self.assertIn('pior seta: 15.90:1', md)
+        self.assertIn('Nenhuma reprovação.', md)
+
+
 @unittest.skipUnless(PLAYWRIGHT, 'Playwright não instalado (testes/requirements-teste.txt)')
 class NavegadorTest(unittest.TestCase):
     @classmethod
@@ -96,7 +115,7 @@ class NavegadorTest(unittest.TestCase):
         pagina = cls.navegador.new_page(viewport={'width': 600, 'height': 600})
         pagina.set_content(PAGINA)
         pagina.evaluate(cw.JS_PREPARO)
-        cls.texto = pagina.evaluate(cw.JS_TEXTO)
+        cls.texto = pagina.evaluate(cw.JS_TEXTO, cw.EXCECOES_CAMPO)
         cls.pagina = pagina
         cls.problemas = []
         cls.focos = cw.medir_tela(pagina, 'sintetica', cls.problemas)['focos']
@@ -124,6 +143,17 @@ class NavegadorTest(unittest.TestCase):
         i = self.item('text#svgt')
         self.assertEqual(i['bg'], '#ffffff')
         self.assertFalse(cw.reprovado(i))
+
+    def test_excecao_p34_mede_a_seta_e_nao_a_borda(self):
+        seta = [i for i in self.texto['itens'] if i['cat'] == 'seta']
+        self.assertEqual([i['s'] for i in seta], ['select#contexto-caso'])
+        self.assertEqual(seta[0]['excecao'], 'P34')
+        self.assertFalse(cw.reprovado(seta[0]))
+        self.assertFalse([i for i in self.texto['itens'] if i['cat'] == 'campo' and i['s'].endswith('select#contexto-caso')])
+        # sem a exceção, o mesmo campo sem caixa reprova no contorno
+        sem = [i for i in self.texto['itens'] if i['cat'] == 'campo' and i['s'].endswith('select#sem-excecao')]
+        self.assertEqual(len(sem), 1)
+        self.assertTrue(cw.reprovado(sem[0]))
 
     def test_fundo_escuro(self):
         self.assertFalse(cw.reprovado(self.item('p#escuro')))
