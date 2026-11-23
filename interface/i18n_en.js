@@ -1366,6 +1366,16 @@ window.VLADO_I18N_EN = {
     // Minha conta e Equipe (conta.js, equipe.js) e o diálogo com senha (dialogo.js)
     "Sua senha": "Your password",
     // Nova apuração (passos 1 e 2)
+    "A leitura de PDF não está disponível neste computador": "PDF reading is not available on this computer",
+    "Há PDFs ainda sem preparo": "There are PDFs not yet prepared",
+    "1 PDF cadastrado ainda não foi preparado": "1 registered PDF has not been prepared yet",
+    "{n} PDFs cadastrados ainda não foram preparados": "{n} registered PDFs have not been prepared yet",
+    "Usa as cópias já cadastradas, sem reenviar.": "Uses the copies already registered, without sending again.",
+    "Páginas de": "Pages of",
+    "Só páginas deste site. A captura guarda a página como estava agora.": "Only pages from this site. The capture keeps the page as it is now.",
+    "Páginas capturadas": "Captured pages",
+    "Ler": "Read",
+    "Ler a página {id}": "Read the page {id}",
     "Ex.: Transporte escolar em Vila Serena": "E.g. School transport in Vila Serena",
     "De onde vêm as fontes?": "Where do the sources come from?",
     "Só documentos": "Documents only",

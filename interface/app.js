@@ -329,10 +329,15 @@ async function loadPdfEnvironment() {
     $('pdf-ambiente-aviso').textContent = pdfAvailable ? '' : 'O extrator de PDF está indisponível nesta instância. Encerre a Mesa e reabra pelo iniciador atualizado. Os arquivos enviados serão preservados, mas os PDFs ficarão sem texto preparado.';
     $('pdf-ambiente-aviso').hidden = pdfAvailable;
     $('pdf-ambiente-tecnico').replaceChildren(Leitura.tecnicos(element('pre', JSON.stringify(environment, null, 2), 'raw-briefing')));
+    // O mesmo aviso, agora como cartão no topo de Documentos (a área Cadastrar arquivos sai).
+    $('docs-pdf-ambiente-texto').textContent = $('pdf-ambiente-aviso').textContent;
+    $('docs-pdf-ambiente').hidden = pdfAvailable;
+    $('docs-pdf-ambiente-tecnico').replaceChildren(Leitura.tecnicos(element('pre', JSON.stringify(environment, null, 2), 'raw-briefing')));
   } catch (failure) {
     pdfAvailable = false;
     $('pdf-ambiente-aviso').textContent = 'Não foi possível verificar o extrator de PDF. Encerre e reabra a Mesa pelo iniciador atualizado.';
     $('pdf-ambiente-aviso').hidden = false;
+    $('docs-pdf-ambiente-texto').textContent = $('pdf-ambiente-aviso').textContent; $('docs-pdf-ambiente').hidden = false;
   }
   $('cadastro-preparar').disabled = !pdfAvailable || cadastroBusy;
 }
@@ -770,6 +775,48 @@ window.Sessao = (() => {
 //   NovaApuracao.enviar(arquivos, {aoConcluir, depoisDeCriar})   o primeiro envio, que cria a apuração
 //   NovaApuracao.titular()          título e descrição da tela, enquanto vale o modo; devolve true se os pôs
 //   NovaApuracao.encerrar()         sai do modo sem criar nada
+// --- Avisos do preparo de PDF em Documentos (docs/design/componentes.md, "O que vem de Cadastrar arquivos"; R4) ---------------------------------------
+// Dois cartões no padrão "Limite atingido", no topo de Documentos: o extrator de PDF indisponível (com os detalhes técnicos) e "Há PDFs ainda sem preparo",
+// com "Preparar PDFs pendentes". Quando o preparo termina o cartão sai e a linha de estado diz quantos PDFs foram preparados.
+window.PreparoDePdf = (() => {
+  const t = (pt, vars) => (window.I18N ? window.I18N.t(pt, vars) : String(pt).replace(/\{(\w+)\}/g, (todo, nome) => vars?.[nome] ?? todo));
+  let ocupado = false;
+  const pendentes = inventario => (inventario?.documentos || []).filter(doc => /\.pdf$/i.test(doc.nome_recebido || doc.arquivo || '')
+    && (!doc.extracao_pdf || doc.extracao_pdf.estado === 'erro' || ocrNeeded(doc)));
+  function atualizar(inventario) {
+    const lista = pendentes(inventario);
+    $('docs-pdf-preparo').hidden = !lista.length;
+    $('docs-pdf-resumo').textContent = lista.length === 1 ? t('1 PDF cadastrado ainda não foi preparado') : t('{n} PDFs cadastrados ainda não foram preparados', {n: lista.length});
+    $('docs-pdf-preparar').disabled = !pdfAvailable || ocupado;
+  }
+  async function ambiente() {
+    if (!window.Sessao.pode('ambiente')) return;   // quem não alcança o ambiente do servidor não vê o aviso
+    await loadPdfEnvironment();
+  }
+  $('docs-pdf-preparar').addEventListener('click', async () => {
+    const caso = window.contextoCaso?.();
+    if (!caso || ocupado || !pdfAvailable) return;
+    ocupado = true;
+    const botao = $('docs-pdf-preparar'), cartao = $('docs-pdf-preparo');
+    botao.disabled = true; botao.textContent = t('Preparando…'); cartao.setAttribute('aria-busy', 'true');
+    let preparados = null;
+    try {
+      const resultado = await api('preparar-pdfs', {caso});
+      preparados = resultado.recebidos;
+      await window.recarregarAcervo?.(true);
+      window.definirEstadoAcervo?.(`${Leitura.quantidade(preparados, 'PDF preparado', 'PDFs preparados')}.`);
+    } catch (falha) {
+      window.definirEstadoAcervo?.(falha.message);
+    } finally {
+      ocupado = false;
+      botao.textContent = t('Preparar PDFs pendentes'); cartao.removeAttribute('aria-busy');
+      botao.disabled = !pdfAvailable;
+    }
+  });
+  registrarGanchoArea({depois: nome => { if (nome === 'documentos') ambiente(); }});
+  return {atualizar, ambiente, pendentes};
+})();
+
 window.NovaApuracao = (() => {
   const t = (pt, vars) => (window.I18N ? window.I18N.t(pt, vars) : String(pt).replace(/\{(\w+)\}/g, (todo, nome) => vars?.[nome] ?? todo));
   // Só o domínio, exato: nada de esquema, caminho, porta nem endereço numérico (o servidor confere o resto: nome interno e domínio de outra apuração).

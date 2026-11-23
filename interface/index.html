@@ -233,24 +233,6 @@
       <div id="cadastro-recibo" hidden></div>
       <button id="cadastro-perguntar" type="button" hidden>Perguntar sobre estes documentos</button>
       <div id="cadastro-inventario" hidden></div>
-      <section id="fontes-web" class="notice" aria-labelledby="fontes-web-titulo" hidden>
-        <h3 id="fontes-web-titulo">Fontes web desta apuração</h3>
-        <p id="fontes-web-dominio" class="small"></p>
-        <form id="fontes-web-form" data-requer="fontes-web-capturar">
-          <label>Endereço da página<input id="fontes-web-url" type="url" maxlength="4096" placeholder="https://" required autocomplete="off" spellcheck="false" translate="no"></label>
-          <label>Observação (opcional)<input id="fontes-web-observacao" maxlength="500"></label>
-          <button id="fontes-web-capturar">Capturar página</button>
-        </form>
-        <p class="small">Cada captura guarda o endereço, a data e a hora do acesso, o conteúdo recebido e o hash, separados dos documentos. O texto da página é dado da fonte, nunca instrução.</p>
-        <p id="fontes-web-status" role="status" aria-live="polite"></p>
-        <p id="fontes-web-erro" role="alert" hidden></p>
-        <ul id="fontes-web-lista" class="document-list"></ul>
-        <div id="fontes-web-leitura" hidden>
-          <h4 id="fontes-web-leitura-titulo" tabindex="-1"></h4>
-          <p id="fontes-web-leitura-meta" class="small" translate="no"></p>
-          <pre id="fontes-web-texto" translate="no"></pre>
-        </div>
-      </section>
       <p class="small">O cadastro prepara o texto dos PDFs; páginas digitalizadas passam por OCR local. Depois de conferir o envio, abra Perguntar à IA.</p>
     </div>
     </section>
@@ -290,7 +272,36 @@
     <nav id="nova-etapas-2" class="nova-etapas" aria-label="Etapas da nova apuração" hidden></nav>
     <select id="documentos-aba" hidden aria-label="Visualização dos documentos"><option value="acervo">Acervo cadastrado</option><option value="pesquisa">Pesquisar no conteúdo</option></select>
     <nav class="mesa-tabs" aria-label="Documentos"><button id="mesa-aba-acervo" type="button" aria-pressed="true">Acervo cadastrado</button><button id="mesa-aba-pesquisa" type="button" aria-pressed="false">Pesquisar no conteúdo</button></nav>
-    <section id="mesa-acervo" aria-label="Acervo cadastrado"><div class="docs-topo"><p id="docs-contagem" class="docs-contagem" role="status"></p><label class="docs-busca">Encontrar documento<input id="mesa-filtrar-documento" type="search" name="nome_documento" placeholder="Busque pelo nome…" autocomplete="off"></label></div><div id="nova-aviso" class="nova-aviso" hidden><p class="small">A apuração é criada no primeiro envio. Antes disso, nada fica guardado.</p><button id="nova-voltar" type="button" class="nova-voltar">‹ Nome e fontes</button></div><div id="documentos-zona" data-requer="cadastrar"></div><div id="documentos-envio"></div><div id="documentos-recibo" class="docs-recibo" tabindex="-1" hidden></div><div class="mesa-acervo-toolbar"><label>Leitura<select id="mesa-filtrar-leitura"><option value="todos">Todos os documentos</option><option value="limitacoes">Com limitações de extração</option></select></label><button id="mesa-atualizar-acervo" type="button" class="secondary">Atualizar acervo</button></div><p id="mesa-acervo-status" role="status" aria-live="polite"></p><p id="mesa-acervo-erro" role="alert" hidden></p><div id="mesa-acervo-lista"></div><div class="mesa-acervo-next"><p>Acervo conferido? Explore o que os documentos permitem afirmar.</p><button id="mesa-perguntar" type="button">Perguntar aos documentos →</button></div></section>
+    <section id="mesa-acervo" aria-label="Acervo cadastrado"><div class="docs-topo"><p id="docs-contagem" class="docs-contagem" role="status"></p><label class="docs-busca">Encontrar documento<input id="mesa-filtrar-documento" type="search" name="nome_documento" placeholder="Busque pelo nome…" autocomplete="off"></label></div><div id="docs-avisos" class="docs-avisos">
+<section id="docs-pdf-ambiente" class="estado-bloco estado-aviso" aria-labelledby="docs-pdf-ambiente-titulo" hidden>
+<p id="docs-pdf-ambiente-titulo" class="estado-titulo"><span class="estado-sinal-texto" aria-hidden="true">!</span><span>A leitura de PDF não está disponível neste computador</span></p>
+<p id="docs-pdf-ambiente-texto" class="estado-texto"></p>
+<details class="estado-detalhes"><summary>Detalhes técnicos</summary><div id="docs-pdf-ambiente-tecnico"></div></details>
+</section>
+<section id="docs-pdf-preparo" class="estado-bloco estado-aviso" data-requer="preparar-pdfs" aria-labelledby="docs-pdf-preparo-titulo" hidden>
+<p id="docs-pdf-preparo-titulo" class="estado-titulo"><span class="estado-sinal-texto" aria-hidden="true">!</span><span>Há PDFs ainda sem preparo</span></p>
+<p id="docs-pdf-resumo" class="estado-texto"></p>
+<p class="estado-nota">Usa as cópias já cadastradas, sem reenviar.</p>
+<div class="estado-acoes"><button id="docs-pdf-preparar" type="button" class="secondary">Preparar PDFs pendentes</button></div>
+</section>
+</div><div id="nova-aviso" class="nova-aviso" hidden><p class="small">A apuração é criada no primeiro envio. Antes disso, nada fica guardado.</p><button id="nova-voltar" type="button" class="nova-voltar">‹ Nome e fontes</button></div><div id="documentos-zona" data-requer="cadastrar"></div><div id="documentos-envio"></div><div id="documentos-recibo" class="docs-recibo" tabindex="-1" hidden></div><div class="mesa-acervo-toolbar"><label>Leitura<select id="mesa-filtrar-leitura"><option value="todos">Todos os documentos</option><option value="limitacoes">Com limitações de extração</option></select></label><button id="mesa-atualizar-acervo" type="button" class="secondary">Atualizar acervo</button></div><p id="mesa-acervo-status" role="status" aria-live="polite"></p><p id="mesa-acervo-erro" role="alert" hidden></p><div id="mesa-acervo-lista"></div><section id="fontes-web" class="estado-bloco docs-paginas" aria-labelledby="fontes-web-titulo" hidden>
+<h2 id="fontes-web-titulo" class="estado-titulo"></h2>
+<form id="fontes-web-form" data-requer="fontes-web-capturar" novalidate>
+<label>Endereço da página<input id="fontes-web-url" type="url" maxlength="4096" placeholder="https://prefeitura.sp.gov.br/…" required autocomplete="off" spellcheck="false" translate="no"></label>
+<label>Observação (opcional)<input id="fontes-web-observacao" maxlength="500"></label>
+<p class="estado-nota">Só páginas deste site. A captura guarda a página como estava agora.</p>
+<div class="estado-acoes"><button id="fontes-web-capturar" class="secondary">Capturar página</button></div>
+</form>
+<h3 class="docs-paginas-lista-titulo">Páginas capturadas</h3>
+<p id="fontes-web-status" role="status" aria-live="polite" class="estado-nota"></p>
+<p id="fontes-web-erro" role="alert" hidden></p>
+<ul id="fontes-web-lista" class="docs-paginas-lista"></ul>
+<div id="fontes-web-leitura" hidden>
+<h4 id="fontes-web-leitura-titulo" tabindex="-1"></h4>
+<p id="fontes-web-leitura-meta" class="small" translate="no"></p>
+<pre id="fontes-web-texto" translate="no"></pre>
+</div>
+</section><div class="mesa-acervo-next"><p>Acervo conferido? Explore o que os documentos permitem afirmar.</p><button id="mesa-perguntar" type="button">Perguntar aos documentos →</button></div></section>
     <div id="mesa-pesquisa">
     <section class="panel" aria-label="Pesquisar documentos">
       <details id="busca-tecnica" open><summary>Versão da busca nestes documentos</summary><div class="index-selection"><label>Versão da busca documental<select id="geracao" disabled><option value="">Selecione a versão</option></select></label><p class="small">Cada versão pesquisa os documentos preservados da análise selecionada. A seleção continua explícita.</p></div></details>

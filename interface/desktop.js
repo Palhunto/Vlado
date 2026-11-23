@@ -319,11 +319,12 @@
     const ticket=++sequence;loadedCase=caseId;inventory=null;loading=!!caseId;$('mesa-acervo-erro').hidden=true;window.barraMesa.definir('documentos','');
     $('mesa-atualizar-acervo').disabled=loading;
     $('mesa-filtrar-documento').value='';$('mesa-filtrar-leitura').value='todos';documentTable();home();
+    window.PreparoDePdf.atualizar(null);window.FontesWeb?.mostrar(null);
     if(!caseId){text('mesa-acervo-status','Selecione a apuração no topo da mesa.');text('mesa-versao','Documentos, achados e fontes');return;}
     text('mesa-acervo-status','Conferindo os documentos cadastrados…');text('mesa-versao','Conferindo acervo…');
     try{
       const result=await api('inventario',{caso:caseId});if(ticket!==sequence||caseId!==current())return;
-      inventory=result;documentTable();home();window.barraMesa.definir('documentos',result.total_documentos?String(result.total_documentos):'');text('mesa-versao',`Versão dos documentos: ${result.corpus_id}`);text('mesa-acervo-status','Os originais estão preservados; a extração não substitui a conferência.');
+      inventory=result;documentTable();home();window.PreparoDePdf.atualizar(result);window.FontesWeb?.mostrar(result);window.barraMesa.definir('documentos',result.total_documentos?String(result.total_documentos):'');text('mesa-versao',`Versão dos documentos: ${result.corpus_id}`);text('mesa-acervo-status','Os originais estão preservados; a extração não substitui a conferência.');
     }catch(error){if(ticket===sequence){$('mesa-acervo-erro').textContent=error.message;$('mesa-acervo-erro').hidden=false;text('mesa-acervo-status','A conferência do acervo falhou. Isso não equivale a um acervo vazio.');text('mesa-versao','Acervo indisponível');}}
     finally{if(ticket===sequence){loading=false;$('mesa-atualizar-acervo').disabled=false;}}
   }
@@ -364,6 +365,7 @@
       card.dataset.esgotada=String(spent);card.hidden=false;
     }catch(_){card.hidden=true;}
   }
+  window.recarregarAcervo=force=>loadInventory(force);window.definirEstadoAcervo=mensagem=>text('mesa-acervo-status',mensagem);
   window.atualizarCotaBarra=force=>loadQuota(force);   // codex.js chama ao terminar cada pergunta
   loadQuota(true);
   window.addEventListener('focus',()=>loadQuota());

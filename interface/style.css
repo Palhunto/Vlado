@@ -2640,3 +2640,17 @@ body[data-nova="passo2"] #area-documentos :is(.mesa-tabs,.docs-topo,.mesa-acervo
   .nova-acoes button{width:100%}
   .nova-cartao{padding:var(--espaco-4)}
 }
+
+/* Documentos: avisos do preparo de PDF e páginas do site (docs/design/componentes.md, "O que vem de Cadastrar arquivos"). Só tokens. */
+.docs-avisos{display:flex;flex-direction:column;gap:var(--espaco-2);margin:0 0 var(--espaco-3)}
+.docs-avisos:not(:has(.estado-bloco:not([hidden]))){display:none}
+.docs-avisos .estado-bloco{margin:0}
+.docs-paginas{margin:var(--espaco-4) 0 0}
+.docs-paginas h2{margin:0}
+.docs-paginas form{display:flex;flex-direction:column;gap:var(--espaco-3)}
+.docs-paginas form>.campo-erro{margin-top:calc(var(--espaco-1) - var(--espaco-3))}
+.docs-paginas-lista-titulo{margin:var(--espaco-3) 0 0;font-size:var(--text-base);font-weight:600}
+.docs-paginas-lista{display:flex;flex-direction:column;gap:var(--espaco-2);margin:0;padding:0;list-style:none}
+.docs-ler{min-height:var(--espaco-6);padding:0;border:0;background:none;color:var(--theme-accent);font-size:var(--text-md);font-weight:600;text-decoration:underline}
+.docs-ler:hover{background:none;color:var(--theme-primary-hover)}
+body[data-nova="passo2"] #area-documentos :is(.docs-avisos,.docs-paginas){display:none}
