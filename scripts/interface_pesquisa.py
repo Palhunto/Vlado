@@ -700,7 +700,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 return
             primeiro = path in ('/', '/entrar', '/primeiro-acesso') and self._primeiro_acesso()
             if path == '/primeiro-acesso' and primeiro:
-                self._send(200, rotas_estaticas.conteudo('entrar.html'), 'text/html; charset=utf-8')
+                self._pagina_de_entrada()
                 return
             if path == '/primeiro-acesso' or (primeiro and path in ('/', '/entrar')):
                 self._send(303, b'', 'text/plain; charset=utf-8',
@@ -719,7 +719,7 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 # Static page without case data; the token stays in the path, read by entrar.js. Like every answer,
                 # it goes with `Cache-Control: no-store` and `Referrer-Policy: no-referrer` (`_send`). The page that
                 # resolves a pending item of the account is of the same family: it reads the session by itself.
-                self._send(200, rotas_estaticas.conteudo('entrar.html'), 'text/html; charset=utf-8')
+                self._pagina_de_entrada()
                 return
             if path in ('/', '/api/catalogo', '/api/integracao', '/api/fila', '/api/cota') and self._principal() is None:
                 self._sem_principal(api=path != '/')

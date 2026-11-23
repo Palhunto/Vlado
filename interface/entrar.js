@@ -221,7 +221,9 @@
   const CHAVE_TEMA = 'apuracao:tema';   // shared with desktop.js
   const ler = chave => { try { return localStorage.getItem(chave) || ''; } catch (_) { return ''; } };
   const gravar = (chave, valor) => { try { localStorage.setItem(chave, valor); } catch (_) { /* Still switches. */ } };
-  let lingua = ler(CHAVE_IDIOMA) === 'en' ? 'en' : 'pt';
+  // A escolha guardada neste navegador vence; sem ela vale o idioma que o servidor pôs na página (P42: conta, Accept-Language, padrão do servidor), o mesmo da Mesa.
+  const guardado = ler(CHAVE_IDIOMA);
+  let lingua = guardado === 'en' || guardado === 'pt' ? guardado : (document.body.dataset.idiomaPadrao === 'en' ? 'en' : 'pt');
   let ultimaMensagem = null;
   let redesenhar = null;   // o texto montado em JS da seção aberta (convite, estados); refeito ao trocar o idioma
   const t = chave => TEXTOS[lingua][chave] || TEXTOS.pt[chave] || chave;
