@@ -255,12 +255,12 @@ Onde: cabeçalho dos quadros. Linha com intervalo de 4. Cada aba é `<a>`: altur
 
 <a id="faixa-que-rola"></a>
 
-**Faixa que rola para o lado** (Q5 da Coruja, 23/11/2026). Vale para as pílulas dos quadros e para a linha de etapas (`#mesa-etapas`) abaixo de 720 px, as duas faixas da Mesa que rolam por dentro. A 320 px, a linha de etapas do Caderno deixava o passo atual, "4 Caderno", fora da vista. Nos Quadros, apareciam duas das cinco pílulas, cortadas na divisa entre elas, e a faixa parecia completa. Quando o conteúdo passa da largura da faixa:
+**Faixa que rola para o lado** (Q5 da Coruja, 23/11/2026). Vale, abaixo de 720 px, para as quatro faixas da Mesa que rolam por dentro: a linha de etapas (`#mesa-etapas`, item ativo por `aria-current="step"`), as pílulas dos Quadros (`.quadros-abas`, por `aria-selected="true"`), as abas de Documentos (`.mesa-tabs`, "Acervo cadastrado" e "Pesquisar no conteúdo") e as do Caderno (`.notebook-tabs`, "Notas e redação" e "Trechos com fonte e contribuições"), as duas últimas por `aria-pressed="true"` (escopo completado pela T1 da Coruja sobre `bb83992`; a 320 px, "Pesquisar no conteúdo" fica cortada). A 320 px, a linha de etapas do Caderno deixava o passo atual, "4 Caderno", fora da vista. Nos Quadros, apareciam duas das cinco pílulas, cortadas na divisa entre elas, e a faixa parecia completa. Quando o conteúdo passa da largura da faixa:
 
 - **O item ativo fica à vista.** Ao desenhar a faixa e ao trocar de item, só a faixa rola (`scrollLeft`, nunca a página) até o item ativo caber inteiro, com 16 px de folga do lado de onde veio. A rolagem é instantânea, sem animação.
-- **Esmaecido na borda.** Do lado em que ainda há conteúdo, os últimos 32 px da faixa esmaecem até sumir. O esmaecido é uma máscara (`mask-image` com gradiente de opaco a transparente), e não uma cor, para valer nos dois temas sem token novo. O lado vem de `data-rola` (`fim`, `inicio` ou `ambos`), recalculado ao rolar e ao redimensionar. Sem estouro, a faixa fica sem o atributo e sem máscara. A máscara vai no elemento que rola. Se ele tiver fundo próprio, como a faixa dos quadros (`--theme-surface`), o fundo passa ao elemento pai, para não esmaecer junto.
+- **Esmaecido na borda.** Do lado em que ainda há conteúdo, os últimos 32 px da faixa esmaecem até sumir. O esmaecido é uma máscara (`mask-image` com gradiente de opaco a transparente), e não uma cor, para valer nos dois temas sem token novo. O lado vem de `data-rola` (`fim`, `inicio` ou `ambos`), recalculado ao rolar e ao redimensionar. Sem estouro, a faixa fica sem o atributo e sem máscara. A máscara vai no próprio elemento que rola. Nenhuma das quatro faixas tem fundo próprio no CSS (as pílulas dos Quadros ficam sobre o fundo do painel), então o esmaecido revela o fundo de trás. Se alguma ganhar fundo, ele passa ao elemento pai, para não esmaecer junto.
 - **Nada além disso.** Sem setas e sem barra de rolagem à vista (a linha de etapas já a esconde). Pelo teclado, o navegador já traz à vista o item que recebe o foco. Como não há animação, `prefers-reduced-motion` não muda nada aqui.
-- **Prova:** capturas a 320, 390 e 430 px do Caderno, de Documentos e dos Quadros, nos dois temas, com o item ativo inteiro dentro da faixa. A medida de reflow passa a conferir também os elementos que rolam por dentro, além da página.
+- **Prova:** capturas a 320, 390 e 430 px do Caderno (etapas e abas), de Documentos (etapas e abas, com "Pesquisar no conteúdo" ativa) e dos Quadros, nos dois temas, com o item ativo inteiro dentro da faixa. A medida de reflow passa a conferir também os elementos que rolam por dentro, além da página.
 
 <a id="achado"></a>
 
@@ -767,6 +767,18 @@ Por que gaveta em 1024 px: com a barra fixa de 232 px, a tela de conferir ficari
 Pranchas: `conferir-achado-{claro,escuro}-390`, `conferir-achado-original-{claro,escuro}-390`, `visao-geral-{claro,escuro}-390`.
 
 Cabeçalho: o do celular do canvas (60 px: "Abrir menu", "Apuração" sobre o nome cortado com reticências, cota à direita). Margens de 16 px. A barra lateral é a mesma gaveta do tablet, com a largura de 256 px.
+
+<a id="cabecalho-celular"></a>
+
+**Cabeçalho do celular, abaixo de 720 px** (aceito pelo Maestro em 23/11/2026, sobre o que entrou com o botão "Configurações" em `29aeafa`). A 375 px, o cabeçalho tinha o menu, o seletor e "Configurações", e o seletor ficava cortado sem reticências ("Escolha uma a"). Abaixo de 720 px, o cabeçalho leva só três coisas:
+
+- **"Abrir menu"**, o botão só com o ícone;
+- **"Apuração" sobre o nome:** o seletor ocupa o espaço que sobra (`min-width: 0`, `flex: 1`), e o nome é cortado com reticências (`text-overflow: ellipsis`, `white-space: nowrap`, `overflow: hidden`). O nome inteiro continua nas opções do seletor;
+- **a cota à direita:** "R$ 18,40 de 50", em 14 `--theme-muted`, sem quebrar, como na tabela dos [cabeçalhos](#cabecalhos). Ela segue as regras do cartão da cota: some sem a rota ou sem sessão e vira "! Cota esgotada" com o teto atingido. O cabeçalho mostra o mesmo bloco que o [cartão da cota](#barra-lateral) escolhe, o de menor saldo, só no formato curto. Quando for a cota da instalação, o texto é "Cota da instalação R$ 40 de 200" (esgotada, "! Cota da instalação esgotada"). A parte da chave própria ("dos quais…" e "Chave própria da redação") não entra no cabeçalho e fica só no cartão. Assim o administrador vê no cabeçalho o mesmo número da barra (C1 da Coruja sobre `3d47814`).
+
+**"Configurações" sai do cabeçalho e vai para a gaveta**, no grupo em que Idioma, Tema e Sair já entram no celular (`.mesa-drawer-controls`, logo abaixo das áreas e acima do cartão da cota e do cartão da pessoa), como o primeiro do grupo. Ela continua aparecendo só para quem tem a capacidade (`data-requer="ia-config"`). A partir de 720 px, volta ao cabeçalho, no lugar de hoje.
+
+Prova: Visão geral e Minha conta a 320, 375 e 430 px, nos dois temas, com um nome de apuração longo, e a gaveta aberta a 375 px.
 
 **Conferir achado, 390.** Coluna única: título de 28 px com o progresso, caixa "Sua pergunta", lista de achados. No achado aberto, as ações ficam empilhadas em botões de 48 px de largura cheia, nesta ordem: "Ver o trecho no original" (secundário), "Confere com o original" (principal), "Precisa de ajuste" (secundário), "Sem suporte" (recusa).
 
