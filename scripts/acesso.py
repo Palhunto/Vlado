@@ -344,6 +344,11 @@ class ConviteDuplicado(Recusada):
     status, codigo, motivo = 400, 'convite_duplicado', 'validacao'
 
 
+class LimiteDeExportacoes(Recusada):
+    """The own data exported too many times in the hour (X1 of the review of 4b-2); W1: the text tells the hour."""
+    status, codigo, motivo = 429, 'limite_de_exportacoes', 'limite'
+
+
 class LimiteDeConvites(Recusada):
     """Too many pending invitations in the newsroom, or the same one sent again too soon."""
     status, codigo, motivo = 429, 'limite_de_convites', 'limite'
@@ -3202,20 +3207,31 @@ def _limite_de_exportacao(cid: str, momento: datetime) -> None:
         fila = _EXPORTACOES.setdefault(cid, deque())
         while fila and (momento - fila[0]).total_seconds() >= EXPORTACAO_JANELA_S:
             fila.popleft()
-        if len(fila) >= EXPORTACOES_POR_JANELA:
-            registro_acesso.registrar('admin_recusada', 'falha', cid, motivo='bloqueado')
-            raise Bloqueado(BLOQUEADO)
+        if len(fila) >= EXPORTACOES_POR_JANELA:  # audited by the route, as every refusal of a conta-* (`admin_recusada`)
+            raise LimiteDeExportacoes(f'Você já exportou os seus dados {EXPORTACOES_POR_JANELA} vezes na última hora. '
+                                      'Tente de novo em até uma hora.')
         fila.append(momento)
         if len(_EXPORTACOES) > 10000:
             for chave in [k for k, f in _EXPORTACOES.items() if not f or (momento - f[-1]).total_seconds() >= EXPORTACAO_JANELA_S]:
                 _EXPORTACOES.pop(chave, None)
 
 
+def casos_da_redacao_da_conta(root: Path, cid) -> list[str]:
+    """The cases of the account's own newsroom that were not deleted, including the ones it no longer takes part in:
+    what it created there is still its own (4b-2b). Never a case of another newsroom; [] for an unknown account."""
+    if not isinstance(cid, str) or not ID_CONTA.fullmatch(cid):
+        return []
+    with _bd(root) as tx:
+        return [linha['caso'] for linha in tx.todos(
+            'SELECT c.caso FROM casos c JOIN contas a ON a.organizacao = c.organizacao'
+            ' WHERE a.id = ? AND a.excluida_em IS NULL AND c.apagada_em IS NULL ORDER BY c.caso', cid)]
+
+
 def exportar_conta(root: Path, cid) -> dict:
     """`conta-exportar`: what the store keeps about the person, for the person (contract, 8.4). Nothing of anybody
     else, and never a secret: no password hash, token, ticket, seed, reserve code, csrf, session id or cookie, device
     mark or its summary, nor AI key. The content of the cases is the newsroom's and leaves by their own export.
-    At most EXPORTACOES_POR_JANELA files an hour per account (429 `bloqueado`)."""
+    At most EXPORTACOES_POR_JANELA files an hour per account (429 `limite_de_exportacoes`)."""
     if isinstance(cid, str):
         _limite_de_exportacao(cid, agora())
     with _bd(root) as tx:

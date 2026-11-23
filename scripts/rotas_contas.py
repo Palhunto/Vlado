@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import html
 from http.cookies import SimpleCookie
+import importlib
 import ipaddress
 import json
 import os
@@ -137,8 +138,8 @@ def conta_propria(root, operation, data, principal, ip=None, origem=None, marca=
         raise ValueError('Contas só existem nos modos com login.')
     if operation == 'conta-ver':
         return {**acesso.ver_conta(root, conta, termos), 'sessao': atual}
-    if operation == 'conta-exportar':  # the own data, as a file (contract, 8.4; 4b-2)
-        dados = acesso.exportar_conta(root, conta)
+    if operation == 'conta-exportar':  # the own data, as a file (contract, 8.4; 4b-2 and 4b-2b)
+        dados = {**acesso.exportar_conta(root, conta), **partes_de_outros_donos(root, conta)}
         return Arquivo(f'vlado-meus-dados-{dados["gerado_em"][:10]}.json',
                        json.dumps(dados, ensure_ascii=False, indent=2).encode('utf-8'))
     if operation == 'conta-excluir':  # the own account, for good (contract, 8.4; 4b-3): the handler clears the cookies
@@ -164,6 +165,58 @@ def conta_propria(root, operation, data, principal, ip=None, origem=None, marca=
         return {'encerradas': acesso.encerrar_outras_sessoes(root, conta, atual),
                 'sessoes': acesso.sessoes_da_conta(root, conta, atual)}
     return {'sessoes': acesso.sessoes_da_conta(root, conta, atual)}
+
+
+# The parts of the export that other owners' files give (contract, 4b-2b). Each module that records who created
+# something answers `itens_da_conta(root, conta, casos)` with `[{tipo, caso, criado_em, id}]`; the audit log answers
+# `registro_acesso.acessos_da_conta(root, conta)`. A part that is missing (its function does not exist yet) or cannot
+# be read leaves its code in `incompleto`, and the rest of the file still leaves.
+MODULOS_DE_ITENS = ('apuracao', 'caderno', 'revisao_humana', 'conferencia_redacao', 'codex_apuracao')
+_CAMPOS_DO_ITEM = ('tipo', 'caso', 'criado_em', 'id')
+MAX_ITENS_CRIADOS = 20000
+
+
+def _itens_criados(root, conta) -> list | None:
+    """What the person created in the cases of the own newsroom, from every module, or None while one is missing.
+    Each item is checked here too: the four fields only, as short text, and a case of the own newsroom."""
+    casos = acesso.casos_da_redacao_da_conta(root, conta)
+    permitidos, itens = set(casos), []
+    for nome in MODULOS_DE_ITENS:
+        try:
+            ler = getattr(importlib.import_module(nome), 'itens_da_conta', None)
+        except ImportError:
+            ler = None
+        if ler is None:
+            return None
+        try:
+            lidos = ler(root, conta, list(casos))
+        except (ValueError, OSError):
+            return None
+        for item in lidos if isinstance(lidos, list) else ():
+            if (isinstance(item, dict) and all(isinstance(item.get(c), str) and 0 < len(item[c]) <= 200 for c in _CAMPOS_DO_ITEM)
+                    and item['caso'] in permitidos):
+                itens.append({c: item[c] for c in _CAMPOS_DO_ITEM})
+    itens.sort(key=lambda item: (item['criado_em'], item['tipo'], item['id']))
+    return itens[-MAX_ITENS_CRIADOS:]
+
+
+def _acessos(root, conta) -> list | None:
+    ler = getattr(registro_acesso, 'acessos_da_conta', None)
+    if ler is None:
+        return None
+    try:
+        return ler(root, conta)
+    except (ValueError, OSError):
+        return None
+
+
+def partes_de_outros_donos(root, conta) -> dict:
+    """`itens_criados` and `acessos` of the export, each one a list or None, and `incompleto` with the codes of the
+    parts that are not in the file (`itens_criados`, `registro_de_acesso`), empty when the file is whole."""
+    itens, acessos = _itens_criados(root, conta), _acessos(root, conta)
+    return {'itens_criados': itens, 'acessos': acessos,
+            'incompleto': [codigo for codigo, parte in (('itens_criados', itens), ('registro_de_acesso', acessos))
+                           if parte is None]}
 
 
 class RotasContas:

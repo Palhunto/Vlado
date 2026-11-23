@@ -12,6 +12,7 @@ import re
 import sqlite3
 import sys
 import time
+import types
 import unittest
 from unittest.mock import patch
 
@@ -21,6 +22,8 @@ import acesso
 import cenario_redacoes as cenario
 from cenario_redacoes import SENHA
 import fator_de_teste
+import registro_acesso
+import rotas_contas
 import segredos
 
 CHAVE_IA = 'sk-sentinela-da-chave-de-ia-000SENTINELA'
@@ -51,9 +54,14 @@ class ExportarTest(cenario.DuasRedacoes):
         finally:
             con.close()
 
+    def sem_partes(self):
+        """The audit log's part absent, and no module answering for the items: the file says both are missing."""
+        return patch.object(registro_acesso, 'acessos_da_conta', None, create=True)
+
     def test_o_arquivo_e_um_anexo_json_com_a_conta_e_o_que_falta(self):
         sessao, cid = self.nova()
-        status, cabecalhos, corpo = self.exportar(sessao)
+        with self.sem_partes():
+            status, cabecalhos, corpo = self.exportar(sessao)
         self.assertEqual(status, 200, corpo[:200])
         self.assertEqual(cabecalhos['Content-Type'], 'application/json; charset=utf-8')
         self.assertRegex(cabecalhos['Content-Disposition'], r'^attachment; filename="vlado-meus-dados-\d{4}-\d{2}-\d{2}\.json"$')
@@ -62,7 +70,9 @@ class ExportarTest(cenario.DuasRedacoes):
         self.assertEqual((dados['formato'], dados['versao'], dados['incompleto']),
                          ('vlado-meus-dados', 1, ['itens_criados', 'registro_de_acesso']))
         self.assertEqual(set(dados), {'formato', 'versao', 'gerado_em', 'conta', 'redacao', 'segundo_fator', 'termos',
-                                      'sessoes', 'aparelhos', 'participacoes', 'eventos', 'incompleto'})
+                                      'sessoes', 'aparelhos', 'participacoes', 'eventos', 'itens_criados', 'acessos',
+                                      'incompleto'})
+        self.assertEqual((dados['itens_criados'], dados['acessos']), (None, None))
         self.assertEqual((dados['conta']['id'], dados['conta']['papel'], dados['redacao']['id'], dados['participacoes']),
                          (cid, 'reporter', self.a, ['alpha']))
         self.assertTrue(dados['sessoes'] and dados['aparelhos'])
@@ -160,7 +170,10 @@ class ExportarTest(cenario.DuasRedacoes):
         for _ in range(acesso.EXPORTACOES_POR_JANELA):
             self.assertEqual(self.exportar(sessao)[0], 200)
         status, _, corpo = self.exportar(sessao)
-        self.assertEqual((status, json.loads(corpo).get('codigo')), (429, 'bloqueado'))
+        recusa = json.loads(corpo)
+        self.assertEqual((status, recusa.get('codigo')), (429, 'limite_de_exportacoes'))
+        self.assertIn('Tente de novo em até uma hora', recusa['erro'])  # W1: the hour, not "a few minutes"
+        self.assertNotIn('minutos', recusa['erro'])
         self.assertEqual(self.exportar(self.nova()[0])[0], 200)
         with patch('acesso.agora', return_value=acesso.agora() + acesso.timedelta(seconds=acesso.EXPORTACAO_JANELA_S)):
             self.assertEqual(self.exportar(sessao)[0], 200)  # the window passed
@@ -171,6 +184,56 @@ class ExportarTest(cenario.DuasRedacoes):
             'EXPLAIN QUERY PLAN SELECT em, tipo, conta, por FROM eventos WHERE organizacao = ? AND (conta = ? OR por = ?)'
             ' AND em > ? ORDER BY n', self.a, 'c' * 16, 'c' * 16, '2026-01-01T00:00:00Z'))
         self.assertIn('eventos_por_organizacao', plano)
+
+    def test_acessos_do_registro_entram_e_o_que_falha_fica_em_incompleto(self):
+        # 4b-2b: the lines of the audit log the person caused, from the Platform's function, as it gives them.
+        sessao, cid = self.nova()
+        linhas = [{'em': '2026-11-23T10:00:00Z', 'evento': 'login_ok', 'resultado': 'ok', 'cliente': 'web', 'ip': '203.0.113.9'}]
+        pedidos = []
+        def acessos(root, conta):
+            pedidos.append(conta)
+            return linhas
+        with patch.object(registro_acesso, 'acessos_da_conta', acessos, create=True):
+            dados = json.loads(self.exportar(sessao)[2])
+        self.assertEqual(pedidos, [cid])  # only the own account, from the session
+        self.assertEqual((dados['acessos'], dados['incompleto']), (linhas, ['itens_criados']))
+        for erro in (OSError('pasta ilegível'), ValueError('linha ilegível')):
+            with patch.object(registro_acesso, 'acessos_da_conta', side_effect=erro, create=True):
+                status, _, corpo = self.exportar(sessao)
+            dados = json.loads(corpo)
+            self.assertEqual((status, dados['acessos'], dados['incompleto']), (200, None, ['itens_criados', 'registro_de_acesso']))
+
+    def test_itens_criados_de_cada_modulo_so_da_propria_redacao(self):
+        # 4b-2b: every module answers itens_da_conta(root, conta, casos); the junction asks with the cases of the own
+        # newsroom and keeps only the four fields of an item of those cases, whatever a module sends.
+        sessao, cid = self.nova()
+        pedidos = []
+        def itens(root, conta, casos):
+            pedidos.append((conta, sorted(casos)))
+            return [{'tipo': 'nota', 'caso': 'alpha', 'criado_em': '2026-11-20T10:00:00Z', 'id': 'E1', 'titulo': 'segredo'},
+                    {'tipo': 'nota', 'caso': cenario.CASO_B, 'criado_em': '2026-11-21T10:00:00Z', 'id': 'E2'},
+                    {'tipo': 'nota', 'caso': 'gama', 'criado_em': 7, 'id': 'E3'},
+                    'lixo']
+        falso = types.ModuleType('modulo_de_itens_falso')
+        falso.itens_da_conta = itens
+        with patch.dict(sys.modules, {'modulo_de_itens_falso': falso}), \
+                patch.object(rotas_contas, 'MODULOS_DE_ITENS', ('modulo_de_itens_falso',)), \
+                patch.object(registro_acesso, 'acessos_da_conta', lambda root, conta: [], create=True):
+            dados = json.loads(self.exportar(sessao)[2])
+        self.assertEqual(dados['itens_criados'], [{'tipo': 'nota', 'caso': 'alpha', 'criado_em': '2026-11-20T10:00:00Z', 'id': 'E1'}])
+        self.assertEqual(dados['incompleto'], [])  # whole: both parts in
+        (conta, casos), = pedidos
+        self.assertEqual(conta, cid)
+        self.assertNotIn(cenario.CASO_B, casos)  # never a case of the other newsroom
+        self.assertTrue({'alpha', 'gama', 'delta'} <= set(casos))  # every case of the newsroom, not only the own ones
+        # A module whose function does not exist yet, or that fails, leaves the code in `incompleto`.
+        for modulo in (types.ModuleType('modulo_de_itens_falso'), falso):
+            with patch.dict(sys.modules, {'modulo_de_itens_falso': modulo}), \
+                    patch.object(rotas_contas, 'MODULOS_DE_ITENS', ('modulo_de_itens_falso',)), \
+                    patch.object(falso, 'itens_da_conta', side_effect=OSError('ilegível')), \
+                    patch.object(registro_acesso, 'acessos_da_conta', lambda root, conta: [], create=True):
+                dados = json.loads(self.exportar(sessao)[2])
+            self.assertEqual((dados['itens_criados'], dados['incompleto']), (None, ['itens_criados']))
 
     @staticmethod
     def downloads(registrar):
