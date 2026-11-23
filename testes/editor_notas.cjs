@@ -7,8 +7,19 @@ async function more(page){
 }
 async function mode(page,name){
   await more(page);
-  await page.locator('#apuracao-vditor button[data-type="edit-mode"]').click();
-  await page.locator(`#apuracao-vditor button[data-mode="${name}"]`).click();
+  // O menu dos modos do Vditor abre ao passar o mouse e ao clicar: espera a barra assentar, passa o mouse e só clica se ainda não abriu
+  // (um clique a mais fecharia o menu aberto; intermitência medida em qa_visual).
+  const alvo=page.locator(`#apuracao-vditor button[data-mode="${name}"]`);
+  const modo=page.locator('#apuracao-vditor button[data-type="edit-mode"]');
+  await page.locator('#apuracao-vditor .vditor-toolbar').waitFor({state:'visible'});
+  await page.waitForTimeout(300);
+  await modo.hover();
+  const aberto=()=>alvo.waitFor({state:'visible',timeout:2500}).then(()=>true,()=>false);
+  if(!await aberto()){
+    await modo.click();
+    if(!await aberto()){await modo.click();await alvo.waitFor({state:'visible',timeout:4000});}
+  }
+  await alvo.click();
 }
 async function write(page,text){
   if(!await page.locator('#apuracao-vditor .vditor-sv').isVisible())await mode(page,'sv');
