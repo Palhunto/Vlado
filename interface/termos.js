@@ -99,7 +99,7 @@
       controle.disabled = true; status.hidden = false; status.classList.remove('fator-erro'); status.textContent = t('Preparando o arquivo…');
       try {
         const feito = await window.DadosConta.exportar();
-        status.textContent = feito.incompleto.length ? `${t('Arquivo baixado.')} ${t('Ainda não traz: {itens}.', {itens: feito.incompleto.map(item => t(item)).join('; ')})}` : t('Arquivo baixado.');
+        status.textContent = feito.incompleto.length ? `${t('Arquivo baixado.')} ${t('Ainda não traz: {itens}.', {itens: feito.incompleto.join('; ')})}` : t('Arquivo baixado.');
       } catch (falha) { status.textContent = textoDoErro(falha); status.classList.add('fator-erro'); }
       controle.disabled = false;
     }

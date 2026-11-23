@@ -1783,6 +1783,8 @@ window.VLADO_I18N_EN = {
     "Ainda não traz: {itens}.": "Not yet included: {itens}.",
     "notas, revisões e conversas que você criou": "notes, reviews and conversations you created",
     "acessos do registro de auditoria": "accesses in the audit log",
+    "conversas criadas antes de {dia}": "conversations created before {dia}",
+    "conversas criadas antes de uma data que o arquivo não informa": "conversations created before a date the file does not give",
     "Excluir a conta": "Delete the account",
     "Excluir a sua conta?": "Delete your account?",
     "Excluindo…": "Deleting…",
@@ -2074,6 +2076,7 @@ window.VLADO_I18N_EN = {
     ia_tempo_etapa: "The step went over its time limit.",
     senha_necessaria: "Type your password to confirm.",
     senha_atual_incorreta: "Wrong password. Check it and try again.",
+    limite_de_exportacoes: "You have already exported your data 5 times in the last hour. Try again within an hour.",
     ultimo_dono: "The newsroom needs at least one active owner."
   }
 };

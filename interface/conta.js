@@ -620,7 +620,7 @@
     try {
       const feito = await window.DadosConta.exportar();
       restaurar();
-      estado(feito.incompleto.length ? `${t('Arquivo baixado.')} ${t('Ainda não traz: {itens}.', {itens: feito.incompleto.map(item => t(item)).join('; ')})}` : t('Arquivo baixado.'));
+      estado(feito.incompleto.length ? `${t('Arquivo baixado.')} ${t('Ainda não traz: {itens}.', {itens: feito.incompleto.join('; ')})}` : t('Arquivo baixado.'));
     } catch (falha) { restaurar(); estado(falha.message, {erro: true}); }
   }
   async function excluirConta(gatilho) {
