@@ -28,16 +28,18 @@ EVENTOS = ('acesso_negado', 'caso_criado', 'caso_atribuido', 'participacao_inclu
            'termos_aceitos', 'chave_redacao_alterada',
            # E3 (convite, e-mail, redefinição, troca de e-mail) e E4 (segundo fator, dois passos, ciclo de vida)
            'convite_expirado', 'redefinicao_pedida', 'email_troca_pedida', 'email_trocado', 'email_enviado',
-           'email_falhou', 'aparelho_novo', 'login_protegido', 'fator_codigos_gerados', 'conta_inativa_avisada')
+           'email_falhou', 'aparelho_novo', 'login_protegido', 'fator_codigos_gerados', 'conta_inativa_avisada',
+           'fator_bloqueado', 'fator_indisponivel')
 PAPEIS = ('dono', 'editor', 'reporter', 'leitor')
 CODIGOS = ('caso_indisponivel', 'conversa_indisponivel', 'lote_inexistente', 'redacao_suspensa', 'pendencia_de_conta',
            'operacao_inexistente', 'acesso_indisponivel', 'senha_atual_incorreta', 'ultimo_dono', 'senha_necessaria',
            'convite_duplicado', 'limite_de_convites', 'transporte_indisponivel', 'codigo_invalido', 'fator_necessario',
-           'recuperacao_pelo_operador', 'link_invalido', 'senha_invalida')
+           'recuperacao_pelo_operador', 'link_invalido', 'senha_invalida', 'fator_indisponivel', 'requisicao_invalida')
 MOTIVOS = ('sem_participacao', 'outra_redacao', 'inexistente', 'redacao_suspensa', 'senha_incorreta', 'ultimo_dono',
-           'link_expirado', 'email_em_uso', 'limite', 'codigo_invalido', 'protegido', 'pendencia')
+           'link_expirado', 'email_em_uso', 'limite', 'codigo_invalido', 'protegido', 'pendencia', 'chave_ausente',
+           'semente_ilegivel')
 MENSAGENS = ('convite', 'redefinicao', 'novo_acesso', 'senha_trocada', 'fator_alterado', 'recuperacao',
-             'muitas_tentativas', 'email_novo', 'conta_inativa')
+             'muitas_tentativas', 'email_novo', 'conta_inativa', 'fator_bloqueado')
 
 
 class ListasDoContratoTest(unittest.TestCase):
@@ -138,6 +140,20 @@ class ListasDoContratoTest(unittest.TestCase):
         # E3: a recovery the operator must do is refused to the dono, and the refusal keeps its code.
         linha = r.montar('admin_recusada', 'negado', CONTA, codigo='recuperacao_pelo_operador', alvo=CONTA, organizacao=ORG)
         self.assertEqual((linha['evento'], linha['codigo'], linha['alvo']), ('admin_recusada', 'recuperacao_pelo_operador', CONTA))
+
+    def test_segundo_fator_indisponivel_e_bloqueado(self):
+        # E4: written straight by registrar, failed, with the reason; without an account at the server's start.
+        for motivo in ('chave_ausente', 'semente_ilegivel'):
+            for conta in (CONTA, None):
+                with self.subTest(motivo=motivo, conta=conta):
+                    linha = r.montar('fator_indisponivel', 'falha', conta, motivo=motivo, ip='192.0.2.10')
+                    self.assertEqual((linha['evento'], linha['resultado'], linha['motivo'], linha['conta'], linha['ip']),
+                                     ('fator_indisponivel', 'falha', motivo, conta, '192.0.2.10'))
+        # The activity event of a factor blocked by attempts arrives through do_acesso, with the newsroom.
+        linha = r.montar('fator_bloqueado', 'ok', CONTA, organizacao=ORG)
+        self.assertEqual((linha['evento'], linha['organizacao']), ('fator_bloqueado', ORG))
+        self.assertEqual(r.montar('admin_recusada', 'negado', CONTA, codigo='requisicao_invalida')['codigo'],
+                         'requisicao_invalida')
 
     def test_fora_das_listas_continua_descartado(self):
         linha = r.montar('acesso_negado', 'negado', CONTA, motivo='porque sim', codigo='inventado', nome_caso='Caso X')
