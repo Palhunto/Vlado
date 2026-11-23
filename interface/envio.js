@@ -257,9 +257,10 @@
           // O pedido do primeiro lote de uma apuração nova terminou em erro de rede ou 502/504: a tela não sabe se o servidor aceitou (e criou a apuração).
           // Para os lotes seguintes e avisa para conferir a Visão geral antes de enviar de novo, porque um reenvio pode criar OUTRA apuração.
           const incerto = !cancelou && !!escopo.novo && !escopo.caso && !casoAceito && (falha.rede === true || [502, 504].includes(falha.status));
-          // Só a recusa que diz que a apuração nova não existe (o primeiro lote não chegou a criá-la): para e avisa. Outra recusa não diz isso.
+          // Só a recusa que diz que a apuração nova não existe (o primeiro lote não chegou a criá-la): para e avisa. Outra recusa não diz isso. O código é
+          // do servidor (erros.py: caso_inexistente, "Caso inexistente; não cadastrar em outro caso automaticamente."; ou caso_indisponivel, do portão).
           const semApuracao = !cancelou && !!casoAceito && !resultado.lotes.length && [400, 404].includes(falha.status)
-            && (/^Caso inexistente/i.test(falha.message || '') || ['caso_inexistente', 'caso_indisponivel'].includes(falha.codigo));
+            && ['caso_inexistente', 'caso_indisponivel'].includes(falha.codigo);
           const parada = incerto ? t('Não sabemos se a apuração foi criada: a resposta do servidor não chegou. Confira a apuração na Visão geral antes de enviar de novo.')
             : semApuracao ? t('A apuração nova não foi criada: o primeiro envio não terminou. Envie de novo.') : '';
           for (const linha of linhas) { linha.estado = cancelou ? 'cancelado' : 'nao-enviado'; linha.motivo = cancelou ? '' : parada || falha.message; }
