@@ -191,6 +191,21 @@ class RotasContas:
         return (f'{COOKIE_APARELHO}={marca}; HttpOnly; ' + ('Secure; ' if self.server.modo == 'piloto' else '')
                 + f'SameSite=Lax; Path=/; Max-Age={APARELHO_SEGUNDOS}')
 
+    def _sem_bilhete(self, exc=None):
+        """The `Set-Cookie` that takes the ticket of the second step out of the browser, when there is one to take:
+        the session opened, or the ticket died (unknown, expired, or killed by its fifth wrong code). While the
+        factor is only blocked the ticket still stands, and so does its cookie: a reserve code gets in with it."""
+        if exc is not None and not (isinstance(exc, acesso.EntradaExpirada) or getattr(exc, 'bilhete_morto', False)):
+            return []
+        if not self._cookie(COOKIE_SEGUNDO_PASSO):
+            return []
+        return [f'{COOKIE_SEGUNDO_PASSO}=; {self.server.atributos_cookie()}; Max-Age=0']
+
+    def _recusa_do_passo(self, status, corpo, exc):
+        """A refusal that may have ended the second step."""
+        cookies = self._sem_bilhete(exc)
+        self._send(status, json.dumps(corpo, ensure_ascii=False).encode('utf-8'), extra={'Set-Cookie': cookies} if cookies else None)
+
     def _entrou(self, sid, csrf, conta, marca, cliente):
         """The answer of every sign-in that worked: the session and the device mark as cookies, and, for a device
         the account had never used, a notice to the account's own address (W08, rule 6)."""
@@ -202,7 +217,7 @@ class RotasContas:
         self._send(200, json.dumps({'conta': publica, 'csrf': csrf, 'destino': autorizacao.destino_inicial(conta)},
                                    ensure_ascii=False).encode('utf-8'),
                    # The session goes last: a client that keeps one `Set-Cookie` per answer keeps the session.
-                   extra={'Set-Cookie': [self._cookie_do_aparelho(marca),
+                   extra={'Set-Cookie': [*self._sem_bilhete(), self._cookie_do_aparelho(marca),
                                          f'{COOKIE_PILOTO}={sid}; {self.server.atributos_cookie()}']})
 
     def _endereco_socket(self):
@@ -465,15 +480,15 @@ class RotasContas:
             self._json(503, {'estado': 'indisponivel', 'erro': 'Registro de acesso indisponível. Avise a administração.'})
         except acesso.Bloqueado as exc:
             avisar_bloqueio_do_fator(self.server.root, exc)
-            self._json(429, {'estado': 'bloqueado', 'codigo': 'bloqueado', 'erro': str(exc)})
+            self._recusa_do_passo(429, {'estado': 'bloqueado', 'codigo': 'bloqueado', 'erro': str(exc)}, exc)
         except acesso.EntradaExpirada as exc:
-            self._json(401, {'estado': 'credenciais', 'codigo': 'entrada_expirada', 'erro': str(exc)})
+            self._recusa_do_passo(401, {'estado': 'credenciais', 'codigo': 'entrada_expirada', 'erro': str(exc)}, exc)
         except acesso.FatorIndisponivel as exc:  # the key of the seeds is missing: not the person's mistake
             self._json(503, {'estado': 'indisponivel', 'codigo': 'fator_indisponivel', 'erro': str(exc)})
         except acesso.CodigoNecessario as exc:  # no code came: asked for, and nothing counted
             self._json(403, {'estado': 'proibido', 'codigo': 'fator_necessario', 'erro': str(exc)})
         except acesso.CodigoInvalido as exc:  # the second factor, in the second step or in a reset by e-mail
-            self._json(403, {'estado': 'proibido', 'codigo': 'codigo_invalido', 'erro': str(exc)})
+            self._recusa_do_passo(403, {'estado': 'proibido', 'codigo': 'codigo_invalido', 'erro': str(exc)}, exc)
         except acesso.CredenciaisInvalidas as exc:
             self._json(401, {'estado': 'credenciais', 'codigo': 'credenciais', 'erro': str(exc)})
         except acesso.AtivacaoInvalida as exc:

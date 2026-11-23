@@ -2113,7 +2113,7 @@ def entrar_segundo_fator(root: Path, bilhete, codigo, ip: str | None = None, mar
     except Bloqueado:
         registro_acesso.registrar_limite_ip('login_falha', ip, _rede(ip), acesso_operacao='segundo_fator')
         raise
-    errou, bloqueado, aviso = False, False, None
+    errou, bloqueado, aviso, morto = False, False, None, False
     with _bd(root, escrever=True) as tx:
         entrada = (tx.um('SELECT * FROM entradas WHERE id_sha256 = ?', _hash(bilhete))
                    if isinstance(bilhete, str) and SID.fullmatch(bilhete) else None)
@@ -2131,12 +2131,15 @@ def entrar_segundo_fator(root: Path, bilhete, codigo, ip: str | None = None, mar
                 errou = True
                 if entrada['falhas'] + 1 >= ENTRADA_FALHAS:
                     tx.ex('DELETE FROM entradas WHERE id_sha256 = ?', entrada['id_sha256'])
+                    morto = True
                 else:
                     tx.ex('UPDATE entradas SET falhas = falhas + 1 WHERE id_sha256 = ?', entrada['id_sha256'])
                 _registrar_falha(tx, entrada['chave'], cid, momento)
                 _falha_do_identificador(tx, entrada['chave'].split('|', 1)[0], cid, momento)  # the same ceilings as the password
     if errou or bloqueado:
-        raise _recusa_do_codigo(aviso, bloqueado)
+        recusa = _recusa_do_codigo(aviso, bloqueado)
+        recusa.bilhete_morto = morto  # the fifth wrong code of a ticket: whoever answers also clears its cookie
+        raise recusa
     raise EntradaExpirada(ENTRADA_EXPIRADA)
 
 
