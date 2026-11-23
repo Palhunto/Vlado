@@ -34,9 +34,13 @@ seu limite), uma sonda à parte, de prioridade normal, pede ``SONDA_CPU`` s de C
 ``SONDA_PRAZO`` s, a máquina está saturada e o teste pula com o motivo explícito ("máquina saturada
 para processos de prioridade normal: X s para Y s de CPU"); se os tem, a lentidão é da Mesa e o teste
 falha. O processo de extração roda abaixo da prioridade normal e sem o núcleo 0 (SEG-01), para não
-tirar CPU da Mesa, e com a máquina saturada por outros processos pode nem começar: quando o arquivo
-longo não começa a ser lido em 60 s, a sonda é nas mesmas condições dele (prioridade abaixo do
-normal, sem o núcleo 0), com a mesma regra. Para fechar a Onda 1, o portão tem de rodar sem pular.
+tirar CPU da Mesa, e com a máquina saturada por outros processos pode nem começar: a espera de até
+60 s pelo começo da leitura roda, durante toda ela, uma sonda nas mesmas condições dele (prioridade
+abaixo do normal, sem o núcleo 0). Se a sonda teve na janela pelo menos 2 s de CPU (4 vezes os ~0,5 s
+de que a extração precisa até a primeira página) e a leitura não começou, falha; senão, pula com os
+números (``apoio_cpu_baixa``). Uma sonda curta depois do prazo não servia: uma folga basta para ela
+passar, sem dizer o que a extração teve durante a espera. Para fechar a Onda 1, o portão tem de rodar
+sem pular.
 
 Medido no Windows de 4 núcleos (22/11): ``T_ref`` de 0,9 a 1,7 s com nenhum, dois ou os quatro
 núcleos ocupados por outros processos; os dez cadastros com a extração longa, de 1,6 a 5,9 s. A sonda
@@ -67,6 +71,7 @@ from modelo_pasta import copiar  # noqa: E402
 import test_codex_integracao as integracao  # noqa: E402
 from test_extracao_cadastro_pdf import HAS_PYPDF  # noqa: E402
 from test_fila_extracao import pdf_pesado  # noqa: E402
+from apoio_cpu_baixa import NECESSARIO_PARA_LER, esperar_com_cpu  # noqa: E402
 
 SESSOES = 10
 LIMITE = 2.0
@@ -327,12 +332,10 @@ class PortaoFilaTest(unittest.TestCase):
                                                              'arquivos': [{'nome': 'pesado.pdf', 'base64': conteudo}]})
         self.assertEqual(status, 200, corpo)
         lote = corpo['lote']['lote']
-        limite = time.monotonic() + 60
-        while not (fila_extracao._ler(fila_extracao.pasta_fila(self.root) / lote / 'estado.json') or {}).get(
-                'arquivos', [{}])[0].get('pagina'):
-            if time.monotonic() >= limite:  # only now: whether low priority gets CPU at all
-                self.lento('baixa', f'o processo de extração não começou a ler em 60 s (T_ref = {referencia:.2f} s)')
-            time.sleep(0.05)
+        esperar_com_cpu(self, lambda: (fila_extracao._ler(fila_extracao.pasta_fila(self.root) / lote / 'estado.json')
+                                       or {}).get('arquivos', [{}])[0].get('pagina'),
+                        60, NECESSARIO_PARA_LER, f'o processo de extração não começou a ler (T_ref = {referencia:.2f} s)',
+                        passo=0.05)
         texto = base64.b64encode('Documento sintético avulso.'.encode('utf-8')).decode('ascii')
         inicio = time.monotonic()
         status, recibo = self.pedir('POST', '/api/cadastrar', {'caso': 'alpha', 'natureza': 'sinteticos',
