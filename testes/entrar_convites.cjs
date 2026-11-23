@@ -128,15 +128,15 @@ test('um destino que não é do mesmo site (//golpe, \\\\golpe) vira "/"', async
 });
 
 test('com termos_versao a caixa aparece, é obrigatória e a versão lida vai no aceite', async () => {
-  const {mesa, chamadas} = await abrir({api: operacao => (operacao === 'convite-consultar' ? {...CONVITE, termos_versao: '2026-11'} : operacao === 'convite-aceitar' ? {conta: {}, csrf: 'x', destino: '/'} : undefined)});
+  const {mesa, chamadas} = await abrir({api: operacao => (operacao === 'convite-consultar' ? {...CONVITE, termos_versao: '2026-11', termos_endereco: 'https://vlado.exemplo/termos-2026-11'} : operacao === 'convite-aceitar' ? {conta: {}, csrf: 'x', destino: '/'} : undefined)});
   assert.equal(visivel(mesa, 'aceitar-termos-rotulo'), true);
   assert.equal(mesa.$('aceitar-termos-rotulo').textContent.trim(), 'Li e aceito os termos de uso e a política de privacidade do teste.');
   const links = [...mesa.$('aceitar-termos-rotulo').querySelectorAll('a')];
   assert.deepEqual(links.map(a => [a.textContent, a.getAttribute('href'), a.getAttribute('target'), a.getAttribute('rel')]),
-    [['termos de uso', '/termos', '_blank', 'noopener'], ['política de privacidade', '/privacidade', '_blank', 'noopener']]);
-  assert.deepEqual(links.map(a => a.getAttribute('aria-label')), ['termos de uso (abre em nova aba)', 'política de privacidade (abre em nova aba)']);
+    [['termos de uso e a política de privacidade', 'https://vlado.exemplo/termos-2026-11', '_blank', 'noopener noreferrer']]);
+  assert.deepEqual(links.map(a => a.getAttribute('aria-label')), ['termos de uso e a política de privacidade (abre em nova aba)']);
   mesa.$('entrar-idioma').click(); await mesa.esperar(3);
-  assert.deepEqual(links.map(a => a.getAttribute('aria-label')), ['terms of use (opens in a new tab)', 'privacy policy (opens in a new tab)']);
+  assert.deepEqual(links.map(a => a.getAttribute('aria-label')), ['terms of use and the privacy policy (opens in a new tab)']);
   mesa.$('entrar-idioma').click(); await mesa.esperar(3);
   digitar(mesa.$('aceitar-nome'), 'Ana'); digitar(mesa.$('aceitar-senha'), 'uma frase longa e boa');
   await enviar(mesa, 'aceitar-form');
@@ -145,6 +145,35 @@ test('com termos_versao a caixa aparece, é obrigatória e a versão lida vai no
   mesa.$('aceitar-termos').checked = true;
   await enviar(mesa, 'aceitar-form');
   assert.equal(chamadas('convite-aceitar')[0].dados.termos_versao, '2026-11');
+});
+
+test('termos_desatualizados no aceite: relê o convite, mostra o aviso no lugar do erro, desmarca a caixa e leva ao endereço novo', async () => {
+  let consultas = 0;
+  const {mesa, chamadas} = await abrir({api: operacao => {
+    if (operacao === 'convite-consultar') {
+      consultas += 1;
+      return {...CONVITE, termos_versao: consultas === 1 ? '2026-11' : '2026-12', termos_endereco: consultas === 1 ? 'https://vlado.exemplo/a' : 'https://vlado.exemplo/b'};
+    }
+    if (operacao === 'convite-aceitar') return recusa('termos_desatualizados', 'Os termos de uso mudaram. Leia a versão em vigor e aceite-a para continuar.');
+    return undefined;
+  }});
+  digitar(mesa.$('aceitar-nome'), 'Ana'); digitar(mesa.$('aceitar-senha'), 'uma frase longa e boa');
+  mesa.$('aceitar-termos').checked = true;
+  await enviar(mesa, 'aceitar-form');
+  assert.equal(chamadas('convite-aceitar')[0].dados.termos_versao, '2026-11');
+  assert.equal(chamadas('convite-consultar').length, 2, 'o convite foi lido de novo');
+  assert.equal(mesa.$('entrar-mensagem').textContent, 'Os termos mudaram enquanto você lia. Confira a versão nova e marque de novo.');
+  assert.equal(mesa.$('aceitar-termos').checked, false, 'a caixa volta desmarcada');
+  assert.equal(mesa.$('aceitar-termos-link').getAttribute('href'), 'https://vlado.exemplo/b');
+  assert.equal(visivel(mesa, 'aceitar-termos-rotulo'), true);
+  mesa.$('aceitar-termos').checked = true;
+  await enviar(mesa, 'aceitar-form');
+  assert.equal(chamadas('convite-aceitar')[1].dados.termos_versao, '2026-12', 'o aceite seguinte leva a versão nova');
+});
+
+test('termos_endereco que não é https não vira link', async () => {
+  const {mesa} = await abrir(comConvite({termos_versao: '2026-11', termos_endereco: 'javascript:alert(1)'}));
+  assert.equal(mesa.$('aceitar-termos-link').getAttribute('href'), null);
 });
 
 test('convite que não vale (consulta ou aceite): uma resposta só, "Este convite não vale mais", o texto e "Ir para a entrada"', async () => {

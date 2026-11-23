@@ -57,12 +57,13 @@
       rotulo_seu_nome: 'Seu nome',
       rotulo_crie_senha: 'Crie uma senha',
       dica_senha_convite: 'De 12 a 256 caracteres. Pode colar ou usar o gerenciador de senhas.',
-      termos_antes: 'Li e aceito os ', termos_uso: 'termos de uso', termos_e: ' e a ', termos_priv: 'política de privacidade', termos_fim: ' do teste.',
+      termos_antes: 'Li e aceito os ', termos_link: 'termos de uso e a política de privacidade', termos_fim: ' do teste.',
       botao_aceitar: 'Criar conta e entrar',
       criando_conta: 'Criando a conta…',
       aviso_titulo: 'Antes de começar',
       aviso_teste: 'O Vlado está em teste. Use só documentos públicos: trechos são enviados ao provedor de IA.',
       erro_termos: 'Falta aceitar os termos. Marque a caixa para continuar.',
+      termos_mudaram: 'Os termos mudaram enquanto você lia. Confira a versão nova e marque de novo.',
       erro_registro: 'Registro de acesso indisponível. Avise a administração.',
       convite_sem_efeito: 'Este convite não vale mais',
       convite_sem_efeito_texto: 'Convite inválido, cancelado ou vencido. Peça um novo a quem convidou.',
@@ -161,12 +162,13 @@
       rotulo_seu_nome: 'Your name',
       rotulo_crie_senha: 'Create a password',
       dica_senha_convite: '12 to 256 characters. You can paste or use a password manager.',
-      termos_antes: 'I have read and accept the ', termos_uso: 'terms of use', termos_e: ' and the ', termos_priv: 'privacy policy', termos_fim: ' of the trial.',
+      termos_antes: 'I have read and accept the ', termos_link: 'terms of use and the privacy policy', termos_fim: ' of the trial.',
       botao_aceitar: 'Create account and sign in',
       criando_conta: 'Creating the account…',
       aviso_titulo: 'Before you start',
       aviso_teste: 'Vlado is in trial. Use public documents only: excerpts are sent to the AI provider.',
       erro_termos: 'The terms are not accepted. Tick the box to continue.',
+      termos_mudaram: 'The terms changed while you were reading. Check the new version and tick the box again.',
       erro_registro: 'The access record is unavailable. Tell the administrators.',
       convite_sem_efeito: 'This invitation is no longer valid',
       convite_sem_efeito_texto: 'Invalid, cancelled or expired invitation. Ask whoever invited you for a new one.',
@@ -537,6 +539,13 @@
     };
     redesenhar(); $('aceitar-titulo').tabIndex = -1; $('aceitar-titulo').focus();
   }
+  // A caixa dos termos só existe onde o convite traz a versão vigente; o texto fica no endereço https que o servidor manda (nunca outro).
+  function mostrarTermos(convite) {
+    const sem = convite.termos_versao === null || convite.termos_versao === undefined;
+    const ligacao = $('aceitar-termos-link'), endereco = String(convite.termos_endereco ?? '');
+    if (!sem && /^https:\/\//.test(endereco)) ligacao.setAttribute('href', endereco); else ligacao.removeAttribute('href');
+    $('aceitar-termos-rotulo').hidden = sem;
+  }
   async function iniciarAceitar(token) {
     secao('aceitar-secao');
     if (!token) { semEfeitoConvite(); return; }   // recarregada depois de o token sair do endereço
@@ -562,7 +571,7 @@
       $('aceitar-validade').hidden = !convite.expira_em;
     };
     $('aceitar-email').value = convite.email;
-    $('aceitar-termos-rotulo').hidden = convite.termos_versao === null || convite.termos_versao === undefined;
+    mostrarTermos(convite);
     $('aceitar-cartao').hidden = false;
     aplicarIdioma();
     $('aceitar-nome').focus();
@@ -581,7 +590,16 @@
         const {status, corpo} = await enviar('convite-aceitar', dados);
         if (status === 200) { window.location.replace(destinoSeguro(corpo.destino)); return; }
         if (corpo.codigo === 'convite_invalido') { semEfeitoConvite(); return; }
-        if (corpo.codigo === 'senha_invalida') mostrarNoCampo('erro_senha_tamanho', $('aceitar-senha'));
+        if (corpo.codigo === 'termos_desatualizados') {   // os termos mudaram enquanto a pessoa lia: relê o convite e pede o aceite de novo
+          const nova = await enviar('convite-consultar', {token});
+          if (nova.status === 200) {
+            Object.assign(convite, nova.corpo); mostrarTermos(convite);
+            $('aceitar-termos').checked = false;
+            mostrar('termos_mudaram');
+          } else if (nova.corpo.codigo === 'convite_invalido') { semEfeitoConvite(); return; }
+          else mostrar(nova.status === 503 ? 'erro_registro' : erroPara(nova.status, nova.corpo));
+        }
+        else if (corpo.codigo === 'senha_invalida') mostrarNoCampo('erro_senha_tamanho', $('aceitar-senha'));
         else if (status === 400 && /nome/i.test(String(corpo.erro || ''))) mostrarNoCampo('erro_nome_vazio', $('aceitar-nome'));
         else mostrar(status === 503 ? 'erro_registro' : erroPara(status, corpo));
       } catch (_) {
