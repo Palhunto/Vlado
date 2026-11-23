@@ -82,9 +82,7 @@ class ApagarDeVezTest(cenario.DuasRedacoes):
         self.assertEqual(self.post('dono_b', 'lixeira-apagar', {**de_beta, 'senha': SENHA})[0], 200)  # its own dono can
 
     def test_cinco_senhas_erradas_bloqueiam_o_apagamento_de_quem_errou(self):
-        conta, token = acesso.criar_conta(self.root, 'Dona Apressada', 'dona.apressada', papel='dono', organizacao=self.a,
-                                          por='operador')
-        acesso.ativar(self.root, token, SENHA)
+        self.conta('Dona Apressada', 'dona.apressada', 'dono')  # with the second factor the hosted mode asks of a dono
         acesso.limpar_limites()
         sessao, base = self._entrar('dona.apressada'), self.pedido()
         for _ in range(acesso.FALHAS_BLOQUEIO):

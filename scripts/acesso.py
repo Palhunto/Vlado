@@ -96,7 +96,9 @@ CHAVE_ESQUECI = '#esqueci|'  # when a reset was last asked for an address, wheth
 RECUPERACAO_HORAS = 24  # a recovery asked by a dono: how long it waits for the second dono, and how long its link lives
 ENTRADA_MINUTOS = 5  # between the right password and the second factor: the ticket of the second step
 ENTRADA_FALHAS = 5  # wrong codes that kill that ticket
+FATOR_OBRIGATORIO = ('dono', 'editor')  # who must have a second factor where it is mandatory: the hosted mode (8.2)
 FATOR_PENDENTE_MINUTOS = 15  # an enrolment not confirmed in this time starts again
+FATOR_RETIRADO = 'fator_removido_na_recuperacao'  # the event of a factor that a recovery took away (link or operator)
 CHAVE_FATOR = '#fator|'  # wrong codes of the authenticator, counted on the account (sign-in and sensitive operations)
 CHAVE_RESERVA = '#reserva|'  # wrong reserve codes, on a counter of their own: they never block the authenticator
 FATOR_CONTADOR_HORAS = 24  # how long those two counters are remembered without a new failure
@@ -1014,6 +1016,18 @@ def listar_redacoes(root: Path) -> list[dict]:
                 for o in tx.todos('SELECT * FROM organizacoes ORDER BY criada_em, id')]
 
 
+EVENTOS_DA_CHAVE_DE_IA = ('chave_ia_salva', 'chave_ia_removida')
+
+
+def registrar_chave_de_ia(root: Path, cid: str, tipo: str) -> None:
+    """The dono saved or removed the newsroom's own AI key: it goes to the activity of the newsroom and to the audit
+    log. Who and when; never the key, nor any part of it."""
+    if tipo not in EVENTOS_DA_CHAVE_DE_IA:
+        raise ValueError('Evento de chave desconhecido.')
+    with _bd(root, escrever=True) as tx:
+        _evento(tx, tipo, _conta(tx, cid)['id'], cid)
+
+
 def total_redacoes(root: Path) -> int:
     with _bd(root) as tx:
         return tx.um('SELECT COUNT(*) AS total FROM organizacoes')['total']
@@ -1376,7 +1390,7 @@ def recuperar(root: Path, cid, por='cli', horas=ATIVACAO_HORAS, organizacao: str
             # Recovered by the operator: the person lost the password and may have lost the device too. The
             # second factor goes with the password, and is enrolled again after the new sign-in.
             _sem_fator(tx, cid)
-            _evento(tx, 'fator_removido', cid, por, momento)
+            _evento(tx, FATOR_RETIRADO, cid, por, momento)
         tx.ex('DELETE FROM aparelhos WHERE conta = ?', cid)
         tx.ex('UPDATE contas SET senha_hash = NULL, senha_definida_em = NULL WHERE id = ?', cid)
         token = _emitir_ativacao(tx, cid, horas, 'recuperacao', momento)
@@ -1859,7 +1873,9 @@ def redefinir_senha(root: Path, token, senha, codigo=None, ip: str | None = None
             cid = conta['id']
             if link['tipo'] == 'recuperacao' and tx.um('SELECT 1 FROM fatores WHERE conta = ?', cid):
                 _sem_fator(tx, cid)
-                _evento(tx, 'fator_removido', cid, cid, momento)
+                # Not `fator_removido`, which is the person taking away the own factor: the activity of the
+                # newsroom tells the two apart.
+                _evento(tx, FATOR_RETIRADO, cid, cid, momento)
             tx.ex('UPDATE contas SET senha_hash = ?, senha_definida_em = ?, ativacao_sha256 = NULL, ativacao_expira_em = NULL,'
                   ' ativacao_motivo = NULL WHERE id = ?', senha_hash, _iso(momento), cid)
             _derrubar_sessoes(tx, cid)
@@ -2113,7 +2129,7 @@ def entrar_segundo_fator(root: Path, bilhete, codigo, ip: str | None = None, mar
     except Bloqueado:
         registro_acesso.registrar_limite_ip('login_falha', ip, _rede(ip), acesso_operacao='segundo_fator')
         raise
-    errou, bloqueado, aviso = False, False, None
+    errou, bloqueado, aviso, morto = False, False, None, False
     with _bd(root, escrever=True) as tx:
         entrada = (tx.um('SELECT * FROM entradas WHERE id_sha256 = ?', _hash(bilhete))
                    if isinstance(bilhete, str) and SID.fullmatch(bilhete) else None)
@@ -2131,12 +2147,15 @@ def entrar_segundo_fator(root: Path, bilhete, codigo, ip: str | None = None, mar
                 errou = True
                 if entrada['falhas'] + 1 >= ENTRADA_FALHAS:
                     tx.ex('DELETE FROM entradas WHERE id_sha256 = ?', entrada['id_sha256'])
+                    morto = True
                 else:
                     tx.ex('UPDATE entradas SET falhas = falhas + 1 WHERE id_sha256 = ?', entrada['id_sha256'])
                 _registrar_falha(tx, entrada['chave'], cid, momento)
                 _falha_do_identificador(tx, entrada['chave'].split('|', 1)[0], cid, momento)  # the same ceilings as the password
     if errou or bloqueado:
-        raise _recusa_do_codigo(aviso, bloqueado)
+        recusa = _recusa_do_codigo(aviso, bloqueado)
+        recusa.bilhete_morto = morto  # the fifth wrong code of a ticket: whoever answers also clears its cookie
+        raise recusa
     raise EntradaExpirada(ENTRADA_EXPIRADA)
 
 
@@ -2745,12 +2764,15 @@ def _auditar_falha(motivo: str, cid: str | None, login: str, cliente, ip: str | 
                               cliente=_cliente(cliente), ip=ip)
 
 
-def sessao(root: Path, sid, ip: str | None = None) -> dict | None:
+def sessao(root: Path, sid, ip: str | None = None, obrigar_fator: bool = False) -> dict | None:
     """The calling account, re-read on every request (deactivation, role, participations and quota apply at once).
     `ip` is kept as the session's last address, at most once a minute, with its last use.
 
     `casos` is always the explicit reach (for a dono, every case of the own newsroom) and `responsavel_de` the cases
-    the account answers for: outside the local mode no caller ever has "every case"."""
+    the account answers for: outside the local mode no caller ever has "every case".
+
+    `obrigar_fator` is the hosted mode: a dono or an editor without an active second factor carries the pending
+    item `segundo_fator`, and the gate lets the session reach only what resolves it (contract, 4.2 and 8.2)."""
     if not isinstance(sid, str) or not SID.fullmatch(sid):
         return None  # malformed ids never touch the store
     momento, chave = agora(), _hash(sid)
@@ -2766,12 +2788,14 @@ def sessao(root: Path, sid, ip: str | None = None) -> dict | None:
             if not conta or not conta['ativa'] or not conta['senha_hash']:
                 return None
             casos, responsavel = _alcance(tx, conta)
+            pendencias = (['segundo_fator'] if obrigar_fator and conta['papel'] in FATOR_OBRIGATORIO
+                          and not tx.um('SELECT 1 FROM fatores WHERE conta = ? AND ativo = 1', conta['id']) else [])
             tocar = (momento - _data(registro['ultimo_uso'])).total_seconds() >= ULTIMO_USO_SEGUNDOS
             principal = {'conta': conta['id'], 'nome': conta['nome'], 'login': conta['login'], 'email': conta['email'],
                          'papel': conta['papel'],
                          'organizacao': {'id': conta['organizacao'], 'nome': conta['redacao_nome'],
                                          'situacao': conta['redacao_situacao']},
-                         'casos': casos, 'responsavel_de': responsavel, 'pendencias': [],
+                         'casos': casos, 'responsavel_de': responsavel, 'pendencias': pendencias,
                          'cota_diaria': conta['cota_diaria'], 'csrf': registro['csrf'], 'sessao': registro['publico'],
                          'expira_em': registro['expira_em'], 'cliente': registro['cliente'] or 'web'}
     if vencida or tocar:

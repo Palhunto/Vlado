@@ -442,5 +442,52 @@ class ServidorTest(cenario.DuasRedacoes):
         self.assertIn(('fator_bloqueado', self.conta), {(e['tipo'], e['conta']) for e in atividade})
 
 
+    def test_o_cookie_do_segundo_passo_sai_do_navegador_quando_a_sessao_abre_ou_o_bilhete_morre(self):
+        # F2 of the review: the ticket's cookie was left in the browser until its five minutes ran out.
+        env = patch.dict(test_acesso.os.environ, {'VLADO_SEGREDOS': ''})
+        env.start()
+        self.addCleanup(env.stop)
+        segredo = acesso.iniciar_fator(self.root, self.conta, SENHA)['segredo']
+        semente = fator.base64.b32decode(segredo + '=' * (-len(segredo) % 8))
+        reserva = acesso.confirmar_fator(self.root, self.conta, fator.codigo_do_passo(semente, fator.passo_de(acesso.agora())))
+
+        def bilhete():
+            status, corpo, cookies = self.pedir_tudo('entrar', {'login': self.email, 'senha': SENHA})
+            self.assertEqual((status, corpo, len(cookies)), (200, {'estado': 'segundo_fator'}, 1))
+            return cookies[0].split(';')[0]
+
+        def apagado(cookies):
+            return [c for c in cookies if c.startswith('vlado_passo2=;') and 'Max-Age=0' in c and 'HttpOnly' in c]
+
+        primeiro = bilhete()
+        status, _, cookies = self.pedir_tudo('entrar-segundo-fator', {'codigo': '000000'}, [primeiro])
+        self.assertEqual((status, cookies), (403, []))  # a wrong code: the ticket still stands, and so does its cookie
+        status, corpo, cookies = self.pedir_tudo('entrar-segundo-fator', {'codigo': reserva[0]}, [primeiro])
+        self.assertEqual((status, len(apagado(cookies)), len(cookies)), (200, 1, 3))  # the session opened: the ticket's cookie goes
+        self.assertTrue(cookies[-1].startswith('vlado_sessao='))
+        # A ticket that is unknown, used or expired: the answer takes its cookie away too.
+        status, corpo, cookies = self.pedir_tudo('entrar-segundo-fator', {'codigo': reserva[1]}, [primeiro])
+        self.assertEqual((status, corpo['codigo'], len(apagado(cookies)), len(cookies)), (401, 'entrada_expirada', 1, 1))
+        self.assertEqual(self.pedir_tudo('entrar-segundo-fator', {'codigo': reserva[1]})[2], [])  # no cookie came: none to clear
+        # A ticket killed by its fifth wrong code (which also blocks the factor of the account).
+        acesso.limpar_limites()
+        segundo = bilhete()
+        respostas = [self.pedir_tudo('entrar-segundo-fator', {'codigo': '000000'}, [segundo]) for _ in range(acesso.ENTRADA_FALHAS)]
+        self.assertEqual([(r[0], len(r[2])) for r in respostas], [(403, 0)] * 4 + [(429, 1)])
+        self.assertEqual(len(apagado(respostas[-1][2])), 1)
+        # While the factor is only blocked a new ticket stands, cookie and all: the reserve code gets in with it.
+        acesso.limpar_limites()
+        with acesso._bd(self.root, escrever=True) as tx:  # only the block of the factor is left
+            tx.ex("DELETE FROM tentativas WHERE chave NOT LIKE '#fator|%'")
+        terceiro = bilhete()
+        status, _, cookies = self.pedir_tudo('entrar-segundo-fator', {'codigo': '000000'}, [terceiro])
+        self.assertEqual((status, cookies), (429, []))
+        status, _, cookies = self.pedir_tudo('entrar-segundo-fator', {'codigo': reserva[1]}, [terceiro])
+        self.assertEqual((status, len(apagado(cookies))), (200, 1))
+        # A sign-in in one step, with no ticket around, clears nothing.
+        outra = self.pedir_tudo('entrar', {'login': 'leo.leitor', 'senha': SENHA})
+        self.assertEqual((outra[0], len(outra[2]), apagado(outra[2])), (200, 2, []))
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -682,7 +682,11 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
             try:
                 autorizacao.conferir(self.server.root, self.server.modo, self._principal(), 'GET:' + path, {})
             except autorizacao.Recusa as recusa:
-                self._recusado(recusa, self._principal(), pagina=path == '/')
+                destino = autorizacao.pagina_da_pendencia(recusa) if path == '/' else None
+                if destino:  # not a denial: the account has something to finish first, and goes to where it is done
+                    self._send(303, b'', 'text/plain; charset=utf-8', {'Location': destino})
+                else:
+                    self._recusado(recusa, self._principal(), pagina=path == '/')
                 return
         if path == '/api/sessao':
             self._sessao_atual()
@@ -707,9 +711,11 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                 # Public, before any session: what the sign-in page may offer. Nothing of any account.
                 self._json(200, {'esqueci_senha': self._esqueci_ligado()})
                 return
-            if path == '/entrar' or re.fullmatch(r'/ativar(/[A-Za-z0-9_-]{1,100})?|/(aceitar|redefinir|confirmar-email)/[A-Za-z0-9_-]{1,100}', path):
+            if (path == '/entrar' or path in autorizacao.PAGINA_DA_PENDENCIA.values()
+                    or re.fullmatch(r'/ativar(/[A-Za-z0-9_-]{1,100})?|/(aceitar|redefinir|confirmar-email)/[A-Za-z0-9_-]{1,100}', path)):
                 # Static page without case data; the token stays in the path, read by entrar.js. Like every answer,
-                # it goes with `Cache-Control: no-store` and `Referrer-Policy: no-referrer` (`_send`).
+                # it goes with `Cache-Control: no-store` and `Referrer-Policy: no-referrer` (`_send`). The page that
+                # resolves a pending item of the account is of the same family: it reads the session by itself.
                 self._send(200, rotas_estaticas.conteudo('entrar.html'), 'text/html; charset=utf-8')
                 return
             if path in ('/', '/api/catalogo', '/api/integracao', '/api/fila', '/api/cota') and self._principal() is None:
