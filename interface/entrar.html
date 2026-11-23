@@ -115,6 +115,21 @@
       <p class="entrar-links"><a id="esqueci-voltar" href="/entrar" data-t="voltar_entrada">Voltar para a entrada</a></p>
     </section>
 
+    <section id="fator-secao" hidden aria-labelledby="fator-titulo">
+      <h1 id="fator-titulo" data-t="fator_titulo">Confirme que é você</h1>
+      <p id="fator-texto" data-t="fator_texto">Digite o código de 6 dígitos do aplicativo autenticador.</p>
+      <form id="fator-form" novalidate>
+        <label for="fator-codigo"><span id="fator-rotulo" data-t="fator_rotulo">Código do aplicativo</span>
+          <input id="fator-codigo" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" autocapitalize="none"
+                 autocorrect="off" spellcheck="false" maxlength="40" required>
+        </label>
+        <button id="fator-reserva" class="entrar-link-linha" type="button" data-t="fator_usar_reserva">Usar um código de reserva</button>
+        <p class="small" data-t="fator_apoio">Você tem 5 minutos para digitar o código.</p>
+        <button id="fator-enviar" type="submit" data-t="botao_entrar">Entrar</button>
+      </form>
+      <p class="entrar-links"><button id="fator-outra" class="entrar-link-linha" type="button" data-t="fator_outra">Entrar com outra conta</button></p>
+    </section>
+
     <section id="aceitar-secao" hidden aria-labelledby="aceitar-titulo">
       <div id="aceitar-espera"></div>
       <div id="aceitar-cartao" hidden>
@@ -162,6 +177,13 @@
           </span>
         </label>
         <p id="redefinir-dica" class="small" data-t="dica_senha_convite">De 12 a 256 caracteres. Pode colar ou usar o gerenciador de senhas.</p>
+        <div id="redefinir-codigo-campo" hidden>
+          <p class="small" data-t="fator_redefinir_texto">Esta conta tem segundo fator. Digite o código do aplicativo ou um código de reserva.</p>
+          <label for="redefinir-codigo"><span data-t="fator_redefinir_rotulo">Código do aplicativo ou de reserva</span>
+            <input id="redefinir-codigo" name="otp" type="text" autocomplete="one-time-code" autocapitalize="none" autocorrect="off"
+                   spellcheck="false" maxlength="40">
+          </label>
+        </div>
         <button id="redefinir-enviar" type="submit" data-t="botao_redefinir">Salvar a senha nova</button>
       </form>
       <div id="redefinir-pronto" hidden>

@@ -88,6 +88,24 @@
       email_confirmado: 'O e-mail da sua conta foi trocado. Use o novo e-mail para entrar.',
       email_link_texto: 'Link inválido, usado ou vencido. Peça outro em Minha conta.',
       ir_mesa: 'Ir para a Mesa',
+      fator_titulo: 'Confirme que é você',
+      fator_texto: 'Digite o código de 6 dígitos do aplicativo autenticador.',
+      fator_texto_reserva: 'Digite um dos códigos de reserva que você guardou. Cada um vale uma vez.',
+      fator_rotulo: 'Código do aplicativo',
+      fator_rotulo_reserva: 'Código de reserva',
+      fator_usar_reserva: 'Usar um código de reserva',
+      fator_usar_app: 'Usar o código do aplicativo',
+      fator_apoio: 'Você tem 5 minutos para digitar o código.',
+      fator_outra: 'Entrar com outra conta',
+      erro_codigo_vazio: 'Falta o código. Digite o código do aplicativo.',
+      erro_codigo_vazio_reserva: 'Falta o código. Digite um código de reserva.',
+      erro_codigo_incorreto: 'Código incorreto. Confira no aplicativo e tente de novo.',
+      erro_codigo_incorreto_reserva: 'Código incorreto. Confira o código de reserva e tente de novo.',
+      erro_entrada_expirada: 'A entrada expirou. Digite o login e a senha de novo.',
+      fator_redefinir_texto: 'Esta conta tem segundo fator. Digite o código do aplicativo ou um código de reserva.',
+      fator_redefinir_rotulo: 'Código do aplicativo ou de reserva',
+      erro_codigo_redefinir: 'Código incorreto. Confira e tente de novo.',
+      erro_codigo_redefinir_vazio: 'Falta o código. Digite o código do aplicativo ou um código de reserva.',
       titulo_confirmar: 'Confirmar o e-mail',
     },
     en: {
@@ -174,6 +192,24 @@
       email_confirmado: 'The e-mail of your account was changed. Use the new e-mail to sign in.',
       email_link_texto: 'Invalid, used or expired link. Ask for another one in My account.',
       ir_mesa: 'Go to the desk',
+      fator_titulo: 'Confirm it is you',
+      fator_texto: 'Enter the 6-digit code from the authenticator app.',
+      fator_texto_reserva: 'Enter one of the reserve codes you saved. Each one works once.',
+      fator_rotulo: 'App code',
+      fator_rotulo_reserva: 'Reserve code',
+      fator_usar_reserva: 'Use a reserve code',
+      fator_usar_app: 'Use the app code',
+      fator_apoio: 'You have 5 minutes to enter the code.',
+      fator_outra: 'Sign in with another account',
+      erro_codigo_vazio: 'The code is missing. Enter the app code.',
+      erro_codigo_vazio_reserva: 'The code is missing. Enter a reserve code.',
+      erro_codigo_incorreto: 'Incorrect code. Check the app and try again.',
+      erro_codigo_incorreto_reserva: 'Incorrect code. Check the reserve code and try again.',
+      erro_entrada_expirada: 'The sign-in expired. Enter the login and password again.',
+      fator_redefinir_texto: 'This account has a second factor. Enter the app code or a reserve code.',
+      fator_redefinir_rotulo: 'App or reserve code',
+      erro_codigo_redefinir: 'Incorrect code. Check it and try again.',
+      erro_codigo_redefinir_vazio: 'The code is missing. Enter the app code or a reserve code.',
       titulo_confirmar: 'Confirm the e-mail',
     },
   };
@@ -283,6 +319,7 @@
       ocupado(botao, true, 'entrando');
       try {
         const {status, corpo} = await enviar('entrar', {login, senha, cliente: 'web'});
+        if (status === 200 && corpo.estado === 'segundo_fator') { $('entrar-senha').value = ''; abrirFator(); ocupado(botao, false); return; }   // a senha estava certa: falta o código
         if (status === 200) {
           const destino = typeof corpo.destino === 'string' && /^\/(?![/\\])/.test(corpo.destino) ? corpo.destino : '/';
           window.location.replace(destino);
@@ -376,6 +413,53 @@
   // Esconde o token do endereço e do histórico: fica só na memória desta página.
   function esconderToken(caminho) { try { history.replaceState(null, '', caminho); } catch (_) { /* Old browsers keep the address. */ } }
   const campoVazio = nome => !nome.trim();
+
+  // Segundo fator, passo 2 do Entrar (#entrar-fator): a senha estava certa e a conta tem o fator; o servidor guarda um bilhete de 5 minutos num cookie próprio.
+  let modoReserva = false;
+  function modoDoCodigo(reserva) {
+    modoReserva = reserva;
+    const campo = $('fator-codigo');
+    campo.setAttribute('inputmode', reserva ? 'text' : 'numeric');
+    campo.value = '';
+    $('fator-rotulo').dataset.t = reserva ? 'fator_rotulo_reserva' : 'fator_rotulo';
+    $('fator-texto').dataset.t = reserva ? 'fator_texto_reserva' : 'fator_texto';
+    $('fator-reserva').dataset.t = reserva ? 'fator_usar_app' : 'fator_usar_reserva';
+    aplicarIdioma();
+  }
+  function abrirFator() {
+    secao('fator-secao'); mostrar(null);
+    modoDoCodigo(false);
+    $('fator-codigo').focus();
+  }
+  function voltarAoLogin(chave) {
+    secao('entrar-secao'); $('entrar-teste').hidden = false;
+    $('entrar-senha').value = ''; $('fator-codigo').value = '';
+    if (chave) mostrar(chave); else mostrar(null);
+    $('entrar-login').focus();
+  }
+  $('fator-reserva').addEventListener('click', () => { modoDoCodigo(!modoReserva); $('fator-codigo').focus(); });
+  $('fator-outra').addEventListener('click', () => voltarAoLogin(null));
+  $('fator-form').addEventListener('submit', async evento => {
+    evento.preventDefault();
+    const codigo = $('fator-codigo').value.trim();
+    if (!codigo) { mostrarNoCampo(modoReserva ? 'erro_codigo_vazio_reserva' : 'erro_codigo_vazio', $('fator-codigo')); return; }
+    const botao = $('fator-enviar');
+    ocupado(botao, true, 'entrando');
+    try {
+      const {status, corpo} = await enviar('entrar-segundo-fator', {codigo});
+      if (status === 200) {
+        window.location.replace(destinoSeguro(corpo.destino));
+        return;
+      }
+      if (corpo.codigo === 'entrada_expirada') { voltarAoLogin('erro_entrada_expirada'); ocupado(botao, false); return; }
+      $('fator-codigo').value = '';
+      if (corpo.codigo === 'codigo_invalido') mostrarNoCampo(modoReserva ? 'erro_codigo_incorreto_reserva' : 'erro_codigo_incorreto', $('fator-codigo'));
+      else mostrar(status === 503 ? 'erro_indisponivel' : erroPara(status, corpo));
+    } catch (_) {
+      mostrar('erro_rede');
+    }
+    ocupado(botao, false);
+  });
 
   // Esqueci a senha: a resposta é sempre a mesma; sem transporte de e-mail (`tela`) o link nem aparece (GET /api/entrada).
   function abrirEsqueci() {
@@ -490,12 +574,19 @@
     $('redefinir-senha').focus();
     $('redefinir-form').addEventListener('submit', async evento => {
       evento.preventDefault();
-      const senha = $('redefinir-senha').value;
+      const senha = $('redefinir-senha').value, codigo = $('redefinir-codigo').value.trim();
+      const pedeCodigo = !$('redefinir-codigo-campo').hidden;
       if (senha.length < 12 || senha.length > 256) { mostrarNoCampo('erro_senha_tamanho', $('redefinir-senha')); return; }
+      if (pedeCodigo && !codigo) { mostrarNoCampo('erro_codigo_redefinir_vazio', $('redefinir-codigo')); return; }
       const botao = $('redefinir-enviar');
       ocupado(botao, true, 'salvando');
       try {
-        const {status, corpo} = await enviar('senha-redefinir', {token, senha});
+        const {status, corpo} = await enviar('senha-redefinir', {token, senha, ...(pedeCodigo ? {codigo} : {})});
+        // A conta tem segundo fator e nenhum código veio (nada foi contado): a senha fica no campo e aparece o código; o foco vai para ele.
+        if (status === 403 && !pedeCodigo && ['fator_necessario', 'codigo_invalido'].includes(corpo.codigo)) {
+          mostrar(null); $('redefinir-codigo-campo').hidden = false; $('redefinir-codigo').focus(); ocupado(botao, false); return;
+        }
+        if (status === 403 && pedeCodigo && corpo.codigo === 'codigo_invalido') { mostrarNoCampo('erro_codigo_redefinir', $('redefinir-codigo')); ocupado(botao, false); return; }
         if (status === 200) {
           $('redefinir-senha').value = '';
           mostrar(null); $('redefinir-form').hidden = true; $('redefinir-pronto').hidden = false;
