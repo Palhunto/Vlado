@@ -850,6 +850,8 @@ window.NovaApuracao = (() => {
   // Escolher uma apuração no topo, ou sair da tela Documentos depois da criação, encerra o modo.
   window.addEventListener('mesa-contexto-alterado', () => { if (noFluxo() && window.contextoCaso?.()) encerrar(); });
   registrarGanchoArea({depois: nome => {
+    // Entrada direta no passo 1 (?area=nova, rota restaurada, qualquer showArea('nova')): ele também tem a linha de etapas.
+    if (nome === 'nova' && fluxo === null) { fluxo = 'passo1'; etapa = 1; }
     if (nome !== 'documentos' && nome !== 'nova' && fluxo === null) etapa = null;
     desenharEtapas(); titular();
   }});

@@ -415,3 +415,20 @@ function soltar_arquivo(mesa, nome) {
   mesa.$('documentos-zona').dispatchEvent(evento);
   return Promise.resolve();
 }
+
+test('o passo 1 aberto por ?area=nova (ou por qualquer showArea) também desenha a linha de etapas, e no celular "Passo 1 de 3 · Nome e fontes"', async () => {
+  const mesa = abrir({url: 'http://127.0.0.1:8765/?area=nova'});
+  await mesa.esperar(14);
+  assert.equal(area(mesa), 'nova');
+  const etapas = mesa.$('nova-etapas-1');
+  assert.equal(etapas.hidden, false, 'a linha aparece por esse caminho');
+  assert.match(etapas.textContent, /1 Nome e fontes\s*2 Documentos\s*3 Conferir recibo/);
+  assert.equal(etapas.querySelector('[aria-current="step"]').textContent.trim(), '1 Nome e fontes');
+  assert.equal(etapas.querySelector('.nova-etapa-celular').textContent, 'Passo 1 de 3 · Nome e fontes');
+  assert.equal(mesa.doc.body.dataset.novaEtapas, '1');
+  assert.equal(mesa.$('area-titulo').textContent, 'Nova apuração');
+  // e o fluxo segue normal a partir daí: preencher e continuar leva ao passo 2
+  const outra = abrir(); await outra.esperar(10);
+  outra.janela.showArea('nova'); await outra.esperar(4);
+  assert.equal(outra.$('nova-etapas-1').hidden, false, 'também por showArea direto');
+});
