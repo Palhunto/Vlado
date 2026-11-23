@@ -19,45 +19,38 @@ PYTHONUTF8=1 ../.venv/Scripts/python.exe qa_extracao_interface.py --modulos-node
 
 ## Navegação pela barra lateral
 
-Desde o d03a85c (barra lateral com a estrutura do canvas, Onda 3, fase 3) a barra não tem mais Cadastrar documentos,
-Apurações e lixeira nem Nova apuração; os botões `#ver-cadastro`, `#ver-gerenciar` e `#mesa-nova` ficam ocultos no DOM
-e o Playwright não clica em elemento oculto. Os roteiros chegam a essas telas por `qa_navegacao.cjs`:
+Desde o d03a85c (barra lateral com a estrutura do canvas, Onda 3, fase 3) a barra não tem mais Apurações e lixeira nem
+Nova apuração; os botões `#ver-gerenciar` e `#mesa-nova` ficam ocultos no DOM e o Playwright não clica em elemento
+oculto. A área "Cadastrar arquivos" (`#area-cadastro`, `#cadastro-*`) saiu (R4, P16.5): uma apuração nova nasce pela
+Nova apuração, e o envio de uma apuração que já existe é a área de envio da tela Documentos. Os roteiros chegam a tudo
+isso por `qa_navegacao.cjs`:
 
 | Função | Caminho visível |
 |---|---|
-| `irParaCadastro(pagina)` | Documentos > aba "Cadastro e recibo" |
+| `irParaDocumentos(pagina)` | barra lateral > Documentos (`#area-documentos`: lista, `#documentos-zona`, `#documentos-recibo`) |
+| `irParaNovaApuracao(pagina)` | Visão geral > "Nova apuração" (`#area-nova`, passo 1: `#nova-nome`, `#nova-natureza`, `nova-fontes`, `#nova-site`) |
+| `criarApuracao(pagina, {nome, natureza, fontes, site})` | passo 1 preenchido e "Continuar para documentos" (passo 2, a tela Documentos, ainda sem apuração) |
+| `enviarArquivos(pagina, arquivos)` | envia pela área de envio de Documentos e espera o recibo do lote; o primeiro lote da Nova apuração cria a apuração |
 | `irParaGerenciar(pagina)` | Visão geral > "Trocar de apuração" (some enquanto não há apuração) |
-| `irParaNovaApuracao(pagina)` | Visão geral > "Nova apuração" |
+| `dialogoConfirmar(pagina)` / `dialogoCancelar(pagina)` | o diálogo próprio de confirmação (UX-16); `page.once('dialog')` não o alcança |
+
+Onde ficou o que o cadastro mostrava: o recibo do lote só conta (`Recibo do lote: N de M arquivos`, novos e duplicados);
+identificador, SHA-256 e estado de leitura de cada documento estão na lista `#mesa-acervo-lista` (em "Detalhes técnicos" e
+na coluna Leitura); a apuração aberta é `#contexto-caso`; a pesquisa (rodada, geração, consulta) é a aba "Pesquisar no
+conteúdo" (`#mesa-aba-pesquisa`); o aviso do extrator e o preparo de PDFs são `#docs-pdf-*`.
 
 Quando a barra mudar de novo, só `qa_navegacao.cjs` deve mudar. Os helpers supõem viewport de desktop (no celular a
 barra é uma gaveta).
 
-## Dívida da QA: cinco roteiros obsoletos (registrada em 22/11/2026)
+## Situação dos roteiros (atualizada em 23/11/2026)
 
-`qa_homologacao`, `qa_interface_achados`, `qa_lixeira`, `qa_polimento` e `qa_visual` **falham desde antes da Onda 3**:
-conferido em 22/11/2026 no `b3b6935` (o `main` da lapidação), no `685c62b` e na ponta da fase 3 do Frontend, com o
-mesmo defeito, ou seja, não é consequência da barra lateral nem de nenhuma mudança da Onda 3.
+Passam, contra `lancamento/frontend-o3`: `qa_homologacao` (15 verificações; o passo do OCR sai como PULADO sem Tesseract;
+os passos de contas voltam pela Equipe e pelo Convidar), `qa_extracao_interface` (4), `qa_polimento` (6).
 
-Motivo: foram escritos antes do **contexto persistente do cabeçalho** (`#contexto-caso`, a apuração escolhida no topo
-da Mesa). Hoje as telas não mostram mais o seletor próprio da apuração, e os roteiros ainda o esperam:
+Também passam, depois de reescritos para o diálogo próprio (UX-16) e as telas novas: `qa_experiencia` e `qa_visual` (este com a
+espera do sinal "salvo" por observador e três execuções seguidas OK). `qa_homologacao` pede uma base com a Equipe e a contas-o2.
+`qa_interface_achados` já migrou o cadastro, mas ainda falha mais adiante (`#achados-revisao` escondido na área Achados): não é prova.
 
-- `qa_lixeira` e `qa_interface_achados` esperam `#gerenciar-caso` e `#caso` visíveis (`selectOption` esgota o tempo:
-  "element is not visible");
-- `qa_polimento` espera que, depois de cadastrar, o seletor do cabeçalho passe para a apuração nova
-  (`#contexto-caso option:checked`), mas ele continua em "Escolha uma apuração";
-- `qa_homologacao` quebra na afirmação da linha ~174 (o 1 esperado volta como `[]`) depois de passar as verificações de
-  acesso;
-- `qa_visual` precisa de `NODE_PATH` e, com ele, falha ao clicar (mesma família).
-
-O ajuste de caminho da barra (acima) já foi aplicado neles, mas **não os deixa verdes**. Reescrevê-los é trabalho à
-parte: trocar os seletores pelo seletor do cabeçalho e pelas telas novas. **Fica para o fim da Onda 3**, quando o
-Frontend estabilizar o cabeçalho e as telas novas; reescrever antes seria refazer o trabalho a cada fase. Até lá,
-não use esses cinco como prova de nada (nem verde nem vermelho).
-
-Situação conhecida dos demais:
-
-- `qa_extracao_interface` roda e passa em `685c62b`; é o único dos seis que serve de prova hoje. Na ponta da fase 3
-  ele falha por uma regressão de produto real (o aviso de extração de PDF não é reverificado ao abrir Cadastro pelo
-  caminho novo); foi comunicada ao Frontend.
-- Os demais `qa_*` (`qa_apuracao`, `qa_caderno`, `qa_codex`, `qa_desktop`, `qa_mobile` e outros) **não foram
-  verificados** nesta rodada; não afirmamos que passam.
+Os demais `qa_*` (`qa_apuracao`, `qa_caderno`, `qa_codex`, `qa_desktop`, `qa_mobile`, `qa_lixeira` e outros) **não foram
+verificados** nesta rodada; não afirmamos que passam. `qa_lixeira` espera `#gerenciar-caso` visível e é anterior ao contexto
+persistente do cabeçalho.

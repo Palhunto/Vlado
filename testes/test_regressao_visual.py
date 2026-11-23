@@ -144,7 +144,8 @@ class LinhaDeBaseTest(unittest.TestCase):
     """A linha de base versionada confere com o manifesto e cobre todas as telas esperadas."""
 
     def pastas(self):
-        return [p for p in sorted(rv.REFERENCIAS.glob('*')) if p.is_dir()]
+        # `<plataforma>_extras` são as capturas adicionais (paisagem, 430 px, 200%), de outro formato: test_regressao_visual_extras.py as confere.
+        return [p for p in sorted(rv.REFERENCIAS.glob('*')) if p.is_dir() and not p.name.endswith('_extras')]
 
     def test_ha_linha_de_base(self):
         self.assertTrue(self.pastas(), 'testes/referencias_visuais/ está vazia: rode `regressao_visual.py gerar`.')
@@ -262,7 +263,7 @@ class SelecaoTest(unittest.TestCase):
     def test_larguras_e_temas_do_plano(self):
         self.assertEqual(sorted(rv.VIEWPORTS), [375, 768, 1024, 1440])
         self.assertEqual(sorted(rv.TEMAS), ['claro', 'escuro'])
-        pedidas = {'inicio', 'documentos', 'cadastro', 'codex', 'achados', 'apuracao', 'diligencias', 'quadros', 'gerenciar'}
+        pedidas = {'inicio', 'documentos', 'nova', 'codex', 'achados', 'apuracao', 'diligencias', 'quadros', 'gerenciar'}
         self.assertTrue(pedidas <= set(rv.TELAS))
 
 

@@ -33,15 +33,15 @@ mostra referência, atual e diferença (pixels diferentes em vermelho, caixas ao
 
 ## O que é capturado
 
-Telas: `inicio`, `documentos`, `cadastro`, `codex`, `achados`, `apuracao`, `diligencias`, `quadros`, `gerenciar`,
+Telas: `inicio`, `documentos`, `nova` (Nova apuração, passo 1), `codex`, `achados`, `apuracao`, `diligencias`, `quadros`, `gerenciar`,
 `caderno`, `configuracoes`, as abas `quadros_linha` e `quadros_mapa` (por `/?area=<área>&caso=vila_serena_sintetico`, servidor `local`) e `entrar` (servidor
 `local-contas`). Larguras 375, 768, 1024 e 1440 px; temas claro e escuro. Captura de página inteira, então a altura
 varia por tela. Nome: `<tela>__<largura>__<tema>.png`.
 
 **Foco de teclado** (`foco_*`): o capturador aperta Tab até o alvo ficar focado com `:focus-visible` e captura com o
 anel visível; se o foco não chegar ao alvo, a rodada falha. Alvos: campo de login e botão Entrar na tela de entrar
-(375 e 1440 px); botão "Enviar e cadastrar agora", campo "Natureza dos documentos" e, só em 1440 px, o item
-"Cadastrar arquivos" da barra lateral, na Mesa (área `cadastro`). Nos dois temas: 18 imagens. Mudar a cor, a
+(375 e 1440 px); botão "Continuar para documentos", campo "Natureza dos documentos" e, só em 1440 px, o item
+"Perguntar" da barra lateral, na Nova apuração (área `nova`; a área "Cadastrar arquivos" saiu, R4). Nos dois temas: 18 imagens. Mudar a cor, a
 espessura ou o `outline-offset` do foco reprova (verificado: cor do foco no tema claro, 9 de 9 reprovadas; offset
 efetivo de 4 px para 2 px, 5 de 5). Nas demais capturas o foco é retirado de propósito, para não aparecer anel.
 
@@ -138,3 +138,25 @@ não a cada commit, e usar recorte (`--telas`, `--larguras`, `--temas`) para tro
 - `inicio` estoura na horizontal: página de 890 px a 768 px e de 1061 px a 1024 px (rolagem horizontal).
 - A área `apuracao` registra no console um bloqueio da CSP (`style-src 'self'`): estilo inline aplicado por script.
   Fica no manifesto (`erros_do_navegador`); `comparar` avisa se aparecer erro novo.
+
+## Capturas adicionais (R6 do Traço): paisagem, 430 px, texto a 200% e reflow a 320 px
+
+`python testes/regressao_visual_extras.py gerar` refaz, e `comparar` confere, 112 capturas em `windows_extras/` (14 telas, sem os focos, nos
+dois temas; nome `<tela>__<cenário>__<tema>.png`). São referências ADICIONAIS: as 130 de cima não mudam. Cenários:
+
+| Cenário | Janela | Para quê |
+|---|---|---|
+| `paisagem` | 812 x 375 px | celular deitado: cabeçalho, gaveta e diálogos com altura curta |
+| `430` | 430 x 932 px | celular grande em pé, entre os 375 e os 768 da linha de base |
+| `zoom200` | 640 px em CSS, escala 2 (imagem de 1280 px) | a janela de 1280 px com a página ampliada a 200% (WCAG 1.4.4) |
+| `reflow320` | 320 x 640 px | o reflow da WCAG 1.4.10: o conteúdo cabe em 320 px de largura em CSS, sem rolagem horizontal |
+
+O `zoom200` é a página ampliada, não só a fonte: a CSP da Mesa não deixa injetar CSS para aumentar o texto sozinho, e Ctrl + é como a pessoa de verdade
+faz. Rolagem horizontal não impede gerar: fica no manifesto (`rolagem_horizontal`, hoje vazio nas 112) e `comparar` reprova a que for nova, além de diferença
+de imagem e de pedido a endereço externo. O Vditor do Caderno registra um aviso de CSP (estilo em linha) no manifesto, como na linha de base. Os testes sem
+navegador estão em `test_regressao_visual_extras.py`.
+
+## Pendentes
+
+Nenhuma. As 14 `nova__*` (8 da linha de base e 6 das extras), que o Traço recusara por faltar a linha de etapas em `?area=nova`, foram regeradas sobre o 06d478e
+do Lume, que a desenha ("1 Nome e fontes · 2 Documentos · 3 Conferir recibo"; no celular, "Passo 1 de 3 · Nome e fontes"). Os 10 `foco_mesa_*` (anel de foco na própria tela `nova`) foram regerados junto, porque a linha de etapas muda a página. A aceitação visual segue sendo do Traço.
