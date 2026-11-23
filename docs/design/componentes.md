@@ -249,6 +249,15 @@ O estado de salvamento é anunciado a leitor de tela quando muda (W11, regra 9).
 
 Onde: cabeçalho dos quadros. Linha com intervalo de 4. Cada aba é `<a>`: altura 44, preenchimento 0 14, raio 8, texto 16 `--theme-text`. Ativa: `aria-current="page"`, fundo `--theme-soft`, texto `--theme-accent` 600. Foco: anel. Ao passar o mouse (derivado): fundo `--theme-soft`. Ocupado, erro, desabilitado e vazio não se aplicam. Ordem: Hipóteses, Linha do tempo, Mapa de relações, Tabelas, Comparador (cinco abas, decisão do dono P15.1; "Conferência do texto" foi para o caderno e "Entrevistas e pedidos" virou a área Pedidos e prazos). Rótulo sem quebra de linha. É o único padrão de aba da Mesa (UX-17 aponta três). No celular, as abas viram pílulas que rolam para o lado: altura 44 (o canvas desenha 40; decisão do dono P20b, 22/11/2026, pelo alvo de toque), preenchimento 0 16, raio pílula, borda 1 px `--theme-input-line`; ativa verde cheio (`--theme-accent`, texto `--theme-on-primary` 600); "Mapa" no lugar de "Mapa de relações"; faixa com preenchimento 12 16, fundo `--theme-surface` e borda inferior 1 px `--theme-line`.
 
+<a id="faixa-que-rola"></a>
+
+**Faixa que rola para o lado** (Q5 da Coruja, 23/11/2026). Vale para as pílulas dos quadros e para a linha de etapas (`#mesa-etapas`) abaixo de 720 px, as duas faixas da Mesa que rolam por dentro. A 320 px, a linha de etapas do Caderno deixava o passo atual, "4 Caderno", fora da vista. Nos Quadros, apareciam duas das cinco pílulas, cortadas na divisa entre elas, e a faixa parecia completa. Quando o conteúdo passa da largura da faixa:
+
+- **O item ativo fica à vista.** Ao desenhar a faixa e ao trocar de item, só a faixa rola (`scrollLeft`, nunca a página) até o item ativo caber inteiro, com 16 px de folga do lado de onde veio. A rolagem é instantânea, sem animação.
+- **Esmaecido na borda.** Do lado em que ainda há conteúdo, os últimos 32 px da faixa esmaecem até sumir. O esmaecido é uma máscara (`mask-image` com gradiente de opaco a transparente), e não uma cor, para valer nos dois temas sem token novo. O lado vem de `data-rola` (`fim`, `inicio` ou `ambos`), recalculado ao rolar e ao redimensionar. Sem estouro, a faixa fica sem o atributo e sem máscara. A máscara vai no elemento que rola. Se ele tiver fundo próprio, como a faixa dos quadros (`--theme-surface`), o fundo passa ao elemento pai, para não esmaecer junto.
+- **Nada além disso.** Sem setas e sem barra de rolagem à vista (a linha de etapas já a esconde). Pelo teclado, o navegador já traz à vista o item que recebe o foco. Como não há animação, `prefers-reduced-motion` não muda nada aqui.
+- **Prova:** capturas a 320, 390 e 430 px do Caderno, de Documentos e dos Quadros, nos dois temas, com o item ativo inteiro dentro da faixa. A medida de reflow passa a conferir também os elementos que rolam por dentro, além da página.
+
 <a id="achado"></a>
 
 ### Cartão de achado
