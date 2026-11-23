@@ -1,7 +1,7 @@
 """Salvar e remover a chave de IA com a senha, num navegador de verdade contra o servidor de verdade (``ia-config-salvar``; contrato de contas, 5.15).
 
 Uma redação só, com login (``local-contas``, como ``test_senha_gestao.py``): numa instalação com mais de uma redação a chave do serviço não se troca pela
-Mesa. O Chromium do Playwright entra como o dono, abre "Conexão e opções" em Perguntar e salva e remove a chave (``qa_ia_senha.cjs``): o servidor recusa
+Mesa. O Chromium do Playwright entra como o dono, abre Configurações (o painel do provedor e da chave da IA, P43) e salva e remove a chave (``qa_ia_senha.cjs``): o servidor recusa
 sem a senha, o diálogo a pede, a senha errada fica no campo, cancelar não envia nada e a senha certa conclui. Aqui se confere o que ficou guardado: a
 chave de teste sumiu depois de removida e a senha não está em nenhum arquivo de texto da instalação. Com ``VLADO_CAPTURAS=<pasta>`` grava os PNGs do
 Design. Sem Node ou sem o Playwright, o teste é pulado. Sem modelo e sem rede.

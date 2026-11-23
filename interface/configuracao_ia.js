@@ -18,11 +18,19 @@
       : `Chave salva · termina em ${chave.final}`;
     $('ia-remover').hidden = !(chave.configurada && chave.origem === 'salva');
   }
+  // Em Perguntar > Conexão e opções fica só a linha que diz o que está em uso (o formulário mora em Configurações): provedor e modelo, ou o modelo padrão.
+  function resumir() {
+    const rotulo = $('ia-resumo');
+    if (!rotulo || !estado) return;
+    const provedor = $('ia-provedor').selectedOptions?.[0]?.textContent || $('ia-provedor').value;
+    rotulo.textContent = `IA: ${provedor}, ${estado.modelo_preferido ? `modelo ${estado.modelo_preferido}` : 'modelo padrão'}.`;
+  }
   function aplicar(dados) {
     estado = dados;
     $('ia-provedor').value = dados.provedor;
     $('ia-modelo').value = dados.modelo_preferido || '';
     render();
+    resumir();
   }
   async function carregar() {
     try {
