@@ -61,16 +61,13 @@
       catalogo = resposta?.ok ? ((await resposta.json())?.casos || []) : [];
     } catch (_) { catalogo = []; }
   }
-  // A redação tem chave própria? `ia-config`, no serviço hospedado, diz de quem é a chave de cada provedor (origem 'redacao' é a dela). Falhou ou não disse: sem chave própria.
-  let chavePropria = false;
-  async function buscarChaves() {
-    try { chavePropria = Object.values((await api('ia-config', {}))?.chaves || {}).some(chave => chave?.origem === 'redacao'); }
-    catch (_) { chavePropria = false; }
-  }
-  // Sem chave própria na redação, nada do gasto com ela aparece (decisão do Design, P40). Com gasto no mês, aparece mesmo que a chave já tenha sido tirada: o gasto foi real.
-  const mostrarChavePropria = () => chavePropria || Number(lista?.gasto_chave_propria_brl) > 0 || pessoas().some(p => Number(p.gasto_chave_propria_brl) > 0);
+  // A redação tem chave própria? `equipe-listar.chave_propria`: true com chave de IA própria salva agora; false sem ela (e sempre fora do piloto); null se o arquivo das chaves não pôde ser
+  // lido. Vem na própria lista, então vale para quem não tem `ia-config` (só o dono tem). Só presença: nada da chave.
+  // Sem chave própria na redação, nada do gasto com ela aparece (decisão do Design, P40). Com gasto no mês, aparece mesmo que a chave já tenha sido tirada, e mesmo com o campo
+  // ilegível (null) ou ausente: o gasto foi real.
+  const mostrarChavePropria = () => lista?.chave_propria === true || Number(lista?.gasto_chave_propria_brl) > 0 || pessoas().some(p => Number(p.gasto_chave_propria_brl) > 0);
   async function recarregar() {
-    await carregar({corpo: raiz.corpoTabela}, async () => { const [equipe] = await Promise.all([api('equipe-listar', {}), buscarCatalogo(), buscarChaves()]); return equipe; },
+    await carregar({corpo: raiz.corpoTabela}, async () => { const [equipe] = await Promise.all([api('equipe-listar', {}), buscarCatalogo()]); return equipe; },
       resposta => { lista = resposta; desenharLista(); desenharGasto(); titulo(); });
   }
 

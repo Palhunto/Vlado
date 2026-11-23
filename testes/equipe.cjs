@@ -3,7 +3,7 @@
 // (apurações, teto mensal, acesso), o gasto da redação e a atividade recente, com uma frase para cada tipo de evento que o servidor grava.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {abrir, esperar, texto, digitar, mudar, botaoPorTexto, dialogo, dados, recusa, equipeListar, pessoa, ID, ALFA, BETA, GAMA, DELTA, tecla} = require('./contas_apoio.cjs');
+const {abrir, esperar, texto, digitar, mudar, botaoPorTexto, dialogo, dados, recusa, sessaoDe, equipeListar, pessoa, ID, ALFA, BETA, GAMA, DELTA, tecla} = require('./contas_apoio.cjs');
 
 const ANA = () => pessoa(ID.ana, 'Ana Lima', 'dono');
 const RUI = (extra = {}) => pessoa(ID.rui, 'Rui Castro', 'reporter', {casos: ['alfa', 'beta', 'gama', 'delta'], responsavel_de: ['alfa'], ...extra});
@@ -418,15 +418,18 @@ test('P40: o gasto com a chave própria da redação aparece em linha separada n
   assert.ok(texto(cartao).includes('Pago pela chave da redação: não entra na cota do serviço.'));
   assert.ok(!texto(cartao).includes('R$ 27,75'), 'nada de soma');
   assert.equal(cartao.querySelector('.mesa-medidor').getAttribute('aria-label'), '16% da cota usada', 'o medidor segue só a cota do serviço');
-  const comChave = op => (op === 'ia-config' ? {chaves: {anthropic: {configurada: true, origem: 'redacao', final: 'abcd'}, openai: {configurada: false, origem: null, final: null}}} : undefined);
-  const zero = await abrirEquipe({...com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}), api: (op, d) => (op === 'equipe-listar' ? equipeListar([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}) : comChave(op))});
+  const zero = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00', chave_propria: true}));
   assert.equal(texto(zero.mesa.doc.querySelector('.equipe-chave-propria')), 'Chave própria da redaçãoR$ 0,00', 'com chave própria e sem gasto: "0.00"');
   const semChave = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}));
   assert.ok(semChave.mesa.doc.querySelector('.equipe-chave-propria') === null, 'sem chave própria na redação (e sem gasto com ela), nada aparece');
-  const doServico = await abrirEquipe({...com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}), api: (op, d) => (op === 'equipe-listar' ? equipeListar([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}) : op === 'ia-config' ? {chaves: {anthropic: {configurada: true, origem: 'servico', final: null}}} : undefined)});
-  assert.ok(doServico.mesa.doc.querySelector('.equipe-chave-propria') === null, 'só a chave do serviço: nada aparece');
-  const falhou = await abrirEquipe({...com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}), api: (op) => (op === 'equipe-listar' ? equipeListar([ANA(), RUI()], {gasto_chave_propria_brl: '0.00'}) : op === 'ia-config' ? recusa('operacao_proibida', 'Não permitido.', 'proibido') : undefined)});
-  assert.ok(falhou.mesa.doc.querySelector('.equipe-chave-propria') === null, 'ia-config falhou: sem chave própria');
+  const doServico = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00', chave_propria: false}));
+  assert.ok(doServico.mesa.doc.querySelector('.equipe-chave-propria') === null, 'chave_propria false (só a chave do serviço, ou fora do piloto): nada aparece');
+  const ilegivel = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00', chave_propria: null}));
+  assert.ok(ilegivel.mesa.doc.querySelector('.equipe-chave-propria') === null, 'chave_propria null (arquivo das chaves ilegível), sem gasto: a lista abre e a linha não aparece');
+  const ilegivelComGasto = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: '3.25', chave_propria: null}));
+  assert.equal(texto(ilegivelComGasto.mesa.doc.querySelector('.equipe-chave-propria')), 'Chave própria da redaçãoR$ 3,25', 'null com gasto: o gasto foi real e aparece');
+  const retirada = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: '3.25', chave_propria: false}));
+  assert.equal(texto(retirada.mesa.doc.querySelector('.equipe-chave-propria')), 'Chave própria da redaçãoR$ 3,25', 'chave já tirada, mas com gasto no mês: aparece');
   const nulo = await abrirEquipe(com([ANA(), RUI()], {gasto_chave_propria_brl: null}));
   assert.ok(nulo.mesa.doc.querySelector('.equipe-chave-propria') === null, 'o razão não pôde ser lido: sem a linha');
   const semGasto = await abrirEquipe(com([ANA(), RUI()], {gasto: null, gasto_chave_propria_brl: null}));
@@ -461,4 +464,15 @@ test('em inglês, "Conta excluída" vira "Deleted account" na atividade; o nome 
   const {Equipe} = mesa.janela;
   assert.equal(texto(Equipe.frase({tipo: 'senha_trocada', conta: ID.rui, por: ID.rui, conta_nome: 'Conta excluída', por_nome: 'Conta excluída'})), 'Deleted account changed the password');
   assert.equal(texto(Equipe.frase({tipo: 'senha_trocada', conta: ID.rui, por: ID.rui, conta_nome: 'Rui Castro', por_nome: 'Rui Castro'})), 'Rui Castro changed the password');
+});
+
+test('P40: quem vê a Equipe sem ter ia-config (editor) vê a linha da chave própria pelo campo chave_propria da lista, e a Mesa não chama ia-config', async () => {
+  const base = sessaoDe('dono');
+  const semIaConfig = {...base, capacidades: base.capacidades.filter(capacidade => capacidade !== 'ia-config')};
+  assert.ok(!semIaConfig.capacidades.includes('ia-config') && semIaConfig.capacidades.includes('equipe-listar'));
+  const f = await abrirEquipe({sessao: semIaConfig, papel: 'editor', ...com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00', chave_propria: true})});
+  assert.equal(texto(f.mesa.doc.querySelector('.equipe-chave-propria')), 'Chave própria da redaçãoR$ 0,00', 'com a chave própria salva e sem gasto: a linha aparece mesmo sem ia-config');
+  assert.ok(!f.mesa.chamadas.some(chamada => chamada.operacao === 'ia-config'), 'a Equipe não pergunta mais ao ia-config');
+  const sem = await abrirEquipe({sessao: semIaConfig, papel: 'editor', ...com([ANA(), RUI()], {gasto_chave_propria_brl: '0.00', chave_propria: false})});
+  assert.ok(sem.mesa.doc.querySelector('.equipe-chave-propria') === null, 'sem chave própria: nada');
 });
