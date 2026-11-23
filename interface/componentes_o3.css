@@ -358,3 +358,12 @@ button[aria-disabled="true"]{cursor:progress}
 /* === Seus dados em Minha conta (componentes.md#minha-conta; conta.js, dados_conta.js) === */
 .conta-termos .conta-link{color:var(--theme-accent);text-decoration:underline;font-weight:600}
 .conta-termos .conta-link:hover{color:var(--theme-primary-hover)}
+
+/* Pendência de termos novos (componentes.md#pendencia-termos; termos.js): a caixa de marcar de 20 px e o aviso da página, na família da pendência do fator */
+.termos-caixa{display:flex;gap:var(--espaco-2);align-items:flex-start;font-size:var(--text-base);line-height:1.5;cursor:pointer}
+.termos-caixa input{flex:none;width:20px;height:20px;margin:var(--espaco-1) 0 0;accent-color:var(--theme-accent)}
+.termos-caixa input[aria-invalid="true"]{outline:2px solid var(--theme-danger);outline-offset:2px}
+.termos-erro,.termos-aviso{margin:0}
+.termos-erro[hidden],.termos-aviso[hidden],.termos-estado[hidden]{display:none}
+.termos-nao-aceitar{margin:0}
+.termos-ler{font-weight:600;text-decoration:underline;color:var(--theme-accent)}

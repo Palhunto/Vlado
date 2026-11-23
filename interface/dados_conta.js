@@ -24,6 +24,17 @@
       return fetch(`/api/${operacao}`, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json', 'X-Session-Token': csrf}, body: JSON.stringify(dados)});
     };
   }
+  // `chamar` para quem não tem o `api` da Mesa (a página dos termos): como o `api`, devolve o corpo ou lança com `result`.
+  function chamadorDaSessao() {
+    const bruto = chamadorBruto();
+    return async (operacao, dados = {}) => {
+      const resposta = await bruto(operacao, dados);
+      let corpo = {};
+      try { corpo = await resposta.json(); } catch (_) { /* sem corpo */ }
+      if (!resposta.ok) throw Object.assign(new Error(textoDoErro(corpo)), {result: corpo});
+      return corpo;
+    };
+  }
   // O texto de uma recusa do servidor, na língua da interface quando o dicionário a tem; senão, a mensagem que veio.
   function textoDoErro(corpo, padrao) {
     const original = corpo?.erro;
@@ -84,5 +95,5 @@
 
   const endereco = texto => (typeof texto === 'string' && /^https:\/\/[^\s]+$/i.test(texto) ? texto : null);
 
-  window.DadosConta = {exportar, excluir, chamadorBruto, endereco, nomeDoArquivo};
+  window.DadosConta = {exportar, excluir, chamadorBruto, chamadorDaSessao, endereco, nomeDoArquivo};
 })();

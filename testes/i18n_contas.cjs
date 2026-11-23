@@ -39,7 +39,7 @@ function literaisDe(arquivo) {
   }
   return achados;
 }
-const ARQUIVOS = ['conta.js', 'equipe.js', 'fator.js', 'dados_conta.js'];
+const ARQUIVOS = ['conta.js', 'equipe.js', 'fator.js', 'dados_conta.js', 'termos.js'];
 
 test('todo texto de interface de conta.js, equipe.js e fator.js tem a tradução em inglês no dicionário', () => {
   const textos = dicionario().textos;
