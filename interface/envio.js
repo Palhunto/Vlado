@@ -350,10 +350,11 @@
   const comLimitacao = resultado => resultado.arquivos.some(l => l.estado === 'pronto' && ['erro', 'parcial', 'sem_texto'].includes(l.extracao));
 
   // O servidor anuncia o envio em fluxo em /api/integracao (envio_fluxo); um servidor mais antigo fica com o envio em JSON.
-  let integracao = null;
+  // Só a resposta boa fica guardada: uma consulta que falhou (rede, 5xx) é refeita no próximo envio, em vez de valer a visita inteira como "sem envio em fluxo".
+  let consulta = null;
   function disponivel() {
-    integracao ||= fetch('/api/integracao').then(r => r.ok ? r.json() : {}).catch(() => ({}));
-    return integracao.then(dados => dados?.envio_fluxo === true);
+    consulta ||= fetch('/api/integracao').then(r => (r.ok ? r.json() : Promise.reject(new Error('integracao'))));
+    return consulta.then(dados => dados?.envio_fluxo === true, () => { consulta = null; return false; });
   }
 
   window.Envio = {enviar, planejar, recusa, renderRecibo, comLimitacao, disponivel, LIMITE_LOTE, LIMITE_ARQUIVOS};

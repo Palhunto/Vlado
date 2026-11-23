@@ -24,14 +24,22 @@ function totp(segredo, desvio = 0) {
   return String(((h[o] & 0x7f) << 24 | h[o + 1] << 16 | h[o + 2] << 8 | h[o + 3]) % 1000000).padStart(6, '0');
 }
 const texto = async (page, seletor) => (await page.textContent(seletor)).replace(/\s+/g, ' ').trim();
+// O redirecionamento que o servidor manda (303 para a página da pendência) volta ao roteador do contexto como uma navegação nova, em vez de ser seguido por fora dele.
+async function responder(rota, resposta) {
+  const destino = resposta.headers().location;
+  if (resposta.status() >= 300 && resposta.status() < 400 && destino) {
+    return rota.fulfill({status: 200, contentType: 'text/html; charset=utf-8', body: `<!doctype html><meta charset="utf-8"><script>location.replace(${JSON.stringify(destino)})</script>`});
+  }
+  return rota.fulfill({response: resposta});
+}
 async function contexto(browser) {
   const ctx = await browser.newContext({viewport: {width: 1440, height: 900}, locale: 'pt-BR'});
   await ctx.addInitScript(() => { try { localStorage.setItem('vlado-idioma', 'pt'); } catch (_) { /* sem armazenamento */ } });
-  await ctx.route(`${args.origem}/**`, async rota => { try {
+  await ctx.route(url => url.host === new URL(args.origem).host, async rota => { try {
     const pedido = rota.request(), endereco = new URL(pedido.url());
     const resposta = await rota.fetch({url: `http://127.0.0.1:${args.porta}${endereco.pathname}${endereco.search}`, headers: {...pedido.headers(), host: new URL(args.origem).host}, maxRedirects: 0});
-    await rota.fulfill({response: resposta});
-  } catch (_) { /* a página fechou com o pedido em voo */ } });
+    await responder(rota, resposta);
+  } catch (erroRota) { console.error('ROTA', String(erroRota.message).slice(0, 160)); } });
   return ctx;
 }
 async function entrarAte2(page, email, senha) {
@@ -117,24 +125,13 @@ async function entrarAte2(page, email, senha) {
     assert.deepEqual(erros, []);
     await ctx.close();
 
-    // 4b. a página da pendência (/conta/segundo-fator): o servidor ainda não marca a pendência nem serve o caminho, então o roteiro faz as duas coisas por fora
-    // (o caminho serve o entrar.html de verdade; GET /api/sessao ganha `pendencias`) e o resto, a sessão, o token e o início do cadastro, é do servidor de verdade.
+    // 4b. a página da pendência (/conta/segundo-fator): um editor de verdade, sem o segundo fator, que o servidor (9e79e25) leva à página e marca em GET /api/sessao
     ctx = await contexto(browser); page = await ctx.newPage(); page.on('pageerror', erro => erros.push(erro.message));
-    let pendente = false;
-    await ctx.route(`${args.origem}/conta/segundo-fator`, async rota => {
-      const resposta = await rota.fetch({url: `http://127.0.0.1:${args.porta}/entrar`, headers: {...rota.request().headers(), host: new URL(args.origem).host}});
-      await rota.fulfill({response: resposta});
-    });
-    await ctx.route(`${args.origem}/api/sessao`, async rota => {
-      const resposta = await rota.fetch({url: `http://127.0.0.1:${args.porta}/api/sessao`, headers: {...rota.request().headers(), host: new URL(args.origem).host}});
-      if (!pendente || resposta.status() !== 200) return rota.fulfill({response: resposta});
-      await rota.fulfill({response: resposta, json: {...(await resposta.json()), pendencias: ['segundo_fator']}});
-    });
     await page.goto(`${args.origem}/entrar`);
     await page.waitForSelector('#entrar-secao:not([hidden])');
     await page.fill('#entrar-login', args.pendente.email); await page.fill('#entrar-senha', args.senha);
     await Promise.all([page.waitForURL(url => url.pathname !== '/entrar', {timeout: 15000}), page.click('#entrar-enviar')]);
-    pendente = true;
+    await page.waitForURL(url => url.pathname === '/conta/segundo-fator' || url.pathname === '/', {timeout: 15000});
     await page.goto(`${args.origem}/conta/segundo-fator`);
     await page.waitForSelector('#pendencia-secao:not([hidden]) h1', {timeout: 15000});
     assert.equal(await texto(page, '#pendencia-secao h1'), 'Proteja a conta com um segundo passo');
@@ -148,7 +145,6 @@ async function entrarAte2(page, email, senha) {
     assert.match(await texto(page, '#pendencia-secao'), /PASSO 2 DE 3/);
     if (args.capturas) await page.screenshot({path: path.join(args.capturas, 'pendencia-passo2-1440.png'), fullPage: true});
     await Promise.all([page.waitForURL(url => url.pathname === '/entrar', {timeout: 15000}), page.click('#pendencia-secao .fator-link')]);   // Sair
-    pendente = false;
     resultado.pendencia = 'ok';
     await ctx.close();
 
@@ -161,11 +157,11 @@ async function entrarAte2(page, email, senha) {
         const conta = args.extras[i], marca = `${rotulo}-${tema}`;
         const c = await browser.newContext({viewport: {width: largura, height: altura}, locale: 'pt-BR', colorScheme: tema});
         await c.addInitScript(t => { try { localStorage.setItem('vlado-idioma', 'pt'); localStorage.setItem('apuracao:tema', t); } catch (_) { /* sem armazenamento */ } }, tema);
-        await c.route(`${args.origem}/**`, async rota => { try {
+        await c.route(url => url.host === new URL(args.origem).host, async rota => { try {
           const pedido = rota.request(), endereco = new URL(pedido.url());
           if (endereco.pathname === '/api/entrar-segundo-fator' && c.__expirar) return await rota.fulfill({status: 401, contentType: 'application/json', body: JSON.stringify({estado: 'credenciais', codigo: 'entrada_expirada', erro: 'A entrada expirou.'})});
           const resposta = await rota.fetch({url: `http://127.0.0.1:${args.porta}${endereco.pathname}${endereco.search}`, headers: {...pedido.headers(), host: new URL(args.origem).host}, maxRedirects: 0});
-          await rota.fulfill({response: resposta});
+          await responder(rota, resposta);
         } catch (_) { /* a página fechou com o pedido em voo */ } });
         const pagina = await c.newPage();
         const foto = nome => pagina.screenshot({path: path.join(args.capturas, `${nome}-${marca}.png`), fullPage: true});
@@ -200,15 +196,13 @@ async function entrarAte2(page, email, senha) {
         const marca = `${rotulo}-${tema}`;
         const c = await browser.newContext({viewport: {width: largura, height: altura}, locale: 'pt-BR', colorScheme: tema});
         await c.addInitScript(t => { try { localStorage.setItem('vlado-idioma', 'pt'); localStorage.setItem('apuracao:tema', t); } catch (_) { /* sem armazenamento */ } }, tema);
-        let pendente = false, recusar = false;
-        await c.route(`${args.origem}/**`, async rota => { try {
+        let recusar = false;
+        await c.route(url => url.host === new URL(args.origem).host, async rota => { try {
           const pedido = rota.request(), endereco = new URL(pedido.url());
           const cabecalhos = {...pedido.headers(), host: new URL(args.origem).host};
           if (recusar && endereco.pathname === '/api/codex-status') return await rota.fulfill({status: 403, contentType: 'application/json', body: JSON.stringify({estado: 'pendencia', codigo: 'pendencia_de_conta', pendencias: ['segundo_fator'], erro: 'Falta cadastrar o segundo fator.'})});
-          const alvo = endereco.pathname === '/conta/segundo-fator' ? '/entrar' : endereco.pathname;
-          const resposta = await rota.fetch({url: `http://127.0.0.1:${args.porta}${alvo}${endereco.search}`, headers: cabecalhos, maxRedirects: 0});
-          if (endereco.pathname === '/api/sessao' && pendente && resposta.status() === 200) return await rota.fulfill({response: resposta, json: {...(await resposta.json()), pendencias: ['segundo_fator']}});
-          await rota.fulfill({response: resposta});
+          const resposta = await rota.fetch({url: `http://127.0.0.1:${args.porta}${endereco.pathname}${endereco.search}`, headers: cabecalhos, maxRedirects: 0});
+          await responder(rota, resposta);
         } catch (_) { /* a página fechou com o pedido em voo */ } });
         const pagina = await c.newPage(); pagina.on('pageerror', erro => erros.push(erro.message));
         const foto = nome => pagina.screenshot({path: path.join(args.capturas, `${nome}-${marca}.png`), fullPage: true});
@@ -216,7 +210,6 @@ async function entrarAte2(page, email, senha) {
         await pagina.waitForSelector('#entrar-secao:not([hidden])');
         await pagina.fill('#entrar-login', args.pendentes[i].email); await pagina.fill('#entrar-senha', args.senha);
         await Promise.all([pagina.waitForURL(url => url.pathname !== '/entrar', {timeout: 15000}), pagina.click('#entrar-enviar')]);
-        pendente = true;
         if (i === 0 || i === 2) {   // o 403 pendencia_de_conta: a Mesa abre, a primeira chamada responde a pendência e a página vai para a da pendência (claro, 375 e 1440)
           recusar = true;
           await pagina.goto(`${args.origem}/?area=codex`);

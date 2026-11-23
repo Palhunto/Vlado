@@ -147,7 +147,7 @@
     if (ocupado) return null;
     ocupado = true;   // antes de qualquer espera: um segundo clique durante a consulta ao servidor não manda o lote duas vezes
     try {
-      if (!window.Envio || !(await window.Envio.disponivel())) { aoIndisponivel?.(arquivos); return null; }
+      if (!window.Envio || !(await window.Envio.disponivel())) { await aoIndisponivel?.(arquivos); return null; }   // a trava só solta quando o envio em JSON termina
       // Sem "natureza": o servidor usa a que a apuração já tem.
       // `escopo` é da Nova apuração (novo: true, sem caso: o servidor escolhe o identificador); sem ele, o envio vai à apuração escolhida.
       const resultado = await window.Envio.enviar({escopo: escopo || {novo: false, caso}, arquivos, alvo, alvoRecibo, aoCriar, aoTerminar});

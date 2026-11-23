@@ -61,7 +61,7 @@ async function api(operation, data, binary = false) {
   try { result = await response.json(); }
   catch (cause) {
     if ([502, 503, 504].includes(response.status)) throw networkFailure('Sem conexão com o servidor.', cause);
-    throw new Error(window.I18N?.erro ? window.I18N.erro({}) : 'Não foi possível completar a operação.');
+    throw Object.assign(new Error(window.I18N?.erro ? window.I18N.erro({}) : 'Não foi possível completar a operação.'), {status: response.status});
   }
   if (!response.ok) {
     window.Sessao?.recusada(result);  // 403 redacao_suspensa: o estado vale para a Mesa inteira
@@ -69,7 +69,7 @@ async function api(operation, data, binary = false) {
     if (result?.codigo === 'pendencia_de_conta' && (result.pendencias || []).includes('segundo_fator') && location.pathname !== '/conta/segundo-fator') location.replace('/conta/segundo-fator');
     // One place turns server errors into the interface language (by `codigo` in English).
     const failure = new Error(window.I18N?.erro ? window.I18N.erro(result) : result.erro || 'Não foi possível completar a operação.');
-    failure.result = result;
+    failure.result = result; failure.status = response.status;
     throw failure;
   }
   return result;
@@ -620,7 +620,9 @@ window.PreparoDePdf = (() => {
 // o recibo é conferido antes de a tela seguir. Serve à Nova apuração (escopo com novo:true) e à Documentos de uma apuração que já existe (escopo com caso).
 window.EnvioJson = (() => {
   const MAXIMO = 50 * 1024 * 1024;
-  async function enviar(arquivos, {escopo, alvoRecibo}) {
+  // Uma apuração nova que não se sabe se nasceu (rede, 500, 502 ou 504, como no envio em fluxo): quem chama avisa e pede confirmação antes de um reenvio.
+  const AVISO_INCERTO = 'Não sabemos se a apuração foi criada: a resposta do servidor não chegou. Confira a apuração na Visão geral antes de enviar de novo.';
+  async function enviar(arquivos, {escopo, aoIncerto}) {
     if (arquivos.reduce((soma, arquivo) => soma + arquivo.size, 0) > MAXIMO) {
       window.definirEstadoAcervo?.('O lote excede 50 MB. Divida o envio em lotes menores; nenhum arquivo foi enviado.'); return null;
     }
@@ -631,7 +633,10 @@ window.EnvioJson = (() => {
       if (resultado.recebidos !== arquivos.length || resultado.arquivos.length !== arquivos.length) throw new Error('Recibo incompleto. Confira o inventário antes de considerar o lote confirmado.');
       return resultado;
     } catch (falha) {
-      window.definirEstadoAcervo?.(falha.message); return null;
+      const incerto = !!escopo.novo && !escopo.caso && (falha.rede === true || [500, 502, 504].includes(falha.status));
+      if (incerto) { const aviso = window.I18N ? window.I18N.t(AVISO_INCERTO) : AVISO_INCERTO; window.definirEstadoAcervo?.(aviso); aoIncerto?.(aviso); }
+      else window.definirEstadoAcervo?.(falha.message);
+      return null;
     }
   }
   return {enviar};
@@ -797,7 +802,7 @@ window.NovaApuracao = (() => {
     const aoCriar = async caso => { marcarEnvio(false); await criada(caso); };   // a apuração existe: não há mais o risco de criar outra
     // N1: sem o envio por arquivo no servidor, a própria Nova apuração envia em JSON (sem depender da área Cadastrar arquivos).
     const enviarEmJson = async arquivosEscolhidos => {
-      const resultado = await window.EnvioJson.enviar(arquivosEscolhidos, {escopo});
+      const resultado = await window.EnvioJson.enviar(arquivosEscolhidos, {escopo, aoIncerto: aviso => { incerto = aviso; $('nova-incerto').textContent = aviso; $('nova-incerto').hidden = false; }});
       if (!resultado) return null;
       marcarEnvio(false); await criada(resultado.caso_id);
       window.Envio.renderRecibo($('documentos-recibo'), resultado);
@@ -845,6 +850,8 @@ window.NovaApuracao = (() => {
   // Escolher uma apuração no topo, ou sair da tela Documentos depois da criação, encerra o modo.
   window.addEventListener('mesa-contexto-alterado', () => { if (noFluxo() && window.contextoCaso?.()) encerrar(); });
   registrarGanchoArea({depois: nome => {
+    // Entrada direta no passo 1 (?area=nova, rota restaurada, qualquer showArea('nova')): ele também tem a linha de etapas.
+    if (nome === 'nova' && fluxo === null) { fluxo = 'passo1'; etapa = 1; }
     if (nome !== 'documentos' && nome !== 'nova' && fluxo === null) etapa = null;
     desenharEtapas(); titular();
   }});
