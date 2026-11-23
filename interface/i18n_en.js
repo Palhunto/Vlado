@@ -120,6 +120,8 @@ window.VLADO_I18N_EN = {
     "Conversa com os documentos": "Conversation with the documents",
     "Verificando conexão…": "Checking connection…",
     "Conexão e opções": "Connection and options",
+    "Chave da redação": "Newsroom key",
+    "Redação inteira": "Whole newsroom",
     "Verificar conexão": "Check connection",
     "Encerrar serviço": "Stop service",
     "Configurações": "Settings",

@@ -100,3 +100,22 @@ test('codex.js avisa o cartão quando a pergunta termina (o acompanhamento para 
   const codigo = fs.readFileSync(path.join(__dirname, '..', 'interface', 'codex.js'), 'utf8');
   assert.match(codigo, /if \(!active && data\.eventos\.length < 100\) \{ window\.atualizarCotaBarra\?\.\(true\);/);
 });
+
+test('P40 (b): o gasto com a chave própria da redação aparece em linha separada, sem somar à cota; o dono vê também o da redação; sem o campo, nada aparece', async () => {
+  const comChave = (gasto, propria, redacao) => ({...conta(gasto, '50.00'), chave_propria: {conta_brl: propria, ...(redacao ? {organizacao_brl: redacao} : {})}});
+  const pessoa = await abrir(comChave('18.40', '3.25'));
+  assert.equal(pessoa.$('mesa-cota-valor').textContent, 'R$ 18,40 de R$ 50', 'a cota do serviço segue como estava');
+  assert.equal(pessoa.$('mesa-cota-chave').hidden, false);
+  assert.equal(pessoa.$('mesa-cota-chave').querySelector('span').textContent, 'Chave da redação'); assert.equal(pessoa.$('mesa-cota-chave-valor').textContent, 'R$ 3,25');
+  assert.equal(pessoa.$('mesa-cota-chave-redacao').hidden, true, 'a pessoa não vê o da redação inteira');
+  const dono = await abrir(comChave('18.40', '3.25', '12.00'));
+  assert.equal(dono.$('mesa-cota-chave-redacao').hidden, false);
+  assert.equal(dono.$('mesa-cota-chave-redacao').querySelector('span').textContent, 'Redação inteira'); assert.equal(dono.$('mesa-cota-chave-redacao-valor').textContent, 'R$ 12,00');
+  const zero = await abrir(comChave('0.00', '0.00'));
+  assert.equal(zero.$('mesa-cota-chave-valor').textContent, 'R$ 0,00', 'sempre presente, 0,00 sem gasto');
+  const sem = await abrir(conta('18.40', '50.00'));
+  assert.equal(sem.$('mesa-cota-chave').hidden, true); assert.equal(sem.$('mesa-cota-chave-redacao').hidden, true);
+  const ingles = await abrir(comChave('18.40', '3.25', '12.00'), 'en');
+  assert.match(ingles.$('mesa-cota-chave').textContent, /Newsroom key/); assert.match(ingles.$('mesa-cota-chave-redacao').textContent, /Whole newsroom/);
+});
+
