@@ -855,6 +855,25 @@ Do que a entrega 3 decide, além do texto da seção 8.1:
 - Gravar e remover a chave viram os eventos `chave_ia_salva` e `chave_ia_removida` na atividade da redação e no registro de auditoria: quem e quando, nunca a chave nem parte dela. Remover quando não há chave não gera evento.
 - A senha de `ia-config-salvar` (seção 5.15) é conferida antes de tudo, onde há contas, e sai do corpo antes de ele chegar à chave da redação: a senha nunca é tomada por campo de configuração.
 
+**Entrega 4b, proposta (a aprovar antes do código):** o ciclo de vida da seção 8.4, em quatro partes, cada uma num commit revisado. O que a 8.4 já decide não se repete aqui; abaixo, só o que ela deixa aberto.
+
+- **4b-1, termos com versão.**
+  - A versão vigente e o endereço do texto vêm de quem opera, como o correio: `VLADO_TERMOS_VERSAO` (texto curto, por exemplo `2026-12-01`) e `VLADO_TERMOS_ENDERECO` (`https://`). Sem a versão, nada muda: `termos_versao` sai `null` e ninguém tem a pendência. O texto e o lugar dele são da Documentação (D6); o servidor só conhece a versão e o endereço, e não serve o texto.
+  - Só no `piloto`. Na Mesa instalada (`local-contas`), quem opera é o próprio controlador dos dados, e não há termos de serviço a aceitar.
+  - `convite-consultar` devolve `termos_versao` e `termos_endereco`; `convite-aceitar` exige `termos_versao` igual à vigente (400 `termos_desatualizados` se outra ou ausente) e grava o aceite junto com a conta.
+  - O aceite fica na tabela `termos_aceites` (conta, versão, data, IP), banco v8; cada aceite é uma linha, nada é reescrito. Excluir a conta apaga as linhas dela.
+  - A pendência `termos` nasce quando a vigente não é a do último aceite da conta, e é relida a cada pedido como a do fator. É resolvida por `conta-ver` e `conta-termos-aceitar {versao}` (a versão tem de ser a vigente; sem senha: aceitar não é operação sensível). Página: `GET /conta/termos`, a mesma estática de `/entrar`, como a do fator (pedido ao Design e ao Frontend). Com as duas pendências, a de termos vem primeiro.
+  - Eventos `termos_aceitos` (na atividade e no registro, com a versão) e código `termos_desatualizados` (pedido à Plataforma para as listas).
+  - `conta-ver` traz `termos: {versao, aceito_em}` do último aceite, mais `termos_vigente: {versao, endereco}`.
+- **4b-2, exportar meus dados** (`conta-exportar`, tipo B: um arquivo JSON para baixar, `Content-Disposition: attachment`, sem cache). Leva perfil, redação e papel, aceites, sessões abertas (sem identificador de sessão), aparelhos conhecidos (só datas), participações e os eventos da atividade em que a conta é `conta` ou `por` (os 90 dias que a atividade guarda). "Acessos" são estes; o registro de auditoria em arquivo, que é da Plataforma, fica de fora desta parte. A lista do que a pessoa criou (notas, revisões, conversas) depende de ler arquivos de outros módulos e vira a 4b-2b, com uma função de cada dono que diga, por id de conta, o que ela criou.
+- **4b-3, excluir a conta** (`conta-excluir {senha, nome}`): o mesmo caminho de `equipe-remover` (seção 8.4: mesmo efeito), mais o fim das sessões da própria conta na mesma resposta, que apaga o cookie. O nome digitado é conferido antes da senha, como em `lixeira-apagar` (nome errado não conta como senha errada). Último dono ativo: 400 `ultimo_dono`. A troca do nome por "Conta excluída" nas saídas antigas fica num ponto só (`acesso.nome_publico(id)`), que cada módulo que mostra autor passa a chamar; o pedido vai a cada dono de arquivo, e esta parte entrega a função e as saídas de Contas.
+- **4b-4, contas inativas** em `acesso.manutencao`.
+  - "Entrar" é abrir sessão (`entrar`, `entrar-segundo-fator`, `convite-aceitar`, `senha-redefinir`); a conta ganha a coluna `ultimo_acesso`. Conta migrada ou criada antes desta parte conta a partir da migração do banco.
+  - 180 dias: aviso por e-mail (`conta_inativa`, sem link). 30 dias depois do aviso, sem entrada nova: desativada (evento `conta_desativada_por_inatividade`, `por` = `manutencao`), não apagada; o dono a reativa.
+  - Conta sem e-mail (migrada) não é desativada sem aviso: fica numa lista para o operador (`acesso.py manutencao` imprime quantas).
+  - O último dono ativo de uma redação é avisado, mas não é desativado: a redação ficaria sem dono, e sair disso exige o operador. O operador é avisado na mesma lista.
+  - Conta `aguardando_senha` cujo convite venceu: hoje o convite vence e a conta não existe antes do aceite, então nada a fazer; contas `aguardando_senha` do fluxo antigo (migradas, com o prazo de ativação vencido) ficam `excluida` pela varredura, pelo mesmo caminho de `equipe-remover`, com evento.
+
 **O que ainda não existe,** e onde o código difere do texto até lá:
 
 - As operações de `autorizacao.PENDENTES` (termos, exportação e exclusão da própria conta) respondem 404. As seis `contas-*` saíram com o convite por e-mail (P30, seção 5.5): respondem 404 em todos os modos, a todos os papéis, e `autorizacao.TRANSITORIAS` ficou vazia. A tela antiga "Contas de acesso" (`piloto.js`) sai na mesma integração.
