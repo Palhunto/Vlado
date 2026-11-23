@@ -113,8 +113,13 @@ test('P40 (b): o que a chave própria pagou é parte do valor da cota ("dos quai
   assert.equal(dono.$('mesa-cota-chave-redacao').hidden, false);
   assert.equal(dono.$('mesa-cota-chave-redacao').querySelector('.mesa-cota-rotulo').textContent, 'Chave própria da redação');
   assert.equal(dono.$('mesa-cota-chave-redacao-valor').textContent, 'R$ 12,00');
-  const zero = await abrir(comChave('0.00', '0.00'));
-  assert.equal(zero.$('mesa-cota-chave').textContent, 'dos quais R$ 0,00 com a chave própria', 'R$ 0,00 se ainda não houve gasto');
+  const zero = await abrir(comChave('0.00', '0.00', '0.00'));
+  assert.equal(zero.$('mesa-cota-chave').textContent, 'dos quais R$ 0,00 com a chave própria', 'R$ 0,00 se ainda não houve gasto, com o total da redação junto (a redação tem chave)');
+  // B1 da Coruja: a forma real que o servidor mandou a quem NÃO tem chave própria; o campo veio, mas sem a chave a linha não aparece
+  const falso = await abrir({...conta('18.40', '50.00'), chave_propria: {conta_brl: '0.00'}});
+  assert.equal(falso.$('mesa-cota-chave').hidden, true, 'conta_brl 0.00 sem o total da redação: sem chave própria, a linha some');
+  assert.equal(falso.$('mesa-cota-chave').textContent, ''); assert.equal(falso.$('mesa-cota-chave-redacao').hidden, true);
+  assert.equal(falso.$('mesa-cota-medidor').getAttribute('aria-label'), '37% da cota usada');
   const sem = await abrir(conta('18.40', '50.00'));
   assert.equal(sem.$('mesa-cota-chave').hidden, true, 'sem chave própria, a linha some'); assert.equal(sem.$('mesa-cota-chave-redacao').hidden, true);
   assert.equal(sem.$('mesa-cota-medidor').getAttribute('aria-label'), '37% da cota usada');
@@ -122,9 +127,9 @@ test('P40 (b): o que a chave própria pagou é parte do valor da cota ("dos quai
   assert.equal(esgotada.$('mesa-cota-medidor').getAttribute('aria-label'), 'Cota do mês esgotada: R$ 50,00 de R$ 50, dos quais R$ 8,00 com a chave própria');
   const ingles = await abrir(comChave('18.40', '3.25', '12.00'), 'en');
   ingles.janela.I18N.aplicar(ingles.$('mesa-sidebar'));
-  assert.equal(ingles.$('mesa-cota-chave').textContent, "of which R$ 3,25 with the newsroom's own key");
-  assert.equal(ingles.$('mesa-cota-medidor').getAttribute('aria-label'), "37% of the quota used, of which R$ 3,25 with the newsroom's own key");
-  assert.equal(ingles.$('mesa-cota-chave-redacao').querySelector('.mesa-cota-rotulo').textContent, "Newsroom's own key");
+  assert.equal(ingles.$('mesa-cota-chave').textContent, "of which R$ 3,25 on the newsroom’s own key");
+  assert.equal(ingles.$('mesa-cota-medidor').getAttribute('aria-label'), "37% of the quota used, of which R$ 3,25 on the newsroom’s own key");
+  assert.equal(ingles.$('mesa-cota-chave-redacao').querySelector('.mesa-cota-rotulo').textContent, "Newsroom’s own key");
 });
 
 test('quando o cartão mostra a cota da instalação (ela não inclui a chave própria), a linha "dos quais" não aparece; o dono segue vendo o total da redação', async () => {
