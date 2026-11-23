@@ -11,6 +11,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
@@ -33,9 +34,12 @@ class ArmazenamentoTest(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
-        env = patch.dict(os.environ, SEM_AMBIENTE)
-        env.start()
-        self.addCleanup(env.stop)
+        for alvo in (patch.dict(os.environ, SEM_AMBIENTE), patch('registro_acesso.lembrar_raiz')):
+            alvo.start()
+            self.addCleanup(alvo.stop)
+        registrar = patch('registro_acesso.registrar')
+        self.registrar = registrar.start()
+        self.addCleanup(registrar.stop)
 
     def test_a_chave_da_redacao_vem_antes_da_do_servico_so_para_ela(self):
         segredos.salvar_chave(self.root, 'anthropic', DO_SERVICO)
@@ -101,11 +105,68 @@ class ArmazenamentoTest(unittest.TestCase):
         segredos.salvar_chave(self.root, 'anthropic', DO_SERVICO)
         segredos.caminho_das_redacoes(self.root).write_text('{ isto não é json', encoding='utf-8')
         self.assertEqual(segredos.ler_chave(self.root, 'anthropic'), DO_SERVICO)
-        with self.assertRaisesRegex(ValueError, 'chaves das redações está ilegível'):
+        # Whose key it held is unknown: no newsroom falls on the key of the service in its place (8.5).
+        for funcao in (segredos.ler_chave, segredos.origem_da_chave):
+            with self.assertRaises(segredos.ChavesIlegiveis):
+                funcao(self.root, 'anthropic', A)
+        with self.assertRaises(segredos.ChavesIlegiveis):
+            segredos.resumo(self.root, B)
+        with self.assertRaises(segredos.ChavesIlegiveis):  # nor is a newsroom key saved over it, losing the others
+            segredos.salvar_chave(self.root, 'anthropic', DE_ALFA, A)
+        self.assertTrue(issubclass(segredos.ChavesIlegiveis, ValueError))
+        self.assertEqual(segredos.origem_da_chave(self.root, 'anthropic'), 'salva')
+        segredos.caminho_das_redacoes(self.root).write_text('["não é objeto"]', encoding='utf-8')
+        with self.assertRaises(segredos.ChavesIlegiveis):
             segredos.ler_chave(self.root, 'anthropic', A)
-        segredos.caminho_das_redacoes(self.root).write_text(json.dumps({'../x': {'anthropic': DE_ALFA}, A: 'texto', B: {'outro': 'x'}}),
-                                                            encoding='utf-8')
-        self.assertEqual([segredos.ler_chave(self.root, 'anthropic', r) for r in (A, B)], [DO_SERVICO, DO_SERVICO])  # only what is well formed
+
+    def test_entrada_de_forma_inesperada_torna_o_arquivo_ilegivel_e_nada_o_reescreve(self):
+        # B1 of the review: an entry dropped in silence put that newsroom on the key of the service, without a
+        # warning, and the next save of another newsroom rewrote the file without it.
+        segredos.salvar_chave(self.root, 'anthropic', DO_SERVICO)
+        arquivo = segredos.caminho_das_redacoes(self.root)
+        for conteudo in ({A: DE_ALFA}, {A: {'anthropic': 7}}, {A: {'anthropic': ''}}, {A: {'outro': DE_ALFA}},
+                         {A: {}}, {'../x': {'anthropic': DE_ALFA}}, {A: {'anthropic': DE_ALFA}, B: 'texto'}):
+            with self.subTest(conteudo=conteudo):
+                texto = json.dumps(conteudo)
+                arquivo.write_text(texto, encoding='utf-8')
+                for funcao in (segredos.ler_chave, segredos.origem_da_chave):
+                    with self.assertRaises(segredos.ChavesIlegiveis):
+                        funcao(self.root, 'anthropic', A)
+                for acao in (lambda: segredos.salvar_chave(self.root, 'anthropic', DE_BETA, B),
+                             lambda: segredos.remover_chave(self.root, 'anthropic', B)):
+                    with self.assertRaises(segredos.ChavesIlegiveis):
+                        acao()
+                self.assertEqual(arquivo.read_text(encoding='utf-8'), texto)  # never rewritten
+                self.assertIsNotNone(segredos.conferir_chaves_das_redacoes(self.root))
+                self.assertEqual(segredos.ler_chave(self.root, 'anthropic'), DO_SERVICO)  # the service's, asked without a newsroom
+        arquivo.write_text('{}', encoding='utf-8')  # what is left after the last key is removed: readable, no key
+        self.assertEqual(segredos.ler_chave(self.root, 'anthropic', A), DO_SERVICO)
+
+    def test_a_leitura_que_falha_em_operacao_vai_ao_registro_uma_vez_por_estado_do_arquivo(self):
+        # C5 of the review: not only at the start. One line per state of the file, not one per request.
+        arquivo = segredos.caminho_das_redacoes(self.root)
+        arquivo.parent.mkdir(parents=True)
+        arquivo.write_text('{ quebrado', encoding='utf-8')
+        for _ in range(3):
+            with self.assertRaises(segredos.ChavesIlegiveis):
+                segredos.ler_chave(self.root, 'anthropic', A)
+        self.assertEqual(self.registrar.call_args_list, [unittest.mock.call('chaves_ia_ilegiveis', 'falha')])
+        arquivo.write_text('{ quebrado de outro jeito', encoding='utf-8')
+        with self.assertRaises(segredos.ChavesIlegiveis):
+            segredos.resumo(self.root, B)
+        self.assertEqual(self.registrar.call_count, 2)
+
+    def test_na_partida_o_operador_e_avisado_do_arquivo_ilegivel(self):
+        with patch('registro_acesso.registrar') as registrar, patch('registro_acesso.lembrar_raiz'):
+            self.assertIsNone(segredos.conferir_chaves_das_redacoes(self.root))  # no file: nothing to say
+            segredos.salvar_chave(self.root, 'anthropic', DE_ALFA, A)
+            self.assertIsNone(segredos.conferir_chaves_das_redacoes(self.root))
+            registrar.assert_not_called()
+            segredos.caminho_das_redacoes(self.root).write_text('{ quebrado', encoding='utf-8')
+            aviso = segredos.conferir_chaves_das_redacoes(self.root)
+        self.assertIn('ilegível', aviso)
+        self.assertNotIn(DE_ALFA, aviso)
+        registrar.assert_called_once_with('chaves_ia_ilegiveis', 'falha')
 
 
 class SemRedacaoTest(unittest.TestCase):

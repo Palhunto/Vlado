@@ -673,6 +673,7 @@ class EsquemaTest(DuasRedacoes):
     def para_a_versao_1(self):
         con = sqlite3.connect(acesso.caminho_bd(self.root))
         try:
+            con.execute('DROP TABLE termos_aceites')  # version 8 (and its index)
             con.execute('DROP TABLE aparelhos')  # version 7
             for tabela in ('fatores', 'codigos_reserva', 'entradas'):  # version 6
                 con.execute(f'DROP TABLE {tabela}')

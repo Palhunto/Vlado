@@ -81,6 +81,9 @@ class DuasRedacoes(unittest.TestCase):
         cls.manager = Conversas(cls.root, integracao.FakeServer)
         cls._pilha.callback(encerrar_gerenciador, cls.manager)
         cls.server = Servidor(('127.0.0.1', 0), cls.root, modo='piloto', origem=ORIGEM)
+        # The fake manager takes the place of the server's with the flags the server set on it: in the piloto, the
+        # newsroom's own AI key (P3c; ressalva P40a), so a server test never skips it without noticing.
+        cls.manager.chave_da_redacao = getattr(cls.server.conversas, 'chave_da_redacao', False)
         cls.server.conversas.close()
         cls.server.conversas = cls.manager
         thread = threading.Thread(target=cls.server.serve_forever, daemon=True)

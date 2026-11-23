@@ -82,7 +82,7 @@ class ArmazenamentoTest(test_acesso.DuasRedacoes):
         consulta = acesso.consultar_convite(self.root, token)
         self.assertEqual(consulta, {'redacao': 'Redação A', 'email': 'nova@exemplo.test', 'papel': 'reporter',
                                     'convidado_por': 'Dona A', 'expira_em': convite['expira_em'], 'idioma': 'en',
-                                    'termos_versao': None})
+                                    'termos_versao': None, 'termos_endereco': None})  # no terms in force (4b-1)
         for nome, senha in (('', SENHA), ('a\nb', SENHA), ('Nova', 'curta')):
             with self.assertRaises(ValueError):
                 self.aceitar(token, nome, senha)

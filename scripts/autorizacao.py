@@ -48,9 +48,14 @@ MENSAGEM_CAMPOS = {'codex-perguntar': 'Esta conta envia somente a pergunta e a c
                    'codex-retomar': 'Esta conta envia somente a conversa a retomar.'}
 # O que uma conta com pendência ainda alcança (seção 4.2): a própria sessão e o que resolve cada pendência.
 SEM_PENDENCIA = frozenset({'sessao-sair', 'GET:/api/sessao'})
-RESOLVE_PENDENCIA = {'segundo_fator': frozenset({'conta-ver', 'conta-fator-iniciar', 'conta-fator-confirmar'})}
+RESOLVE_PENDENCIA = {'segundo_fator': frozenset({'conta-ver', 'conta-fator-iniciar', 'conta-fator-confirmar'}),
+                     'termos': frozenset({'conta-ver', 'conta-termos-aceitar'})}
+# As saídas que uma pendência deixa abertas sem resolvê-la: quem não aceita os termos novos ainda leva os próprios
+# dados e sai do serviço (ressalva B2). Uma saída só passa se TODAS as pendências da conta a deixam: com o segundo
+# fator pendente, nenhuma (ressalva R1 da revisão da 4b-1: a liberação de uma pendência nunca abre o que outra fecha).
+SAIDAS_DA_PENDENCIA = {'termos': frozenset({'conta-exportar', 'conta-excluir'}), 'segundo_fator': frozenset()}
 # A página que resolve cada pendência: com ela, `GET /` responde 303 para cá (da família do Entrar, sem dado de conta).
-PAGINA_DA_PENDENCIA = {'segundo_fator': '/conta/segundo-fator'}
+PAGINA_DA_PENDENCIA = {'termos': '/conta/termos', 'segundo_fator': '/conta/segundo-fator'}
 FATOR_OBRIGATORIO = 'O segundo fator é obrigatório para o seu papel neste serviço e não pode ser removido.'
 ID_CONVERSA = re.compile(lixeira.ID_CONVERSA)
 
@@ -99,7 +104,8 @@ _linhas(MATRIZ, 'lote+caso+nenhum', 'L', TODOS, 'GET:/api/fila')
 # 5.4 A própria conta.
 _linhas(MATRIZ, 'nenhum', 'A', TODOS, 'sessao-sair conta-senha-trocar conta-sessao-encerrar conta-sessoes-encerrar-outras '
                                       'conta-email-trocar conta-fator-iniciar conta-fator-confirmar conta-fator-codigos '
-                                      'conta-fator-remover')  # remover: negado onde o fator é obrigatório (`_recusa_do_modo`)
+                                      'conta-fator-remover conta-termos-aceitar')  # remover: negado onde o fator é
+# obrigatório; aceitar os termos: só onde eles existem, o `piloto` (as duas em `_recusa_do_modo`)
 _linhas(MATRIZ, 'nenhum', 'L', TODOS, 'conta-ver conta-sessoes')
 _linhas(MATRIZ, 'nenhum', 'E', TODOS, 'conta-atualizar')
 # 5.5 A redação.
@@ -172,7 +178,7 @@ TRANSITORIAS: dict[str, Regra] = {}
 RETIRADAS = ('contas-listar', 'contas-criar', 'contas-atualizar', 'contas-desativar', 'contas-reativar', 'contas-recuperar')
 # Operações que o contrato já define e que entram nas próximas entregas (segundo fator, ciclo de vida).
 PENDENTES = frozenset((
-    'conta-termos-aceitar conta-exportar conta-excluir').split())
+    'conta-exportar conta-excluir').split())
 # Antes da sessão (seção 5.3): sem papel, conferidas em `rotas_contas._publico`.
 PUBLICAS = ('entrar', 'ativar', 'ativacao-consultar', 'primeiro-admin', 'convite-consultar', 'convite-aceitar',
             'senha-esqueci', 'senha-redefinir', 'email-confirmar', 'entrar-segundo-fator')
@@ -251,7 +257,11 @@ def _barrada_pela_pendencia(principal: dict, operacao: str) -> bool:
     """A conta com pendência só alcança a própria sessão e o que resolve a pendência (seção 4.2). Um lugar só,
     lido pelo portão e pelo teto do corpo."""
     pendencias = principal.get('pendencias') or ()
-    return bool(pendencias) and operacao not in SEM_PENDENCIA.union(*(RESOLVE_PENDENCIA.get(p, ()) for p in pendencias))
+    if not pendencias:
+        return False
+    if operacao in SEM_PENDENCIA.union(*(RESOLVE_PENDENCIA.get(p, ()) for p in pendencias)):
+        return False  # what resolves one of them, whatever the others
+    return not all(operacao in SAIDAS_DA_PENDENCIA.get(p, ()) for p in pendencias)
 
 
 def corpo_grande(modo: str, principal: dict, operacao: str) -> bool:
@@ -336,6 +346,8 @@ def _recusa_do_modo(root: Path, modo: str, papel, operacao: str) -> Recusa | Non
     if modo == 'local':
         return _proibida('Contas só existem nos modos com login.') if operacao.startswith(('caso-', 'conta-', 'equipe-')) else None
     if modo != 'piloto':
+        if operacao == 'conta-termos-aceitar':  # a Mesa instalada não tem termos de serviço (seção 12, entrega 4b-1)
+            return _proibida('Esta instalação não tem termos de uso a aceitar.')
         return None
     if operacao == 'codex-desligar':
         return _proibida('O serviço hospedado não pode ser encerrado pela interface.', 'servico_nao_encerravel')
