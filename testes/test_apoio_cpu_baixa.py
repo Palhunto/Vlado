@@ -170,6 +170,42 @@ class OciosaTest(unittest.TestCase):
         self.assertGreaterEqual(apoio.cpu_ociosa_s(), antes)
 
 
+class JanelaCpuTest(unittest.TestCase):
+    """The window the gate measures its own times in (T_ref, the single upload, the sessions)."""
+
+    def test_mede_ociosa_gasto_e_relogio(self):
+        with apoio.JanelaCpu() as janela:
+            fim = time.monotonic() + 0.3
+            while time.monotonic() < fim:
+                sum(range(1000))
+        self.assertGreaterEqual(janela.janela, 0.3)
+        self.assertGreater(janela.gasto, 0.0)
+        self.assertTrue(janela.ociosa is None or janela.ociosa >= 0.0)
+        if os.name == 'nt':
+            self.assertIsNotNone(janela.ociosa)
+
+    def decidir(self, ociosa, gasto, duracao):
+        janela = apoio.JanelaCpu()
+        janela.ociosa, janela.gasto, janela.janela = ociosa, gasto, duracao
+        try:
+            with mock.patch.dict(os.environ, {apoio.EXIGIR_SEM_PULO: ''}):
+                janela.decidir(self, 'pedidos acima do limite: [(2.83, 4, pergunta)]')
+        except AssertionError as erro:
+            return 'falha', str(erro)
+        except unittest.SkipTest as pulo:
+            return 'pula', str(pulo)
+        self.fail('a regra não decidiu')
+
+    def test_com_ociosa_falha_e_sem_ela_pula(self):
+        decisao, texto = self.decidir(ociosa=20.0, gasto=3.0, duracao=8.0)  # needs max(1, min(12, 8)) = 8
+        self.assertEqual(decisao, 'falha', texto)
+        self.assertIn('pedidos acima do limite: [(2.83, 4, pergunta)], com CPU disponível', texto)
+        decisao, texto = self.decidir(ociosa=0.89, gasto=3.0, duracao=8.0)
+        self.assertEqual(decisao, 'pula', texto)
+        self.assertIn('deixou 0.89 s de CPU ociosa', texto)
+        self.assertEqual(self.decidir(ociosa=None, gasto=3.0, duracao=8.0)[0], 'falha')  # unreadable: fails
+
+
 class SondaRealTest(unittest.TestCase):
     def test_mede_e_para_na_hora(self):
         # Stopped at once even when the machine gives it no CPU (it is killed, not asked).

@@ -179,6 +179,30 @@ def decidir_por_ociosa(teste, ociosa, gasto, janela, mensagem):
     pular(teste, f'máquina saturada para prioridade normal: {numeros}; {mensagem}')
 
 
+class JanelaCpu:
+    """A window for a time of the Mesa: the machine's idle CPU, this process's CPU (the Mesa runs in the test's
+    process) and the clock between entering and leaving; ``decidir`` applies ``decidir_por_ociosa`` to them.
+
+    The low-priority extraction running in the window counts as used, not idle, CPU: the measure undercounts what
+    the Mesa could have had, so it errs toward skipping, never toward a false failure."""
+
+    ociosa = gasto = janela = None
+
+    def __enter__(self):
+        self._ociosa, self._gasto, self._relogio = cpu_ociosa_s(), time.process_time(), time.monotonic()
+        return self
+
+    def __exit__(self, *erro):
+        ociosa = cpu_ociosa_s()
+        self.gasto = time.process_time() - self._gasto
+        self.janela = time.monotonic() - self._relogio
+        self.ociosa = None if self._ociosa is None or ociosa is None else ociosa - self._ociosa
+
+    def decidir(self, teste, mensagem):
+        """FAIL or SKIP (see decidir_por_ociosa) for a time over its limit measured in this window."""
+        decidir_por_ociosa(teste, self.ociosa, self.gasto, self.janela, mensagem)
+
+
 def esperar_com_cpu(teste, condicao, prazo, necessario, mensagem, sonda=SondaBaixa, passo=0.02):
     """``condicao()``'s first true value within ``prazo`` s; else fail or skip by the parallel probe (see above)."""
     with sonda(prazo + 30) as medidor:
