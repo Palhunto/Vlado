@@ -161,7 +161,8 @@ class RotasContas:
         if not sid:
             return None, None
         try:
-            return acesso.sessao(self.server.root, sid, ip=self._ip()), sid
+            # Where the service is hosted the second factor is mandatory for dono and editor (contract, 8.2).
+            return acesso.sessao(self.server.root, sid, ip=self._ip(), obrigar_fator=self.server.modo == 'piloto'), sid
         except (ValueError, OSError):
             self.acesso_indisponivel = True  # answered with 503, never with a dropped connection
             return None, sid
@@ -327,7 +328,7 @@ class RotasContas:
         self._json(200, {'conta': autorizacao.conta_publica(principal),
                          'organizacao': {'id': redacao['id'], 'nome': redacao['nome']} if redacao else None,
                          'pendencias': list(principal.get('pendencias') or []),
-                         'capacidades': autorizacao.capacidades(principal),
+                         'capacidades': autorizacao.capacidades(self.server.root, self.server.modo, principal),
                          'csrf': principal['csrf'], 'ambiente': self._ambiente_publico(),
                          'modo': self.server.modo, 'expira_em': principal.get('expira_em')})
 

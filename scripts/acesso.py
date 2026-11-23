@@ -96,6 +96,7 @@ CHAVE_ESQUECI = '#esqueci|'  # when a reset was last asked for an address, wheth
 RECUPERACAO_HORAS = 24  # a recovery asked by a dono: how long it waits for the second dono, and how long its link lives
 ENTRADA_MINUTOS = 5  # between the right password and the second factor: the ticket of the second step
 ENTRADA_FALHAS = 5  # wrong codes that kill that ticket
+FATOR_OBRIGATORIO = ('dono', 'editor')  # who must have a second factor where it is mandatory: the hosted mode (8.2)
 FATOR_PENDENTE_MINUTOS = 15  # an enrolment not confirmed in this time starts again
 FATOR_RETIRADO = 'fator_removido_na_recuperacao'  # the event of a factor that a recovery took away (link or operator)
 CHAVE_FATOR = '#fator|'  # wrong codes of the authenticator, counted on the account (sign-in and sensitive operations)
@@ -2751,12 +2752,15 @@ def _auditar_falha(motivo: str, cid: str | None, login: str, cliente, ip: str | 
                               cliente=_cliente(cliente), ip=ip)
 
 
-def sessao(root: Path, sid, ip: str | None = None) -> dict | None:
+def sessao(root: Path, sid, ip: str | None = None, obrigar_fator: bool = False) -> dict | None:
     """The calling account, re-read on every request (deactivation, role, participations and quota apply at once).
     `ip` is kept as the session's last address, at most once a minute, with its last use.
 
     `casos` is always the explicit reach (for a dono, every case of the own newsroom) and `responsavel_de` the cases
-    the account answers for: outside the local mode no caller ever has "every case"."""
+    the account answers for: outside the local mode no caller ever has "every case".
+
+    `obrigar_fator` is the hosted mode: a dono or an editor without an active second factor carries the pending
+    item `segundo_fator`, and the gate lets the session reach only what resolves it (contract, 4.2 and 8.2)."""
     if not isinstance(sid, str) or not SID.fullmatch(sid):
         return None  # malformed ids never touch the store
     momento, chave = agora(), _hash(sid)
@@ -2772,12 +2776,14 @@ def sessao(root: Path, sid, ip: str | None = None) -> dict | None:
             if not conta or not conta['ativa'] or not conta['senha_hash']:
                 return None
             casos, responsavel = _alcance(tx, conta)
+            pendencias = (['segundo_fator'] if obrigar_fator and conta['papel'] in FATOR_OBRIGATORIO
+                          and not tx.um('SELECT 1 FROM fatores WHERE conta = ? AND ativo = 1', conta['id']) else [])
             tocar = (momento - _data(registro['ultimo_uso'])).total_seconds() >= ULTIMO_USO_SEGUNDOS
             principal = {'conta': conta['id'], 'nome': conta['nome'], 'login': conta['login'], 'email': conta['email'],
                          'papel': conta['papel'],
                          'organizacao': {'id': conta['organizacao'], 'nome': conta['redacao_nome'],
                                          'situacao': conta['redacao_situacao']},
-                         'casos': casos, 'responsavel_de': responsavel, 'pendencias': [],
+                         'casos': casos, 'responsavel_de': responsavel, 'pendencias': pendencias,
                          'cota_diaria': conta['cota_diaria'], 'csrf': registro['csrf'], 'sessao': registro['publico'],
                          'expira_em': registro['expira_em'], 'cliente': registro['cliente'] or 'web'}
     if vencida or tocar:
