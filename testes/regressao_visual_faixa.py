@@ -200,12 +200,27 @@ JS_DOIS_QUADROS = "new Promise(ok => requestAnimationFrame(() => requestAnimatio
 SELETOR_FAIXAS_DE_ABA = '.quadros-abas,.mesa-tabs,.notebook-tabs'
 
 
+# A pílula mais larga de cada faixa de abas visível (rola ou não): se for mais larga que a faixa menos a folga de --espaco-4 (16 px), o ativo não cabe inteiro nem rolando.
+JS_PILULA_MAIS_LONGA = """(seletor) => [...document.querySelectorAll(seletor)].filter(f => f.getBoundingClientRect().width > 0).map(f => {
+  const itens = [...f.querySelectorAll('button,[role=tab]')].filter(i => i.getBoundingClientRect().width > 0);
+  const maior = itens.reduce((m, i) => i.getBoundingClientRect().width > m.largura ? {largura: i.getBoundingClientRect().width, texto: (i.textContent || '').trim()} : m, {largura: 0, texto: ''});
+  return {nome: f.id ? '#' + f.id : f.tagName.toLowerCase() + '.' + [...f.classList].join('.'), cliente: f.clientWidth, rola: f.scrollWidth - f.clientWidth > 1, ...maior};
+})"""
+FOLGA_DA_FAIXA = 16
+
+
+def julgar_pilulas(nome: str, medidas: list) -> list:
+    """Reprova a faixa cuja pílula mais larga passa da largura da faixa menos a folga: nela o ativo ficaria cortado mesmo com a rolagem certa."""
+    return [f"{nome}: {m['nome']}: a pílula {m['texto']!r} tem {m['largura']:.1f} px e a faixa só {m['cliente']} px (com a folga de {FOLGA_DA_FAIXA} px, cabem {m['cliente'] - FOLGA_DA_FAIXA})"
+            for m in medidas if m['largura'] > m['cliente'] - FOLGA_DA_FAIXA]
+
+
 def troca(args, selecao) -> int:
     """Q5d: o ativo agora é trazido no quadro seguinte. Em cada faixa de abas que rola, clica em cada item e, dois quadros depois, o ativo tem de caber inteiro."""
     from playwright.sync_api import sync_playwright
     import regressao_visual as rv
     telas, cenarios, temas = selecao
-    reprovacoes, cliques = [], 0
+    reprovacoes, cliques, maiores = [], 0, {}
     with rv.Servidores(rv.python_do_servidor(args.python_servidor)) as servidores, sync_playwright() as pw:
         navegador = pw.chromium.launch(args=rv.ARGS_CHROMIUM)
         try:
@@ -221,6 +236,10 @@ def troca(args, selecao) -> int:
                         pagina.goto(url, wait_until='load')
                         pagina.wait_for_selector(seletor, state='visible', timeout=30000)
                         atividade.esperar_quieta(pagina)
+                        pilulas = pagina.evaluate(JS_PILULA_MAIS_LONGA, SELETOR_FAIXAS_DE_ABA)
+                        reprovacoes += julgar_pilulas(f'{tela}__{cenario}__{tema}', pilulas)
+                        for m in pilulas:
+                            maiores[(tela, cenario, m['nome'])] = (m['largura'], m['cliente'], m['texto'], m['rola'])
                         for faixa_ in pagina.evaluate(JS_ITENS_DA_FAIXA, SELETOR_FAIXAS_DE_ABA):
                             marca = f"[data-prova-faixa='{faixa_['indice']}']"
                             for n in range(faixa_['itens']):
@@ -235,6 +254,8 @@ def troca(args, selecao) -> int:
                     contexto.close()
         finally:
             navegador.close()
+    for (tela, cenario, nome), (largura, cliente, texto, rola) in sorted(maiores.items()):
+        print(f"  pílula mais longa em {tela} a {cenario} px, {nome}: {texto!r} com {largura:.1f} px numa faixa de {cliente} px ({'rola' if rola else 'não rola'})")
     for r in reprovacoes:
         print('  REPROVADA', r)
     print(f'Troca de aba: {cliques} clique(s) em faixas que rolam, {len(reprovacoes)} reprovação(ões).')

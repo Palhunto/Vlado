@@ -76,6 +76,21 @@ class JulgarTest(unittest.TestCase):
         self.assertEqual(set(resumo[0]), {'nome', 'tipo', 'scrollWidth', 'clientWidth'})
 
 
+class PilulasTest(unittest.TestCase):
+    def pilula(self, largura, cliente=288):
+        return {'nome': '#caderno-abas', 'cliente': cliente, 'rola': False, 'largura': largura, 'texto': 'Trechos com fonte e contribuições'}
+
+    def test_pilula_que_cabe_com_a_folga_passa(self):
+        self.assertEqual(faixa.julgar_pilulas('caderno__320__claro', [self.pilula(267.8)]), [])
+        self.assertEqual(faixa.julgar_pilulas('x', [self.pilula(272.0)]), [])   # exatamente faixa menos folga
+
+    def test_pilula_mais_larga_que_a_faixa_menos_a_folga_reprova(self):
+        reprovacoes = faixa.julgar_pilulas('caderno__320__claro', [self.pilula(273.0)])
+        self.assertEqual(len(reprovacoes), 1)
+        self.assertIn('Trechos com fonte e contribuições', reprovacoes[0])
+        self.assertIn('cabem 272', reprovacoes[0])
+
+
 class ComparacaoTest(unittest.TestCase):
     def test_sem_a_chave_no_manifesto_nao_ha_o_que_comparar(self):
         self.assertEqual(faixa.novas_internas({}, {'rolagem_interna': {'a__320__claro': [{'nome': 'x', 'tipo': 'outro'}]}}), {})
