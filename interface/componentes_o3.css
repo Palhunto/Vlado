@@ -175,7 +175,7 @@ button[aria-disabled="true"]{cursor:progress}
 .dialogo-senha-linha input{flex:1 1 auto;min-width:0}
 .dialogo-mostrar{flex:none;min-height:44px;padding:0 var(--espaco-3)}
 .dialogo-campo-senha .dialogo-nota{font-weight:400}
-.dialogo-erro-campo{font-weight:400}
+.dialogo-erro-campo{font-weight:400;margin-top:calc(var(--espaco-1) - var(--espaco-2))}  /* a 4 px do campo, mesmo dentro do intervalo de 8 do grupo */
 .dialogo-campo-senha input[aria-invalid="true"]{border:2px solid var(--theme-danger)}
 @media (max-width:719px) {
   .dialogo-senha-linha input,.dialogo-mostrar{min-height:48px}

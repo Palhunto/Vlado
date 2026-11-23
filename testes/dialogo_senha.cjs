@@ -287,3 +287,15 @@ test('trocarPor: executar troca o formulário por outra vista sem fechar; a aç�
   assert.equal(await confirmacao, true, 'Esc fecha como a ação');
   assert.equal(mesa.doc.querySelector('dialog.dialogo'), null); assert.ok(!mesa.doc.body.textContent.includes('SEGREDO-DO-LINK'), 'o link não fica na página');
 });
+
+test('em cada campo de senha o erro vem antes do apoio (o erro a 4 px do campo, o apoio depois) e o aria-describedby segue a mesma ordem', async () => {
+  const {mesa, D} = await abrir();
+  const confirmacao = D.confirmar({variante: 'simples', titulo: 'T', acao: 'Fazer', campos: [{id: 's', rotulo: 'Sua senha', apoio: 'A senha com que você entra na Mesa.'}]});
+  await mesa.esperar(3);
+  const grupo = dialogo(mesa).querySelector('.dialogo-campo-senha');
+  const filhos = [...grupo.children].map(c => (c.className.includes('dialogo-erro-campo') ? 'erro' : c.className.includes('dialogo-nota') ? 'apoio' : c.localName));
+  assert.deepEqual(filhos, ['label', 'div', 'erro', 'apoio']);
+  const ids = entradas(mesa)[0].getAttribute('aria-describedby').split(' ');
+  assert.equal(ids[0], grupo.querySelector('.dialogo-erro-campo').id); assert.equal(ids[1], grupo.querySelector('.dialogo-nota').id);
+  botoes(mesa)[0].click(); await confirmacao;
+});

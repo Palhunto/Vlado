@@ -135,8 +135,9 @@
         const mensagemDoCampo = no('p', 'dialogo-erro dialogo-erro-campo'); mensagemDoCampo.id = `${base}-erro`; mensagemDoCampo.hidden = true;
         const ligacoes = [];
         if (apoio) { apoio.id = `${base}-apoio`; ligacoes.push(apoio.id); }
-        entrada.setAttribute('aria-describedby', [...ligacoes, mensagemDoCampo.id].join(' '));
-        grupo.append(rotuloDoCampo, linha, ...(apoio ? [apoio] : []), mensagemDoCampo);
+        entrada.setAttribute('aria-describedby', [mensagemDoCampo.id, ...ligacoes].join(' '));
+        // O erro vem primeiro, a 4 px do campo, e o apoio depois (#dialogo-senha).
+        grupo.append(rotuloDoCampo, linha, mensagemDoCampo, ...(apoio ? [apoio] : []));
         partes.push(grupo);
         if (def.oculto) grupo.hidden = true;
         entradas.set(def.id, {def, entrada, mostrar, mensagem: mensagemDoCampo, grupo});
