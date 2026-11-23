@@ -12,6 +12,7 @@ Componentes de terceiros distribuídos neste pacote ou instalados pela imagem Do
 | --- | --- | --- |
 | Vditor 4.0.1 (inclui Lute) | MIT | `interface/vendor/vditor/LICENSE` |
 | pdf.js (pdfjs-dist) | Apache-2.0 | `interface/vendor/pdfjs/LICENSE` |
+| QR Code generator library 1.8.0 (Project Nayuki) | MIT | `interface/vendor/qrcodegen/LICENSE` |
 | Source Serif 4 | SIL Open Font License 1.1 | `interface/fonts/LICENSE-SourceSerif4.md` |
 | Source Sans 3 | SIL Open Font License 1.1 | `interface/fonts/LICENSE-SourceSans3.md` |
 
