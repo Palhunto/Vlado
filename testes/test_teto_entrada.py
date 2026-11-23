@@ -284,6 +284,45 @@ class SegundoPassoTest(Base):
             self.assertEqual(acesso.entrar_segundo_fator(self.root, self.bilhete(), self.codigo(1), ip=self.ip())[2]['id'], self.rep_a)
         self.assertEqual(self.linhas('SELECT 1 FROM tentativas WHERE chave = ?', acesso.CHAVE_FATOR + self.rep_a), [])
 
+    def test_o_codigo_de_reserva_atravessa_o_bloqueio_do_fator_e_tem_contador_proprio(self):
+        # T1 of the review: who has somebody's password renews the block of the factor every 15 minutes. The
+        # reserve code (80 bits, not to be guessed) is the way in of the person, and it is never blocked itself.
+        reserva = acesso.novos_codigos_do_fator(self.root, self.rep_a, SENHA, self.codigo(1))
+        self.assertEqual(self.errar(5), ['CodigoInvalido'] * 4 + ['FatorBloqueado'])
+        with self.assertRaises(acesso.Bloqueado):
+            acesso.exigir_codigo(self.root, self.rep_a, self.codigo(2))  # the authenticator: blocked
+        self.assertIsNone(acesso.exigir_codigo(self.root, self.rep_a, reserva[0]))  # a reserve code: through
+        self.assertEqual(acesso.entrar_segundo_fator(self.root, self.bilhete(), reserva[1], ip=self.ip())[2]['id'], self.rep_a)
+        self.assertTrue(self.linhas('SELECT 1 FROM tentativas WHERE chave = ? AND bloqueado_ate IS NOT NULL',
+                                    acesso.CHAVE_FATOR + self.rep_a))  # and the block of the authenticator stays
+        errada = 'ABCD-EFGH-JKLM-NPQR'
+        for _ in range(acesso.FALHAS_BLOQUEIO - 1):
+            with self.assertRaises(acesso.CodigoInvalido):
+                acesso.exigir_codigo(self.root, self.rep_a, errada)
+        for _ in range(3):  # the fifth wrong one and the ones after it: the answer of a block, with nobody to tell
+            with self.assertRaises(acesso.Bloqueado) as recusa:
+                acesso.exigir_codigo(self.root, self.rep_a, errada)
+            self.assertNotIsInstance(recusa.exception, acesso.FatorBloqueado)
+        self.assertIsNone(acesso.exigir_codigo(self.root, self.rep_a, reserva[2]))  # a right one still passes
+        self.assertEqual(self.tipos().count('fator_bloqueado'), 1)
+        with self.depois(minutes=acesso.BLOQUEIO_MINUTOS + 1):  # the wrong reserve codes never blocked the authenticator
+            self.assertIsNone(acesso.exigir_codigo(self.root, self.rep_a, self.codigo(1)))
+
+    def test_poucos_codigos_errados_de_cada_vez_tambem_somam_ate_o_bloqueio(self):
+        # T2 of the review: the counter of the factor was forgotten after 15 quiet minutes, so four wrong codes every
+        # quarter of an hour never blocked nor told anybody. It is remembered for a day.
+        self.assertEqual(self.errar(4), ['CodigoInvalido'] * 4)
+        with self.depois(minutes=acesso.BLOQUEIO_MINUTOS + 5):
+            self.assertEqual(self.tentar('ninguem.aqui'), 'CredenciaisInvalidas')  # any failure prunes the stale counters
+            self.assertEqual(self.errar(1), ['FatorBloqueado'])
+        self.assertEqual(self.tipos().count('fator_bloqueado'), 1)
+        with self.depois(hours=1):  # the block ended; a right code clears the counter
+            acesso.exigir_codigo(self.root, self.rep_a, self.codigo(1))
+            self.assertEqual(self.errar(4), ['CodigoInvalido'] * 4)
+        with self.depois(hours=acesso.FATOR_CONTADOR_HORAS + 2):  # and a counter nobody touched for a day is forgotten
+            self.assertEqual(self.tentar('ninguem.aqui'), 'CredenciaisInvalidas')
+            self.assertEqual(self.linhas('SELECT 1 FROM tentativas WHERE chave = ?', acesso.CHAVE_FATOR + self.rep_a), [])
+
     def test_codigos_errados_do_segundo_fator_contam_no_mesmo_teto_do_identificador(self):
         self.assertEqual(self.errar(5), ['CodigoInvalido'] * 4 + ['FatorBloqueado'])
         with self.depois(minutes=acesso.BLOQUEIO_MINUTOS + 1):  # the block of the factor ended; the hour of the identifier did not

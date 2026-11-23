@@ -97,7 +97,9 @@ RECUPERACAO_HORAS = 24  # a recovery asked by a dono: how long it waits for the 
 ENTRADA_MINUTOS = 5  # between the right password and the second factor: the ticket of the second step
 ENTRADA_FALHAS = 5  # wrong codes that kill that ticket
 FATOR_PENDENTE_MINUTOS = 15  # an enrolment not confirmed in this time starts again
-CHAVE_FATOR = '#fator|'  # attempt counter of the second factor asked again by a sensitive operation
+CHAVE_FATOR = '#fator|'  # wrong codes of the authenticator, counted on the account (sign-in and sensitive operations)
+CHAVE_RESERVA = '#reserva|'  # wrong reserve codes, on a counter of their own: they never block the authenticator
+FATOR_CONTADOR_HORAS = 24  # how long those two counters are remembered without a new failure
 PROTECAO_FALHAS = 10  # failures of one identifier, from any address, inside the window below ...
 PROTECAO_JANELA_MINUTOS = 60
 PROTECAO_MINUTOS = 60  # ... put it in protected mode for this long
@@ -1876,7 +1878,7 @@ def redefinir_senha(root: Path, token, senha, codigo=None, ip: str | None = None
 def _sem_fator(tx: _Tx, cid: str) -> None:
     tx.ex('DELETE FROM fatores WHERE conta = ?', cid)
     tx.ex('DELETE FROM codigos_reserva WHERE conta = ?', cid)
-    tx.ex('DELETE FROM tentativas WHERE chave = ?', CHAVE_FATOR + cid)
+    tx.ex('DELETE FROM tentativas WHERE chave IN (?, ?)', CHAVE_FATOR + cid, CHAVE_RESERVA + cid)
 
 
 def _estado_do_fator(tx: _Tx, cid: str) -> dict:
@@ -1957,6 +1959,32 @@ def _falha_do_fator(tx: _Tx, cid: str, momento: datetime, ip: str | None) -> dic
     return _destinatario(tx.um('SELECT * FROM contas WHERE id = ?', cid))
 
 
+def _conferir_codigo(tx: _Tx, root: Path, cid: str, codigo, momento: datetime, ip: str | None) -> tuple:
+    """The whole rule of a code of the second factor of an account, for the sign-in and for the operations that
+    ask it: (kind accepted or None, the answer is a block, a wrong code was counted, who to tell).
+
+    A code of the authenticator is not even tried while the factor is blocked. A reserve code crosses that block:
+    it has 80 random bits, so letting it be tried gives nothing to who guesses, and it is the way in of the person
+    whose password somebody else has and uses to keep the factor blocked. A right one always passes; the wrong
+    ones count on a counter of their own, which never blocks the authenticator nor a right reserve code."""
+    if segundo_fator.resumo_da_reserva(codigo):
+        if _usar_codigo(tx, root, cid, codigo, momento):
+            tx.ex('DELETE FROM tentativas WHERE chave = ? OR (chave = ? AND bloqueado_ate IS NULL)',
+                  CHAVE_RESERVA + cid, CHAVE_FATOR + cid)
+            return 'reserva', False, False, None
+        if _bloqueado(tx, CHAVE_RESERVA + cid, momento):
+            return None, True, False, None
+        _fator_recusado(tx, cid, momento, ip)
+        return None, _registrar_falha(tx, CHAVE_RESERVA + cid, None, momento), True, None
+    if _bloqueado(tx, CHAVE_FATOR + cid, momento):
+        return None, True, False, None
+    if _usar_codigo(tx, root, cid, codigo, momento):
+        tx.ex('DELETE FROM tentativas WHERE chave = ?', CHAVE_FATOR + cid)
+        return 'totp', False, False, None
+    aviso = _falha_do_fator(tx, cid, momento, ip)
+    return None, bool(aviso), True, aviso
+
+
 def _recusa_do_codigo(aviso: dict | None, bloqueado: bool) -> Exception:
     if aviso:
         return FatorBloqueado(aviso)
@@ -1974,15 +2002,11 @@ def exigir_codigo(root: Path, cid: str, codigo, ip: str | None = None) -> None:
     CodigoInvalido or Bloqueado."""
     if _sem_codigo(codigo):
         raise CodigoNecessario(CODIGO_NECESSARIO)
-    chave, bloqueado, aviso = CHAVE_FATOR + cid, False, None
+    bloqueado, aviso = False, None
     with _bd(root, escrever=True) as tx:
-        momento = agora()
-        bloqueado = _bloqueado(tx, chave, momento)
-        if not bloqueado:
-            if _usar_codigo(tx, root, cid, codigo, momento):
-                tx.ex('DELETE FROM tentativas WHERE chave = ?', chave)
-                return
-            aviso = _falha_do_fator(tx, cid, momento, ip)
+        aceito, bloqueado, _, aviso = _conferir_codigo(tx, root, cid, codigo, agora(), ip)
+        if aceito:
+            return
     raise _recusa_do_codigo(aviso, bloqueado)
 
 
@@ -2098,13 +2122,12 @@ def entrar_segundo_fator(root: Path, bilhete, codigo, ip: str | None = None, mar
             tx.ex('DELETE FROM entradas WHERE id_sha256 = ?', entrada['id_sha256'])
         elif entrada:
             cid = conta['id']
-            if _bloqueado(tx, CHAVE_FATOR + cid, momento):
-                bloqueado = True
-            elif _usar_codigo(tx, root, cid, codigo, momento):
+            aceito, bloqueado, contou, aviso = _conferir_codigo(tx, root, cid, codigo, momento, ip)
+            if aceito:
                 tx.ex('DELETE FROM entradas WHERE conta = ?', cid)
-                tx.ex('DELETE FROM tentativas WHERE chave IN (?, ?)', entrada['chave'], CHAVE_FATOR + cid)
+                tx.ex('DELETE FROM tentativas WHERE chave = ?', entrada['chave'])
                 return _sessao_aberta(tx, conta, momento, entrada['cliente'], entrada['aparelho'], ip, marca)
-            else:
+            if contou:  # an attempt during a block is neither tried, counted nor spent
                 errou = True
                 if entrada['falhas'] + 1 >= ENTRADA_FALHAS:
                     tx.ex('DELETE FROM entradas WHERE id_sha256 = ?', entrada['id_sha256'])
@@ -2112,7 +2135,6 @@ def entrar_segundo_fator(root: Path, bilhete, codigo, ip: str | None = None, mar
                     tx.ex('UPDATE entradas SET falhas = falhas + 1 WHERE id_sha256 = ?', entrada['id_sha256'])
                 _registrar_falha(tx, entrada['chave'], cid, momento)
                 _falha_do_identificador(tx, entrada['chave'].split('|', 1)[0], cid, momento)  # the same ceilings as the password
-                aviso = _falha_do_fator(tx, cid, momento, ip)  # and the account's own, whatever the address
     if errou or bloqueado:
         raise _recusa_do_codigo(aviso, bloqueado)
     raise EntradaExpirada(ENTRADA_EXPIRADA)
@@ -2465,15 +2487,20 @@ def _registrar_falha(tx: _Tx, chave: str, cid: str | None, momento: datetime) ->
 
 def _podar_tentativas(tx: _Tx, momento: datetime) -> None:
     """Forget stale counters. An active block is never evicted, and neither is a counter before its time: the
-    per-identifier ones (the fixed table of BALDES counters) live for their whole window; the others live
-    BLOQUEIO_MINUTOS, and only
-    the per-address counters of the sign-in, which an attacker can multiply, have a ceiling."""
+    per-identifier ones (the fixed table of BALDES counters) live for their whole window; the ones of the second
+    factor of an account live FATOR_CONTADOR_HORAS, so that a few wrong codes every quarter of an hour add up to a
+    block and a notice instead of being forgotten each time; the others live BLOQUEIO_MINUTOS, and only the
+    per-address counters of the sign-in, which an attacker can multiply, have a ceiling."""
     agora_ = _iso(momento)
     curto, longo = _iso(momento - timedelta(minutes=BLOQUEIO_MINUTOS)), _iso(momento - timedelta(minutes=PROTECAO_JANELA_MINUTOS))
+    dia = _iso(momento - timedelta(hours=FATOR_CONTADOR_HORAS))
     ativo = '(bloqueado_ate IS NOT NULL AND bloqueado_ate > ?)'
     do_identificador = f"chave LIKE '{CHAVE_BALDE}%'"
-    tx.ex(f"DELETE FROM tentativas WHERE NOT {ativo} AND coalesce(em, '') <= ? AND NOT {do_identificador}", agora_, curto)
+    do_fator = f"(chave LIKE '{CHAVE_FATOR}%' OR chave LIKE '{CHAVE_RESERVA}%')"
+    tx.ex(f"DELETE FROM tentativas WHERE NOT {ativo} AND coalesce(em, '') <= ? AND NOT {do_identificador} AND NOT {do_fator}",
+          agora_, curto)
     tx.ex(f"DELETE FROM tentativas WHERE NOT {ativo} AND coalesce(em, '') <= ? AND {do_identificador}", agora_, longo)
+    tx.ex(f"DELETE FROM tentativas WHERE NOT {ativo} AND coalesce(em, '') <= ? AND {do_fator}", agora_, dia)
     excesso = tx.um("SELECT COUNT(*) AS total FROM tentativas WHERE chave NOT LIKE '#%'")['total'] - MAX_TENTATIVAS_GUARDADAS
     if excesso > 0:
         tx.ex(f"DELETE FROM tentativas WHERE chave IN (SELECT chave FROM tentativas WHERE NOT {ativo}"

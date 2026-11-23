@@ -157,6 +157,8 @@ class ModelosTest(Base):
                           'fator_bloqueado'})
         bloqueio = correio.montar('fator_bloqueado', 'pt', {'minutos': 15})[1]
         self.assertIn('bloqueado por 15 minutos', bloqueio)
+        self.assertIn('código de reserva continua valendo', bloqueio)  # the way out is told (T1 of the review)
+        self.assertIn('recuperação do seu acesso', bloqueio)
         self.assertNotIn('http', bloqueio)
         aviso = correio.montar('novo_acesso', 'pt', {'aparelho': 'Firefox · Linux'})[1]
         self.assertIn('Firefox Linux', aviso)  # the device, as two words of closed lists, and nothing to click
