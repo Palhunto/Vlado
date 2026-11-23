@@ -323,17 +323,17 @@ test('Atividade: cada tipo que o servidor grava tem frase (nenhum cai em "Ação
   const TIPOS = ['papel_alterado', 'conta_desativada', 'conta_reativada', 'conta_excluida', 'conta_criada', 'participacao_incluida', 'participacao_retirada', 'responsavel_alterado',
     'teto_alterado', 'senha_trocada', 'senha_definida', 'sessao_encerrada_a_distancia', 'conta_atualizada', 'recuperacao_emitida', 'login_bloqueado', 'sessao_encerrada',
     'convite_enviado', 'convite_reenviado', 'convite_cancelado', 'convite_aceito', 'convite_expirado', 'recuperacao_pedida', 'recuperacao_confirmada', 'senha_redefinida',
-    'redefinicao_pedida', 'email_troca_pedida', 'email_trocado', 'fator_ativado', 'fator_removido', 'fator_codigos_gerados', 'aparelho_novo', 'codigo_reserva_usado', 'fator_bloqueado', 'login_protegido',
+    'redefinicao_pedida', 'email_troca_pedida', 'email_trocado', 'fator_ativado', 'fator_removido', 'fator_removido_na_recuperacao', 'fator_codigos_gerados', 'aparelho_novo', 'codigo_reserva_usado', 'fator_bloqueado', 'login_protegido',
     'acesso_alterado', 'caso_atribuido', 'caso_criado', 'primeiro_admin', 'migracao_contas', 'redacao_criada', 'redacao_suspensa', 'redacao_reativada', 'redacao_encerrada'];
   const {mesa} = await abrirEquipe(com([ANA(), RUI()]));
   const {Equipe} = mesa.janela;
   const base = {conta: ID.rui, por: ID.ana, conta_nome: 'Rui Castro', por_nome: 'Ana Lima'};
   for (const tipo of TIPOS) assert.notEqual(texto(Equipe.frase({...base, tipo})), 'Ação de administração', tipo);
   assert.equal(texto(Equipe.frase({...base, tipo: 'tipo_que_ninguem_previu'})), 'Ação de administração');
-  // Q2 da Coruja: o fator que cai pela recuperação não foi "removido" pela própria conta
+  // Q2 da Coruja: o fator que cai pela recuperação tem tipo próprio; fator_removido é só de quem remove o próprio
   assert.equal(texto(Equipe.frase({...base, tipo: 'fator_removido', por: ID.rui, por_nome: 'Rui Castro'})), 'Rui Castro removeu o segundo fator', 'a própria conta removeu');
-  assert.equal(texto(Equipe.frase({...base, tipo: 'fator_removido', por: 'operador', por_nome: null})), 'O segundo fator de Rui Castro saiu na recuperação de acesso', 'o operador recuperou o acesso');
-  assert.equal(texto(Equipe.frase({...base, tipo: 'fator_removido', por: ID.ana})), 'O segundo fator de Rui Castro saiu na recuperação de acesso', 'outro dono recuperou o acesso');
+  assert.equal(texto(Equipe.frase({...base, tipo: 'fator_removido_na_recuperacao', por: 'operador', por_nome: null})), 'O segundo fator de Rui Castro saiu na recuperação de acesso', 'o operador recuperou o acesso');
+  assert.equal(texto(Equipe.frase({...base, tipo: 'fator_removido_na_recuperacao', por: ID.rui, por_nome: 'Rui Castro'})), 'O segundo fator de Rui Castro saiu na recuperação de acesso', 'o link de redefinição pedido por um dono');
   assert.equal(texto(Equipe.frase({...base, tipo: 'conta_desativada'})), 'Ana Lima desativou a conta de Rui Castro');
   assert.equal(texto(Equipe.frase({...base, tipo: 'senha_trocada', por: ID.rui, por_nome: 'Rui Castro'})), 'Rui Castro trocou a senha');
   assert.equal(texto(Equipe.frase({...base, tipo: 'conta_excluida', conta_nome: null})), 'Ana Lima removeu uma conta removida da redação');

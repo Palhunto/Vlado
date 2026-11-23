@@ -668,7 +668,8 @@
     // Recuperação do acesso, link de senha e troca do e-mail (frases do Design, #recuperar; nenhuma leva endereço de e-mail).
     recuperacao_pedida: '{por} pediu a recuperação do acesso de {conta}', recuperacao_confirmada: '{por} confirmou a recuperação do acesso de {conta}',
     fator_ativado: '{conta} ativou o segundo fator', fator_removido: '{conta} removeu o segundo fator',
-    // Quando quem registra não é a própria conta (a recuperação do acesso feita por outro dono ou pelo operador), o fator não foi removido por ela (Q2 da Coruja).
+    // O servidor grava este tipo quando o fator cai pela recuperação do acesso (link de redefinição pedido por um dono, ou o operador no terminal); fator_removido é só de quem
+    // remove o próprio fator (Q2 da Coruja; a0cd095 da contas-o2).
     fator_removido_na_recuperacao: 'O segundo fator de {conta} saiu na recuperação de acesso', fator_codigos_gerados: '{conta} gerou novos códigos de reserva',
     // O que a E4 também grava (frases a confirmar com o Design): aparelho novo, código de reserva, fator bloqueado e entrada protegida.
     aparelho_novo: '{conta} entrou de um aparelho novo', codigo_reserva_usado: '{conta} entrou com um código de reserva',
@@ -689,8 +690,7 @@
     return t('uma conta removida');
   }
   function frase(evento) {
-    const saiuNaRecuperacao = evento.tipo === 'fator_removido' && !!evento.por && evento.por !== evento.conta;
-    const modelo = FRASES[saiuNaRecuperacao ? 'fator_removido_na_recuperacao' : evento.tipo];
+    const modelo = FRASES[evento.tipo];
     const alvo = no('span', 'equipe-frase');
     if (!modelo) { alvo.textContent = t('Ação de administração'); return alvo; }
     // Quando as duas pontas são a mesma conta, a frase usa só o nome dela.
