@@ -101,11 +101,34 @@ class ArmazenamentoTest(unittest.TestCase):
         segredos.salvar_chave(self.root, 'anthropic', DO_SERVICO)
         segredos.caminho_das_redacoes(self.root).write_text('{ isto não é json', encoding='utf-8')
         self.assertEqual(segredos.ler_chave(self.root, 'anthropic'), DO_SERVICO)
-        with self.assertRaisesRegex(ValueError, 'chaves das redações está ilegível'):
+        # Whose key it held is unknown: no newsroom falls on the key of the service in its place (8.5).
+        for funcao in (segredos.ler_chave, segredos.origem_da_chave):
+            with self.assertRaises(segredos.ChavesIlegiveis):
+                funcao(self.root, 'anthropic', A)
+        with self.assertRaises(segredos.ChavesIlegiveis):
+            segredos.resumo(self.root, B)
+        with self.assertRaises(segredos.ChavesIlegiveis):  # nor is a newsroom key saved over it, losing the others
+            segredos.salvar_chave(self.root, 'anthropic', DE_ALFA, A)
+        self.assertTrue(issubclass(segredos.ChavesIlegiveis, ValueError))
+        self.assertEqual(segredos.origem_da_chave(self.root, 'anthropic'), 'salva')
+        segredos.caminho_das_redacoes(self.root).write_text('["não é objeto"]', encoding='utf-8')
+        with self.assertRaises(segredos.ChavesIlegiveis):
             segredos.ler_chave(self.root, 'anthropic', A)
         segredos.caminho_das_redacoes(self.root).write_text(json.dumps({'../x': {'anthropic': DE_ALFA}, A: 'texto', B: {'outro': 'x'}}),
                                                             encoding='utf-8')
         self.assertEqual([segredos.ler_chave(self.root, 'anthropic', r) for r in (A, B)], [DO_SERVICO, DO_SERVICO])  # only what is well formed
+
+    def test_na_partida_o_operador_e_avisado_do_arquivo_ilegivel(self):
+        with patch('registro_acesso.registrar') as registrar, patch('registro_acesso.lembrar_raiz'):
+            self.assertIsNone(segredos.conferir_chaves_das_redacoes(self.root))  # no file: nothing to say
+            segredos.salvar_chave(self.root, 'anthropic', DE_ALFA, A)
+            self.assertIsNone(segredos.conferir_chaves_das_redacoes(self.root))
+            registrar.assert_not_called()
+            segredos.caminho_das_redacoes(self.root).write_text('{ quebrado', encoding='utf-8')
+            aviso = segredos.conferir_chaves_das_redacoes(self.root)
+        self.assertIn('ilegível', aviso)
+        self.assertNotIn(DE_ALFA, aviso)
+        registrar.assert_called_once_with('chaves_ia_ilegiveis', 'falha')
 
 
 class SemRedacaoTest(unittest.TestCase):
