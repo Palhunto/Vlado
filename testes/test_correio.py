@@ -18,7 +18,8 @@ import registro_acesso
 ORIGEM = 'https://vlado.test'
 LINK = ORIGEM + '/aceitar/' + 'T' * 43
 DADOS = {'redacao': 'Redação Alfa', 'convidado_por': 'Dona Alfa', 'papel': 'reporter', 'validade': '2026-11-29',
-         'link': LINK, 'origem': ORIGEM, 'minutos': 60, 'horas': 24, 'aparelho': 'Firefox · Linux'}
+         'link': LINK, 'origem': ORIGEM, 'minutos': 60, 'horas': 24, 'aparelho': 'Firefox · Linux',
+         'dias': 180, 'prazo': 30}
 SMTP = {'VLADO_CORREIO': 'smtp', 'VLADO_SMTP_HOST': 'smtp.exemplo.test', 'VLADO_SMTP_PORTA': '587',
         'VLADO_SMTP_USUARIO': 'vlado', 'VLADO_SMTP_SENHA': 'senha-do-smtp-de-teste', 'VLADO_SMTP_REMETENTE': 'nao-responda@vlado.test'}
 SEM_CORREIO = {chave: '' for chave in SMTP}
@@ -107,7 +108,7 @@ class ModelosTest(Base):
                  'h​ttps://golpe.example', 'golpe . example', 'https:\\\\golpe.example', '//golpe.example')
         for tipo in correio.MODELOS:
             for idioma in correio.IDIOMAS:
-                for campo in ('convidado_por', 'redacao', 'papel', 'validade', 'minutos', 'horas', 'aparelho'):
+                for campo in ('convidado_por', 'redacao', 'papel', 'validade', 'minutos', 'horas', 'aparelho', 'dias', 'prazo'):
                     for nome in nomes:
                         with self.subTest(tipo=tipo, idioma=idioma, campo=campo, nome=nome):
                             assunto, corpo = correio.montar(tipo, idioma, {**DADOS, campo: nome})
@@ -154,7 +155,7 @@ class ModelosTest(Base):
         # What goes to the audit log is the kind of message, out of a closed list.
         self.assertEqual({rotulo for rotulo, _ in correio.MODELOS.values()},
                          {'convite', 'redefinicao', 'recuperacao', 'email_novo', 'senha_trocada', 'fator_alterado', 'novo_acesso',
-                          'fator_bloqueado'})
+                          'fator_bloqueado', 'conta_inativa'})
         bloqueio = correio.montar('fator_bloqueado', 'pt', {'minutos': 15})[1]
         self.assertIn('bloqueado por 15 minutos', bloqueio)
         self.assertIn('código de reserva continua valendo', bloqueio)  # the way out is told (T1 of the review)

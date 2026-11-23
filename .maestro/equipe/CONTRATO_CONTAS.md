@@ -855,7 +855,7 @@ Do que a entrega 3 decide, além do texto da seção 8.1:
 - Gravar e remover a chave viram os eventos `chave_ia_salva` e `chave_ia_removida` na atividade da redação e no registro de auditoria: quem e quando, nunca a chave nem parte dela. Remover quando não há chave não gera evento.
 - A senha de `ia-config-salvar` (seção 5.15) é conferida antes de tudo, onde há contas, e sai do corpo antes de ele chegar à chave da redação: a senha nunca é tomada por campo de configuração.
 
-**Entrega 4b** (proposta aprovada pelo Revisor e pelo Maestro em 23/11/2026; da 4b-1 à 4b-3 em código): o ciclo de vida da seção 8.4, em quatro partes, cada uma num commit revisado. O que a 8.4 já decide não se repete aqui; abaixo, só o que ela deixa aberto.
+**Entrega 4b** (proposta aprovada pelo Revisor e pelo Maestro em 23/11/2026; as quatro partes em código, a 4b-2b à espera das funções dos outros donos): o ciclo de vida da seção 8.4, em quatro partes, cada uma num commit revisado. O que a 8.4 já decide não se repete aqui; abaixo, só o que ela deixa aberto.
 
 - **4b-1, termos com versão.**
   - A versão vigente e o endereço do texto vêm de quem opera, como o correio: `VLADO_TERMOS_VERSAO` (texto curto, por exemplo `2026-12-01`) e `VLADO_TERMOS_ENDERECO` (`https://`). Sem a versão, nada muda: `termos_versao` sai `null` e ninguém tem a pendência. O texto e o lugar dele são da Documentação (D6); o servidor só conhece a versão e o endereço, e não serve o texto.
@@ -884,6 +884,14 @@ Do que a entrega 3 decide, além do texto da seção 8.1:
   - Conta sem e-mail (migrada) não é desativada sem aviso: fica numa lista para o operador (`acesso.py manutencao` imprime quantas).
   - O último dono ativo de uma redação é avisado, mas não é desativado: a redação ficaria sem dono, e sair disso exige o operador. O operador é avisado na mesma lista.
   - Conta `aguardando_senha` cujo convite venceu: hoje o convite vence e a conta não existe antes do aceite, então nada a fazer; contas `aguardando_senha` do fluxo antigo (migradas, com o prazo de ativação vencido) ficam `excluida` pela varredura, pelo mesmo caminho de `equipe-remover`, com evento. Se a trava do último dono recusar (a conta é o único dono da redação), a varredura pula a conta e a põe na lista do operador (ressalva E1).
+  - O que esta parte decide no código: o banco vai à v9 com `ultimo_acesso` e `aviso_inatividade_em` na conta; a migração dá `ultimo_acesso` = agora a toda conta não excluída, e a conta nova conta da criação até a primeira entrada. Toda sessão aberta (`acesso._abrir_sessao`, o ponto único das quatro entradas) grava `ultimo_acesso` e apaga o aviso; a reativação (`equipe-reativar` e o terminal) também, para que a conta reativada depois da varredura não seja desativada de novo pela seguinte.
+  - Os prazos só correm em redação `ativa`: na suspensa ou encerrada ninguém consegue entrar, e nem aviso nem desativação acontecem.
+  - "Conta criada que nunca teve senha" é a sem `senha_hash` e sem `senha_definida_em`, com a ativação vencida e de motivo diferente de `recuperacao`: a conta à espera de uma recuperação teve senha e a pessoa pode voltar, e a varredura não a toca. Sai pelo mesmo `acesso._apagar_conta` de `equipe-remover` e da 4b-3, com o evento `conta_excluida` e `por` = `manutencao`.
+  - E-mails: `conta_inativa` (180 dias, desativação em 30) e a variante do último dono ativo, que diz que a conta não será desativada e que quem opera será avisado; as duas vão ao registro com o mesmo rótulo `conta_inativa`, sem link (a mensagem que pede para entrar não leva o lugar de digitar a senha). Cada envio sai fora da transação do banco; o aviso só é gravado se a pessoa não entrou enquanto a mensagem ia. Três falhas seguidas do servidor de e-mail encerram as tentativas daquela varredura.
+  - A lista do operador volta em `para_o_operador` do resultado de `acesso.py manutencao`, refeita a cada varredura: `{conta, redacao, motivo}`, só ids e um motivo fixo (`sem_email`, `sem_envio`, `envio_falhou`, `ultimo_dono`), nunca nome nem endereço. O resultado conta também `contas_avisadas`, `contas_desativadas` e `contas_excluidas`.
+  - Na partida do servidor a varredura roda sem os avisos (`manutencao(root, avisar=False)`) e os avisos vão num fio à parte (`acesso.avisar_inativas`), para que um servidor de e-mail lento não segure a partida.
+  - A exportação (4b-2) passa a levar `ultimo_acesso` e `aviso_inatividade_em` no bloco `conta`: é o que o armazenamento guarda da pessoa.
+  - Pedido à Plataforma para as listas: o evento `conta_desativada_por_inatividade` e a mensagem `conta_inativa`.
 
 **O que ainda não existe,** e onde o código difere do texto até lá:
 

@@ -189,7 +189,8 @@ class MigracaoTest(unittest.TestCase):
             acesso.criar_redacao(root, 'Redação')  # a fresh store, then taken back to version 7
             con = sqlite3.connect(acesso.caminho_bd(root))
             try:
-                con.executescript('DROP INDEX termos_por_conta; DROP TABLE termos_aceites; PRAGMA user_version = 7;')
+                con.executescript('ALTER TABLE contas DROP COLUMN ultimo_acesso; ALTER TABLE contas DROP COLUMN aviso_inatividade_em;'
+                                  ' DROP INDEX termos_por_conta; DROP TABLE termos_aceites; PRAGMA user_version = 7;')
             finally:
                 con.close()
             self.assertEqual(acesso.listar_redacoes(root)[0]['nome'], 'Redação')

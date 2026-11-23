@@ -1,14 +1,20 @@
-"""Excluir a própria conta (``conta-excluir``; contrato de contas, seção 8.4 e entrega 4b-3).
+"""Ciclo de vida da conta (contrato de contas, seção 8.4): excluir a própria conta (``conta-excluir``, entrega 4b-3)
+e as contas inativas da varredura diária (``acesso.manutencao``, entrega 4b-4).
 
 O mesmo efeito de ``equipe-remover``: fica só o id, com a situação ``excluida``. A ordem é a combinada com o
 Frontend: o nome digitado, depois o último dono, depois a senha; nome errado e exclusão impossível não gastam
 tentativa. O sucesso encerra todas as sessões da conta e apaga os cookies da sessão e do aparelho. Nas saídas de
-Contas, o autor excluído aparece como "Conta excluída" (``acesso.nome_publico``). Sem modelo e sem rede.
+Contas, o autor excluído aparece como "Conta excluída" (``acesso.nome_publico``).
+
+Inativas: 180 dias sem entrar geram um aviso por e-mail, que só conta quando o transporte ``smtp`` o entregou; 30 dias
+depois do aviso, sem entrada nova, a conta é desativada, nunca o último dono ativo. Conta criada que nunca teve senha,
+com a ativação vencida, é excluída; a que espera uma recuperação, não. Sem modelo e sem rede (o ``smtp`` é falso).
 """
 import http.client
 import json
 import os
 from pathlib import Path
+import smtplib
 import sqlite3
 import sys
 import unittest
@@ -19,6 +25,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acesso
 import cenario_redacoes as cenario
 from cenario_redacoes import SENHA
+import correio
+import test_acesso  # module import: its TestCases are not collected again here
 
 
 class ExcluirTest(cenario.DuasRedacoes):
@@ -156,6 +164,134 @@ class NomePublicoTest(cenario.DuasRedacoes):
             self.assertIsNone(acesso.nome_publico(self.root, valor), valor)
         self.assertEqual(acesso.nomes_publicos(self.root, [dono, cid, dono_b, 'operador'], self.a),
                          {dono: 'Dona Alfa', cid: 'Conta excluída'})
+
+
+class InativasTest(test_acesso.DuasRedacoes):
+    def setUp(self):
+        super().setUp()
+        self.enviadas = []
+        enviar = patch.object(correio, '_smtp', side_effect=lambda para, assunto, corpo: self.enviadas.append(
+            (para, assunto, corpo)))
+        enviar.start()
+        self.addCleanup(enviar.stop)
+
+    def inativa(self, cid, dias=acesso.INATIVIDADE_DIAS, email=True):
+        momento = acesso._iso(acesso.agora() - acesso.timedelta(days=dias, minutes=1))
+        self.gravar('UPDATE contas SET ultimo_acesso = ?, email = ? WHERE id = ?', momento,
+                    f'{cid}@exemplo.test' if email else None, cid)
+
+    def conta(self, cid):
+        return self.linhas('SELECT * FROM contas WHERE id = ?', cid)[0]
+
+    def varrer(self, transporte='smtp', **delta):
+        with correio.usar(transporte):
+            if not delta:
+                return acesso.manutencao(self.root)
+            with self.depois(**delta):
+                return acesso.manutencao(self.root)
+
+    def test_aviso_entregue_e_desativacao_trinta_dias_depois(self):
+        sid = acesso.entrar(self.root, 'rep.a', test_acesso.SENHA)[0]
+        self.inativa(self.rep_a)
+        self.inativa(self.dono_a, dias=acesso.INATIVIDADE_DIAS - 2)  # not yet
+        resultado = self.varrer()
+        self.assertEqual((resultado['contas_avisadas'], resultado['para_o_operador']), (1, []))
+        (para, assunto, corpo), = self.enviadas
+        self.assertEqual(para, f'{self.rep_a}@exemplo.test')
+        self.assertIn('há mais de 180 dias', corpo)
+        self.assertIn('por mais 30 dias, será desativada', corpo)
+        self.assertNotIn('http', assunto + corpo)  # no link: the message never carries where to type the password
+        self.assertTrue(self.conta(self.rep_a)['aviso_inatividade_em'])
+        self.assertEqual(self.varrer()['contas_avisadas'], 0)  # warned once
+        self.assertEqual(len(self.enviadas), 1)
+        self.assertEqual(self.varrer(days=acesso.DESATIVACAO_DIAS - 1)['contas_desativadas'], 0)
+        self.assertEqual(self.varrer(days=acesso.DESATIVACAO_DIAS, minutes=1)['contas_desativadas'], 1)
+        conta = self.conta(self.rep_a)
+        self.assertEqual((conta['ativa'], conta['excluida_em']), (0, None))  # deactivated, not deleted
+        self.assertIsNone(acesso.sessao(self.root, sid))
+        evento = self.linhas("SELECT * FROM eventos WHERE tipo = 'conta_desativada_por_inatividade'")
+        self.assertEqual([(e['conta'], e['por'], e['organizacao']) for e in evento], [(self.rep_a, 'manutencao', self.a)])
+        self.assertIsNone(self.linhas("SELECT responsavel FROM casos WHERE caso = 'caso_a'")[0]['responsavel'])
+        # The dono reactivates it, and the count starts again: the next sweep does not deactivate it at once.
+        acesso.reativar(self.root, self.rep_a, por=self.dono_a, organizacao=self.a)
+        self.assertEqual(self.varrer(days=acesso.DESATIVACAO_DIAS, minutes=2)['contas_desativadas'], 0)
+        self.assertEqual(self.conta(self.rep_a)['ativa'], 1)
+
+    def test_entrar_de_novo_zera_tudo(self):
+        self.inativa(self.rep_a)
+        self.assertEqual(self.varrer()['contas_avisadas'], 1)
+        acesso.entrar(self.root, 'rep.a', test_acesso.SENHA)
+        conta = self.conta(self.rep_a)
+        self.assertIsNone(conta['aviso_inatividade_em'])
+        self.assertGreater(conta['ultimo_acesso'], acesso._iso(acesso.agora() - acesso.timedelta(minutes=1)))
+        resultado = self.varrer(days=acesso.DESATIVACAO_DIAS + 1)
+        self.assertEqual((resultado['contas_desativadas'], resultado['contas_avisadas']), (0, 0))
+
+    def test_sem_smtp_sem_email_ou_com_falha_nada_conta_e_vai_ao_operador(self):
+        self.inativa(self.rep_a)
+        self.inativa(self.rep_b, email=False)
+        for transporte in ('tela', 'simulado'):  # observation F1: the simulated one delivers only in memory
+            resultado = self.varrer(transporte)
+            self.assertEqual(resultado['contas_avisadas'], 0, transporte)
+            self.assertCountEqual(resultado['para_o_operador'], [
+                {'conta': self.rep_a, 'redacao': self.a, 'motivo': 'sem_envio'},
+                {'conta': self.rep_b, 'redacao': self.b, 'motivo': 'sem_email'}])
+        with patch.object(correio, '_smtp', side_effect=smtplib.SMTPException('recusado')):
+            resultado = self.varrer()
+        self.assertEqual(resultado['contas_avisadas'], 0)
+        self.assertIn({'conta': self.rep_a, 'redacao': self.a, 'motivo': 'envio_falhou'}, resultado['para_o_operador'])
+        for cid in (self.rep_a, self.rep_b):
+            self.assertIsNone(self.conta(cid)['aviso_inatividade_em'])
+        # Never warned, never deactivated: not even a year later.
+        resultado = self.varrer('tela', days=400)
+        self.assertEqual(resultado['contas_desativadas'], 0)
+        self.assertEqual(self.conta(self.rep_a)['ativa'], 1)
+        self.assertNotIn('Rep A', json.dumps(resultado))  # the operator's list: ids and reasons only
+        self.assertNotIn('@', json.dumps(resultado))
+
+    def test_servidor_de_email_fora_do_ar_nao_e_tentado_sem_fim(self):
+        pessoas = [self.pessoa(f'Pessoa {n}', f'pessoa.{n}', 'reporter', self.a) for n in range(5)]
+        for cid in pessoas:
+            self.inativa(cid)
+        with patch.object(correio, '_smtp', side_effect=OSError('sem rede')) as smtp:
+            resultado = self.varrer()
+        self.assertEqual(smtp.call_count, acesso.FALHAS_SEGUIDAS_DE_ENVIO)
+        self.assertEqual([linha['motivo'] for linha in resultado['para_o_operador']], ['envio_falhou'] * 5)
+
+    def test_o_ultimo_dono_e_avisado_e_nunca_desativado(self):
+        self.inativa(self.dono_b)
+        self.assertEqual(self.varrer()['contas_avisadas'], 1)
+        corpo = self.enviadas[0][2]
+        self.assertIn('única conta de dono ativa', corpo)
+        self.assertIn('não será desativada', corpo)
+        self.assertNotIn('por mais', corpo)  # no date to deactivate it: it never is
+        resultado = self.varrer(days=acesso.DESATIVACAO_DIAS + 1)
+        self.assertEqual(resultado['contas_desativadas'], 0)
+        self.assertEqual(resultado['para_o_operador'], [{'conta': self.dono_b, 'redacao': self.b, 'motivo': 'ultimo_dono'}])
+        self.assertEqual(self.conta(self.dono_b)['ativa'], 1)
+
+    def test_redacao_suspensa_nao_corre_prazo(self):
+        acesso.definir_situacao_redacao(self.root, self.b, 'suspensa')
+        self.inativa(self.rep_b)
+        resultado = self.varrer()
+        self.assertEqual((resultado['contas_avisadas'], resultado['para_o_operador'], self.enviadas), (0, [], []))
+
+    def test_criada_sem_senha_e_vencida_sai_e_a_da_recuperacao_fica(self):
+        nova, _ = acesso.criar_conta(self.root, 'Nunca Ativou', 'nunca.ativou', papel='reporter', organizacao=self.a,
+                                     por='operador')
+        acesso.recuperar(self.root, self.rep_b, por='operador', organizacao=self.b)  # waiting for a recovery
+        sozinha = acesso.criar_redacao(self.root, 'Redação Só Convite')['id']
+        dona, _ = acesso.criar_conta(self.root, 'Dona Sem Senha', 'dona.sem.senha', papel='dono', organizacao=sozinha,
+                                     por='operador')
+        self.assertEqual(self.varrer('tela', hours=acesso.ATIVACAO_HORAS - 1)['contas_excluidas'], 0)
+        resultado = self.varrer('tela', hours=acesso.ATIVACAO_HORAS, minutes=1)
+        self.assertEqual(resultado['contas_excluidas'], 1)
+        self.assertIsNotNone(self.conta(nova['id'])['excluida_em'])
+        evento = self.linhas("SELECT * FROM eventos WHERE tipo = 'conta_excluida' AND conta = ?", nova['id'])
+        self.assertEqual([e['por'] for e in evento], ['manutencao'])
+        self.assertIsNone(self.conta(self.rep_b)['excluida_em'])  # the recovery: it had a password and may come back
+        self.assertIsNone(self.conta(dona['id'])['excluida_em'])  # the only dono of a newsroom: to the operator
+        self.assertIn({'conta': dona['id'], 'redacao': sozinha, 'motivo': 'ultimo_dono'}, resultado['para_o_operador'])
 
 
 if __name__ == '__main__':
