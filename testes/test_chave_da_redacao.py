@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acesso
 import cenario_redacoes as cenario
+from cenario_redacoes import SENHA
 import segredos
 from inferencia_api import resumo_inferencia
 
@@ -148,7 +149,7 @@ class ServidorTest(cenario.DuasRedacoes):
         return corpo['chaves'][self.provedor], bruto.decode('utf-8')
 
     def salvar(self, quem, **campos):
-        return self.post(quem, 'ia-config-salvar', {'provedor': self.provedor, **campos})
+        return self.post(quem, 'ia-config-salvar', {'provedor': self.provedor, 'senha': SENHA, **campos})
 
     def test_cada_dono_grava_e_ve_so_a_chave_da_propria_redacao(self):
         segredos.salvar_chave(self.root, self.provedor, DO_SERVICO)  # the operator's doing
@@ -181,7 +182,7 @@ class ServidorTest(cenario.DuasRedacoes):
                       {'provedor': self.provedor}, {'provedor': self.provedor, 'remover_chave': 'sim'},
                       {'provedor': self.provedor, 'chave': 'curta'}, {'provedor': self.provedor, 'chave': DE_ALFA, 'redacao': self.b},
                       {'chave': DE_ALFA}):
-            status, resposta, bruto = self.post('dono', 'ia-config-salvar', corpo)
+            status, resposta, bruto = self.post('dono', 'ia-config-salvar', {**corpo, 'senha': SENHA})
             self.assertEqual(status, 400, (corpo, bruto[:200]))
             self.assertNotIn(DE_ALFA, bruto.decode('utf-8'))
         self.assertFalse(segredos.caminho_das_redacoes(self.root).exists())  # refused whole: nothing was written
@@ -191,6 +192,15 @@ class ServidorTest(cenario.DuasRedacoes):
         # The page of today sends the model it read: the same model is not a change.
         igual = self.salvar('dono', modelo_preferido=antes['modelo_preferido'], chave=DE_ALFA)
         self.assertEqual(igual[0], 200, igual[2][:200])
+
+    def test_sem_a_senha_nada_e_gravado(self):
+        # Seção 5.15: the password of who does it, checked before anything; it never reaches the newsroom's key.
+        status, corpo, bruto = self.post('dono', 'ia-config-salvar', {'provedor': self.provedor, 'chave': DE_ALFA})
+        self.assertEqual((status, corpo.get('codigo')), (403, 'senha_necessaria'), bruto[:200])
+        self.assertNotIn(DE_ALFA, bruto.decode('utf-8'))
+        self.assertFalse(segredos.caminho_das_redacoes(self.root).exists())
+        self.assertEqual(self.salvar('dono', chave=DE_ALFA)[0], 200)  # the password left the body: not a field
+        self.assertEqual(segredos.ler_chave(self.root, self.provedor, self.a), DE_ALFA)
 
     def test_so_o_dono_e_a_troca_fica_na_atividade_da_propria_redacao_sem_a_chave(self):
         for papel in ('editor', 'reporter', 'leitor', 'convidado'):
