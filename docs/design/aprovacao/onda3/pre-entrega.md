@@ -142,4 +142,15 @@ Minha conta, Equipe, convite e redefinir a senha (Onda 2) não estão nesta linh
 | R9 | Contorno de campo: o título da nota no Caderno tem sublinhado da cor do fundo. Correção decidida em `componentes.md#foco-aa`, (d) | Caderno, notas | Frontend (Lume) |
 | R7 | Textos: "3 achado(s)" sem concordância (o plural deve concordar, sem "(s)"); o texto de Configurações no modo `local` fala de contas que não aparecem | Conferir achados, Configurações | Frontend (Lume), junto com as correções do AA (`componentes.md#foco-aa`) |
 
+**Resolvidas e conferidas pelo Design (22/11/2026), em `lancamento/frontend-o3`:**
+
+- R1, em `ccbd4a9`: capturas com a análise R001;
+- R2, em `ccbd4a9`, com o token `--theme-disabled-text`;
+- R4, em `16f9e6e` e `db4124d`: "Cadastrar arquivos" saiu, a Nova apuração vem pelo W01 e o recibo acompanha a pergunta;
+- R8 e R9, em `0303919`;
+- R7, em `9520fc3` (plural concordado nos achados) e `599e9e2` (Configurações sem o texto de contas). A lista foi medida na linha de base `db4e032`, anterior a esses dois commits;
+- R5, em parte, em `7c2345c` e `61d7fe3`: o Entrar ganhou as seções da Onda 2; a conferência com o canvas inteiro fica para a captura nova da linha de base.
+
+Abertas: R3, exceção até a Onda 4; R6, da Sonda.
+
 R1 e R2 são da lista da skill. R4 e R5 são divergências do desenho aprovado; R3 também, mas é exceção declarada até a Onda 4. R6 é falta de prova. R7 é texto. R8 e R9 são do portão AA (medidor da Sonda, `1ac811d`); o seletor do topo sem caixa não é falta: é a decisão P34 do dono.

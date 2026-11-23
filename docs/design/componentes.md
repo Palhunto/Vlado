@@ -1102,7 +1102,7 @@ A resposta é sempre `{estado: "confirmacao_enviada"}`, para endereço livre e p
 3. **Códigos de reserva** (`codigos_de_reserva`, mostrados uma vez).
    - **Título:** "Guarde os códigos de reserva".
    - **Texto:** "Cada código entra uma vez, se você perder o celular. Eles não aparecem de novo."
-   - **Bloco dos códigos:** borda 1 px tracejada `--theme-input-line`, raio 8, preenchimento 12 e grade de duas colunas (uma no celular). Cada código fica em 16/600, com espaçamento de letra de 1 px, algarismos tabulares e `translate="no"`.
+   - **Bloco dos códigos:** borda 1 px tracejada `--theme-input-line`, raio 8, preenchimento 12 e grade de duas colunas (uma no celular e em todo cartão com menos de 480 px de largura, como o da [pendência](#pendencia-fator)). Cada código fica numa linha só, sem quebrar (`white-space: nowrap`), em 16/600, com espaçamento de letra de 1 px, algarismos tabulares e `translate="no"`.
    - **Ações:** "Copiar" e "Baixar" (secundários, lado a lado, como no W10). "Baixar" gera no navegador um arquivo `vlado-codigos-de-reserva.txt`, sem rede. Depois vem "Já guardei" (principal).
    - **Fechar:** neste passo Esc não fecha nem há "Cancelar"; só "Já guardei" fecha, porque os códigos não voltam. Ao fechar, a linha de estado diz "✓ Segundo fator ativado."
 
