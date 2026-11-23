@@ -360,6 +360,8 @@ class Servidor(ThreadingHTTPServer):
         # (main); 'local' in threads of this process (tests, the frozen Windows desk).
         self.fila = fila_extracao.Fila(self.root, modo=extracao or 'local')
         self.conversas.renderizar_pagina = self.fila.renderizar_pagina  # page images too (SEG-01)
+        # The newsroom's own AI key only in the piloto mode (P3c; Viga, with Tranca's consent for this line).
+        self.conversas.chave_da_redacao = modo == 'piloto'
         super().__init__(address, Handler)
 
     def serve_forever(self, poll_interval=0.5):

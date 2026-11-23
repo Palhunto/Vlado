@@ -29,6 +29,13 @@ sempre; o da redação, só quem a rota diz que vê (``ve_redacao``, o dono); o 
 A frase de um teto atingido no meio da pergunta vai para a conversa, que os colegas da apuração leem:
 nunca leva número (``estouro``); os números ficam na barra e na recusa direta.
 
+**Chave própria da redação (contrato 8.5).** Uma pergunta feita com a chave que a redação cadastrou
+(``segredos``) não é paga pelo serviço: o gasto cai na pessoa (o teto dela continua valendo, como
+definido, sem o limite da cota da redação) e num lançamento separado da redação
+(``chaves_proprias``, e a parte de cada pessoa em ``chaves_proprias_contas``), fora da cota paga
+pelo serviço e fora da soma da instalação. A barra da cota e a tela Equipe mostram esse lançamento num
+campo à parte (P40): a pessoa, o próprio; o dono, também o da redação.
+
 **Gasto sem redação própria.** O gasto sem conta (modo local, ou uma chamada sem conta) e o gasto já
 gravado antes desta versão ficam na chave ``instalacao``, a da redação inicial: contam para o teto e a
 barra dela e para a soma da instalação, e nunca são redistribuídos. No mês da atualização, se outra
@@ -441,6 +448,10 @@ def _registro(caminho):
                 or any(type(v) is not int or v < 0 for v in atual[grupo].values())
                 for grupo in ('contas', 'organizacoes')):
             raise ValueError(f'mês {quando} danificado')
+        for grupo in ('chaves_proprias', 'chaves_proprias_contas'):  # optional: older months lack them
+            proprias = atual.get(grupo, {})
+            if not isinstance(proprias, dict) or any(type(v) is not int or v < 0 for v in proprias.values()):
+                raise ValueError(f'mês {quando} danificado')
     return dados
 
 
@@ -476,10 +487,15 @@ def _do_mes(dados, quando):
     atual = dados['meses'].get(quando)
     if not isinstance(atual, dict):
         atual = {'contas': {}, 'organizacoes': {}}
-    for chave in ('contas', 'organizacoes'):
+    for chave in ('contas', 'organizacoes', 'chaves_proprias', 'chaves_proprias_contas'):
         if not isinstance(atual.get(chave), dict):
             atual[chave] = {}
     return atual
+
+
+def _grupo_da_redacao(chave_propria) -> str:
+    """Where a call's newsroom spend goes: the service's quota, or the separate entry of its own key."""
+    return 'chaves_proprias' if chave_propria else 'organizacoes'
 
 
 def _totais(atual, chaves) -> dict:
@@ -489,18 +505,38 @@ def _totais(atual, chaves) -> dict:
             'instalacao': sum(v for v in atual['organizacoes'].values() if type(v) is int and v >= 0)}
 
 
+def gasto_chave_propria(root, conta, chaves=None) -> dict:
+    """{'conta', 'organizacao': micro-reais} spent this month with the newsroom's own key (not paid by the
+    service): by ``conta``, and by its whole newsroom."""
+    chaves = chaves or chaves_orcamento(conta, root)
+    atual = _do_mes(_ler_gasto(root), mes())
+    valor = lambda d, k: d.get(k) if type(d.get(k)) is int and d.get(k) >= 0 else 0  # noqa: E731
+    return {'conta': valor(atual['chaves_proprias_contas'], chaves['conta']),
+            'organizacao': valor(atual['chaves_proprias'], chaves['organizacao'])}
+
+
+def gasto_chave_propria_brl(root, conta, *, da_redacao=False) -> str:
+    """The own key's spend this month in reais as text ('3.25'): by ``conta``, or its newsroom's (``da_redacao``,
+    for the dono only: the route decides, by the gate). Never added to the service's quota."""
+    micro = gasto_chave_propria(root, conta)['organizacao' if da_redacao else 'conta']
+    return str((Decimal(micro) / MICRO).quantize(Decimal('0.01'), ROUND_HALF_UP))
+
+
 def gasto(root, conta, chaves=None) -> dict:
     """{'conta', 'organizacao', 'instalacao': micro-reais} spent this month (the installation: all newsrooms)."""
     chaves = chaves or chaves_orcamento(conta, root)
     return _totais(_do_mes(_ler_gasto(root), mes()), chaves)
 
 
-def somar_gasto(root, conta, micro_brl, chaves=None) -> dict:
-    """Add one call's cost to this month's account and newsroom; returns the new totals (``gasto``)."""
+def somar_gasto(root, conta, micro_brl, chaves=None, *, chave_propria=False) -> dict:
+    """Add one call's cost to this month's account and newsroom; returns the new totals (``gasto``).
+
+    ``chave_propria``: the call used the newsroom's own key: the newsroom's part goes to its separate entry, not to
+    the service's quota nor to the installation's sum."""
     chaves, quando = chaves or chaves_orcamento(conta, root), mes()
-    pendente = (str(Path(root).resolve()), quando, chaves['conta'], chaves['organizacao'])
+    pendente = (str(Path(root).resolve()), quando, chaves['conta'], chaves['organizacao'], bool(chave_propria))
     try:
-        return _somar(root, chaves, quando, micro_brl)
+        return _somar(root, chaves, quando, micro_brl, bool(chave_propria))
     except (OSError, GastoSemRegistro) as exc:  # no question goes on without its count (R1)
         with _TRAVA:  # kept, and added at the first write that works (the call was spent)
             _PENDENTES[pendente] = _PENDENTES.get(pendente, 0) + max(0, int(micro_brl))
@@ -510,18 +546,20 @@ def somar_gasto(root, conta, micro_brl, chaves=None) -> dict:
         raise GastoSemRegistro(MENSAGEM_SEM_GRAVAR) from exc
 
 
-def _somar(root, chaves, quando, micro_brl):
+def _somar(root, chaves, quando, micro_brl, chave_propria=False):
     with _TRAVA, trava_arquivo(_arquivo(root)):
         dados = _ler_gasto(root)
         raiz = str(Path(root).resolve())
         guardados = {k: v for k, v in _PENDENTES.items() if k[0] == raiz}
-        for (_, mes_pendente, conta_pendente, organizacao_pendente), valor in guardados.items():
+        for (_, mes_pendente, conta_pendente, organizacao_pendente, propria), valor in guardados.items():
             atrasado = _do_mes(dados, mes_pendente)
-            for grupo, chave in (('contas', conta_pendente), ('organizacoes', organizacao_pendente)):
+            for grupo, chave in (('contas', conta_pendente), (_grupo_da_redacao(propria), organizacao_pendente)) + (
+                    (('chaves_proprias_contas', conta_pendente),) if propria else ()):
                 atrasado[grupo][chave] = atrasado[grupo].get(chave, 0) + valor
             dados['meses'][mes_pendente] = atrasado
         atual = _do_mes(dados, quando)
-        for grupo, chave in (('contas', chaves['conta']), ('organizacoes', chaves['organizacao'])):
+        for grupo, chave in (('contas', chaves['conta']), (_grupo_da_redacao(chave_propria), chaves['organizacao'])) + (
+                (('chaves_proprias_contas', chaves['conta']),) if chave_propria else ()):
             atual[grupo][chave] = atual[grupo].get(chave, 0) + max(0, int(micro_brl))
         dados['meses'][quando] = atual
         for antigo in sorted(dados['meses'])[:-MESES_GUARDADOS]:
@@ -628,19 +666,30 @@ def situacao(root, conta, *, administrador=False) -> dict:
                 'cambio_brl_por_usd': str(cambio(root, tabela)), 'tabela_vigente_em': tabela['vigente_em']}
     if administrador:
         resposta['organizacao'] = bloco(usado_org, teto_org)
+    # P40: what the newsroom's own key paid, apart (never in the service's quota above): the person's own, and the
+    # newsroom's for whoever sees it. The person's block above counts both keys (its ceiling holds for both).
+    propria = gasto_chave_propria(root, conta, chaves)
+    em_reais = lambda micro: str((Decimal(micro) / MICRO).quantize(Decimal('0.01'), ROUND_HALF_UP))  # noqa: E731
+    resposta['chave_propria'] = {'conta_brl': em_reais(propria['conta'])}
+    if administrador:
+        resposta['chave_propria']['organizacao_brl'] = em_reais(propria['organizacao'])
     return resposta
 
 
-def _teto_batido(root, conta, totais, estimativa, *, convidado, ve_redacao, publico=False):
+def _teto_batido(root, conta, totais, estimativa, *, convidado, ve_redacao, publico=False, chave_propria=False):
     """(cause, message) of the first ceiling ``totais`` (+ ``estimativa``) reaches: person, newsroom, installation.
-    ``publico``: the message goes where others read it (the conversation), so it carries no number at all."""
+    ``publico``: the message goes where others read it (the conversation), so it carries no number at all.
+    ``chave_propria``: the newsroom's own key pays: only the person's ceiling as set holds (contract 8.5)."""
     limite, numeros = tetos(root, conta), not publico and _numeros_da_redacao(convidado, ve_redacao)
     usado = {k: Decimal(totais[k]) / MICRO for k in ('conta', 'organizacao', 'instalacao')}
     # The person's own number never carries the newsroom's ceiling to who does not see it: past the own
-    # ceiling as set, the newsroom's refusal (without number) follows.
-    teto_conta = limite['conta' if numeros else 'pessoa']
+    # ceiling as set, the newsroom's refusal (without number) follows. With the own key, the service's quota of
+    # the newsroom does not cap the person's either.
+    teto_conta = limite['conta' if numeros and not chave_propria else 'pessoa']
     if usado['conta'] >= teto_conta or usado['conta'] + estimativa > teto_conta:
         return 'limite_cota_conta', (mensagem_cota_pessoa() if publico else mensagem_cota_conta(usado['conta'], teto_conta))
+    if chave_propria:
+        return None
     if usado['organizacao'] >= limite['organizacao'] or usado['organizacao'] + estimativa > limite['organizacao']:
         return 'limite_cota_organizacao', mensagem_cota_organizacao(
             usado['organizacao'] if numeros else None, limite['organizacao'] if numeros else None,
@@ -651,7 +700,7 @@ def _teto_batido(root, conta, totais, estimativa, *, convidado, ve_redacao, publ
     return None
 
 
-def conferir_antes(root, conta, modelo, *, convidado=False, ve_redacao=None):
+def conferir_antes(root, conta, modelo, *, convidado=False, ve_redacao=None, chave_propria=False):
     """Refuse the question before it starts when a balance does not cover the minimum estimate, or
     when the month's spend cannot be read or recorded (an unrecorded spend would have no ceiling).
 
@@ -660,13 +709,14 @@ def conferir_antes(root, conta, modelo, *, convidado=False, ve_redacao=None):
     chaves = chaves_orcamento(conta, root)
     somar_gasto(root, conta, 0, chaves)  # writes the ledger again: GastoSemRegistro when it cannot
     batido = _teto_batido(root, conta, gasto(root, conta, chaves), estimativa_minima_brl(root, modelo),
-                          convidado=convidado, ve_redacao=ve_redacao)
+                          convidado=convidado, ve_redacao=ve_redacao, chave_propria=chave_propria)
     if batido:
         raise CotaEsgotada(batido[1])
 
 
-def estouro(root, totais, *, conta=None):
+def estouro(root, totais, *, conta=None, chave_propria=False):
     """(cause, message) when this month's totals (``somar_gasto``) reached a ceiling in the middle of a question,
     else None. The message is recorded in the conversation, which the colleagues of the case read: it never carries
     a number, whoever asked (B1 of P1). Who asked sees the numbers in the quota bar and in the direct refusal."""
-    return _teto_batido(root, conta, totais, Decimal(0), convidado=True, ve_redacao=False, publico=True)
+    return _teto_batido(root, conta, totais, Decimal(0), convidado=True, ve_redacao=False, publico=True,
+                        chave_propria=chave_propria)

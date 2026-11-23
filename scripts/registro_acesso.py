@@ -77,6 +77,8 @@ EVENTOS = frozenset({
     'fator_bloqueado', 'fator_indisponivel',
     # o segundo fator retirado ao terminar uma recuperação (pelo link de redefinição ou pelo terminal)
     'fator_removido_na_recuperacao',
+    # chave de IA própria da redação (contrato 8.5): salva e removida pelo dono; arquivo das chaves ilegível na partida
+    'chave_ia_salva', 'chave_ia_removida', 'chaves_ia_ilegiveis',
     # downloads
     'download',
     # pedido recusado por excesso de pedidos em curso do mesmo endereço (429, CONF-03)
@@ -105,7 +107,9 @@ CODIGOS = frozenset({'operacao_proibida', 'caso_nao_liberado', 'campos_nao_permi
                      # com as respostas, mesmo que hoje não cheguem ao registro como código)
                      'recuperacao_pelo_operador', 'link_invalido', 'senha_invalida',
                      # segundo fator indisponível (E4); o padrão de acesso.Recusada, que pode chegar em admin_recusada
-                     'fator_indisponivel', 'requisicao_invalida'})
+                     'fator_indisponivel', 'requisicao_invalida',
+                     # pergunta recusada porque a chave de IA da redação não pôde ser lida (P3, C3)
+                     'chave_redacao_ilegivel'})
 # Qual e-mail saiu ou falhou (email_enviado, email_falhou): só o tipo, nunca o endereço nem o texto.
 MENSAGENS = frozenset({'convite', 'redefinicao', 'novo_acesso', 'senha_trocada', 'fator_alterado', 'recuperacao',
                        'muitas_tentativas', 'email_novo', 'conta_inativa', 'fator_bloqueado'})

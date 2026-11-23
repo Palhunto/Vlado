@@ -83,11 +83,15 @@ def dia_da_organizacao(root: Path, organizacao: str) -> int:
     return _hoje(root)['organizacoes'].get(organizacao, 0)
 
 
-def somar_dia(root: Path, tokens: int, organizacao: str | None = None) -> int:
-    """Add to today's installation total and, with ``organizacao``, to that organization's; returns the total."""
+def somar_dia(root: Path, tokens: int, organizacao: str | None = None, *, instalacao: bool = True) -> int:
+    """Add to today's installation total and, with ``organizacao``, to that organization's; returns the total.
+
+    ``instalacao=False``: a call paid with the newsroom's own key (P40): it counts in its newsroom's day, not in the
+    installation's total, which the service pays."""
     with _TRAVA, trava_arquivo(_arquivo(root)):
         atual, somar = _hoje(root), max(0, int(tokens))
-        atual['tokens'] += somar
+        if instalacao:
+            atual['tokens'] += somar
         if isinstance(organizacao, str) and organizacao:
             atual['organizacoes'][organizacao] = atual['organizacoes'].get(organizacao, 0) + somar
         arquivo = _arquivo(root)
@@ -102,15 +106,16 @@ DIA_INSTALACAO = 'Limite diário de uso da instalação atingido. Novas pergunta
 DIA_REDACAO = 'Limite diário de uso da redação atingido. Novas perguntas voltam amanhã (UTC).'
 
 
-def conferir_dia(root: Path, organizacao: str | None = None) -> None:
+def conferir_dia(root: Path, organizacao: str | None = None, *, instalacao: bool = True) -> None:
     """Before a question: the organization's daily total (when it has a limit), then the installation's.
-    The newsroom first, so one at its own limit learns nothing of the others."""
+    The newsroom first, so one at its own limit learns nothing of the others. ``instalacao=False``: the newsroom's
+    own key pays (P40): only its own day holds."""
     valores = ler(root)
     atual = _hoje(root)
     limite = valores['tokens_por_dia_por_organizacao']
     if limite is not None and organizacao and atual['organizacoes'].get(organizacao, 0) >= limite:
         raise ValueError(DIA_REDACAO)
-    if valores['tokens_por_dia'] is not None and atual['tokens'] >= valores['tokens_por_dia']:
+    if instalacao and valores['tokens_por_dia'] is not None and atual['tokens'] >= valores['tokens_por_dia']:
         raise ValueError(DIA_INSTALACAO)
 
 

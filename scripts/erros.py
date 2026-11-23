@@ -158,6 +158,8 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('cota_mensal_instalacao', r'^A cota do mês da Mesa acabou\.'),
     ('gasto_ilegivel', r'^O registro do gasto do mês está ilegível'),
     ('gasto_nao_registrado', r'^O gasto do mês não pode ser registrado agora'),
+    # The newsroom's own AI key cannot be read (segredos.ChavesIlegiveis): only the question is refused (P3, C3).
+    ('chave_redacao_ilegivel', r'^A chave de IA da redação não pôde ser lida'),
     ('modelo_nao_permitido', r'^O modelo .+ não está entre os permitidos nesta instalação'),
     ('execucoes_simultaneas_conta', r'^Já há (?P<limite>\d+) perguntas? em andamento nesta conta'),
     ('execucoes_simultaneas_redacao', r'^Já há (?P<limite>\d+) perguntas? em andamento nesta redação'),

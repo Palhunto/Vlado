@@ -1879,6 +1879,7 @@ window.VLADO_I18N_EN = {
     cota_mensal_instalacao: "The installation's monthly quota is used up. Documents, review and the notebook keep working; the operator can raise the quota.",
     gasto_ilegivel: "The record of this month's spending is unreadable: the quota was treated as used up until the installation administrator recovers it. Documents, review and the notebook keep working.",
     gasto_nao_registrado: "This month's spending cannot be recorded right now: no question is run until the record can be written again. Documents, review and the notebook keep working.",
+    chave_redacao_ilegivel: "The newsroom's AI key could not be read, and the question was not asked. Documents, review and the notebook keep working; the operator needs to restore the newsroom keys file.",
     modelo_nao_permitido: "The selected model is not among those allowed on this installation. The previous configuration was kept; choose one of the allowed models or ask the installation owner.",
     execucoes_simultaneas_conta: "There are already {limite} question(s) running on this account. Conversations and documents stay available; send this one when one of them finishes.",
     execucoes_simultaneas_mesa: "The Mesa is at its limit of questions running. Conversations and documents stay available; send this question in a few minutes.",
