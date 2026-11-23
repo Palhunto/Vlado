@@ -1723,6 +1723,8 @@ body>svg:has(>defs>symbol[id^="vditor-icon-"]){position:absolute;width:0;height:
 }
 .ia-config{display:grid;gap:8px;margin:14px 0;padding-top:12px;border-top:1px solid var(--line)}
 .ia-config h3{margin:0;font-size:var(--text-md)}
+/* F1: a linha do estado da chave chega depois da leitura do servidor; reservada, ela não empurra o botão Salvar para baixo quando o texto entra. */
+.ia-config #ia-chave-estado{min-height:1.65em}
 .ia-config label{display:grid;gap:4px;font-size:var(--text-sm)}
 .ia-config input,.ia-config select{width:100%;max-width:420px}
 body[data-papel="convidado"] [data-somente-admin]{display:none}

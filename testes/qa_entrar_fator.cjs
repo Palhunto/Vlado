@@ -236,6 +236,10 @@ async function entrarAte2(page, email, senha) {
         await campo.fill(totp(chave, 0));
         await pagina.click('#pendencia-secao .fator-principal');
         await pagina.waitForSelector('#pendencia-secao .fator-codigos', {timeout: 15000});
+        // B1 do Traço: nenhum código quebra em duas linhas e, no cartão de 440 px, a grade tem uma coluna só
+        const medidas = await pagina.evaluate(() => ({colunas: getComputedStyle(document.querySelector('#pendencia-secao .fator-codigos')).gridTemplateColumns.split(' ').length,
+          quebrados: [...document.querySelectorAll('#pendencia-secao .fator-codigo')].filter(no => no.getClientRects().length > 1 || no.getBoundingClientRect().height > parseFloat(getComputedStyle(no).lineHeight || '0') * 1.6 && parseFloat(getComputedStyle(no).lineHeight || '0') > 0).length}));
+        assert.equal(medidas.colunas, 1, 'a pendência tem uma coluna de códigos'); assert.equal(medidas.quebrados, 0, 'nenhum código quebra');
         await foto('pendencia-3-codigos-de-reserva');
         await pagina.click('#pendencia-secao .fator-guardei');
         await pagina.waitForSelector('#pendencia-secao .fator-pronto', {timeout: 15000});
