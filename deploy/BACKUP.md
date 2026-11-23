@@ -82,6 +82,14 @@ Restaurar um lote pendente faz a Mesa processá-lo de novo, sem dano (publicar d
 Quem quiser incluir as chaves de API precisa montar `segredos` no serviço e definir `VLADO_BACKUP_INCLUIR_SEGREDOS=1`
 (decisão consciente; o manifesto registra `segredos_incluidos`).
 
+**A chave do segundo fator (`segredos/contas.chave`) não se cola de novo.** Ela abre as sementes do segundo fator
+guardadas no banco de contas e fica com os segredos, nunca com as contas: quem copiar só o banco não gera códigos.
+Por isso o backup agendado, que não monta `segredos`, **não a leva**. Restaurar as contas sem ela deixa todo segundo
+fator inutilizável: cada pessoa precisa ser recuperada e cadastrar o aplicativo de novo. Guarde uma cópia dessa chave
+junto dos outros segredos do serviço (fora do servidor, com o mesmo cuidado da chave privada do backup), ou inclua os
+segredos no backup como acima. O backup manual sem segredos avisa no manifesto quando essa chave existe e ficou de
+fora. Nenhum comando do backup lê, imprime ou registra o conteúdo dela.
+
 ## Retenção
 
 Padrão `diarios=7,semanais=4,mensais=6`: guarda **todos** os backups dos últimos 7 dias, mais o mais novo de cada uma

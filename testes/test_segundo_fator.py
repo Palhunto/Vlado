@@ -70,12 +70,26 @@ class TotpTest(unittest.TestCase):
         self.assertEqual(hostil.count('issuer='), 1)
 
 
+class DependenciaTest(unittest.TestCase):
+    def test_cryptography_e_dependencia_direta_com_a_versao_da_trava(self):
+        # Decision 13: it used to come only through the OCR's dependencies, which could drop it without notice.
+        raiz = Path(__file__).resolve().parents[1]
+        diretas = dict(re.findall(r'^([A-Za-z0-9._-]+)==(\S+)$', (raiz / 'requirements.txt').read_text(encoding='utf-8'), re.M))
+        self.assertIn('cryptography', diretas)
+        trava = dict(re.findall(r'^([A-Za-z0-9._-]+)==(\S+?)(?:\s|\\)', (raiz / 'deploy' / 'requirements.lock').read_text(encoding='utf-8'), re.M))
+        self.assertEqual(trava.get('cryptography'), diretas['cryptography'])
+        import cryptography
+        self.assertEqual(cryptography.__version__, diretas['cryptography'])  # what this environment runs is what is pinned
+
+
 class ReservaTest(unittest.TestCase):
     def test_dez_codigos_diferentes_num_formato_que_se_dita(self):
         codigos = fator.novos_codigos_de_reserva()
         self.assertEqual((len(codigos), len(set(codigos))), (10, 10))
         for codigo in codigos:
-            self.assertRegex(codigo, r'^[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}$')
+            self.assertRegex(codigo, r'^[A-HJ-NP-Z2-9]{4}(-[A-HJ-NP-Z2-9]{4}){3}$')
+            # 80 bits each: the store keeps a plain SHA-256, which a copy of it must not let anybody walk (R4).
+            self.assertGreaterEqual(len(codigo.replace('-', '')) * 5, 80)
         self.assertFalse(set(codigos) & set(fator.novos_codigos_de_reserva()))
 
     def test_o_que_a_pessoa_digita_vira_a_mesma_forma_e_o_armazenamento_guarda_so_o_resumo(self):
@@ -83,11 +97,12 @@ class ReservaTest(unittest.TestCase):
         resumo = fator.resumo_da_reserva(codigo)
         self.assertRegex(resumo, r'^[0-9a-f]{64}$')
         self.assertNotIn(codigo.replace('-', ''), resumo.upper())
-        for digitado in (codigo.lower(), codigo.replace('-', ''), f'  {codigo[:5]} {codigo[6:]} ', codigo.replace('-', ' - ')):
+        for digitado in (codigo.lower(), codigo.replace('-', ''), f'  {codigo[:4]} {codigo[5:]} ', codigo.replace('-', ' - ')):
             self.assertEqual(fator.resumo_da_reserva(digitado), resumo, digitado)
         outro = codigo[:-1] + ('A' if codigo[-1] != 'A' else 'B')
         self.assertNotEqual(fator.resumo_da_reserva(outro), resumo)
-        for invalido in ('', None, 'ABCDE-FGHJ', 'ABCDE-FGHJKL', 'ABCDE-FGHJ0', 'ABCDE-FGHJI', '287082', 5, 'A' * 41, ['x']):
+        for invalido in ('', None, 'ABCD-EFGH-JKLM-NPQ', 'ABCD-EFGH-JKLM-NPQRS', 'ABCD-EFGH-JKLM-NPQ0', 'ABCD-EFGH-JKLM-NPQI',
+                         'ABCDE-FGHJK', '287082', 5, 'A' * 41, ['x']):
             self.assertIsNone(fator.resumo_da_reserva(invalido), invalido)
 
 
@@ -104,7 +119,7 @@ class SementeCifradaTest(unittest.TestCase):
 
     def test_semente_cifrada_so_abre_com_a_chave_e_na_conta_dela(self):
         semente = fator.nova_semente()
-        guardada = fator.cifrar(self.root, semente, CONTA)
+        guardada = fator.cifrar(self.root, semente, CONTA, criar_chave=True)
         self.assertEqual(fator.decifrar(self.root, guardada, CONTA), semente)
         self.assertNotEqual(guardada, fator.cifrar(self.root, semente, CONTA))  # a new nonce each time
         self.assertNotIn(fator.em_base32(semente), guardada)
@@ -116,7 +131,7 @@ class SementeCifradaTest(unittest.TestCase):
                 fator.decifrar(self.root, estragada, CONTA)
 
     def test_a_chave_fica_em_segredos_fora_da_pasta_das_contas_e_nao_e_trocada_em_silencio(self):
-        guardada = fator.cifrar(self.root, b'x' * 20, CONTA)
+        guardada = fator.cifrar(self.root, b'x' * 20, CONTA, criar_chave=True)
         arquivo = self.root / 'segredos' / 'contas.chave'
         self.assertEqual(fator.arquivo_da_chave(self.root), arquivo)
         self.assertTrue(re.fullmatch(r'[0-9a-f]{64}\n', arquivo.read_text(encoding='ascii')))
@@ -131,11 +146,34 @@ class SementeCifradaTest(unittest.TestCase):
         self.assertEqual(arquivo.read_text(encoding='ascii'), 'estragada\n')  # left as it was, for who restores it
 
     def test_quem_copia_so_o_banco_nao_gera_codigos(self):
-        guardada = fator.cifrar(self.root, SEMENTE_DA_RFC, CONTA)
+        guardada = fator.cifrar(self.root, SEMENTE_DA_RFC, CONTA, criar_chave=True)
         outra_instalacao = tempfile.TemporaryDirectory()
         self.addCleanup(outra_instalacao.cleanup)
+        outra = Path(outra_instalacao.name)
+        with self.assertRaises(fator.ChaveAusente):
+            fator.decifrar(outra, guardada, CONTA)  # no key there, and reading a seed never makes one
+        self.assertFalse(fator.chave_presente(outra))
+        fator.cifrar(outra, b'z' * 20, OUTRA, criar_chave=True)
         with self.assertRaises(fator.SementeIlegivel):
-            fator.decifrar(Path(outra_instalacao.name), guardada, CONTA)  # another key: the seed does not open
+            fator.decifrar(outra, guardada, CONTA)  # another key: the seed does not open
+
+    def test_chave_que_sumiu_nao_e_refeita_em_silencio(self):
+        # Reservation R2 of the review: after a restore without `segredos/`, a new key made in silence would leave
+        # every stored seed unreadable for good. Only the caller who knows no seed is stored may ask for one.
+        with self.assertRaises(fator.ChaveAusente):
+            fator.cifrar(self.root, b'x' * 20, CONTA)
+        self.assertFalse(fator.chave_presente(self.root))
+        self.assertFalse((self.root / 'segredos').exists())
+        guardada = fator.cifrar(self.root, b'x' * 20, CONTA, criar_chave=True)
+        arquivo = fator.arquivo_da_chave(self.root)
+        original = arquivo.read_bytes()
+        arquivo.unlink()
+        for acao in (lambda: fator.cifrar(self.root, b'y' * 20, CONTA), lambda: fator.decifrar(self.root, guardada, CONTA)):
+            with self.assertRaises(fator.ChaveAusente):  # even with the key still in the memory of the process
+                acao()
+        self.assertFalse(arquivo.exists())
+        arquivo.write_bytes(original)  # the operator restores the file: every seed opens again
+        self.assertEqual(fator.decifrar(self.root, guardada, CONTA), b'x' * 20)
 
 
 if __name__ == '__main__':

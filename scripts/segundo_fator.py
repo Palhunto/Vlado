@@ -6,11 +6,17 @@ Só as contas de aritmética e de cifra ficam aqui; quem guarda, conta tentativa
 - **TOTP** (RFC 6238): HMAC-SHA1, 6 dígitos, passo de 30 segundos, um passo de tolerância para cada lado.
   ``conferir`` devolve o passo aceito, e quem chama o guarda: um passo já aceito, ou anterior a ele, não vale de
   novo, de modo que o mesmo código não serve duas vezes.
-- **Códigos de reserva:** dez, de uso único, com 50 bits cada, mostrados uma vez. O armazenamento guarda só o
-  SHA-256 de cada um.
+- **Códigos de reserva:** dez, de uso único, com 80 bits cada, mostrados uma vez. O armazenamento guarda só o
+  SHA-256 de cada um. Com 80 bits ao acaso, percorrê-los a partir de uma cópia do banco não é viável, e a
+  conferência não depende de chave nenhuma: a das sementes pode faltar depois de uma restauração, e é aí que o
+  código de reserva mais importa.
 - **A semente é cifrada** (AES-GCM, biblioteca ``cryptography``) com uma chave de 32 bytes em
   ``segredos/contas.chave``, fora da pasta das contas e fora do backup comum: quem copiar só o banco não gera
   códigos. O id da conta entra como dado autenticado, então a semente de uma conta não decifra na linha de outra.
+- **A chave nunca é refeita em silêncio.** Só ``cifrar(..., criar_chave=True)`` cria o arquivo, e quem chama só
+  pede isso quando nenhuma conta tem fator (``acesso.iniciar_fator``). Se o arquivo sumiu e há sementes guardadas
+  (uma restauração sem ``segredos/``), o erro é ``ChaveAusente``: uma chave nova deixaria as sementes ilegíveis
+  para sempre, e quem restaura o arquivo certo recupera todas.
 """
 from __future__ import annotations
 
@@ -39,13 +45,19 @@ CODIGOS_DE_RESERVA = 10
 EMISSOR = 'Vlado'
 _CODIGO = re.compile(r'[0-9]{6}')  # ASCII digits only: `\d` would let other scripts' digits through
 _ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'  # 32 symbols, without the ones people mix up (0/O, 1/I)
-_RESERVA = re.compile(r'[A-HJ-NP-Z2-9]{10}')
+GRUPOS_DA_RESERVA, LETRAS_POR_GRUPO = 4, 4  # 16 symbols of 5 bits: 80 bits
+_RESERVA = re.compile(r'[A-HJ-NP-Z2-9]{%d}' % (GRUPOS_DA_RESERVA * LETRAS_POR_GRUPO))
 _TRAVA = threading.Lock()
 _CHAVES: dict[str, bytes] = {}
 
 
 class ChaveIlegivel(OSError):
     """The key of the seeds cannot be read or made: nobody enrols or passes a second factor until it can."""
+
+
+class ChaveAusente(ChaveIlegivel):
+    """The key file is not there and making a new one was not allowed: the seeds stored with the missing one would
+    never open again. Whoever restores `segredos/contas.chave` gets them all back."""
 
 
 class SementeIlegivel(ValueError):
@@ -99,8 +111,8 @@ def endereco(semente: bytes, rotulo: str) -> str:
 # --- reserve codes --------------------------------------------------------------------------------
 
 def novos_codigos_de_reserva() -> list[str]:
-    """Ten single-use codes, shown once: 'ABCDE-FGHJK' (50 bits each)."""
-    return ['{}-{}'.format(*(''.join(secrets.choice(_ALFABETO) for _ in range(5)) for _ in range(2)))
+    """Ten single-use codes, shown once: 'ABCD-EFGH-JKLM-NPQR' (80 bits each)."""
+    return ['-'.join(''.join(secrets.choice(_ALFABETO) for _ in range(LETRAS_POR_GRUPO)) for _ in range(GRUPOS_DA_RESERVA))
             for _ in range(CODIGOS_DE_RESERVA)]
 
 
@@ -111,7 +123,8 @@ def normalizar_reserva(codigo) -> str | None:
 
 
 def resumo_da_reserva(codigo) -> str | None:
-    """What the store keeps of a reserve code: its SHA-256 (the code has 50 random bits, so a plain hash is enough)."""
+    """What the store keeps of a reserve code: its SHA-256. No key: the code has 80 random bits, out of reach of a
+    search over a copy of the store, and checking it must not depend on a key file that may be missing."""
     texto = normalizar_reserva(codigo)
     return hashlib.sha256(('reserva:' + texto).encode('ascii')).hexdigest() if texto else None
 
@@ -123,7 +136,12 @@ def arquivo_da_chave(root: Path) -> Path:
     return segredos.caminho(Path(root)).parent / 'contas.chave'
 
 
-def _chave(root: Path) -> bytes:
+def chave_presente(root: Path) -> bool:
+    """Whether the key file is there. It is not read."""
+    return arquivo_da_chave(root).is_file()
+
+
+def _chave(root: Path, criar: bool = False) -> bytes:
     arquivo = arquivo_da_chave(root)
     with _TRAVA:
         guardada = _CHAVES.get(str(arquivo))
@@ -136,6 +154,8 @@ def _chave(root: Path) -> bytes:
                 if len(chave) != 32:  # never replaced silently: the seeds already stored would be lost with it
                     raise ChaveIlegivel('A chave do segundo fator está ilegível; restaure segredos/contas.chave.')
             else:
+                if not criar:
+                    raise ChaveAusente('A chave do segundo fator não está em segredos/contas.chave.')
                 chave = secrets.token_bytes(32)
                 arquivo.parent.mkdir(parents=True, exist_ok=True)
                 descritor = os.open(arquivo, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_BINARY', 0), 0o600)
@@ -149,13 +169,17 @@ def _chave(root: Path) -> bytes:
         return chave
 
 
-def cifrar(root: Path, semente: bytes, conta: str) -> str:
-    """The seed as the store keeps it: base64 of nonce + AES-GCM(seed), bound to the account's id."""
+def cifrar(root: Path, semente: bytes, conta: str, criar_chave: bool = False) -> str:
+    """The seed as the store keeps it: base64 of nonce + AES-GCM(seed), bound to the account's id. `criar_chave`
+    lets a missing key file be made: only for the caller who knows no seed is stored yet."""
     nonce = secrets.token_bytes(12)
-    return base64.b64encode(nonce + AESGCM(_chave(root)).encrypt(nonce, semente, conta.encode('ascii'))).decode('ascii')
+    chave = _chave(root, criar_chave)
+    return base64.b64encode(nonce + AESGCM(chave).encrypt(nonce, semente, conta.encode('ascii'))).decode('ascii')
 
 
 def decifrar(root: Path, guardada, conta: str) -> bytes:
+    """The seed, or SementeIlegivel (another key, another account's row, damage). Never makes a key: without the
+    file it is ChaveAusente."""
     try:
         bruto = base64.b64decode(guardada, validate=True)
         return AESGCM(_chave(root)).decrypt(bruto[:12], bruto[12:], conta.encode('ascii'))

@@ -61,7 +61,7 @@ class ContaPropriaTest(cenario.DuasRedacoes):
                 self.assertEqual((corpo['conta']['id'], corpo['conta']['nome'], corpo['conta']['papel'], corpo['conta']['idioma']),
                                  (self.ids[papel], nome, papel, 'pt'))
                 self.assertEqual(corpo['organizacao'], {'id': self.a, 'nome': 'Redação Alfa'})
-                self.assertEqual(corpo['segundo_fator'], {'ativo': False})
+                self.assertEqual(corpo['segundo_fator'], {'ativo': False, 'ativado_em': None, 'codigos_restantes': 0})
                 self.assertRegex(corpo['sessao'], r'^[0-9a-f]{16}$')
                 self.sem_sentinela(bruto)
                 for segredo in ('senha_hash', '$argon2', self.sessoes[papel][0].split('=', 1)[1], self.sessoes[papel][1]):
