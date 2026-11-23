@@ -835,6 +835,7 @@ window.NovaApuracao = (() => {
   let etapa = null;      // 1, 2 ou 3 enquanto a linha de etapas vale (ela segue até o recibo ser conferido, já com a apuração criada)
   let liberado = false;  // a saída foi confirmada: o clique que a pediu segue
   let incerto = null;    // o aviso, enquanto não se sabe se a apuração nasceu num envio que não terminou: um reenvio pode criar outra
+  let enviando = false;  // o primeiro envio está no ar: a apuração pode nascer a qualquer momento, então o passo 1 não reabre (B1 da Coruja: voltar, corrigir e continuar criava DUAS)
 
   const fontes = () => [...document.querySelectorAll('input[name="nova-fontes"]')].find(opcao => opcao.checked)?.value || 'somente_documental';
   function desenharEtapas() {
@@ -887,6 +888,7 @@ window.NovaApuracao = (() => {
     campoDoSite();
   }
   function abrir(valores = null) {
+    if (enviando) return;   // com o envio no ar não se volta ao passo 1
     fluxo = 'passo1'; etapa = 1; delete document.body.dataset.nova;
     $('nova-aviso').hidden = true;
     preencher(valores);
@@ -896,6 +898,7 @@ window.NovaApuracao = (() => {
     $('nova-nome').focus();
   }
   function continuar() {
+    if (enviando) return;
     const valido = validar();
     if (!valido) return;
     dados = valido; fluxo = 'passo2'; etapa = 2;
@@ -929,26 +932,35 @@ window.NovaApuracao = (() => {
     if (passo2) apoio.setAttribute('translate', 'no'); else apoio.removeAttribute('translate');
     return true;
   }
+  // O link "‹ Nome e fontes" fica indisponível enquanto o primeiro envio está no ar.
+  function marcarEnvio(valor) {
+    enviando = valor;
+    $('nova-voltar').disabled = valor; $('nova-voltar').setAttribute('aria-disabled', String(valor));
+  }
   async function enviar(arquivos, extra = {}) {
-    if (fluxo !== 'passo2' || !dados) return null;
+    if (fluxo !== 'passo2' || !dados || enviando) return null;
     // R3: depois de um envio que não se sabe se criou a apuração, a pessoa vê o aviso e confirma antes de um reenvio criar outra.
     if (incerto) {
       const ok = await window.Dialogo.confirmar({titulo: 'Enviar de novo pode criar outra apuração', texto: incerto, acao: 'Enviar mesmo assim'});
       if (!ok) return null;
       incerto = null; $('nova-incerto').hidden = true;
     }
+    marcarEnvio(true);
     const escopo = {novo: true, titulo: dados.nome, natureza: dados.natureza, modo_fontes: dados.modo_fontes,
       ...(dados.dominio_permitido ? {dominio_permitido: dados.dominio_permitido} : {})};
-    return window.Documentos.enviar(arquivos, {escopo, alvo: $('documentos-envio'), alvoRecibo: $('documentos-recibo'),
+    try {
+    return await window.Documentos.enviar(arquivos, {escopo, alvo: $('documentos-envio'), alvoRecibo: $('documentos-recibo'),
       // O servidor aceitou o primeiro lote: a apuração existe. O seletor do topo passa a ela e a tela vira a Documentos comum.
       aoCriar: async caso => {
-        const nome = dados.nome;
+        const nome = dados.nome, noPasso1 = currentArea === 'nova';
+        marcarEnvio(false);   // a apuração existe: não há mais o risco de criar outra, e a Nova apuração pode abrir de novo
         fluxo = null; dados = null; delete document.body.dataset.nova;
         $('nova-aviso').hidden = true;
         // O catálogo só ganha a apuração quando o lote é publicado (depois da leitura dos arquivos): até lá, o título vem do que a pessoa digitou.
         if (typeof loadCatalog === 'function') await loadCatalog();
         if (!cases.some(c => c.id === caso)) cases.push({id: caso, titulo: nome, rodadas: []});
         window.definirContextoCaso?.(caso, {force: true});
+        if (noPasso1) showArea('documentos');   // nasceu com a pessoa no passo 1: leva à Documentos dela, não a um formulário que criaria outra
         areaHeading(); desenharEtapas();
         await extra.depoisDeCriar?.(caso);
       },
@@ -959,6 +971,7 @@ window.NovaApuracao = (() => {
           incerto = resultado.aviso_incerto; $('nova-incerto').textContent = incerto; $('nova-incerto').hidden = false;
         }
       }});
+    } finally { marcarEnvio(false); }
   }
 
   $('nova-form').addEventListener('submit', evento => { evento.preventDefault(); continuar(); });
@@ -967,7 +980,7 @@ window.NovaApuracao = (() => {
     if (!(await confirmarSaida($('nova-cancelar')))) return;
     encerrar(); showArea('inicio');
   });
-  $('nova-voltar').addEventListener('click', () => { abrir(dados); });
+  $('nova-voltar').addEventListener('click', () => { if (!enviando) abrir(dados); });
   window.addEventListener('envio-recibo-visto', () => { if (etapa === 3) { etapa = null; desenharEtapas(); } });
   // Escolher uma apuração no topo, ou sair da tela Documentos depois da criação, encerra o modo.
   window.addEventListener('mesa-contexto-alterado', () => { if (noFluxo() && window.contextoCaso?.()) encerrar(); });

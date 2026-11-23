@@ -234,3 +234,36 @@ test('a Nova apuração em inglês e a área só para quem pode cadastrar', asyn
   await leitor.esperar(8);
   assert.equal(leitor.$('inicio-nova').hasAttribute('data-sem-capacidade') || leitor.avaliar("Sessao.areaPermitida('nova')") === true, true);
 });
+
+test('B1 da Coruja: com o primeiro envio no ar o link "‹ Nome e fontes" fica indisponível; voltar, corrigir e continuar não cria uma segunda apuração', async () => {
+  const mesa = abrir(); await mesa.esperar(10);
+  await passo2(mesa, {nome: 'Obra da escola'});
+  await soltar(mesa);
+  assert.equal(mesa.pedidos.length, 1, 'o envio está no ar (segurado: ainda sem resposta)');
+  assert.equal(mesa.$('nova-voltar').disabled, true); assert.equal(mesa.$('nova-voltar').getAttribute('aria-disabled'), 'true');
+  mesa.$('nova-voltar').click(); await mesa.esperar(4);
+  assert.equal(area(mesa), 'documentos', 'o clique não leva ao passo 1');
+  assert.equal(mesa.doc.body.dataset.nova, 'passo2');
+  mesa.janela.NovaApuracao.abrir(); await mesa.esperar(3);
+  assert.equal(area(mesa), 'documentos', 'nem por outro caminho');
+  await soltar(mesa, 'segundo.pdf');
+  assert.equal(mesa.pedidos.length, 1, 'e um segundo envio não sai enquanto o primeiro está no ar');
+  mesa.catalogo.push({id: CASO_NOVO, titulo: 'Obra da escola', rodadas: []});
+  mesa.pedidos[0].responder(200, {estado: 'enfileirado', lote: {lote: 'L1', caso: CASO_NOVO, estado: 'enfileirado', arquivos: []}});
+  await mesa.esperar(40);
+  assert.equal(mesa.janela.contextoCaso(), CASO_NOVO); assert.equal(mesa.$('nova-voltar').disabled, false, 'criada a apuração, o link volta ao normal (e some com o aviso)');
+  assert.equal(mesa.chamadas.filter(c => c.operacao === 'cadastrar').length, 0);
+  assert.equal(mesa.pedidos.length, 1, 'uma apuração só');
+});
+
+test('B1: se o envio falha sem criar nada, o link volta e a pessoa pode corrigir o nome', async () => {
+  const mesa = abrir(); await mesa.esperar(10);
+  await passo2(mesa, {nome: 'Obra da escola'});
+  await soltar(mesa);
+  assert.equal(mesa.$('nova-voltar').disabled, true);
+  mesa.pedidos[0].responder(400, {estado: 'erro', erro: 'O nome do arquivo tem caracteres que a Mesa não aceita.'});
+  await mesa.esperar(20);
+  assert.equal(mesa.$('nova-voltar').disabled, false, 'nada nasceu: dá para voltar');
+  mesa.$('nova-voltar').click(); await mesa.esperar(4);
+  assert.equal(area(mesa), 'nova'); assert.equal(mesa.$('nova-nome').value, 'Obra da escola');
+});
