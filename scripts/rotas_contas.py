@@ -96,13 +96,13 @@ def avisar_bloqueio_do_fator(root, exc):
                               conta=aviso['id'], raiz=root)
 
 
-def _fator(root, operation, conta, data, ip):
+def _fator(root, operation, conta, data, ip, atual=None):
     """``conta-fator-*``: the own second factor. The seed and the reserve codes go out once, in the answer of the
     operation that makes them, and never again; the person is told by e-mail of every change."""
     if operation == 'conta-fator-iniciar':
         return acesso.iniciar_fator(root, conta, data.get('senha'), data.get('codigo'), ip)
     if operation == 'conta-fator-confirmar':
-        resposta = {'estado': 'fator_ativado', 'codigos_de_reserva': acesso.confirmar_fator(root, conta, data.get('codigo'), ip)}
+        resposta = {'estado': 'fator_ativado', 'codigos_de_reserva': acesso.confirmar_fator(root, conta, data.get('codigo'), ip, sessao_atual=atual)}
     elif operation == 'conta-fator-codigos':
         resposta = {'estado': 'codigos_gerados',
                     'codigos_de_reserva': acesso.novos_codigos_do_fator(root, conta, data.get('senha'), data.get('codigo'), ip)}
@@ -132,7 +132,7 @@ def conta_propria(root, operation, data, principal, ip=None, origem=None, marca=
     if operation == 'conta-email-trocar':
         return _trocar_email(root, conta, data, ip, origem)
     if operation.startswith('conta-fator-'):
-        return _fator(root, operation, conta, data, ip)
+        return _fator(root, operation, conta, data, ip, atual)
     if operation == 'conta-senha-trocar':
         encerradas = acesso.trocar_senha(root, conta, data.get('senha_atual'), data.get('senha_nova'), atual, ip, marca=marca)
         perfil = acesso.ver_conta(root, conta)['conta']

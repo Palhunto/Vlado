@@ -75,6 +75,17 @@ class ArmazenamentoTest(test_acesso.DuasRedacoes):
             acesso.confirmar_fator(self.root, self.rep_a, codigo_de(inicio['segredo']))  # nothing pending any more
         self.assertEqual(acesso.ver_conta(self.root, self.dono_a)['segundo_fator']['ativo'], False)  # nobody else's
 
+    def test_ativar_o_fator_encerra_as_outras_sessoes_da_conta(self):
+        # Reservation R5 of the review: as when the password changes, only the session that asks goes on.
+        aqui, outra = (acesso.entrar(self.root, 'rep.a', SENHA)[0] for _ in range(2))
+        de_outra_conta = acesso.entrar(self.root, 'dona.a', SENHA)[0]
+        segredo = acesso.iniciar_fator(self.root, self.rep_a, SENHA)['segredo']
+        self.assertTrue(acesso.sessao(self.root, outra))  # starting changes nothing
+        acesso.confirmar_fator(self.root, self.rep_a, codigo_de(segredo), sessao_atual=acesso.sessao(self.root, aqui)['sessao'])
+        self.assertIsNone(acesso.sessao(self.root, outra))
+        self.assertEqual(acesso.sessao(self.root, aqui)['conta'], self.rep_a)
+        self.assertEqual(acesso.sessao(self.root, de_outra_conta)['conta'], self.dono_a)
+
     def test_cadastro_nao_confirmado_vence_e_cinco_codigos_errados_bloqueiam(self):
         segredo = acesso.iniciar_fator(self.root, self.rep_a, SENHA)['segredo']
         with self.depois(minutes=acesso.FATOR_PENDENTE_MINUTOS, seconds=1):
@@ -328,10 +339,14 @@ class ServidorTest(cenario.DuasRedacoes):
         sem_senha = self.post(self.sessao, 'conta-fator-iniciar', {})
         self.assertEqual((sem_senha[0], sem_senha[1].get('codigo')), (403, 'senha_necessaria'))
         self.assertEqual(self.post(self.sessao, 'conta-fator-iniciar', {'senha': SENHA, 'conta': self.ids['dono']})[0], 400)
+        status, corpo, cabecalhos, _ = self.publico('entrar', {'login': self.email, 'senha': SENHA})
+        outra = (cabecalhos['Set-Cookie'].split(';')[0], corpo['csrf'])
         with correio.usar('simulado'):
             segredo, reserva = self.cadastrar()
             correio.aguardar()
         self.assertEqual([(m['tipo'], m['para']) for m in correio.caixa()], [('fator_alterado', self.email)])
+        self.assertEqual(self.post(self.sessao, 'codex-status', {})[0], 200)  # the session that enrolled goes on
+        self.assertEqual(self.post(outra, 'codex-status', {})[0], 401)  # the other one of the account ended (R5)
         perfil = self.post(self.sessao, 'conta-ver', {})
         self.assertEqual((perfil[1]['segundo_fator']['ativo'], perfil[1]['segundo_fator']['codigos_restantes']), (True, 10))
         for segredo_ou_codigo in (segredo, *reserva):

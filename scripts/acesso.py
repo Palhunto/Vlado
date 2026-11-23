@@ -2014,9 +2014,11 @@ def iniciar_fator(root: Path, cid: str, senha, codigo=None, ip: str | None = Non
                 'otpauth': segundo_fator.endereco(semente, conta['email'] or conta['login'] or cid)}
 
 
-def confirmar_fator(root: Path, cid: str, codigo, ip: str | None = None) -> list[str]:
+def confirmar_fator(root: Path, cid: str, codigo, ip: str | None = None, sessao_atual=None) -> list[str]:
     """Finish the enrolment with a code of the new authenticator: the factor becomes the account's (the one
-    before, if any, is replaced) and ten new reserve codes are returned, to be shown once."""
+    before, if any, is replaced) and ten new reserve codes are returned, to be shown once. Every other session of
+    the account ends, as when the password changes: a session somebody else opened with the password alone does
+    not outlive the factor. `sessao_atual` is the public id of the session that asks, the only one kept."""
     if _sem_codigo(codigo):
         raise CodigoNecessario(CODIGO_NECESSARIO)
     chave, codigos, bloqueado, aviso = CHAVE_FATOR + cid, segundo_fator.novos_codigos_de_reserva(), False, None
@@ -2034,6 +2036,7 @@ def confirmar_fator(root: Path, cid: str, codigo, ip: str | None = None) -> list
                       ' ultimo_passo = ? WHERE conta = ?', _iso(momento), passo, cid)
                 _novos_codigos(tx, cid, codigos, momento)
                 tx.ex('DELETE FROM tentativas WHERE chave = ?', chave)
+                tx.ex('DELETE FROM sessoes WHERE conta = ? AND publico IS NOT ?', cid, sessao_atual)
                 _evento(tx, 'fator_ativado', cid, cid, momento)
                 return codigos
             aviso = _falha_do_fator(tx, cid, momento, ip)
