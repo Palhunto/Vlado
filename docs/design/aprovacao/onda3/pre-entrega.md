@@ -34,9 +34,9 @@ Legenda:
 | Só consultas relevantes à interface | C | `componentes.md`, "Consultas às skills" |
 | Passada final por `quick-reference.md` §1 a §3 | C, com ressalva | Esta lista cobre §1 e §2. O §3 (desempenho) é o item "primeira carga em rede móvel medida antes e depois" do portão, separado desta lista |
 | Testado em 375 px | C | linha de base `db4e032`, 375 nos dois temas, todas as telas |
-| Testado em paisagem | F | não há captura em paisagem de celular → **R6** |
+| Testado em paisagem | C | 14 telas em 812×375, nos dois temas, sem rolagem lateral (`lancamento/qa-o3` `dbf0281`, `testes/referencias_visuais/windows_extras/`); R6 resolvida |
 | Movimento reduzido | C | `prefers-reduced-motion` em `style.css` (5 blocos), `componentes_o3.css`, `caderno.css` e `entrar.css`; o esqueleto não pulsa (`componentes.md`, Movimento) |
-| Texto ampliado (equivalente web do Dynamic Type) | F | não há rodada com texto a 200 % → **R6** |
+| Texto ampliado (equivalente web do Dynamic Type) | C | 14 telas com a página a 200 %, nos dois temas, sem rolagem lateral nem texto cortado (`lancamento/qa-o3` `dbf0281`, `testes/referencias_visuais/windows_extras/`); R6 resolvida |
 | Escuro conferido por conta própria | C | contraste de cada par medido nos dois temas em `mudancas-de-token.md`; capturas nos dois temas |
 | Alvos ≥ 44 px; nada sob área fixa | C | `min-height: 44px` em `style.css` (17) e `caderno.css` (4); a Mesa não tem barra fixa no pé |
 
@@ -76,7 +76,7 @@ Legenda:
 |---|---|---|
 | Áreas seguras | — | página web sem barra fixa no pé nem no topo sobre o conteúdo |
 | Rolagem não fica sob barra fixa | C | nenhuma barra fixa cobre conteúdo; o compositor do celular não cobre o foco (UX-19) |
-| Celular pequeno, grande e tablet, retrato e paisagem | F em parte | 375, 768, 1024 e 1440 capturados; faltam celular grande (430) e paisagem → **R6** |
+| Celular pequeno, grande e tablet, retrato e paisagem | C | 375, 430, 768, 1024 e 1440 px, e paisagem de 812×375 (`lancamento/qa-o3` `dbf0281`, `testes/referencias_visuais/windows_extras/`); R6 resolvida |
 | Margens por largura | C | 16 px no celular, 32 no desktop |
 | Ritmo de 4/8 px | C | arredondamento para a grade de 4 px (P11.8) |
 | Medida de leitura | C | até 70 caracteres no texto de leitura (UX-10) |
@@ -90,7 +90,7 @@ Legenda:
 | Controle só de ícone com nome e estado | C | "Abrir navegação" com `aria-label` e `aria-expanded` (`index.html:49`) |
 | Campos com rótulo, dica e erro claro | C | erro junto ao campo (UX-15; `componentes.md#campo` e W11) |
 | Cor nunca sozinha | C | estados sempre com sinal e texto (W02, regra 5; P20a) |
-| Movimento reduzido e texto ampliado sem quebrar | C e F | movimento: C. Texto ampliado: **R6** |
+| Movimento reduzido e texto ampliado sem quebrar | C | movimento: ver Processo; texto a 200 %: R6 resolvida |
 | Interface fixa não cobre o foco | C | UX-19 |
 | Arrastar tem alternativa | C | envio por arrasto tem "escolha no computador" e "Escolher arquivos"; o mapa tem a lista |
 | Entrada aceita gerenciador de senha e colar | C | Entrar com `autocomplete` e "Mostrar"; nenhuma trava de colar |
@@ -144,13 +144,15 @@ Minha conta, Equipe, convite e redefinir a senha (Onda 2) não estão nesta linh
 
 **Resolvidas e conferidas pelo Design (22/11/2026), em `lancamento/frontend-o3`:**
 
-- R1, em `ccbd4a9`: capturas com a análise R001;
+- R1, em `ccbd4a9`: o botão "Conferir" fica dentro do cartão de achado (provado pelas capturas com a análise R001, em 1440 e 1024, nos dois temas);
 - R2, em `ccbd4a9`, com o token `--theme-disabled-text`;
 - R4, em `16f9e6e` e `db4124d`: "Cadastrar arquivos" saiu, a Nova apuração vem pelo W01 e o recibo acompanha a pergunta;
 - R8 e R9, em `0303919`;
 - R7, em `9520fc3` (plural concordado nos achados) e `599e9e2` (Configurações sem o texto de contas). A lista foi medida na linha de base `db4e032`, anterior a esses dois commits;
 - R5, em parte, em `7c2345c` e `61d7fe3`: o Entrar ganhou as seções da Onda 2; a conferência com o canvas inteiro fica para a captura nova da linha de base.
 
-Abertas: R3, exceção até a Onda 4; R6, da Sonda.
+- R6, em `dbf0281` (`lancamento/qa-o3`): 84 capturas extras, de 14 telas em 430×932, em paisagem 812×375 e com a página a 200 %, nos dois temas. Nenhuma tem rolagem lateral. O Design aceitou 78 como referência; as 6 `nova` esperam a correção da linha de etapas do passo 1.
+
+Aberta: só a R3, exceção declarada até a Onda 4. Com isso, a lista de pré-entrega da Onda 3 está cumprida.
 
 R1 e R2 são da lista da skill. R4 e R5 são divergências do desenho aprovado; R3 também, mas é exceção declarada até a Onda 4. R6 é falta de prova. R7 é texto. R8 e R9 são do portão AA (medidor da Sonda, `1ac811d`); o seletor do topo sem caixa não é falta: é a decisão P34 do dono.
