@@ -84,7 +84,8 @@ test('Entrada e segurança: "definida há 12 dias" (ou "hoje"), só a senha, sem
   const seguranca = cartao(mesa, 'seguranca');
   assert.ok(texto(seguranca).includes('Senha') && texto(seguranca).includes('definida há 12 dias'));
   assert.ok(botaoPorTexto(seguranca, 'Trocar senha'));
-  assert.ok(!/segundo fator|autenticador|chave de acesso|códigos/i.test(texto(seguranca)), 'as linhas ainda sem servidor ficam fora (exceções declaradas)');
+  assert.ok(!/chave de acesso|passkey/i.test(texto(seguranca)), 'a chave de acesso (passkey) segue fora: decisão 4 do contrato');
+  assert.ok(texto(seguranca).includes('○ Segundo fator desligado'), 'a linha do segundo fator existe (E4a)');
   const hoje = abrir({api: op => (op === 'conta-ver' ? contaVer('dono', {}, 0) : undefined)}); await esperar(hoje.mesa);
   assert.ok(texto(cartao(hoje.mesa, 'seguranca')).includes('definida hoje'));
   const ontem = abrir({api: op => (op === 'conta-ver' ? contaVer('dono', {}, 1) : undefined)}); await esperar(ontem.mesa);

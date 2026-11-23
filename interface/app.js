@@ -61,6 +61,8 @@ async function api(operation, data, binary = false) {
     throw new Error(window.I18N?.erro ? window.I18N.erro({}) : 'Não foi possível completar a operação.');
   }
   if (!response.ok) {
+    // A pendência da conta (o segundo fator obrigatório que falta cadastrar): a Mesa volta à página dela (contrato de contas, 4.3).
+    if (result?.codigo === 'pendencia_de_conta' && (result.pendencias || []).includes('segundo_fator') && location.pathname !== '/conta/segundo-fator') location.replace('/conta/segundo-fator');
     // One place turns server errors into the interface language (by `codigo` in English).
     const failure = new Error(window.I18N?.erro ? window.I18N.erro(result) : result.erro || 'Não foi possível completar a operação.');
     failure.result = result;

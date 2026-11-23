@@ -3,11 +3,11 @@
 // do servidor nos formatos de testes/test_sessoes_conta.py e testes/test_equipe.py, e pequenos auxiliares. Não tem testes.
 const {criarMesa, Evento, PILHA} = require('./dom_minimo.cjs');
 
-const SCRIPTS = PILHA.flatMap(nome => (nome === 'gerenciar.js' ? [nome, 'conta.js', 'equipe.js'] : [nome]));
+const SCRIPTS = PILHA.flatMap(nome => (nome === 'gerenciar.js' ? [nome, 'fator.js', 'conta.js', 'equipe.js'] : [nome]));
 const DIA = 86400000;
 const ID = {ana: 'a'.repeat(16), rui: 'b'.repeat(16), cora: 'c'.repeat(16), davi: 'd'.repeat(16), eva: 'e'.repeat(16)};
-const CAPACIDADES_DONO = ['conta-ver', 'conta-atualizar', 'conta-sessoes', 'equipe-listar', 'equipe-atividade', 'equipe-convidar', 'equipe-convite-reenviar', 'equipe-convite-cancelar', 'equipe-recuperar', 'equipe-recuperar-confirmar', 'ia-config'];
-const CAPACIDADES_REPORTER = ['conta-ver', 'conta-atualizar', 'conta-sessoes'];
+const CAPACIDADES_DONO = ['conta-ver', 'conta-atualizar', 'conta-sessoes', 'equipe-listar', 'equipe-atividade', 'equipe-convidar', 'equipe-convite-reenviar', 'equipe-convite-cancelar', 'equipe-recuperar', 'equipe-recuperar-confirmar', 'conta-fator-iniciar', 'conta-fator-confirmar', 'conta-fator-codigos', 'ia-config'];
+const CAPACIDADES_REPORTER = ['conta-ver', 'conta-atualizar', 'conta-sessoes', 'conta-fator-iniciar', 'conta-fator-confirmar', 'conta-fator-codigos'];
 
 const sessaoDe = (papel = 'dono', extra = {}) => ({
   conta: {id: ID.ana, nome: 'Ana Lima', email: 'ana@redacao.org', login: 'ana.lima', papel, casos: papel === 'dono' ? null : ['alfa'], ...extra},
@@ -16,7 +16,7 @@ const sessaoDe = (papel = 'dono', extra = {}) => ({
 const contaVer = (papel = 'dono', extra = {}, definidaHa = 12) => ({
   conta: {id: ID.ana, nome: 'Ana Lima', email: 'ana@redacao.org', login: 'ana.lima', papel, idioma: 'pt',
     senha_definida_em: new Date(Date.now() - definidaHa * DIA).toISOString(), criada_em: '2026-01-01T00:00:00+00:00', ...extra},
-  organizacao: {id: 'o1', nome: 'Redação Serena'}, segundo_fator: {ativo: false}, termos: null});
+  organizacao: {id: 'o1', nome: 'Redação Serena'}, segundo_fator: {ativo: false, ativado_em: null, codigos_restantes: 0}, termos: null});
 const sessaoItem = (id, aparelho, atual, ultimoUso = new Date(Date.now() - DIA).toISOString(), ip = '189.40.12.7') => ({id, aparelho, cliente: 'web', criada_em: ultimoUso, ultimo_uso: ultimoUso, expira_em: null, ip, ip_criacao: ip, atual});
 
 const ALFA = {id: 'alfa', titulo: 'Pauta Alfa', rodadas: []};

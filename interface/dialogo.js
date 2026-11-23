@@ -29,6 +29,8 @@
 // enviado e nada é limpo. Uma falha com `silencioso: true` não mostra mensagem do diálogo (quem lançou já a pôs junto ao campo).
 // `ctx.trocarPor({titulo, texto, acao, semCancelar, montar(corpo)})`, chamado de `executar`, troca o formulário por outra vista sem fechar (o link do convite, que
 // só aparece uma vez): a ação fecha (devolve true), Esc também, e `semCancelar` tira o botão de cancelar; o que a vista mostrou some quando o diálogo fecha.
+// `semAcoes: true` tira os botões do diálogo (quem o usa traz os próprios, como o cadastro do segundo fator, em vários passos): `ctx.fechar(valor)` o fecha e `ctx.travar(true)` faz o Esc
+// deixar de fechar (o passo dos códigos de reserva, que não voltam).
 // Clique no véu não fecha (decisão do dono, P12.5). Esc fecha como "Cancelar". O foco fica preso e, ao fechar, volta a `gatilho`.
 (() => {
   const t = (pt, vars) => (window.I18N ? window.I18N.t(pt, vars) : String(pt).replace(/\{(\w+)\}/g, (todo, nome) => vars?.[nome] ?? todo));
@@ -158,10 +160,12 @@
       const botaoAcao = no('button', destrutivo ? 'danger' : '', t(opcoes.acao || 'Confirmar')); botaoAcao.type = 'button';
       const acoes = no('div', 'dialogo-acoes');
       acoes.append(botaoCancelar, botaoAcao);
+      if (opcoes.semAcoes) acoes.hidden = true;
       partes.push(acoes);
       caixa.append(...partes);
 
       let estado = 'aberto';       // aberto | ocupado | cancelando | fechado
+      let travado = false;         // o Esc não fecha (ctx.travar)
       let bloqueado = false;       // recusa que não passa com nova tentativa (bloqueio por senhas erradas): sobra "Cancelar"
       let controlador = null;
       const fechamento = new AbortController();
@@ -225,7 +229,8 @@
         resolver(valor);
       }
       // A vista de resultado: o formulário some, entra o texto e o que `montar` puser; a ação fecha. O que foi mostrado sai da página com o diálogo.
-      function trocarPor({titulo: novoTitulo, texto: novoTexto, acao: novaAcao, semCancelar = false, montar, item, itemAspas = false} = {}) {
+      function trocarPor({titulo: novoTitulo, texto: novoTexto, acao: novaAcao, semCancelar = false, travada = false, montar, item, itemAspas = false} = {}) {
+        travado = !!travada;  // os códigos de reserva: nem o Esc fecha, só "Já guardei"
         for (const filho of [...caixa.children]) if (filho !== titulo && filho !== acoes) filho.hidden = true;
         preencherTitulo(titulo, t(novoTitulo || ''), item, itemAspas);
         const vista = no('div', 'dialogo-resultado');
@@ -260,6 +265,8 @@
           atualizar();
         },
         trocarPor,
+        fechar: valor => fechar(valor ?? false),
+        travar: valor => { travado = !!valor; },
         limparCampos() { for (const {entrada} of entradas.values()) entrada.value = ''; limparErrosDeCampo(); },
         fechou: () => estado === 'fechado',
         sinalFechado: fechamento.signal,
@@ -304,6 +311,7 @@
         }
       }
       function cancelar() {
+        if (travado) return;
         if (estado === 'resultado') { fechar(true); return; }  // Esc na vista de resultado fecha como a ação
         if (estado === 'aberto') { fechar(false); return; }
         if (estado === 'ocupado' && opcoes.longa) {

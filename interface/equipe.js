@@ -665,6 +665,10 @@
     convite_aceito: '{conta} aceitou o convite e entrou na redação', convite_expirado: 'Um convite venceu',
     // Recuperação do acesso, link de senha e troca do e-mail (frases do Design, #recuperar; nenhuma leva endereço de e-mail).
     recuperacao_pedida: '{por} pediu a recuperação do acesso de {conta}', recuperacao_confirmada: '{por} confirmou a recuperação do acesso de {conta}',
+    fator_ativado: '{conta} ativou o segundo fator', fator_removido: '{conta} removeu o segundo fator', fator_codigos_gerados: '{conta} gerou novos códigos de reserva',
+    // O que a E4 também grava (frases a confirmar com o Design): aparelho novo, código de reserva, fator bloqueado e entrada protegida.
+    aparelho_novo: '{conta} entrou de um aparelho novo', codigo_reserva_usado: '{conta} entrou com um código de reserva',
+    fator_bloqueado: 'O segundo fator de {conta} foi bloqueado por muitos códigos errados', login_protegido: 'A entrada de {conta} foi protegida por muitas tentativas',
     senha_redefinida: '{conta} criou uma senha nova pelo link', redefinicao_pedida: '{conta} pediu um link para criar uma senha nova',
     email_troca_pedida: '{conta} pediu para trocar o e-mail', email_trocado: '{conta} trocou o e-mail',
     // Os que o servidor também grava e o desenho não previa (ressalva D1 da Coruja): cada tipo com a sua frase.

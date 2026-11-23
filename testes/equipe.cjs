@@ -323,7 +323,7 @@ test('Atividade: cada tipo que o servidor grava tem frase (nenhum cai em "Ação
   const TIPOS = ['papel_alterado', 'conta_desativada', 'conta_reativada', 'conta_excluida', 'conta_criada', 'participacao_incluida', 'participacao_retirada', 'responsavel_alterado',
     'teto_alterado', 'senha_trocada', 'senha_definida', 'sessao_encerrada_a_distancia', 'conta_atualizada', 'recuperacao_emitida', 'login_bloqueado', 'sessao_encerrada',
     'convite_enviado', 'convite_reenviado', 'convite_cancelado', 'convite_aceito', 'convite_expirado', 'recuperacao_pedida', 'recuperacao_confirmada', 'senha_redefinida',
-    'redefinicao_pedida', 'email_troca_pedida', 'email_trocado',
+    'redefinicao_pedida', 'email_troca_pedida', 'email_trocado', 'fator_ativado', 'fator_removido', 'fator_codigos_gerados', 'aparelho_novo', 'codigo_reserva_usado', 'fator_bloqueado', 'login_protegido',
     'acesso_alterado', 'caso_atribuido', 'caso_criado', 'primeiro_admin', 'migracao_contas', 'redacao_criada', 'redacao_suspensa', 'redacao_reativada', 'redacao_encerrada'];
   const {mesa} = await abrirEquipe(com([ANA(), RUI()]));
   const {Equipe} = mesa.janela;

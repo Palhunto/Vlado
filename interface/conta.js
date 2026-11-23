@@ -403,9 +403,86 @@
       rotulo.append(no('span', 'conta-apoio', dias === 0 ? t('definida hoje') : dias === 1 ? t('definida há 1 dia') : t('definida há {n} dias', {n: dias})));
     }
     const trocar = botao('Trocar senha', 'secondary conta-trocar-senha', () => trocarSenha(trocar));
-    nuvem.seguranca.corpo.replaceChildren(linha(rotulo, trocar));
+    nuvem.seguranca.corpo.replaceChildren(linha(rotulo, trocar), linhaDoFator(resposta.segundo_fator || {ativo: false}));
   }
 
+  // --- o segundo fator (E4a; #segundo-fator): a linha, o cadastro em três passos, gerar novos códigos e remover -----------------------------------------------------
+  const TEXTO_CODIGO_INCORRETO = 'Código incorreto. Confira no aplicativo e digite o código que aparece agora.';
+  function linhaDoFator(fator) {
+    const podeRemover = capacidade('conta-fator-remover');  // dono e editor nunca a têm: o fator é obrigatório para eles
+    const corpo = no('div', 'conta-fator');
+    const texto = no('div', 'conta-rotulo'), acoes = no('div', 'conta-acoes');
+    if (!fator.ativo) {
+      texto.append(no('span', 'conta-texto', t('○ Segundo fator desligado')), no('span', 'conta-apoio', t('Um código do aplicativo autenticador, além da senha, na entrada.')));
+      if (!podeRemover) texto.append(no('span', 'conta-apoio', t('Depois de cadastrado, o segundo fator não pode ser removido no seu papel.')));
+      acoes.append(botao('Cadastrar', 'secondary conta-fator-cadastrar', evento => cadastrarFator(evento.currentTarget, false)));
+    } else {
+      const restantes = Number(fator.codigos_restantes) || 0;
+      const reserva = restantes === 1 ? t('1 código de reserva') : t('{n} códigos de reserva', {n: restantes});
+      texto.append(no('span', 'conta-texto conta-fator-ativo', t('✓ Código do autenticador ativo')), no('span', 'conta-apoio', `${t('desde {dia}', {dia: dia(fator.ativado_em)})} · ${reserva}`));
+      if (restantes <= 3) {
+        const aviso = restantes === 0 ? t('! Não restam códigos de reserva. Gere novos.') : restantes === 1 ? t('! Resta 1 código de reserva. Gere novos.') : t('! Restam {n} códigos de reserva. Gere novos.', {n: restantes});
+        texto.append(no('span', 'conta-apoio conta-fator-aviso', aviso));
+      }
+      acoes.append(botao('Gerar novos códigos', 'secondary conta-fator-codigos', evento => gerarCodigos(evento.currentTarget)),
+        botao('Trocar de aparelho', 'secondary conta-fator-trocar', evento => cadastrarFator(evento.currentTarget, true)));
+      if (podeRemover) acoes.append(botao('Remover', 'danger conta-fator-remover', evento => removerFator(evento.currentTarget)));
+    }
+    corpo.append(texto, acoes);
+    return corpo;
+  }
+  const recarregarPerfil = () => carregar(nuvem.perfil, () => api('conta-ver', {}), desenharPerfilESeguranca);
+  // O cadastro (e a troca de aparelho): três passos dentro de um diálogo sem botões próprios; o passo dos códigos não fecha com Esc.
+  async function cadastrarFator(gatilho, trocar) {
+    let concluiu = false;
+    await window.Dialogo.confirmar({variante: 'simples', titulo: trocar ? 'Trocar de aparelho' : 'Cadastrar o segundo fator', semAcoes: true, gatilho,
+      preparar(ctx) {
+        window.Fator.cadastro({alvo: ctx.corpo, trocar, chamar: (operacao, dados) => api(operacao, dados), aoCancelar: () => ctx.fechar(false), travar: valor => ctx.travar(valor),
+          aoConcluir: () => { concluiu = true; ctx.fechar(true); }});
+      }});
+    if (!concluiu) return;
+    estado(t('Segundo fator ativado.'));
+    recarregarPerfil(); carregarSessoes();  // ativar encerra as outras sessões da conta
+  }
+  // Gerar novos códigos: a variante com senha com mais um campo ("Código do aplicativo", ou um de reserva); a resposta abre o passo dos códigos.
+  async function gerarCodigos(gatilho) {
+    const form = {};
+    let gerou = false;
+    await window.Dialogo.confirmar({variante: 'simples', titulo: 'Gerar novos códigos de reserva?', texto: 'Os códigos atuais param de valer.', acao: 'Gerar códigos', ocupado: 'Gerando…', gatilho,
+      campos: [{id: 'senha', rotulo: 'Sua senha', apoio: 'A senha com que você entra na Mesa.', autocomplete: 'current-password', exigido: true}],
+      preparar(ctx) {
+        const codigo = document.createElement('input'); codigo.type = 'text'; codigo.autocomplete = 'one-time-code'; codigo.maxLength = 24; codigo.setAttribute('translate', 'no');
+        codigo.setAttribute('spellcheck', 'false'); codigo.setAttribute('autocapitalize', 'none');
+        const rotulo = no('label', 'conta-campo', t('Código do aplicativo')); rotulo.append(codigo);
+        ctx.corpo.append(rotulo); form.codigo = codigo; codigo.focus();
+      },
+      validar() {
+        window.Estados.limparErroCampo(form.codigo);
+        if (!form.codigo.value.trim()) { window.Estados.erroCampo(form.codigo, 'Falta o código. Digite o código do aplicativo ou um código de reserva.'); return false; }
+        return {};
+      },
+      async executar(ctx) {
+        let resposta;
+        try { resposta = await api('conta-fator-codigos', {senha: ctx.valores().senha, codigo: form.codigo.value.trim()}); }
+        catch (falha) {
+          if (falha?.result?.codigo === 'codigo_invalido') { window.Estados.erroCampo(form.codigo, TEXTO_CODIGO_INCORRETO); throw Object.assign(new Error(falha.message), {silencioso: true}); }
+          const recusa = window.Dialogo.recusaDaSenha(falha);
+          throw recusa === falha ? new Error(textoDoServidor(falha)) : recusa;
+        }
+        gerou = true;
+        ctx.trocarPor({titulo: 'Guarde os códigos de reserva', acao: 'Já guardei', semCancelar: true, travada: true,
+          montar: vista => vista.append(window.Fator.vistaDosCodigos(resposta.codigos_de_reserva || [], {semGuardei: true}))});
+      }});
+    if (gerou) { estado(t('Novos códigos de reserva gerados.')); recarregarPerfil(); }
+  }
+  async function removerFator(gatilho) {
+    try {
+      const resultado = await sensivel({operacao: 'conta-fator-remover', gatilho, dialogo: {titulo: 'Remover o segundo fator?', texto: 'A entrada volta a pedir só a senha. Você pode cadastrar de novo quando quiser.',
+        acao: 'Remover segundo fator', ocupado: 'Removendo…', destrutiva: true}});
+      if (!resultado) return;
+      estado(t('Segundo fator removido.')); recarregarPerfil();
+    } catch (falha) { estado(falha.message, {erro: true}); }
+  }
   // O diálogo "Trocar senha": a variante com senha, com três campos e a conferência antes de enviar (W08, regra 2).
   async function trocarSenha(gatilho) {
     let resultado = null;
