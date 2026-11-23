@@ -15,3 +15,6 @@ test_imagem_build
 # Filas de extracao e do portao (CONF-02), medidas pela Viga: cerca de 60 s e 20 s.
 test_fila_extracao
 test_fila_portao
+# Portão do WCAG AA nos dois temas (Onda 3): mede as 14 telas da linha de base em 375 e 1440 px; cerca de 15 min, só com Playwright e Chromium.
+# Sem eles pula; com VLADO_EXIGIR_PLAYWRIGHT=1 (o CI) falha.
+test_portao_contraste
