@@ -2583,12 +2583,14 @@ ins.comparar-incluido,p.comparar-incluido{
   .quadros-abas [role=tab]{transition:none}
 }
 /* Faixa que rola para o lado (componentes.md#faixa-que-rola, Q5): desktop.js põe data-rola=fim|inicio|ambos só quando há conteúdo além da borda; o esmaecido é máscara, vale nos dois temas.
-   A máscara fica no elemento que rola (#mesa-etapas e .quadros-abas não têm fundo próprio; se ganharem, o fundo passa ao pai). Sem seta e sem barra à vista. */
-#mesa-etapas,.quadros-abas{scrollbar-width:none}
-#mesa-etapas::-webkit-scrollbar,.quadros-abas::-webkit-scrollbar{display:none}
-:is(#mesa-etapas,.quadros-abas)[data-rola=fim]{-webkit-mask-image:linear-gradient(to right,currentColor calc(100% - var(--espaco-8)),transparent);mask-image:linear-gradient(to right,currentColor calc(100% - var(--espaco-8)),transparent)}
-:is(#mesa-etapas,.quadros-abas)[data-rola=inicio]{-webkit-mask-image:linear-gradient(to right,transparent,currentColor var(--espaco-8));mask-image:linear-gradient(to right,transparent,currentColor var(--espaco-8))}
-:is(#mesa-etapas,.quadros-abas)[data-rola=ambos]{-webkit-mask-image:linear-gradient(to right,transparent,currentColor var(--espaco-8),currentColor calc(100% - var(--espaco-8)),transparent);mask-image:linear-gradient(to right,transparent,currentColor var(--espaco-8),currentColor calc(100% - var(--espaco-8)),transparent)}
+   A máscara fica no elemento que rola (as faixas não têm fundo próprio; se ganharem, o fundo passa ao pai). Sem seta e sem barra à vista. */
+#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs{scrollbar-width:none}
+#mesa-etapas::-webkit-scrollbar,.quadros-abas::-webkit-scrollbar,.mesa-tabs::-webkit-scrollbar,.notebook-tabs::-webkit-scrollbar{display:none}
+/* O encaixe das pílulas (scroll-snap) para onde a rolagem do ativo já põe o item: a folga de --espaco-4, sem briga com o scrollLeft. */
+.mesa-tabs,.notebook-tabs,.quadros-abas{scroll-padding-inline:var(--espaco-4)}
+:is(#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs)[data-rola=fim]{-webkit-mask-image:linear-gradient(to right,currentColor calc(100% - var(--espaco-8)),transparent);mask-image:linear-gradient(to right,currentColor calc(100% - var(--espaco-8)),transparent)}
+:is(#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs)[data-rola=inicio]{-webkit-mask-image:linear-gradient(to right,transparent,currentColor var(--espaco-8));mask-image:linear-gradient(to right,transparent,currentColor var(--espaco-8))}
+:is(#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs)[data-rola=ambos]{-webkit-mask-image:linear-gradient(to right,transparent,currentColor var(--espaco-8),currentColor calc(100% - var(--espaco-8)),transparent);mask-image:linear-gradient(to right,transparent,currentColor var(--espaco-8),currentColor calc(100% - var(--espaco-8)),transparent)}
 
 /* Papéis e estados da Mesa inteira (Sessao em app.js; docs/design/componentes.md#estados) */
 [data-sem-capacidade]{display:none!important}
