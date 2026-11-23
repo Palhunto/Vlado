@@ -190,6 +190,59 @@ async function entrarAte2(page, email, senha) {
         await c.close();
       }
     }
+
+    // 6. capturas da página da pendência (só com `capturas`): os passos 1 (senha), 2 (QR, chave e código) e 3 (códigos de reserva e Abrir a Mesa) em 375 e 1440,
+    // nos dois temas; cada captura usa uma conta sem o fator, porque o passo 3 cadastra de verdade. E o 403 pendencia_de_conta que leva a Mesa de volta a ela.
+    if (args.capturas && args.pendentes) {
+      let i = -1;
+      for (const [rotulo, largura, altura] of [['375', 375, 812], ['1440', 1440, 900]]) for (const tema of ['light', 'dark']) {
+        i += 1;
+        const marca = `${rotulo}-${tema}`;
+        const c = await browser.newContext({viewport: {width: largura, height: altura}, locale: 'pt-BR', colorScheme: tema});
+        await c.addInitScript(t => { try { localStorage.setItem('vlado-idioma', 'pt'); localStorage.setItem('apuracao:tema', t); } catch (_) { /* sem armazenamento */ } }, tema);
+        let pendente = false, recusar = false;
+        await c.route(`${args.origem}/**`, async rota => { try {
+          const pedido = rota.request(), endereco = new URL(pedido.url());
+          const cabecalhos = {...pedido.headers(), host: new URL(args.origem).host};
+          if (recusar && endereco.pathname === '/api/codex-status') return await rota.fulfill({status: 403, contentType: 'application/json', body: JSON.stringify({estado: 'pendencia', codigo: 'pendencia_de_conta', pendencias: ['segundo_fator'], erro: 'Falta cadastrar o segundo fator.'})});
+          const alvo = endereco.pathname === '/conta/segundo-fator' ? '/entrar' : endereco.pathname;
+          const resposta = await rota.fetch({url: `http://127.0.0.1:${args.porta}${alvo}${endereco.search}`, headers: cabecalhos, maxRedirects: 0});
+          if (endereco.pathname === '/api/sessao' && pendente && resposta.status() === 200) return await rota.fulfill({response: resposta, json: {...(await resposta.json()), pendencias: ['segundo_fator']}});
+          await rota.fulfill({response: resposta});
+        } catch (_) { /* a página fechou com o pedido em voo */ } });
+        const pagina = await c.newPage(); pagina.on('pageerror', erro => erros.push(erro.message));
+        const foto = nome => pagina.screenshot({path: path.join(args.capturas, `${nome}-${marca}.png`), fullPage: true});
+        await pagina.goto(`${args.origem}/entrar`);
+        await pagina.waitForSelector('#entrar-secao:not([hidden])');
+        await pagina.fill('#entrar-login', args.pendentes[i].email); await pagina.fill('#entrar-senha', args.senha);
+        await Promise.all([pagina.waitForURL(url => url.pathname !== '/entrar', {timeout: 15000}), pagina.click('#entrar-enviar')]);
+        pendente = true;
+        if (i === 0 || i === 2) {   // o 403 pendencia_de_conta: a Mesa abre, a primeira chamada responde a pendência e a página vai para a da pendência (claro, 375 e 1440)
+          recusar = true;
+          await pagina.goto(`${args.origem}/?area=codex`);
+          await pagina.waitForURL(url => url.pathname === '/conta/segundo-fator', {timeout: 15000});
+          recusar = false;
+        } else await pagina.goto(`${args.origem}/conta/segundo-fator`);
+        await pagina.waitForSelector('#pendencia-secao:not([hidden]) h1', {timeout: 15000});
+        await pagina.waitForSelector('#pendencia-secao input[type="password"]');
+        await foto('pendencia-1-senha');
+        await pagina.fill('#pendencia-secao input[type="password"]', args.senha);
+        await pagina.click('#pendencia-secao .fator-principal');
+        await pagina.waitForSelector('#pendencia-secao svg', {timeout: 15000});
+        await foto('pendencia-2-qr-chave-codigo');
+        const chave = (await pagina.evaluate(() => [...document.querySelectorAll('#pendencia-secao *')].map(no => no.children.length ? '' : no.textContent.trim()).find(x => /^[A-Z2-7]{4}( [A-Z2-7]{4}){3,}$/.test(x)) || '')).replace(/\s+/g, '');
+        assert.ok(chave.length >= 16, `a chave em texto aparece: ${chave}`);
+        const campo = (await pagina.$$('#pendencia-secao input[type="text"]')).pop();
+        await campo.fill(totp(chave, 0));
+        await pagina.click('#pendencia-secao .fator-principal');
+        await pagina.waitForSelector('#pendencia-secao .fator-codigos', {timeout: 15000});
+        await foto('pendencia-3-codigos-de-reserva');
+        await pagina.click('#pendencia-secao .fator-guardei');
+        await pagina.waitForSelector('#pendencia-secao .fator-pronto', {timeout: 15000});
+        await foto('pendencia-4-abrir-a-mesa');
+        await c.close();
+      }
+    }
   } finally {
     await browser.close();
   }

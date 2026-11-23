@@ -39,7 +39,7 @@ class EntrarComFatorNoNavegadorTest(cenario.DuasRedacoes):
         fator._CHAVES.clear()
         cls.addClassCleanup(fator._CHAVES.clear)
 
-    def conta(self, email, nome):
+    def nova_conta(self, email, nome):
         _, token, _ = acesso.convidar(self.root, self.a, self.ids['dono'], email, 'leitor', [])
         _, _, conta = acesso.aceitar_convite(self.root, token, nome, SENHA)
         return conta['id']
@@ -47,14 +47,14 @@ class EntrarComFatorNoNavegadorTest(cenario.DuasRedacoes):
     def test_o_roteiro_pelo_navegador(self):
         acesso.limpar_limites()
         correio.limpar_caixa()
-        com_app = self.conta('com.app@exemplo.test', 'Pessoa Com App')
+        com_app = self.nova_conta('com.app@exemplo.test', 'Pessoa Com App')
         segredo_app, _ = cadastrar(self.root, com_app)
-        com_reserva = self.conta('com.reserva@exemplo.test', 'Pessoa Com Reserva')
+        com_reserva = self.nova_conta('com.reserva@exemplo.test', 'Pessoa Com Reserva')
         _, reservas = cadastrar(self.root, com_reserva)
-        a_redefinir = self.conta('redefine@exemplo.test', 'Pessoa Que Redefine')
+        a_redefinir = self.nova_conta('redefine@exemplo.test', 'Pessoa Que Redefine')
         segredo_redefinir, _ = cadastrar(self.root, a_redefinir)
         token, _ = acesso.pedir_redefinicao(self.root, 'redefine@exemplo.test')
-        self.conta('pendente@exemplo.test', 'Pessoa Pendente')
+        self.nova_conta('pendente@exemplo.test', 'Pessoa Pendente')
         entrada = {'porta': self.server.server_port, 'origem': cenario.ORIGEM, 'senha': SENHA,
                    'app': {'email': 'com.app@exemplo.test', 'segredo': segredo_app},
                    'reserva': {'email': 'com.reserva@exemplo.test', 'codigo': reservas[0]},
@@ -66,10 +66,14 @@ class EntrarComFatorNoNavegadorTest(cenario.DuasRedacoes):
             entrada['extras'], entrada['redefinires'] = [], []
             for i in range(4):
                 email = f'captura{i}@exemplo.test'
-                cid = self.conta(email, f'Pessoa Captura {i}')
+                cid = self.nova_conta(email, f'Pessoa Captura {i}')
                 cadastrar(self.root, cid)
                 entrada['extras'].append({'email': email})
                 entrada['redefinires'].append(acesso.pedir_redefinicao(self.root, email)[0])
+            entrada['pendentes'] = []
+            for i in range(4):
+                self.nova_conta(f'pendente{i}@exemplo.test', f'Pessoa Pendente {i}')
+                entrada['pendentes'].append({'email': f'pendente{i}@exemplo.test'})
         with patch.object(acesso, 'TENTATIVAS_IP_MINUTO', 10000), correio.usar('simulado'):
             processo = subprocess.run(['node', str(Path(__file__).with_name('qa_entrar_fator.cjs')), json.dumps(entrada)],
                                       capture_output=True, text=True, encoding='utf-8', timeout=420, cwd=RAIZ)
