@@ -10,6 +10,7 @@ Use o Python do `.venv`. `python -m unittest discover -s testes` continua rodand
 import argparse
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -44,6 +45,11 @@ def modulo_de(teste):
     if type(teste).__name__ == '_FailedTest':
         return teste._testMethodName.split('.')[0]
     return teste.id().split('.')[0]
+
+
+def pulos_de_navegador(pulados):
+    """Dos `(teste, motivo)` pulados, os que pularam por falta de navegador (Playwright ou Chromium)."""
+    return [(teste.id(), motivo) for teste, motivo in pulados if re.search(r'playwright|chromium', motivo, re.I)]
 
 
 class SelecaoInvalida(Exception):
@@ -107,6 +113,14 @@ def main():
         print(f'ERRO: {erro}', file=sys.stderr)
         return 2
     resultado = unittest.TextTestRunner(verbosity=1).run(suite)
+    if os.environ.get('VLADO_EXIGIR_PLAYWRIGHT') == '1':
+        # Rede de segurança do CI: teste de navegador que pulou, por qualquer caminho, reprova a execução.
+        pulos = pulos_de_navegador(resultado.skipped)
+        if pulos:
+            print('ERRO: com VLADO_EXIGIR_PLAYWRIGHT=1 nenhum teste de navegador pode pular:', file=sys.stderr)
+            for teste, motivo in pulos:
+                print(f'  {teste}: {motivo}', file=sys.stderr)
+            return 1
     return 0 if resultado.wasSuccessful() else 1
 
 

@@ -10,7 +10,6 @@ Sem modelo e sem rede.
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import unittest
@@ -19,6 +18,7 @@ from unittest.mock import patch
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from auxiliar_node import requer_navegador_node
 import acesso
 import cenario_redacoes as cenario
 import correio
@@ -26,10 +26,9 @@ import fator_de_teste
 import segundo_fator as fator
 from test_acesso import SENHA
 
-PLAYWRIGHT = RAIZ / '.ferramentas' / 'node' / 'node_modules' / 'playwright'
 
 
-@unittest.skipUnless(shutil.which('node') and PLAYWRIGHT.is_dir(), 'precisa do Node e do Playwright em .ferramentas/node')
+@requer_navegador_node
 class CadastroDoFatorNoNavegadorTest(cenario.DuasRedacoes):
     @classmethod
     def setUpClass(cls):

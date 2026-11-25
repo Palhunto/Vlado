@@ -20,6 +20,7 @@ from unittest.mock import patch
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from auxiliar_node import requer_navegador_node
 import acesso
 import apagamento
 from criar_caso import criar_caso
@@ -27,11 +28,10 @@ from interface_pesquisa import Servidor
 import lixeira
 from test_acesso import SENHA, hasher_rapido
 
-PLAYWRIGHT = RAIZ / '.ferramentas' / 'node' / 'node_modules' / 'playwright'
 PASSAGENS = 4
 
 
-@unittest.skipUnless(shutil.which('node') and PLAYWRIGHT.is_dir(), 'precisa do Node e do Playwright em .ferramentas/node')
+@requer_navegador_node
 class ApagarComSenhaNoNavegadorTest(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()

@@ -10,7 +10,6 @@ o teste é pulado. Sem modelo e sem rede.
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import unittest
@@ -19,17 +18,17 @@ from unittest.mock import patch
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from auxiliar_node import requer_navegador_node
 import acesso
 import cenario_redacoes as cenario
 import correio
 import fator_de_teste
 from test_acesso import SENHA
 
-PLAYWRIGHT = RAIZ / '.ferramentas' / 'node' / 'node_modules' / 'playwright'
 VERSAO, ENDERECO = '2026-12-01', 'https://vlado.test/termos'
 
 
-@unittest.skipUnless(shutil.which('node') and PLAYWRIGHT.is_dir(), 'precisa do Node e do Playwright em .ferramentas/node')
+@requer_navegador_node
 class SeusDadosNoNavegadorTest(cenario.DuasRedacoes):
     @classmethod
     def setUpClass(cls):

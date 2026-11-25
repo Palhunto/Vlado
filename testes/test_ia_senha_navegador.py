@@ -9,7 +9,6 @@ Design. Sem Node ou sem o Playwright, o teste é pulado. Sem modelo e sem rede.
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -20,16 +19,16 @@ from unittest.mock import patch
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from auxiliar_node import requer_navegador_node
 import acesso
 from comum import escrever_json
 from interface_pesquisa import Servidor
 import segredos
 from test_acesso import SENHA, hasher_rapido
 
-PLAYWRIGHT = RAIZ / '.ferramentas' / 'node' / 'node_modules' / 'playwright'
 
 
-@unittest.skipUnless(shutil.which('node') and PLAYWRIGHT.is_dir(), 'precisa do Node e do Playwright em .ferramentas/node')
+@requer_navegador_node
 class IaComSenhaNoNavegadorTest(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
