@@ -10,7 +10,12 @@ Para ler o contexto integral da unidade, executar `python scripts/banco.py ler -
 
 Se o índice estiver ausente, usar `banco.py construir` somente sobre o snapshot dessa rodada; gerações existentes nunca são sobrescritas. Para reconstrução necessária, escolher `--geracao v2` (ou outro ID novo) e informar a mesma geração em todas as operações seguintes. Não reconstruir para esconder divergência de hash nem alterar entradas congeladas. Registrar indisponibilidade, geração escolhida e leituras diretas realmente realizadas.
 
-Registrar em `03_buscas.md` as consultas realmente executadas, ferramenta utilizada, arquivos/páginas consultados, resultados úteis e lacunas. Não inventar um log de buscas que não ocorreram. Se uma ferramenta não puder ler um formato, registrar o impedimento e tentar um derivado autorizado ou pedir a entrada necessária.
+Registrar em `03_buscas.md` as consultas realmente executadas, ferramenta utilizada, arquivos/páginas consultados, resultados úteis e lacunas. Não inventar um log de buscas que não ocorreram. O relatório tem duas seções obrigatórias:
+
+- "Cobertura": cada documento candidato do plano, lido ou com a exclusão justificada. Antes de declarar algo fora do corpus ou não localizado, cruzar as listas de anexos e as referências das próprias peças com a cobertura e dizer onde procurou.
+- "Contraverificação": para cada conclusão ou fundamento central, as buscas feitas pelo que o contraria (ônus da prova, normas do próprio emissor, contradições internas da peça, origem dos dados), registradas também quando não acharam nada. A evidência contrária entra com papel `contradicao`.
+
+Quando o corpus tiver mais de um processo ou procedimento sobre a mesma matéria, procurar se o mesmo documento, parecer ou fundamento aparece em mais de um deles e comparar os desfechos. Um mesmo fundamento com desfechos diferentes é registrado como cruzamento, com os dois lados, a chave que os liga (identificador, data, emissor, versão) e o que muda entre os processos; a diferença de desfecho não prova irregularidade. Se uma ferramenta não puder ler um formato, registrar o impedimento e tentar um derivado autorizado ou pedir a entrada necessária.
 
 Salvar a geração inicial em `04_evidencias_brutas.md`. Para cada passagem: ID E001 etc.; documento; página/campo/linhas observáveis; trecho curto literal; atribuição; contexto; relação com a pergunta; limitação de leitura. Não alterar silenciosamente uma transcrição de OCR. Quando houver divergência visual, registrar a leitura observada e a origem da diferença.
 

@@ -8,6 +8,10 @@ Salvar em `06_revisao_assistida.md`: afirmação original; fonte e trecho; exist
 
 Separar três perguntas: a referência existe? O trecho sustenta a frase? A própria declaração foi verificada externamente? No corpus fechado, normalmente só as duas primeiras podem ser avaliadas. Não transformar uma declaração atribuída em comprovação do evento.
 
+Antes de manter uma pendência, procurar o mesmo dado em outras peças do corpus (notas, quadros, anexos) e dizer onde procurou. Classificar cada divergência pela materialidade: muda a conclusão, muda o valor final ou é só grafia. Cada pendência indica a diligência: o destinatário (órgão ou papel), o meio (pedido de acesso à informação, ofício ou entrevista) e o que pedir; o pedido de acesso à informação não exige motivo do requerente (Lei 12.527/2011, art. 10, § 3º).
+
+Numa comparação entre processos, conferir que o documento ou fundamento é de fato o mesmo (versão, data, emissor e trecho) e que os desfechos são comparáveis (mesma questão decidida, mesma fase). Sem essa conferência, a comparação fica como pendência.
+
 Salvar correções em `07_achados_revisados.md`, mantendo IDs e vínculo com a redação inicial. Não sobrescrever `04_evidencias_brutas.md` ou `05_cruzamentos_brutos.md`. Reduzir uma afirmação parcial ao alcance sustentado e voltar a conferir; não promover pendências a fatos.
 
 Relevância e detalhamento não bastam para aprovação factual. Se nenhum achado tiver suporte, registrar insuficiência e produzir somente essa conclusão limitada na síntese. Nunca acionar um fallback que trate relatórios reprovados como fatos. Esta revisão é da IA e permanece sujeita à conferência humana.

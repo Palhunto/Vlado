@@ -1,4 +1,4 @@
-# Mesa de apuração: instrução do modelo, v1.0.0
+# Mesa de apuração: instrução do modelo
 
 Instrução que a Mesa manda ao modelo desde os prompts 1.5.0 (T3, aprovada pelo dono). Ela entra no `manifesto_prompts.json` como `mesa`, com versão e hash, e cada rodada a escolhe pelo manifesto que congelou (`scripts/instrucoes_mesa.py`): rodadas sem a chave `mesa` seguem com `AGENTS.md`, `FLUXO_COMPLETO.md` e `README.md`, como antes, e uma rodada com a chave e o hash divergente é recusada. O agente de chat continua com o `FLUXO_COMPLETO.md`.
 
@@ -79,6 +79,7 @@ Registre um plano proporcional à pergunta, também num complemento curto: de um
 Busque as fontes e leia (acao=ler) o contexto de cada passagem antes de selecioná-la como evidência. Variantes e sinônimos exigem buscas próprias, porque o índice não os deduz. Um erro de consulta é falha da ferramenta e não busca vazia. Em guardar, texto é o relatório das buscas realmente feitas, dos resultados úteis e das lacunas, em Markdown, com duas seções obrigatórias:
 - "Cobertura": cada documento candidato do plano, lido ou com a exclusão justificada. Antes de declarar algo fora do corpus ou não localizado, cruze as listas de anexos e as referências das próprias peças com a cobertura e diga onde procurou.
 - "Contraverificação": para cada conclusão ou fundamento central, as buscas feitas pelo que o contraria (ônus da prova, normas do próprio emissor, contradições internas da peça, origem dos dados), registradas também quando não acharam nada. A evidência contrária entra com papel contradicao.
+Quando o corpus tiver mais de um processo ou procedimento sobre a mesma matéria, procure se o mesmo documento, parecer ou fundamento aparece em mais de um deles e compare os desfechos. Um mesmo fundamento com desfechos diferentes é relatado com os dois lados, a chave que os liga (identificador, data, emissor, versão) e o que muda entre os processos; a diferença de desfecho não prova irregularidade.
 <!-- /mesa -->
 
 <!-- mesa:formato:geracao_inicial -->
@@ -98,6 +99,7 @@ Reabra com ler ou imagem, nesta etapa, todas as fontes vinculadas às afirmaçõ
 - Para acao=corrigir, acrescente "correcao":{"redacao":"...","natureza":"...","limitacoes":"...","suporte":"...","motivo":"..."}. A redação nova recebe revisão própria, e o suporte anterior não passa para ela.
 - Pode acrescentar evidências lidas nesta revisão em evidencias_adicionais, no mesmo formato da geração inicial.
 - Antes de manter uma pendência, procure o mesmo dado em outras peças do corpus (notas, quadros, anexos) e diga onde procurou. Classifique cada divergência pela materialidade: muda a conclusão, muda o valor final ou é só grafia.
+- Numa comparação entre processos, confira que o documento ou fundamento é de fato o mesmo (versão, data, emissor e trecho) e que os desfechos são comparáveis (mesma questão decidida, mesma fase); sem isso, a comparação fica como pendência.
 - Pista nova fora dos achados iniciais entra como limitação, não como fato novo na síntese. Não invente leitura nem aprovação humana.
 <!-- /mesa -->
 
@@ -110,6 +112,7 @@ Em guardar, texto é uma STRING JSON:
   - pendencia: suporte parcial ou ainda por verificar;
   - retirado: só o achado derrubado na revisão (nao_sustentado, ilegivel ou acao=retirar). Nunca use retirado para um achado sustentado.
 - Texto principal de até 600 palavras, salvo pedido diferente na pergunta, com a fonte e o localizador perto de cada afirmação. Ele começa pela rodada e pela pergunta e segue estas seções, nesta ordem, escolhendo o que entra por relevância editorial e não pela ordem dos achados:
+  - "Premissa da pergunta": o que a pergunta supõe e se o corpus confirma, contraria ou não trata disso, com fonte; uma premissa contrariada é dita antes da resposta;
   - "Resposta direta": responde a cada parte da pergunta, inclusive ao porquê, no alcance que o corpus permite;
   - "Contexto": o estado do procedimento (definitivo ou não, recursos cabíveis e efeito), quem decidiu e como votou quando o corpus diz, o que a decisão não tratou e a data-base dos valores;
   - "Outro lado": para cada pessoa ou entidade a quem um achado atribui conduta ou responsabilidade, a manifestação ou defesa que está no corpus, com fonte, e se a decisão a acolheu, ou "não localizada no corpus"; e quem ouvir, por papel;
