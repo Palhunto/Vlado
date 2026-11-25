@@ -83,6 +83,7 @@ COPY scripts/acesso.py \
      scripts/comparador.py \
      scripts/comum.py \
      scripts/custo.py \
+     scripts/conferencia_briefing.py \
      scripts/conferencia_redacao.py \
      scripts/continuidade.py \
      scripts/correio.py \
@@ -102,6 +103,7 @@ COPY scripts/acesso.py \
      scripts/indice_achados.py \
      scripts/indice_sqlite.py \
      scripts/inferencia_api.py \
+     scripts/instrucoes_mesa.py \
      scripts/interface_pesquisa.py \
      scripts/limites.py \
      scripts/linha_tempo.py \

@@ -10,7 +10,10 @@ import stat
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSAO_PROMPTS = '1.4.1'
+VERSAO_PROMPTS = '1.5.0'
+# prompts/MESA.md: the Mesa's own instruction (T3). Each round chooses it by its frozen manifest
+# (scripts/instrucoes_mesa.py); the chat agent keeps FLUXO_COMPLETO.md, assembled from PARTES only.
+VERSAO_MESA = '1.0.0'
 PARTES = (
     '00_REGRAS.md', '01_DESCREVER_CORPUS.md', '02_PLANEJAR.md',
     '03_BUSCAR_E_CRUZAR.md', '04_REVISAR_SUPORTE.md',
@@ -187,6 +190,8 @@ def fluxo_esperado(root: Path = ROOT) -> bytes:
 
 
 def manifesto_prompts(root: Path = ROOT) -> dict:
+    mesa = root / 'prompts' / 'MESA.md'
+    extra = {'mesa': {'arquivo': 'prompts/MESA.md', 'versao': VERSAO_MESA, 'sha256': sha256(mesa)}} if mesa.is_file() else {}
     return {
         'versao': VERSAO_PROMPTS,
         'modulos': [
@@ -197,6 +202,7 @@ def manifesto_prompts(root: Path = ROOT) -> dict:
             'arquivo': 'prompts/FLUXO_COMPLETO.md',
             'sha256': hashlib.sha256(fluxo_esperado(root)).hexdigest(),
         },
+        **extra,
     }
 
 
@@ -206,6 +212,9 @@ def conferir_prompts(root: Path = ROOT):
         raise ValueError('Fluxo completo ausente ou divergente dos modulos')
     if ler_json(root / 'prompts' / 'manifesto_prompts.json') != manifesto_prompts(root):
         raise ValueError('Manifesto de prompts desatualizado')
+    if (root / 'prompts' / 'MESA.md').is_file():
+        from instrucoes_mesa import blocos_mesa
+        blocos_mesa((root / 'prompts' / 'MESA.md').read_bytes().decode('utf-8-sig'))
 
 
 def conferir_projeto(root: Path = ROOT) -> dict:

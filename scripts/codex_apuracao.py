@@ -27,6 +27,7 @@ import tetos_extracao
 from indice_sqlite import _entradas, construir_snapshot, cobertura, ler_passagem, pesquisar
 from nova_rodada import _criar_rodada, preparar_pasta_rodada
 from fluxo_codex import Fluxo, ETAPAS
+import instrucoes_mesa
 import lixeira
 import revisao_humana
 import continuidade
@@ -963,14 +964,23 @@ class Conversas:
             meta['uso_tokens'] = {}
             meta['modelos_informados'] = []
             ctx['pipeline'] = Fluxo(self.root, run, meta, ctx['references'], continuidade=evolution)
+            meta['instrucoes'] = instrucoes_mesa.publico(ctx['pipeline'].instrucoes)
             ctx['tool_lock'] = threading.RLock()
             meta['fluxo_automatico'] = 2
         self._save(identifier)
         return run
 
     def _instructions(self, identifier, run):
+        """The system instruction of this round: prompts/MESA.md (mode 'mesa') or, for rounds frozen before the
+        1.5.0 prompts, AGENTS.md + FLUXO_COMPLETO.md + README.md and the transport adaptation (legacy)."""
         meta = self.contexts[identifier]['meta']
         frozen = run / 'entradas'
+        rodada = json.dumps({'caso': meta['caso'], 'rodada': meta['rodada'], 'geracao': 'v1',
+                             'corpus_id': meta['corpus_id'], 'configuracao': ler_json(frozen / 'configuracao.json')},
+                            ensure_ascii=False)
+        instrucoes = instrucoes_mesa.modo_da_rodada(run)
+        if instrucoes['modo'] == 'mesa':
+            return instrucoes['blocos']['sistema'] + '\n\n' + rodada
         return '\n\n'.join([
             (frozen / 'AGENTS.md').read_text(encoding='utf-8-sig'),
             (frozen / 'prompts/FLUXO_COMPLETO.md').read_text(encoding='utf-8-sig'),
@@ -999,8 +1009,7 @@ class Conversas:
             'Execute o fluxo também em complementos curtos. Não pule etapas nem produza somente uma resposta. '
             'Depois da entrega aceita encerre o turno; a próxima etapa será automática. '
             'Toda mensagem anterior à verificação final é uma atualização provisória.',
-            json.dumps({'caso': meta['caso'], 'rodada': meta['rodada'], 'geracao': 'v1',
-                        'corpus_id': meta['corpus_id'], 'configuracao': ler_json(frozen / 'configuracao.json')}, ensure_ascii=False)])
+            rodada])
 
     def _registrar_causa(self, ctx, codigo, detalhe=None):
         """Remember the first failure cause of this execution; _finish turns it into the situacao."""
@@ -1034,7 +1043,8 @@ class Conversas:
                 return
             ctx['meta']['estado'] = 'executando'
             self._save(identifier)
-            self._event(identifier, 'escopo', {k: ctx['meta'][k] for k in ('caso', 'rodada', 'corpus_id', 'modelo')})
+            self._event(identifier, 'escopo', {**{k: ctx['meta'][k] for k in ('caso', 'rodada', 'corpus_id', 'modelo')},
+                                               'instrucoes': ctx['meta'].get('instrucoes')})
             self._execute_stages(identifier, question, rpc)
         except trava_cadastro.TravaInterrompida as exc:
             # Cancelled, or the Mesa is shutting down, while waiting to freeze: nothing was frozen.
@@ -1474,6 +1484,7 @@ class Conversas:
             ctx['observacoes_humanas'] = self._recibo(run, 'observacoes_humanas_recebidas.json',
                 ('rodada_destino', 'conversa', 'recebidas_em_utc')) if meta.get('observacoes_humanas') else None
             pipeline = Fluxo(self.root, run, meta, references, continuidade=evolution)
+            meta['instrucoes'] = instrucoes_mesa.publico(pipeline.instrucoes)
             pipeline.restaurar()
             ctx['pipeline'] = pipeline
             ctx['run'] = run

@@ -1,5 +1,5 @@
 {
-  "versao": "1.4.1",
+  "versao": "1.5.0",
   "modulos": [
     {
       "arquivo": "prompts/00_REGRAS.md",
@@ -32,6 +32,11 @@
   ],
   "fluxo_completo": {
     "arquivo": "prompts/FLUXO_COMPLETO.md",
-    "sha256": "249a86d9cf52c326ef257caf238122cedd1286b41196cd7e969d4389711dea85"
+    "sha256": "97106de7a69b55ef58279ea564c6401e08be440546627c1fc6d0dda52ec67a3d"
+  },
+  "mesa": {
+    "arquivo": "prompts/MESA.md",
+    "versao": "1.0.0",
+    "sha256": "58737061ecb787f66d39d432e8a30d94e02189199411099347155dcc0d9d3b7f"
   }
 }
