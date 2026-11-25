@@ -140,6 +140,66 @@ class NumeroSempreTemAchadoTest(unittest.TestCase):
                                pergunta='O que diz o contrato 041/2025?'), [])
 
 
+def com_pendencia():
+    """dados() mais A003, uma pendência sem evidência (não leva a marca [A003@v1])."""
+    d = dados()
+    d['achados'].append({'id': 'A003', 'subquestao': '...', 'versoes': [{
+        'versao': 1, 'redacao': 'Pagamento de R$ 3 milhões ao fornecedor, sem comprovante no corpus.',
+        'natureza': 'pendencia', 'limitacoes': '...'}]})
+    return d
+
+
+class PendenciaPorExtensoTest(unittest.TestCase):
+    """R1 da Coruja à bc55751: a pendência, citada pelo ID com versão por extenso, cobre o número que ela registra."""
+
+    def recusas(self, texto):
+        return [r['tipo'] for r in cb.conferir(texto, com_pendencia(), REFS)['recusas']]
+
+    def test_pendencia_por_extenso_cobre_o_numero(self):
+        self.assertEqual(self.recusas('## Lacunas e diligências\n- Pagamento de R$ 3 milhões sem comprovante '
+                                      '(A003 v1, pendência).\n'), [])
+        self.assertEqual(self.recusas('O pagamento de R$ 3 milhões segue sem comprovante (A003, v1).'), [])
+
+    def test_numero_que_a_pendencia_nao_registra_continua_recusado(self):
+        self.assertEqual(self.recusas('O pagamento de R$ 4 milhões segue sem comprovante (A003 v1, pendência).'),
+                         ['numero_fora_do_achado'])
+        # ID por extenso de achado que não existe não cobre nada.
+        self.assertEqual(self.recusas('O pagamento de R$ 3 milhões segue sem comprovante (A009 v1).'),
+                         ['afirmacao_sem_achado'])
+
+
+class CabecalhoDaRodadaTest(unittest.TestCase):
+    """N2: o cabeçalho cita os metadados da própria rodada, conferidos contra o registro dela."""
+    METADADOS = ['alpha', 'R001', 'alpha_v3', 'r3_sintese', '25/11/2026']
+
+    def recusas(self, texto):
+        return [r['tipo'] for r in cb.conferir(texto, dados(), REFS, '', self.METADADOS)['recusas']]
+
+    def test_data_da_rodada_no_cabecalho_passa(self):
+        self.assertEqual(self.recusas('Rodada R001, de 25/11/2026, corpus alpha_v3.\n\n## Resposta direta\n\n'
+                                      '[A002@v1] O contrato vale R$ 8.750.000,00. [fonte:R2]'), [])
+        self.assertEqual(self.recusas('Rodada R001 (25 de novembro de 2026), revisão r3_sintese.'), [])
+
+    def test_outra_data_no_cabecalho_ou_a_data_da_rodada_fora_dele_e_recusada(self):
+        self.assertEqual(self.recusas('Rodada R001, de 24/11/2026.'), ['afirmacao_sem_achado'])
+        self.assertEqual(self.recusas('## Resposta direta\n\nO pagamento foi feito em 25/11/2026.'),
+                         ['afirmacao_sem_achado'])
+
+    def test_o_fluxo_le_os_metadados_do_registro_da_rodada(self):
+        import tempfile
+        from comum import escrever_json
+        from fluxo_codex import Fluxo
+        with tempfile.TemporaryDirectory() as pasta:
+            run = Path(pasta)
+            (run / 'saidas').mkdir()
+            escrever_json(run / 'registro.json', {'criada_em_utc': '2026-11-26T01:30:00+00:00'})
+            fluxo = Fluxo(run, run, {'caso': 'alpha', 'rodada': 'R001', 'corpus_id': 'alpha_v3'}, {},
+                          instrucoes={'modo': 'legado', 'versao_prompts': '1.5.0'})
+            metadados = fluxo._metadados_da_rodada()
+        # 01:30 UTC de 26/11 ainda é 25/11 em Brasília: as duas datas valem.
+        self.assertEqual(set(metadados), {'alpha', 'R001', 'alpha_v3', 'r3_sintese', '26/11/2026', '25/11/2026'})
+
+
 class EscopoDaConferenciaTest(unittest.TestCase):
     """R3 (decisão do Maestro): vale para rodadas congeladas em 1.5.0 ou depois; a legada segue sem ela."""
 
