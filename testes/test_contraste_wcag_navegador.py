@@ -188,5 +188,54 @@ class FaixaTest(unittest.TestCase):
             pw.stop()
 
 
+PAGINA_CORTES = """<!doctype html><meta charset="utf-8"><style>
+body{margin:0;background:#ffffff;font:16px Arial}
+#faixa{position:absolute;left:20px;top:20px;width:300px;overflow-x:auto;white-space:nowrap}
+.vao{display:inline-block;width:330px}
+#longe{position:absolute;left:900px;top:100px;pointer-events:none;color:#000000}
+#campo{background:#ffffff;color:#000000;border:1px solid #000000}
+</style>
+<div id="faixa"><span class="vao"></span><input id="campo" value="Campo cortado pela faixa" size="20"></div>
+<p id="longe">Texto fora da janela e fora da pilha</p>
+"""
+
+
+class CortesTest(unittest.TestCase):
+    """M1 e M2 da Coruja: nenhuma das duas formas de ficar cortado vira texto que some ou 'não medido' à toa."""
+
+    @classmethod
+    def setUpClass(cls):
+        if SEM_PLAYWRIGHT:
+            indisponivel(SEM_PLAYWRIGHT)
+        try:
+            cls.pw = sync_playwright().start()
+            cls.navegador = cls.pw.chromium.launch(args=['--force-color-profile=srgb', '--disable-gpu'])
+        except Exception as exc:   # noqa: BLE001 - Chromium ausente
+            indisponivel(f'Chromium indisponível: {str(exc)[:120]}')
+        pagina = cls.navegador.new_page(viewport={'width': 600, 'height': 300})
+        pagina.set_content(PAGINA_CORTES)
+        pagina.evaluate(cw.JS_PREPARO)
+        cls.texto = pagina.evaluate(cw.JS_TEXTO, cw.EXCECOES_CAMPO)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.navegador.close()
+        cls.pw.stop()
+
+    def test_texto_fora_da_janela_e_sem_pilha_e_medido_e_nao_vira_nao_medido(self):
+        longe = [i for i in self.texto['itens'] if i['t'].startswith('Texto fora da janela')]
+        self.assertEqual(len(longe), 1, self.texto)
+        self.assertEqual(longe[0]['bg'], '#ffffff')
+        self.assertFalse(cw.reprovado(longe[0]))
+        self.assertFalse([d for d in self.texto['nao_medidos_detalhe'] if d['t'].startswith('Texto fora')] if 'nao_medidos_detalhe' in self.texto else [])
+
+    def test_campo_cortado_pela_faixa_e_medido_ou_contado(self):
+        campo = [i for i in self.texto['itens'] if i['cat'] == 'campo-texto']
+        contado = self.texto['por_motivo'].get('fora da área visível', 0)
+        self.assertTrue(campo or contado, 'o campo sumiu sem ser medido nem contado')
+        self.assertEqual(len(campo), 1, self.texto)   # a rolagem o traz à vista: é medido, não só contado
+        self.assertFalse(cw.reprovado(campo[0]))
+
+
 if __name__ == '__main__':
     unittest.main()

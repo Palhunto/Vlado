@@ -218,6 +218,7 @@ JS_TEXTO = r"""(excecoes = {}) => {
     if (alfa < 0.02) return motivo('texto transparente', e, txt);
     let x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
     if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) {
+      rolados.add(e);   // uma rolagem só por elemento, nos dois ramos: sem isto o texto fora da janela e fora da pilha do ponto gastava as duas e virava 'não medido'
       e.scrollIntoView({block: 'center', inline: 'center', behavior: 'instant'});
       return null;   // o chamador refaz a medida com o retângulo novo
     }
@@ -278,10 +279,16 @@ JS_TEXTO = r"""(excecoes = {}) => {
     const tipoBotao = e.tagName === 'INPUT' && ['button', 'submit'].includes((e.type || '').toLowerCase());
     let rotulo = e.tagName === 'SELECT' ? (e.selectedOptions[0] ? e.selectedOptions[0].text : '') : (e.value || '');
     nos++;
-    if (rotulo) medir(e, rect, rotulo, tipoBotao ? 'texto' : 'campo-texto');
+    // medir() devolve null quando rolou o campo à vista e pede a medida de novo: refaz uma vez e, se ainda não deu, conta o motivo (o campo não some sem registro).
+    const medirCampo = (txt, categoria, forcarCor) => {
+      let r = medir(e, rect, txt, categoria, forcarCor);
+      if (r === null) { rect = e.getBoundingClientRect(); r = medir(e, rect, txt, categoria, forcarCor); if (r === null) motivo('fora da área visível', e, txt); }
+      return r;
+    };
+    if (rotulo) medirCampo(rotulo, tipoBotao ? 'texto' : 'campo-texto');
     else if (e.placeholder) {
       const ph = getComputedStyle(e, '::placeholder');
-      medir(e, rect, e.placeholder, 'placeholder', ph.color);
+      medirCampo(e.placeholder, 'placeholder', ph.color);
     }
     if (tipoBotao) continue;
     // Contorno do campo (WCAG 1.4.11): a borda ou o fundo do campo contra o que o cerca.

@@ -136,8 +136,8 @@ class FundoTest(unittest.TestCase):
 
 
 class PilulasTest(unittest.TestCase):
-    def pilula(self, largura, cliente=288, rola=True):
-        return {'nome': '#caderno-abas', 'cliente': cliente, 'rola': rola, 'largura': largura, 'texto': 'Trechos com fonte e contribuições'}
+    def pilula(self, largura, cliente=288, rola=True, data_rola='fim'):
+        return {'nome': '#caderno-abas', 'cliente': cliente, 'rola': rola, 'dataRola': data_rola, 'largura': largura, 'texto': 'Trechos com fonte e contribuições'}
 
     def test_pilula_que_cabe_com_a_folga_passa(self):
         self.assertEqual(faixa.julgar_pilulas('x', [self.pilula(200.0)]), [])
@@ -148,6 +148,13 @@ class PilulasTest(unittest.TestCase):
         self.assertEqual(len(reprovacoes), 1)
         self.assertIn('Trechos com fonte e contribuições', reprovacoes[0])
         self.assertIn('cabem 256', reprovacoes[0])
+
+    def test_com_o_esmaecido_dos_dois_lados_a_folga_e_de_64(self):
+        self.assertEqual(faixa.julgar_pilulas('x', [self.pilula(224.0, data_rola='ambos')]), [])   # exatamente faixa menos 64
+        reprovacoes = faixa.julgar_pilulas('x', [self.pilula(225.0, data_rola='ambos')])
+        self.assertEqual(len(reprovacoes), 1)
+        self.assertIn('cabem 224', reprovacoes[0])
+        self.assertEqual(faixa.julgar_pilulas('x', [self.pilula(256.0, data_rola='inicio')]), [])   # de um lado só, 32
 
     def test_faixa_que_nao_rola_nao_tem_esmaecido_e_so_exige_caber(self):
         self.assertEqual(faixa.julgar_pilulas('x', [self.pilula(267.8, rola=False)]), [])
