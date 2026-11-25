@@ -20,9 +20,11 @@ class JulgarTest(unittest.TestCase):
 
     def test_ativo_cortado_na_direita_reprova(self):
         reprovacoes, _ = self.julgar(medida(ativo={'texto': '4 Caderno', 'esq': 250, 'dir': 380}))
-        self.assertEqual(len(reprovacoes), 1)
+        # cortado e, de quebra, dentro do esmaecido da direita: as duas mensagens são verdadeiras
+        self.assertEqual(len(reprovacoes), 2)
         self.assertIn('4 Caderno', reprovacoes[0])
         self.assertIn('não cabe inteiro', reprovacoes[0])
+        self.assertIn('esmaecido', reprovacoes[1])
 
     def test_ativo_dentro_da_faixa_mas_fora_da_janela_reprova(self):
         reprovacoes, _ = self.julgar(medida(faixaDir=420, scrollWidth=900, clientWidth=404, ativo={'texto': 'Mapa', 'esq': 300, 'dir': 340}, janela=320))
@@ -33,7 +35,28 @@ class JulgarTest(unittest.TestCase):
         self.assertTrue(any('Hipóteses' in r for r in reprovacoes))
 
     def test_item_com_tolerancia_de_subpixel_passa(self):
-        self.assertEqual(self.julgar(medida(ativo={'texto': 'x', 'esq': 15.7, 'dir': 304.4}))[0], [])
+        self.assertEqual(self.julgar(medida(ativo={'texto': 'x', 'esq': 15.7, 'dir': 200}))[0], [])
+
+    def test_ativo_no_esmaecido_da_borda_reprova(self):
+        # data-rola=ambos: os 32 px de cada ponta da faixa (16–304) esmaecem. A folga de 16 px da Q5 deixa o ativo dentro do esmaecido.
+        no_inicio = medida(scrollLeft=100, dataRola='ambos', ativo={'texto': 'Mapa de relações', 'esq': 32, 'dir': 180})
+        reprovacoes, _ = self.julgar(no_inicio)
+        self.assertEqual(len(reprovacoes), 1)
+        self.assertIn('esmaecido de 32 px da borda esquerda', reprovacoes[0])
+        no_fim = medida(ativo={'texto': 'Conferência do texto', 'esq': 100, 'dir': 288})   # fim: o esmaecido é só na direita
+        self.assertIn('borda direita', self.julgar(no_fim)[0][0])
+
+    def test_ativo_fora_do_esmaecido_passa_e_so_vale_do_lado_que_esmaece(self):
+        self.assertEqual(self.julgar(medida(scrollLeft=100, dataRola='ambos', ativo={'texto': 'x', 'esq': 52, 'dir': 200}))[0], [])
+        # data-rola=fim: o início não esmaece, o ativo pode encostar nele
+        self.assertEqual(self.julgar(medida(ativo={'texto': 'x', 'esq': 16, 'dir': 120}))[0], [])
+        # data-rola=inicio: só a ponta esquerda esmaece, o ativo pode encostar na direita
+        self.assertEqual(self.julgar(medida(scrollLeft=312, dataRola='inicio', ativo={'texto': 'x', 'esq': 120, 'dir': 304}))[0], [])
+
+    def test_o_esmaecido_vem_do_espaco_8_da_pagina(self):
+        reprovacoes, _ = self.julgar(medida(esmaecido=48, ativo={'texto': 'x', 'esq': 100, 'dir': 270}))
+        self.assertTrue(any('esmaecido de 48 px' in r for r in reprovacoes))
+
 
     def test_data_rola_precisa_bater_com_a_posicao(self):
         self.assertEqual(faixa.lado_esperado(medida(scrollLeft=0)), 'fim')
@@ -74,6 +97,42 @@ class JulgarTest(unittest.TestCase):
         resumo = faixa.resumo_interno([medida(), quieto, faixa_quieta])
         self.assertEqual([r['nome'] for r in resumo], ['#mesa-etapas', '.quadros-abas'])
         self.assertEqual(set(resumo[0]), {'nome', 'tipo', 'scrollWidth', 'clientWidth'})
+
+
+class FundoTest(unittest.TestCase):
+    """O que o portão de contraste enxerga: o pixel das pontas da pílula ativa."""
+
+    def imagem(self, cor_da_esquerda=(30, 77, 62), cor_da_direita=(30, 77, 62)):
+        from PIL import Image
+        imagem = Image.new('RGB', (320, 100), (255, 254, 250))
+        for x in range(60, 150):
+            for y in range(20, 64):
+                imagem.putpixel((x, y), cor_da_esquerda if x < 105 else cor_da_direita)
+        return imagem
+
+    def medida(self):
+        return medida(ativo={'texto': 'Mapa', 'esq': 60, 'dir': 150, 'cima': 20, 'baixo': 64}, fundoAtivo='rgb(30, 77, 62)')
+
+    def test_fundo_inteiro_passa(self):
+        self.assertEqual(faixa.julgar_fundo('quadros__320__claro__troca5', [self.medida()], self.imagem()), [])
+
+    def test_ponta_misturada_com_a_pagina_reprova(self):
+        reprovacoes = faixa.julgar_fundo('quadros__320__claro__troca5', [self.medida()], self.imagem(cor_da_esquerda=(104, 136, 125)))
+        self.assertEqual(len(reprovacoes), 1)
+        self.assertIn('esquerda', reprovacoes[0])
+        self.assertIn('(104, 136, 125)', reprovacoes[0])
+
+    def test_fundo_transparente_ou_ponta_fora_da_faixa_nao_se_mede(self):
+        transparente = {**self.medida(), 'fundoAtivo': 'rgba(0, 0, 0, 0)'}
+        self.assertEqual(faixa.julgar_fundo('x', [transparente], self.imagem(cor_da_esquerda=(1, 2, 3))), [])
+        fora = {**self.medida(), 'faixaEsq': 100}   # a ponta esquerda (66) fica fora da faixa
+        self.assertEqual(faixa.julgar_fundo('x', [fora], self.imagem(cor_da_esquerda=(1, 2, 3))), [])
+
+    def test_cor_do_css(self):
+        self.assertEqual(faixa.cor_do_css('rgb(30, 77, 62)'), (30, 77, 62))
+        self.assertEqual(faixa.cor_do_css('rgba(30, 77, 62, 1)'), (30, 77, 62))
+        self.assertIsNone(faixa.cor_do_css('rgba(30, 77, 62, 0.5)'))
+        self.assertIsNone(faixa.cor_do_css('transparent'))
 
 
 class PilulasTest(unittest.TestCase):

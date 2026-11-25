@@ -57,8 +57,9 @@ JS_ROLAGEM_INTERNA = """([seletorFaixa, seletorTabela, seletorAtivo]) => {
       nome: nome(e), tipo: faixa ? 'faixa' : tabela ? 'tabela' : 'outro',
       scrollWidth: e.scrollWidth, clientWidth: e.clientWidth, scrollLeft: Math.round(e.scrollLeft * 10) / 10,
       dataRola: e.getAttribute('data-rola'), mascara: mascara !== 'none',
+      esmaecido: parseFloat(s.getPropertyValue('--espaco-8')) || 32, fundoAtivo: ativo ? getComputedStyle(ativo).backgroundColor : null,
       faixaEsq: r.left, faixaDir: r.right, janela: innerWidth,
-      ativo: a ? {texto: (ativo.textContent || '').trim().slice(0, 40), esq: a.left, dir: a.right} : null,
+      ativo: a ? {texto: (ativo.textContent || '').trim().slice(0, 40), esq: a.left, dir: a.right, cima: a.top, baixo: a.bottom} : null,
     });
   }
   return saida;
@@ -101,9 +102,46 @@ def julgar(nome: str, medidas: list) -> tuple[list, list]:
                                    f"{m['scrollWidth']} de {m['clientWidth']} px)")
             elif esperado and not m['mascara']:
                 reprovacoes.append(f"{onde}: data-rola={esperado!r} sem mask-image (o esmaecido da borda não aparece)")
+            elif ativo is not None and esperado:
+                # O esmaecido é máscara sobre a faixa inteira: o que cai nos primeiros ou últimos `esmaecido` px perde o fundo (e o texto, sobre a página, perde o contraste).
+                fade = m.get('esmaecido', 32)
+                na_esquerda = esperado in ('inicio', 'ambos') and ativo['esq'] < m['faixaEsq'] + fade - TOLERANCIA
+                na_direita = esperado in ('fim', 'ambos') and ativo['dir'] > m['faixaDir'] - fade + TOLERANCIA
+                if na_esquerda or na_direita:
+                    lado = 'esquerda' if na_esquerda else 'direita'
+                    reprovacoes.append(f"{onde}: o item ativo {ativo['texto']!r} cai no esmaecido de {fade:g} px da borda {lado} da faixa (item {ativo['esq']:.1f}–{ativo['dir']:.1f}, "
+                                       f"faixa {m['faixaEsq']:.1f}–{m['faixaDir']:.1f}): a máscara apaga o fundo da pílula")
         elif m['tipo'] == 'outro' and rola:
             avisos.append(f"{onde}: rola por dentro ({m['scrollWidth']} de {m['clientWidth']} px) e não é faixa nem tabela")
     return reprovacoes, avisos
+
+
+def cor_do_css(texto):
+    """(r, g, b) de 'rgb(…)' ou 'rgba(…)' opaco; None para transparente ou formato desconhecido."""
+    import re
+    achado = re.fullmatch(r'rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)', (texto or '').strip())
+    if not achado or (achado.group(4) is not None and float(achado.group(4)) < 1):
+        return None
+    return tuple(int(achado.group(i)) for i in (1, 2, 3))
+
+
+def julgar_fundo(nome: str, medidas: list, imagem, margem: int = 6, tolerancia: int = 3) -> list:
+    """O que o contraste enxerga: o pixel a `margem` px de cada ponta da pílula ativa, na altura do meio, tem de ser o fundo da pílula. Se a máscara do
+    esmaecido cobre a ponta, o pixel sai misturado com a página (o texto claro cai sobre fundo claro e o portão de contraste mede 1,0:1)."""
+    reprovacoes = []
+    for m in medidas:
+        ativo, cor = m.get('ativo'), cor_do_css(m.get('fundoAtivo'))
+        if ativo is None or cor is None or 'cima' not in ativo:
+            continue
+        y = int((ativo['cima'] + ativo['baixo']) / 2)
+        for lado, x in (('esquerda', ativo['esq'] + margem), ('direita', ativo['dir'] - margem)):
+            x = int(x)
+            if not (m['faixaEsq'] <= x <= m['faixaDir']) or not (0 <= x < imagem.width and 0 <= y < imagem.height):
+                continue   # a ponta fica fora da faixa: já é reprovação de `julgar`
+            pixel = imagem.getpixel((x, y))[:3]
+            if max(abs(a - b) for a, b in zip(pixel, cor)) > tolerancia:
+                reprovacoes.append(f"{nome}: {m['nome']}: o pixel da ponta {lado} do ativo {ativo['texto']!r} é {pixel}, não o fundo {cor} da pílula (a máscara cobre a ponta)")
+    return reprovacoes
 
 
 def resumo_interno(medidas: list) -> list:
@@ -217,6 +255,8 @@ def julgar_pilulas(nome: str, medidas: list) -> list:
 
 def troca(args, selecao) -> int:
     """Q5d: o ativo agora é trazido no quadro seguinte. Em cada faixa de abas que rola, clica em cada item e, dois quadros depois, o ativo tem de caber inteiro."""
+    import io
+    from PIL import Image
     from playwright.sync_api import sync_playwright
     import regressao_visual as rv
     telas, cenarios, temas = selecao
@@ -248,8 +288,10 @@ def troca(args, selecao) -> int:
                                 pagina.evaluate(JS_DOIS_QUADROS)
                                 cliques += 1
                                 nome = f'{tela}__{cenario}__{tema}__troca{n + 1}'
-                                rep, _ = julgar(nome, medir(pagina))
+                                medidas = medir(pagina)
+                                rep, _ = julgar(nome, medidas)
                                 reprovacoes += rep
+                                reprovacoes += julgar_fundo(nome, medidas, Image.open(io.BytesIO(pagina.screenshot())).convert('RGB'))
                         pagina.close()
                     contexto.close()
         finally:
