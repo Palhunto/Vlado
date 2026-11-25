@@ -3,7 +3,7 @@
   "modulos": [
     {
       "arquivo": "prompts/00_REGRAS.md",
-      "sha256": "0d91db3585f9a219af7574d75e90296c654f73ca24b78244dcd94e6ce0d5b420"
+      "sha256": "8582bc96bd75673d5fd22bac913110bb91a4fbef934ca0fc7a14a005c6421f5a"
     },
     {
       "arquivo": "prompts/01_DESCREVER_CORPUS.md",
@@ -23,16 +23,16 @@
     },
     {
       "arquivo": "prompts/05_SINTETIZAR.md",
-      "sha256": "6387ae818bb70040ff91180c151509eaff68043eeb632cb4dba6947df37d3210"
+      "sha256": "0893a37350ff0bffbaca9cf82e54850e65c93127692eae518c7832e91d4c2a31"
     },
     {
       "arquivo": "prompts/06_INCORPORAR_REVISAO_HUMANA.md",
-      "sha256": "b8c1f53a6d7a5bcd55b783e104c66ee520a41ac991ce2b7e85571e214cc2e5c1"
+      "sha256": "2bb5a5bd9a9d2f25e20abb23c8c1c00e9ebe4ad2ad96c9c0b1ac68ab274b7eba"
     }
   ],
   "fluxo_completo": {
     "arquivo": "prompts/FLUXO_COMPLETO.md",
-    "sha256": "97106de7a69b55ef58279ea564c6401e08be440546627c1fc6d0dda52ec67a3d"
+    "sha256": "8c37986fdfabb61ef6340a8e30defc77c78eb28575cd716486d601f0837709b3"
   },
   "mesa": {
     "arquivo": "prompts/MESA.md",
