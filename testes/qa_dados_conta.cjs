@@ -72,7 +72,7 @@ async function abrirExcluir(page) {
     assert.equal(conteudo.formato, 'vlado-meus-dados'); assert.equal(conteudo.versao, 1);
     assert.ok(!JSON.stringify(conteudo).includes(args.senha), 'a senha não está no arquivo');
     await page.waitForFunction(() => /Arquivo baixado\./.test(document.querySelector('.conta-estado')?.textContent || ''), null, {timeout: 15000});
-    assert.equal(await texto(page, '.conta-estado'), '✓ Arquivo baixado. Ainda não traz: notas, revisões e conversas que você criou; acessos do registro de auditoria.');
+    assert.equal(await texto(page, '.conta-estado'), '✓ Arquivo baixado. Ainda não traz: conversas criadas antes de 22 de nov. de 2026.');
     resultado.exportado = {nome: arquivo.suggestedFilename(), incompleto: conteudo.incompleto};
 
     // excluir: a senha errada fica no campo da senha; o nome certo e a senha certa saem da Mesa
