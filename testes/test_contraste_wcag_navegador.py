@@ -146,5 +146,47 @@ class NavegadorTest(unittest.TestCase):
         self.assertEqual(self.problemas, [])
 
 
+PAGINA_FAIXA = """<!doctype html><meta charset="utf-8"><style>
+body{margin:0;background:#ffffff;font:16px Arial}
+#faixa{position:absolute;left:20px;top:20px;width:300px;overflow-x:auto;white-space:nowrap}
+.pilula{display:inline-block;margin:0 16px 0 0;padding:8px 16px;background:#1e4d3e;color:#ffffff}
+.vao{display:inline-block;width:250px}
+</style>
+<div id="faixa"><span class="pilula">Hipóteses</span><span class="vao"></span><span class="pilula" id="mapa">Mapa de relações</span></div>
+"""
+
+
+class FaixaTest(unittest.TestCase):
+    """Texto dentro da janela mas cortado pelo overflow da faixa que rola: o medidor mede a pílula, não o fundo da página (Q5, Mapa a 375 px)."""
+
+    def test_item_cortado_pela_faixa_e_medido_sobre_o_proprio_fundo(self):
+        if SEM_PLAYWRIGHT:
+            indisponivel(SEM_PLAYWRIGHT)
+        try:
+            pw = sync_playwright().start()
+            navegador = pw.chromium.launch(args=['--force-color-profile=srgb', '--disable-gpu'])
+        except Exception as exc:   # noqa: BLE001 - Chromium ausente
+            indisponivel(f'Chromium indisponível: {str(exc)[:120]}')
+        try:
+            pagina = navegador.new_page(viewport={'width': 600, 'height': 300})
+            pagina.set_content(PAGINA_FAIXA)
+            # a segunda pílula fica além da borda direita da faixa (20..320) mas dentro da janela de 600 px
+            fora = pagina.evaluate("(() => { const r = document.getElementById('mapa').getBoundingClientRect(); return [r.left + r.width / 2, document.getElementById('faixa').getBoundingClientRect().right]; })()")
+            self.assertGreater(fora[0], fora[1], 'o caso de teste precisa começar com o centro do texto fora da faixa')
+            self.assertLess(fora[0], 600)
+            pagina.evaluate(cw.JS_PREPARO)
+            texto = pagina.evaluate(cw.JS_TEXTO, cw.EXCECOES_CAMPO)
+            mapa = [i for i in texto['itens'] if i['t'].startswith('Mapa')]
+            self.assertEqual(len(mapa), 1, texto)
+            self.assertEqual(mapa[0]['bg'], '#1e4d3e')
+            self.assertEqual(mapa[0]['fg'], '#ffffff')
+            self.assertFalse(cw.reprovado(mapa[0]))
+            self.assertGreater(mapa[0]['r'], 9)
+            self.assertFalse(texto['nao_medidos'], texto['nao_medidos'])
+        finally:
+            navegador.close()
+            pw.stop()
+
+
 if __name__ == '__main__':
     unittest.main()

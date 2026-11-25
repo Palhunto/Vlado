@@ -200,6 +200,7 @@ EXPLICACAO_EXCECAO = {'P34': 'Seletor de apuração do topo (select#contexto-cas
 JS_TEXTO = r"""(excecoes = {}) => {
   const vc = window.__vc, itens = [], naoMedidos = [], porMotivo = {};
   let isentos = 0, nos = 0;
+  const rolados = new Set();
   const motivo = (m, e, t) => { porMotivo[m] = (porMotivo[m] || 0) + 1; if (naoMedidos.length < 400) naoMedidos.push({motivo: m, s: vc.desc(e), t: (t || '').slice(0, 50)}); };
   const SALTAR = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'OPTION', 'OPTGROUP', 'TEXTAREA', 'TITLE', 'HEAD']);
   const desativado = (e) => !!e.closest(':disabled, [aria-disabled="true"]');
@@ -219,6 +220,13 @@ JS_TEXTO = r"""(excecoes = {}) => {
     if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) {
       e.scrollIntoView({block: 'center', inline: 'center', behavior: 'instant'});
       return null;   // o chamador refaz a medida com o retângulo novo
+    }
+    // Dentro da janela, mas cortado pelo overflow de um ancestral (a faixa que rola, Q5): o elemento não está na pilha do ponto e o que se mediria
+    // seria o fundo do ancestral que cobre o corte (a página), não o do próprio elemento. Rola o elemento à vista uma vez e refaz a medida.
+    if (!svg && !rolados.has(e) && !document.elementsFromPoint(x, y).includes(e)) {
+      rolados.add(e);
+      e.scrollIntoView({block: 'center', inline: 'center', behavior: 'instant'});
+      return null;
     }
     const f = vc.fundoNoPonto(x, y, e, true);
     if (f.coberto) return motivo('coberto por outro elemento', e, txt);
