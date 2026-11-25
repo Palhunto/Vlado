@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import html
 from http.cookies import SimpleCookie
+import importlib
 import ipaddress
 import json
 import os
 import secrets
+import sys
 
 import acesso
 import autorizacao
@@ -137,8 +139,8 @@ def conta_propria(root, operation, data, principal, ip=None, origem=None, marca=
         raise ValueError('Contas só existem nos modos com login.')
     if operation == 'conta-ver':
         return {**acesso.ver_conta(root, conta, termos), 'sessao': atual}
-    if operation == 'conta-exportar':  # the own data, as a file (contract, 8.4; 4b-2)
-        dados = acesso.exportar_conta(root, conta)
+    if operation == 'conta-exportar':  # the own data, as a file (contract, 8.4; 4b-2 and 4b-2b)
+        dados = {**acesso.exportar_conta(root, conta), **partes_de_outros_donos(root, conta)}
         return Arquivo(f'vlado-meus-dados-{dados["gerado_em"][:10]}.json',
                        json.dumps(dados, ensure_ascii=False, indent=2).encode('utf-8'))
     if operation == 'conta-excluir':  # the own account, for good (contract, 8.4; 4b-3): the handler clears the cookies
@@ -164,6 +166,112 @@ def conta_propria(root, operation, data, principal, ip=None, origem=None, marca=
         return {'encerradas': acesso.encerrar_outras_sessoes(root, conta, atual),
                 'sessoes': acesso.sessoes_da_conta(root, conta, atual)}
     return {'sessoes': acesso.sessoes_da_conta(root, conta, atual)}
+
+
+# The parts of the export that other owners' files give (contract, 4b-2b). Each module that records who created
+# something answers `itens_da_conta(root, conta, casos)` with `[{tipo, caso, criado_em, id}]`; the audit log answers
+# `registro_acesso.acessos_da_conta(root, conta)`. A part that is missing (its function does not exist yet) or cannot
+# be read leaves its code in `incompleto`, and the rest of the file still leaves.
+MODULOS_DE_ITENS = ('apuracao', 'caderno', 'revisao_humana', 'conferencia_redacao', 'codex_apuracao', 'diligencias',
+                    'evidencias')
+_CAMPOS_DO_ITEM = ('tipo', 'caso', 'criado_em', 'id')
+MAX_ITENS_CRIADOS = 20000
+
+
+def _parte_falhou(parte: str, exc: BaseException) -> None:
+    """A part of another owner failed: the server's log says which and the kind of error, never its text (it may
+    carry a path or a value of a case); the person only sees the part's code in `incompleto` (B1 of the review)."""
+    print(f'Exportação de dados: a parte {parte} falhou ({type(exc).__name__}); ela sai como incompleta.',
+          file=sys.stderr, flush=True)
+
+
+def _funcao(modulo: str, nome: str):
+    try:
+        return getattr(importlib.import_module(modulo), nome, None)
+    except Exception as exc:  # noqa: BLE001 - a module that does not load is a missing part, never a failed export
+        _parte_falhou(modulo, exc)
+        return None
+
+
+def _itens_criados(root, conta) -> tuple[list | None, bool]:
+    """(items, whole): what the person created in the cases of the own newsroom, from each module apart. A module
+    whose function is missing, that fails in any way, or that sends an item out of shape or of another newsroom
+    (counted and logged), leaves the list not whole, and the others still come in;
+    the items are None only when no module answered. Each item is checked here too: the four fields only, as short
+    text, and a case of the own newsroom."""
+    casos = acesso.casos_da_redacao_da_conta(root, conta)
+    permitidos, itens, respondeu, inteira = set(casos), [], False, True
+    for nome in MODULOS_DE_ITENS:
+        ler = _funcao(nome, 'itens_da_conta')
+        if ler is None:
+            inteira = False
+            continue
+        try:
+            lidos = ler(root, conta, list(casos))
+            if not isinstance(lidos, list):
+                raise TypeError('itens_da_conta não devolveu uma lista')
+        except Exception as exc:  # noqa: BLE001 - one module's fault never takes the whole file down (B1)
+            _parte_falhou(f'itens_criados ({nome})', exc)
+            inteira = False
+            continue
+        respondeu, descartados = True, 0
+        for item in lidos:
+            if (isinstance(item, dict) and all(isinstance(item.get(c), str) and 0 < len(item[c]) <= 200 for c in _CAMPOS_DO_ITEM)
+                    and item['caso'] in permitidos):
+                itens.append({c: item[c] for c in _CAMPOS_DO_ITEM})
+            else:
+                descartados += 1
+        if descartados:  # R3 of the review: an item left out is never silent, and the file never says it is whole
+            print(f'Exportação de dados: {descartados} item(ns) de {nome} fora da forma ou da redação ficaram de fora;'
+                  ' a parte sai como incompleta.', file=sys.stderr, flush=True)
+            inteira = False
+    itens.sort(key=lambda item: (item['criado_em'], item['tipo'], item['id']))
+    return (itens[-MAX_ITENS_CRIADOS:] if respondeu else None), inteira
+
+
+def _acessos(root, conta) -> list | None:
+    ler = getattr(registro_acesso, 'acessos_da_conta', None)
+    if ler is None:
+        return None
+    try:
+        lidos = ler(root, conta)
+        if not isinstance(lidos, list):
+            raise TypeError('acessos_da_conta não devolveu uma lista')
+        return lidos
+    except Exception as exc:  # noqa: BLE001 - see `_itens_criados`
+        _parte_falhou('registro_de_acesso', exc)
+        return None
+
+
+def _conversas_desde(root, conta) -> tuple[bool, str | None]:
+    """(whole, since): whether every conversation of the newsroom's cases records who created it. Conversations
+    record `criada_por` only from the version that brought it; `codex_apuracao.conversas_sem_criador(root, casos)`
+    gives the creation time of the newest one without it (None: there is none). The list of conversations is whole
+    from that moment on. Without the function, or when it fails: not whole, since unknown."""
+    ler = _funcao('codex_apuracao', 'conversas_sem_criador')
+    if ler is None:
+        return False, None
+    try:
+        desde = ler(root, acesso.casos_da_redacao_da_conta(root, conta))
+    except Exception as exc:  # noqa: BLE001 - see `_itens_criados`
+        _parte_falhou('conversas_anteriores', exc)
+        return False, None
+    if desde is None:
+        return True, None
+    return False, desde if isinstance(desde, str) and 0 < len(desde) <= 40 else None
+
+
+def partes_de_outros_donos(root, conta) -> dict:
+    """`itens_criados` and `acessos` of the export, each one a list or None, `conversas_desde`, and `incompleto` with
+    the codes of what the file does not carry: `itens_criados` and `registro_de_acesso` (the whole part), and
+    `conversas_anteriores` (the items are in, but the conversations before `conversas_desde`, or of a time not known
+    when it is None, are not). Empty when the file is whole."""
+    (itens, itens_inteiros), acessos, inteiras, desde = _itens_criados(root, conta), _acessos(root, conta), True, None
+    if itens_inteiros:  # the conversations only matter once every module answered: otherwise `itens_criados` says it
+        inteiras, desde = _conversas_desde(root, conta)
+    incompleto = [codigo for codigo, falta in (('itens_criados', not itens_inteiros), ('conversas_anteriores', not inteiras),
+                                               ('registro_de_acesso', acessos is None)) if falta]
+    return {'itens_criados': itens, 'acessos': acessos, 'conversas_desde': desde, 'incompleto': incompleto}
 
 
 class RotasContas:
