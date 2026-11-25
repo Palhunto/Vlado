@@ -219,7 +219,8 @@ class QuadrosPelaMesa:
 
     def abrir_original(self, ref, trecho):
         """Segue o vínculo até o arquivo: a Mesa entrega o PDF íntegro e a página do localizador traz o trecho."""
-        evidencia = self.da_mesa(ref['revisao'], ref['evidencia_id'])['evidencia']
+        aberta = self.da_mesa(ref['revisao'], ref['evidencia_id'])
+        evidencia = aberta['evidencia']
         status, conteudo = self.chamar('achados-original', {'caso': CASO, 'rodada': self.rodada,
                                        'revisao': ref['revisao'], 'evidencia_id': ref['evidencia_id']}, True)
         self.assertEqual(status, 200)
@@ -228,7 +229,15 @@ class QuadrosPelaMesa:
         pagina = evidencia['localizador']['pagina_pdf']
         leitor = PdfReader(io.BytesIO(conteudo))
         self.assertTrue(1 <= pagina <= len(leitor.pages), (pagina, len(leitor.pages)))
-        self.assertIn(trecho.split(':')[0], leitor.pages[pagina - 1].extract_text())
+        # A página física, não o rótulo: o trecho inteiro está no texto da página que o localizador aponta.
+        texto_da_pagina = ' '.join(leitor.pages[pagina - 1].extract_text().split())
+        self.assertIn(' '.join(trecho.split()), texto_da_pagina)
+        # E a linha do localizador, na cópia textual conferida por hash (a que a Mesa mostra em `contexto`),
+        # é exatamente esse trecho: linha, página e arquivo dizem a mesma coisa.
+        contexto = {c['linha']: c['texto'] for c in aberta['contexto']}
+        inicio, fim = evidencia['localizador']['linha_inicio'], evidencia['localizador']['linha_fim']
+        self.assertEqual(' '.join(' '.join(contexto[n] for n in range(inicio, fim + 1)).split()),
+                         ' '.join(trecho.split()))
         return evidencia
 
     def test_uma_evidencia_publicada_chega_aos_quatro_quadros_e_ao_original(self):
@@ -272,14 +281,40 @@ class QuadrosPelaMesa:
             self.assertEqual(evidencia['trecho'], trecho)
             self.assertEqual(evidencia['documento_id'], 'D001')
 
-    def test_identidade_adulterada_ou_revisao_inexistente_e_recusada(self):
+    def tentativas_de_gravar(self, ref):
+        """Um pedido de criação por quadro, todos com a mesma referência (a adulterada)."""
+        data = {'tipo': 'fato', 'valor': '2025-03-03', 'aproximada': False, 'fonte': 0, 'observacao': ''}
+        colunas = [{'id': 'valor', 'nome': 'Valor global', 'tipo': 'monetario', 'moeda': 'BRL'}]
+        linhas = [{'celulas': {'valor': {'valor': '8750000.00', 'fonte': 0}}}]
+        vinculos = [self.vinculo(ref)]
+        return {
+            'hipoteses-criar': self.base(enunciado='Hipótese com referência adulterada.', evidencias=vinculos),
+            'linha-tempo-criar': self.base(descricao='Acontecimento com referência adulterada.',
+                                           evidencias=vinculos, datas=[data]),
+            'mapa-entidade-criar': self.base(tipo='organizacao', nome='Entidade com referência adulterada',
+                                             evidencias=vinculos),
+            'tabelas-criar': self.base(titulo='Tabela com referência adulterada', colunas=colunas,
+                                       linhas=linhas, evidencias=vinculos)}
+
+    def estado_dos_quadros(self):
+        """Tudo o que os quatro quadros guardam do caso, lido pelas rotas da Mesa."""
+        return {operacao: self.ok(operacao, {'caso': CASO}) for operacao in
+                ('hipoteses-listar', 'linha-tempo-listar', 'mapa-ver', 'tabelas-listar')}
+
+    def test_identidade_adulterada_ou_revisao_inexistente_e_recusada_em_cada_quadro(self):
+        """Independe dos outros testes: compara o estado dos quadros antes e depois, não com 'vazio'."""
         ref = self.ref(self.revisao, 'E001')
+        antes = self.estado_dos_quadros()
         for campo, valor in (('registros_sha256', '0' * 64), ('revisao', 'r9_inexistente')):
-            status, corpo = self.chamar('hipoteses-criar', self.base(
-                enunciado='Hipótese com referência adulterada.', evidencias=[self.vinculo({**ref, campo: valor})]))
-            self.assertEqual(status, 400, (campo, corpo))
-            self.assertNotIn(str(self.root), json.dumps(corpo))
-        self.assertEqual(self.ok('hipoteses-listar', {'caso': CASO})['hipoteses'], [])
+            for operacao, pedido in self.tentativas_de_gravar({**ref, campo: valor}).items():
+                status, corpo = self.chamar(operacao, pedido)
+                self.assertEqual(status, 400, (operacao, campo, corpo))
+                self.assertTrue(corpo.get('erro'), (operacao, campo, corpo))
+                self.assertNotIn(str(self.root), json.dumps(corpo))
+        self.assertEqual(self.estado_dos_quadros(), antes)
+        # Com a referência íntegra o mesmo pedido grava: a recusa acima foi da adulteração, não do pedido.
+        for operacao, pedido in self.tentativas_de_gravar(ref).items():
+            self.ok(operacao, pedido)
 
 
 class MesaInteiraTest(Mesa, QuadrosPelaMesa, unittest.TestCase):
