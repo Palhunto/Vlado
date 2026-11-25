@@ -26,13 +26,16 @@ import executar_suite
 TESTES = Path(__file__).resolve().parent
 # Sinais de que o módulo dirige um navegador: roteiro Node, Playwright do Node ou do Python.
 SINAIS = re.compile(r"qa_\w+\.cjs|['\"]\.ferramentas['\"]|sync_playwright|from playwright|import playwright")
-EXIGENCIA = ('requer_navegador_node', 'VLADO_EXIGIR_PLAYWRIGHT')
-# Pulo condicional que testa o navegador sem a exigência do CI.
-PULO_SOLTO = re.compile(r"skipUnless\([^\n]*(node|playwright|chromium|ferramentas)", re.I)
+# A exigência tem de ser real: o decorador aplicado, ou a leitura da variável no código (não um comentário que a cite).
+DECORADOR = re.compile(r"^\s*@requer_navegador_node\b", re.M)
+LEITURA = re.compile(r"os\.environ\.get\(\s*['\"]VLADO_EXIGIR_PLAYWRIGHT['\"]")
+# Pulo condicional que testa o navegador sem a exigência do CI (na mesma linha: skipUnless, skipIf ou skipTest).
+PULO_SOLTO = re.compile(r"skip(?:Unless|If|Test)\([^\n]*(node|playwright|chromium|ferramentas)", re.I)
 
 
 def modulos_de_navegador():
-    for caminho in sorted(TESTES.glob('test_*.py')):
+    # `test*.py` é o padrão da descoberta do unittest: um `teste_x.py` também é descoberto e não pode escapar.
+    for caminho in sorted(TESTES.glob('test*.py')):
         if caminho.name == Path(__file__).name:
             continue
         texto = caminho.read_text(encoding='utf-8')
@@ -44,13 +47,39 @@ class RegraNoCodigoTest(unittest.TestCase):
     def test_todo_modulo_de_navegador_exige_o_navegador_no_ci(self):
         modulos = list(modulos_de_navegador())
         self.assertGreaterEqual(len(modulos), 8, 'a busca não achou os módulos de navegador conhecidos')
-        sem_exigencia = [nome for nome, texto in modulos if not any(marca in texto for marca in EXIGENCIA)]
+        sem_exigencia = [nome for nome, texto in modulos if not (DECORADOR.search(texto) or LEITURA.search(texto))]
         self.assertEqual(sem_exigencia, [], 'módulo que abre um navegador sem exigir o Playwright no CI: '
                          'use @requer_navegador_node (testes/auxiliar_node.py)')
 
     def test_nenhum_pulo_solto_de_node_ou_navegador(self):
-        soltos = [nome for nome, texto in modulos_de_navegador() if PULO_SOLTO.search(texto)]
+        # Quem lê a variável decide sozinho quando pular (portão de contraste); quem só põe o decorador não pula por fora.
+        soltos = [nome for nome, texto in modulos_de_navegador()
+                  if PULO_SOLTO.search(texto) and not LEITURA.search(texto)]
         self.assertEqual(soltos, [], 'use @requer_navegador_node em vez de skipUnless de Node/Playwright')
+
+
+class PadroesDaRegraTest(unittest.TestCase):
+    """A marca e o pulo da regra pegam o que devem e só isso."""
+
+    def test_a_exigencia_e_o_decorador_ou_a_leitura_real_da_variavel(self):
+        def vale(texto):
+            return bool(DECORADOR.search(texto) or LEITURA.search(texto))
+        self.assertTrue(vale('@requer_navegador_node\nclass A: pass'))
+        self.assertTrue(vale("EXIGIR = os.environ.get('VLADO_EXIGIR_PLAYWRIGHT') == '1'"))
+        # Citar a variável ou o decorador num comentário, num texto ou numa linha de código qualquer não vale.
+        self.assertFalse(vale('# usa VLADO_EXIGIR_PLAYWRIGHT no CI'))
+        self.assertFalse(vale('# @requer_navegador_node\nclass A: pass'))
+        self.assertFalse(vale('"""Com VLADO_EXIGIR_PLAYWRIGHT=1 falha."""'))
+        self.assertFalse(vale('x = requer_navegador_node_antigo'))
+
+    def test_o_pulo_solto_pega_skipunless_skipif_e_skiptest(self):
+        for linha in ("@unittest.skipUnless(shutil.which('node'), 'sem node')",
+                      "@unittest.skipIf(not PLAYWRIGHT.is_dir(), 'sem playwright')",
+                      "            self.skipTest('Chromium não instalado')",
+                      "        self.skipTest('sem Node')"):
+            self.assertTrue(PULO_SOLTO.search(linha), linha)
+        for linha in ("self.skipTest('sem linha de base')", "@unittest.skipUnless(find_spec('pypdf'), 'extrator')"):
+            self.assertFalse(PULO_SOLTO.search(linha), linha)
 
 
 class DecoradorTest(unittest.TestCase):

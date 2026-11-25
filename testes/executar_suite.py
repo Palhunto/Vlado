@@ -29,7 +29,7 @@ def modulos_lentos():
 
 
 def modulos():
-    return sorted(p.stem for p in TESTES.glob('test_*.py'))
+    return sorted(p.stem for p in TESTES.glob('test*.py'))  # o padrão da descoberta do unittest
 
 
 def folhas(suite):
