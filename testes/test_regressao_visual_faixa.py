@@ -136,18 +136,22 @@ class FundoTest(unittest.TestCase):
 
 
 class PilulasTest(unittest.TestCase):
-    def pilula(self, largura, cliente=288):
-        return {'nome': '#caderno-abas', 'cliente': cliente, 'rola': False, 'largura': largura, 'texto': 'Trechos com fonte e contribuições'}
+    def pilula(self, largura, cliente=288, rola=True):
+        return {'nome': '#caderno-abas', 'cliente': cliente, 'rola': rola, 'largura': largura, 'texto': 'Trechos com fonte e contribuições'}
 
     def test_pilula_que_cabe_com_a_folga_passa(self):
-        self.assertEqual(faixa.julgar_pilulas('caderno__320__claro', [self.pilula(267.8)]), [])
-        self.assertEqual(faixa.julgar_pilulas('x', [self.pilula(272.0)]), [])   # exatamente faixa menos folga
+        self.assertEqual(faixa.julgar_pilulas('x', [self.pilula(200.0)]), [])
+        self.assertEqual(faixa.julgar_pilulas('x', [self.pilula(256.0)]), [])   # exatamente faixa menos o esmaecido (32 px)
 
-    def test_pilula_mais_larga_que_a_faixa_menos_a_folga_reprova(self):
-        reprovacoes = faixa.julgar_pilulas('caderno__320__claro', [self.pilula(273.0)])
+    def test_pilula_mais_larga_que_a_faixa_menos_o_esmaecido_reprova_na_faixa_que_rola(self):
+        reprovacoes = faixa.julgar_pilulas('caderno__320__claro', [self.pilula(267.8)])   # coube na folga antiga de 16 px (272), não cabe fora do esmaecido
         self.assertEqual(len(reprovacoes), 1)
         self.assertIn('Trechos com fonte e contribuições', reprovacoes[0])
-        self.assertIn('cabem 272', reprovacoes[0])
+        self.assertIn('cabem 256', reprovacoes[0])
+
+    def test_faixa_que_nao_rola_nao_tem_esmaecido_e_so_exige_caber(self):
+        self.assertEqual(faixa.julgar_pilulas('x', [self.pilula(267.8, rola=False)]), [])
+        self.assertEqual(len(faixa.julgar_pilulas('x', [self.pilula(289.0, rola=False)])), 1)
 
 
 class ComparacaoTest(unittest.TestCase):

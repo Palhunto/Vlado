@@ -238,19 +238,25 @@ JS_DOIS_QUADROS = "new Promise(ok => requestAnimationFrame(() => requestAnimatio
 SELETOR_FAIXAS_DE_ABA = '.quadros-abas,.mesa-tabs,.notebook-tabs'
 
 
-# A pílula mais larga de cada faixa de abas visível (rola ou não): se for mais larga que a faixa menos a folga de --espaco-4 (16 px), o ativo não cabe inteiro nem rolando.
+# A pílula mais larga de cada faixa de abas visível (rola ou não): se a faixa rola e a pílula é mais larga que a faixa menos a folga (o esmaecido, --espaco-8, 32 px), o ativo não fica fora da máscara nem rolando.
 JS_PILULA_MAIS_LONGA = """(seletor) => [...document.querySelectorAll(seletor)].filter(f => f.getBoundingClientRect().width > 0).map(f => {
   const itens = [...f.querySelectorAll('button,[role=tab]')].filter(i => i.getBoundingClientRect().width > 0);
   const maior = itens.reduce((m, i) => i.getBoundingClientRect().width > m.largura ? {largura: i.getBoundingClientRect().width, texto: (i.textContent || '').trim()} : m, {largura: 0, texto: ''});
   return {nome: f.id ? '#' + f.id : f.tagName.toLowerCase() + '.' + [...f.classList].join('.'), cliente: f.clientWidth, rola: f.scrollWidth - f.clientWidth > 1, ...maior};
 })"""
-FOLGA_DA_FAIXA = 16
+FOLGA_DA_FAIXA = 32   # = o esmaecido (--espaco-8) que Q5 põe por mask-image nas pontas da faixa que rola
 
 
 def julgar_pilulas(nome: str, medidas: list) -> list:
-    """Reprova a faixa cuja pílula mais larga passa da largura da faixa menos a folga: nela o ativo ficaria cortado mesmo com a rolagem certa."""
-    return [f"{nome}: {m['nome']}: a pílula {m['texto']!r} tem {m['largura']:.1f} px e a faixa só {m['cliente']} px (com a folga de {FOLGA_DA_FAIXA} px, cabem {m['cliente'] - FOLGA_DA_FAIXA})"
-            for m in medidas if m['largura'] > m['cliente'] - FOLGA_DA_FAIXA]
+    """Reprova a faixa cuja pílula mais larga passa da largura da faixa menos a folga: nela o ativo ficaria cortado ou sob o esmaecido mesmo com a rolagem certa.
+    A folga é o esmaecido, que só existe na faixa que rola; a que não rola (sem máscara) só exige que a pílula caiba na faixa."""
+    reprovacoes = []
+    for m in medidas:
+        folga = FOLGA_DA_FAIXA if m['rola'] else 0
+        if m['largura'] > m['cliente'] - folga:
+            reprovacoes.append(f"{nome}: {m['nome']}: a pílula {m['texto']!r} tem {m['largura']:.1f} px e a faixa só {m['cliente']} px "
+                               f"(com a folga de {folga} px, cabem {m['cliente'] - folga})")
+    return reprovacoes
 
 
 def troca(args, selecao) -> int:

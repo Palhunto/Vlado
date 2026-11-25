@@ -34,8 +34,9 @@ from indice_achados import construir
 from registros_achados import publicar
 
 CASO_A, CASO_B = 'epsilon', 'zetazeta'
-# Arquivos que uma leitura acrescenta por conta própria (log de consulta do índice, quadros derivados, travas): não são gravação do pedido.
-TRANSITORIOS = ('consultas_sqlite', 'quadros', '.lock')
+# Arquivos que uma leitura acrescenta por conta própria (log de consulta do índice, travas): não são gravação do pedido. `quadros` NÃO entra aqui:
+# é em casos/<caso>/quadros/<nome> (evidencias.py) que hipóteses, linha do tempo, mapa e tabelas gravam, e filtrá-la deixava o teste cego a elas.
+TRANSITORIOS = ('consultas_sqlite', '.lock')
 
 
 def semear(root, caso, titulo_extra, pasta):
@@ -141,8 +142,11 @@ class EscritasCruzadasTest(cenario.DuasRedacoes):
 
     def gravada(self, operacao, corpo):
         """O corpo válido, com a referência de Alfa: grava (200). Sem isto a recusa abaixo poderia ser só um corpo mal formado."""
+        antes = self.de_alfa()
         status, dados, bruto = self.post('dono', operacao, corpo)
         self.assertEqual(status, 200, f'{operacao}: o corpo de controle não é válido: {bruto[:300]!r}')
+        # A gravação aparece no que o teste vigia: se não mudasse de_alfa, "nada muda em Alfa" nas recusas não provaria nada para esta operação.
+        self.assertNotEqual(self.de_alfa(), antes, f'{operacao}: a escrita de controle não mudou nenhum arquivo lido por de_alfa()')
         self.sem_sentinela(bruto, operacao)
         return dados
 
