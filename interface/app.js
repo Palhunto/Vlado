@@ -918,7 +918,7 @@ function pretty(value) {
   return ({declaracao_documental:'declaração documental',alegacao_atribuida:'alegação atribuída',
     inferencia:'inferência',pendencia:'pendência',nao_revisado:'não revisado',nao_sustentado:'não sustentado',
     ilegivel:'ilegível',nao_realizada:'não realizada',contradicao:'contradição',substituido:'substituído',
-    incluido:'incluído',confirmacao:'confirmação',correcao:'correção'})[value] || value.replaceAll('_', ' ');
+    incluido:'incluído',confirmacao:'confirmação',correcao:'correção',fora_do_briefing:'Fora do briefing (sustentado)'})[value] || value.replaceAll('_', ' ');
 }
 // "Label: value · data": the label and the value are interface words; record text keeps its language.
 function labelled(label, value, data, className = 'small') {
@@ -1180,7 +1180,8 @@ function renderFinding(item, scope, version, allowBriefing = true) {
   card.append(labelled('Pergunta relacionada:', '', item.subquestao), labelled('Destino editorial:', pretty(item.destino)),
     labelled('Verificação externa:', pretty(item.verificacao_externa.estado), item.verificacao_externa.limitacao));
   if (item.briefing) {
-    card.append(element('p', 'Incluído no briefing.', 'small'));
+    card.append(element('p', item.destino === 'fora_do_briefing'
+      ? 'Sustentado, fora do texto do briefing; consta na lista de outros achados sustentados.' : 'Incluído no briefing.', 'small'));
     const artifact = findingResult?.artefatos.find(a => a.arquivo === item.briefing);
     if (artifact && allowBriefing) {
       const view = element('button','Ver briefing e referências','secondary'); view.type = 'button';
