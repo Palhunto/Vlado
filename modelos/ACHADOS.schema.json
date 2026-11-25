@@ -376,6 +376,7 @@
             "type": "string",
             "enum": [
               "incluido",
+              "fora_do_briefing",
               "pendencia",
               "retirado",
               "substituido"

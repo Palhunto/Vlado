@@ -8,7 +8,8 @@ import re
 
 from comum import dentro, escrever_json, ler_json, sha256
 from cadastrar_documentos import _atomico, _bytes
-from registros_achados import publicar, carregar, validar
+from registros_achados import (publicar, carregar, validar, COM_BRIEFING, TITULOS_FORA_DO_BRIEFING,
+                               citado_na_lista, secao_fora_do_briefing)
 import indice_achados
 import continuidade as evolucao
 
@@ -330,28 +331,47 @@ class Fluxo:
         if not set(citations) <= self.references.keys():
             raise ValueError('Síntese contém referência sem leitura registrada nesta rodada.')
         event = self.provenance('sintese')
-        included = any(d.get('destino') == 'incluido' for d in decisions)
+        # 'fora_do_briefing' (P48): supported, but listed after the main text instead of cited in it.
+        included = any(d.get('destino') in COM_BRIEFING for d in decisions)
+        lista = secao_fora_do_briefing(content)[1]
+        listed_citations = set(re.findall(r'\[fonte:([^\]\n]+)\]', lista or ''))
         artifact = self.add_artifact(data, 'briefing', 'briefing' if included else 'insuficiencia', content, event)
         for decision in decisions:
             claim = claims[decision['achado_id']]
             version = claim['versoes'][-1]['versao']
             kind = decision.get('destino')
-            if kind not in ('incluido', 'pendencia', 'retirado'):
+            if kind not in ('incluido', 'fora_do_briefing', 'pendencia', 'retirado'):
                 raise ValueError('Destino inválido.')
             entries = [(i + 1, r) for i, r in enumerate(data['revisoes_assistidas'])
                        if (r['achado_id'], r['versao']) == (claim['id'], version)]
             support = entries[-1] if entries else None
-            if kind == 'incluido':
+            if kind in COM_BRIEFING:
                 if not support or support[1]['suporte'] != 'sustentado':
-                    raise ValueError('A síntese só pode incluir a redação com última revisão sustentado.')
+                    raise ValueError('A síntese só pode incluir a redação com última revisão sustentado'
+                                     + (' (também na lista fora do briefing).' if kind != 'incluido' else '.'))
                 supported = {self.evidence_refs[v['evidencia_id']] for v in data['vinculos']
                     if (v['achado_id'], v['versao'], v['papel']) == (claim['id'], version, 'suporte')}
-                if not supported.intersection(citations):
+                if kind == 'incluido' and not supported.intersection(citations):
                     raise ValueError('Incluído sem citação de sua evidência de suporte na síntese.')
+                if kind == 'fora_do_briefing':
+                    name = f'{claim["id"]} v{version}'
+                    if f'[{claim["id"]}@v{version}]' in content:
+                        raise ValueError(f'{name} está fora do briefing: liste-o sem a marca [{claim["id"]}@v{version}], '
+                                         'que é só dos incluídos no texto principal.')
+                    if lista is None:
+                        raise ValueError(f'{name} está fora do briefing: depois do texto principal, abra a seção '
+                                         f'"{TITULOS_FORA_DO_BRIEFING[0]}" ("{TITULOS_FORA_DO_BRIEFING[1]}" em inglês) '
+                                         'numa linha própria e liste o achado nela.')
+                    if not citado_na_lista(lista, claim['id'], version):
+                        raise ValueError(f'{name} está fora do briefing, mas não aparece como "{name}" na seção '
+                                         f'"{TITULOS_FORA_DO_BRIEFING[0]}".')
+                    if not supported.intersection(listed_citations):
+                        raise ValueError(f'{name} está fora do briefing sem a citação [fonte:...] da sua evidência '
+                                         f'de suporte na seção "{TITULOS_FORA_DO_BRIEFING[0]}".')
             data['destinos'].append({'achado_id': claim['id'], 'versao': version,
                 'destino': kind, 'motivo': texto(decision.get('motivo'), 'Motivo do destino'),
-                'briefing': artifact['arquivo'] if kind == 'incluido' else None,
-                'revisao_suporte': support[0] if kind == 'incluido' else None})
+                'briefing': artifact['arquivo'] if kind in COM_BRIEFING else None,
+                'revisao_suporte': support[0] if kind in COM_BRIEFING else None})
         if not included and not re.search(r'insufici|não (?:foi|há|foram)|sem (?:suporte|evidência|achados)', content, re.I):
             raise ValueError('Sem achados incluídos, declare explicitamente a insuficiência do suporte.')
         data['procedencia'].append(event)

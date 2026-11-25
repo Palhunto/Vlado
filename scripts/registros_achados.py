@@ -18,7 +18,29 @@ RAIZ_MODELOS = (Path(sys._MEIPASS) / 'modelo_dados' if hasattr(sys, '_MEIPASS')
 SCHEMA = RAIZ_MODELOS / 'modelos/ACHADOS.schema.json'
 NATUREZAS = ('declaracao_documental', 'alegacao_atribuida', 'inferencia', 'pendencia')
 SUPORTES = ('nao_revisado', 'sustentado', 'parcial', 'nao_sustentado', 'ilegivel')
-DESTINOS = ('incluido', 'pendencia', 'retirado', 'substituido')
+DESTINOS = ('incluido', 'fora_do_briefing', 'pendencia', 'retirado', 'substituido')
+# Destinations that need a supported wording and the briefing artifact: 'incluido' is cited in the main text
+# with [A001@v1]; 'fora_do_briefing' (P48) is a supported finding that did not fit the main text and is listed,
+# without that marker, after one of TITULOS_FORA_DO_BRIEFING.
+COM_BRIEFING = ('incluido', 'fora_do_briefing')
+TITULOS_FORA_DO_BRIEFING = ('Outros achados sustentados', 'Other supported findings')
+_TITULO_FORA = re.compile(r'^[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*|__)?[ \t]*(?:'
+                          + '|'.join(re.escape(t) for t in TITULOS_FORA_DO_BRIEFING)
+                          + r')[ \t]*(?:\*\*|__)?[ \t]*:?[ \t]*(?:\*\*|__)?[ \t]*$', re.I | re.M)
+
+
+def secao_fora_do_briefing(texto):
+    """(texto principal, lista) of a briefing: the list starts at the first line that is only the title of
+    'Outros achados sustentados' (or its English title), as a heading, bold or plain; None when absent."""
+    found = _TITULO_FORA.search(texto)
+    if not found:
+        return texto, None
+    return texto[:found.start()], texto[found.end():]
+
+
+def citado_na_lista(lista, achado_id, versao):
+    """The list names the finding by ID and version written out (A008 v1), never by the inclusion marker."""
+    return bool(lista) and re.search(r'(?<![\w@\[])' + re.escape(achado_id) + r'[ \t]+v' + str(versao) + r'(?!\d)', lista) is not None
 
 
 def validar_esquema(value, schema=None, at='$'):
@@ -261,21 +283,24 @@ def validar(root, caso, rodada, data, anterior=None):
         key = (decision['achado_id'], decision['versao'])
         if key not in versions:
             raise ValueError('Destino editorial órfão.')
-        if decision['destino'] == 'incluido':
+        if decision['destino'] in COM_BRIEFING:
             artifact = artifacts.get(decision['briefing'])
             ordinal = decision['revisao_suporte']
             support = data['revisoes_assistidas'][ordinal-1] if type(ordinal) is int and 1 <= ordinal <= len(data['revisoes_assistidas']) else {}
             if (not artifact or artifact['tipo'] != 'briefing' or support.get('suporte') != 'sustentado'
                     or (support.get('achado_id'), support.get('versao')) != key):
                 raise ValueError('Inclusão exige redação sustentada e briefing identificado.')
-            marker = f'[{key[0]}@v{key[1]}]'
-            if marker not in dentro(run, decision['briefing']).read_text(encoding='utf-8-sig'):
-                raise ValueError('ID/versão ausente do briefing.')
+            content = dentro(run, decision['briefing']).read_text(encoding='utf-8-sig')
+            if decision['destino'] == 'incluido':
+                if f'[{key[0]}@v{key[1]}]' not in content:
+                    raise ValueError('ID/versão ausente do briefing.')
+            elif not citado_na_lista(secao_fora_do_briefing(content)[1], *key):
+                raise ValueError('Achado fora do briefing ausente da lista "Outros achados sustentados" do briefing.')
         elif decision['briefing'] is not None or decision['revisao_suporte'] is not None:
             raise ValueError('Destino sem inclusão não recebe briefing/revisão de suporte.')
         decisions[key] = decision
     for key, decision in decisions.items():
-        if decision['destino'] == 'incluido' and reviewed.get(key, {}).get('suporte') != 'sustentado':
+        if decision['destino'] in COM_BRIEFING and reviewed.get(key, {}).get('suporte') != 'sustentado':
             raise ValueError('Suporte mudou: acrescentar retirada/substituição do destino antes de publicar.')
     for artifact in artifacts.values():
         content = dentro(run, artifact['arquivo']).read_text(encoding='utf-8-sig')
