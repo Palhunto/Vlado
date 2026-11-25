@@ -20,3 +20,5 @@ test_fila_portao
 test_portao_contraste
 # O medidor reprova de verdade? (página sintética de razões conhecidas, no navegador). Pula sem Playwright; com VLADO_EXIGIR_PLAYWRIGHT=1 falha.
 test_contraste_wcag_navegador
+# Caminho inteiro da Mesa ao quadro (Onda 4, passo 0a): duas Mesas reais em porta local, provedor simulado, sem rede; cerca de 60 s.
+test_mesa_ao_quadro
