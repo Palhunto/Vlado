@@ -30,7 +30,7 @@ test('código conhecido aparece em inglês, com os parâmetros', async () => {
 
 test('falha do provedor (ia_*) e a trava do original também têm texto em inglês', async () => {
   assert.equal((await falha('en', {erro: 'A conversa excedeu a janela de contexto do modelo. Abra uma nova conversa.', codigo: 'ia_contexto'})).message,
-    "The conversation went past the model's context window. Open a new conversation.");
+    "The conversation went past the model’s context window. Open a new conversation.");
   const trava = await falha('en', {erro: 'Para marcar “Conferida no original”, abra antes o original de cada trecho citado (faltam: E001, E002).',
     codigo: 'conferencia_sem_original', faltam: ['E001', 'E002']});
   assert.equal(trava.message, 'To mark “Checked against the original”, first open the original of each cited excerpt (missing: E001, E002).');
@@ -58,4 +58,13 @@ test('o dicionário cobre todos os códigos de scripts/erros.py e as falhas do p
   const ausentes = [...codigos, ...ia, 'json_invalido', 'conflito'].filter(c => !erros[c]);
   assert.ok(codigos.length > 30, 'lista de códigos lida de erros.py');
   assert.deepEqual(ausentes, []);
+});
+
+test('limite_de_exportacoes (429 de conta-exportar) aparece em inglês, com o texto da tela do servidor como original', async () => {
+  const corpo = {estado: 'bloqueado', erro: 'Você já exportou os seus dados 5 vezes na última hora. Tente de novo em até uma hora.', codigo: 'limite_de_exportacoes'};
+  const erro = await falha('en', corpo, 429);
+  assert.equal(erro.message, 'You have already exported your data 5 times in the last hour. Try again within an hour.');
+  assert.deepEqual(erro.result, corpo);
+  const pt = await falha('pt', corpo, 429);
+  assert.equal(pt.message, corpo.erro, 'em português vale o texto do servidor');
 });

@@ -36,6 +36,7 @@ AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(AQUI))
 import regressao_visual as rv  # noqa: E402
 import regressao_visual_comparador as comparador  # noqa: E402
+import regressao_visual_faixa as faixa  # noqa: E402
 
 CENARIOS = {
     'paisagem': {'viewport': {'width': 812, 'height': 375}, 'escala': 1},
@@ -43,6 +44,8 @@ CENARIOS = {
     'zoom200': {'viewport': {'width': 640, 'height': 450}, 'escala': 2},
     'reflow320': {'viewport': {'width': 320, 'height': 640}, 'escala': 1},
 }
+# Os cenários da prova da faixa que rola (regressao_visual_faixa.py) também podem ser capturados por aqui; `430` é o mesmo dos dois.
+TODOS_OS_CENARIOS = {**CENARIOS, **faixa.CENARIOS_FAIXA}
 TELAS = tuple(rv.TELAS) + tuple(rv.VARIANTES) + (rv.TELA_ENTRAR,)
 
 
@@ -63,6 +66,7 @@ def capturar(servidores, saida: Path, telas, cenarios, temas, aviso=print) -> di
     from playwright.sync_api import Error as ErroPlaywright, sync_playwright
     saida.mkdir(parents=True, exist_ok=True)
     problemas, externos, rolagem, avisos_navegador = [], [], {}, {}
+    interna, avisos_interna = {}, {}
     metadados = {'reinicios_do_navegador': 0}
     permitidos = (servidores.origem_mesa, servidores.origem_entrar)
 
@@ -108,6 +112,15 @@ def capturar(servidores, saida: Path, telas, cenarios, temas, aviso=print) -> di
             largura_da_janela = pagina.evaluate('innerWidth')
             if largura_da_pagina > largura_da_janela:
                 rolagem[nome] = {'pagina': largura_da_pagina, 'janela': largura_da_janela}
+            # Elementos que rolam por dentro (faixas, abas, tabelas): a medida da página sozinha não os vê.
+            medidas = faixa.medir(pagina)
+            reprovacoes, avisos_da_tela = faixa.julgar(nome, medidas)
+            problemas.extend(reprovacoes)
+            if avisos_da_tela:
+                avisos_interna[nome] = avisos_da_tela
+            resumo = faixa.resumo_interno(medidas)
+            if resumo:
+                interna[nome] = resumo
             png = rv.estavel(pagina)
             if png is None:
                 problemas.append(f'{nome}: não estabilizou em {rv.ESPERA_ESTAVEL_MAX} leituras (captura não determinística)')
@@ -122,7 +135,7 @@ def capturar(servidores, saida: Path, telas, cenarios, temas, aviso=print) -> di
 
     with sync_playwright() as pw:
         for cenario in cenarios:
-            config = CENARIOS[cenario]
+            config = TODOS_OS_CENARIOS[cenario]
             for tema in temas:
                 pendentes = list(telas)
                 tentativas = 0
@@ -164,6 +177,7 @@ def capturar(servidores, saida: Path, telas, cenarios, temas, aviso=print) -> di
             'playwright': getattr(playwright, '__version__', '?'), 'plataforma': rv.plataforma(),
             'relogio_fixo_utc': rv.RELOGIO.isoformat(), 'cenarios': {k: {**v['viewport'], 'escala': v['escala']} for k, v in CENARIOS.items()},
             'argumentos_chromium': rv.ARGS_CHROMIUM, 'rolagem_horizontal': dict(sorted(rolagem.items())),
+            'rolagem_interna': dict(sorted(interna.items())), 'avisos_rolagem_interna': dict(sorted(avisos_interna.items())),
             'erros_do_navegador': avisos_navegador}
 
 
@@ -214,6 +228,8 @@ def gerar(args) -> int:
             anterior = json.loads((destino / 'manifesto.json').read_text(encoding='utf-8')) if (destino / 'manifesto.json').is_file() else {}
             meta['rolagem_horizontal'] = {**{n: v for n, v in anterior.get('rolagem_horizontal', {}).items() if n not in nomes}, **meta['rolagem_horizontal']}
             meta['erros_do_navegador'] = {**{n: e for n, e in anterior.get('erros_do_navegador', {}).items() if n not in nomes}, **meta['erros_do_navegador']}
+            for chave in ('rolagem_interna', 'avisos_rolagem_interna'):
+                meta[chave] = {**{n: v for n, v in anterior.get(chave, {}).items() if n not in nomes}, **meta[chave]}
         for nome in nomes:
             rv.otimizar(bruto / f'{nome}.png', novo / f'{nome}.png')
         todas = sorted(p.stem for p in novo.glob('*.png'))
@@ -253,11 +269,15 @@ def comparar(args) -> int:
     for nome in novas:
         v = meta['rolagem_horizontal'][nome]
         print(f"  REPROVADA {nome}: rolagem horizontal nova (página com {v['pagina']} px numa janela de {v['janela']} px)")
+    novas_internas = faixa.novas_internas(manifesto, meta, nomes if parcial else None)
+    for nome, quais in novas_internas.items():
+        print(f"  REPROVADA {nome}: rolagem por dentro nova em {', '.join(quais)} (a referência não tinha)")
+    novas = sorted(set(novas) | set(novas_internas))
     for res in resultados:
         if not res.aprovado:
             extra = f' ({res.diferentes} px, {res.percentual:.4f}%)' if res.estado == 'diferente' else ''
             print(f'  REPROVADA {res.nome}: {res.estado}{extra}')
-    print(f"{r['aprovadas']}/{r['total']} capturas extras dentro da tolerância; {len(novas)} rolagem(ns) horizontal(is) nova(s). Relatório: {pagina}")
+    print(f"{r['aprovadas']}/{r['total']} capturas extras dentro da tolerância; {len(novas)} rolagem(ns) nova(s), da página ou por dentro. Relatório: {pagina}")
     return 0 if not r['reprovadas'] and not novas else 1
 
 

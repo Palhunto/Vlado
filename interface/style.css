@@ -1691,6 +1691,12 @@ body>svg:has(>defs>symbol[id^="vditor-icon-"]){position:absolute;width:0;height:
   #mesa-tema,#mesa-idioma{display:none}
 }
 .ia-config{display:grid;gap:8px;margin:14px 0;padding-top:12px;border-top:1px solid var(--line)}
+/* Configurações (P43): o painel do provedor e da chave da IA tem o título do painel (serifa), e o formulário dispensa o fio de cima. */
+#ia-painel>h2{font-size:var(--text-xl)}
+#ia-painel .ia-config{margin-top:0;padding-top:0;border-top:0}
+#ia-titulo:focus-visible{outline-offset:var(--foco-afastamento)}
+/* Em Perguntar, no lugar do formulário: o que está em uso e o caminho para mudar (14, --theme-muted). */
+.ia-resumo{margin:var(--espaco-3) 0;font-size:var(--text-sm);color:var(--theme-muted)}
 .ia-config h3{margin:0;font-size:var(--text-md)}
 /* F1: a linha do estado da chave chega depois da leitura do servidor; reservada, ela não empurra o botão Salvar para baixo quando o texto entra. */
 .ia-config #ia-chave-estado{min-height:1.65em}
@@ -2596,8 +2602,8 @@ ins.comparar-incluido,p.comparar-incluido{
    A máscara fica no elemento que rola (as faixas não têm fundo próprio; se ganharem, o fundo passa ao pai). Sem seta e sem barra à vista. */
 #mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs{scrollbar-width:none}
 #mesa-etapas::-webkit-scrollbar,.quadros-abas::-webkit-scrollbar,.mesa-tabs::-webkit-scrollbar,.notebook-tabs::-webkit-scrollbar{display:none}
-/* O encaixe das pílulas (scroll-snap) para onde a rolagem do ativo já põe o item: a folga de --espaco-4, sem briga com o scrollLeft. */
-.mesa-tabs,.notebook-tabs,.quadros-abas{scroll-padding-inline:var(--espaco-4)}
+/* O encaixe das pílulas (scroll-snap) para onde a rolagem do ativo já põe o item, sem briga com o scrollLeft: a folga é a do esmaecido (--espaco-8), para o ativo nunca ficar sob a máscara. */
+.mesa-tabs,.notebook-tabs,.quadros-abas{scroll-padding-inline:var(--espaco-8)}
 :is(#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs)[data-rola=fim]{-webkit-mask-image:linear-gradient(to right,currentColor calc(100% - var(--espaco-8)),transparent);mask-image:linear-gradient(to right,currentColor calc(100% - var(--espaco-8)),transparent)}
 :is(#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs)[data-rola=inicio]{-webkit-mask-image:linear-gradient(to right,transparent,currentColor var(--espaco-8));mask-image:linear-gradient(to right,transparent,currentColor var(--espaco-8))}
 :is(#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs)[data-rola=ambos]{-webkit-mask-image:linear-gradient(to right,transparent,currentColor var(--espaco-8),currentColor calc(100% - var(--espaco-8)),transparent);mask-image:linear-gradient(to right,transparent,currentColor var(--espaco-8),currentColor calc(100% - var(--espaco-8)),transparent)}

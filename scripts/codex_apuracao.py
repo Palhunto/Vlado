@@ -251,6 +251,87 @@ def agora():
     return datetime.now(timezone.utc).isoformat()
 
 
+# Index of the conversations by case, for the data export (R4 of the Coruja): conversas/.por_caso/<case>/<id>, an
+# empty file written when the conversation is created. The ones from before are indexed once, at the first export,
+# and the mark .completo says that is done. A mark left by a conversation deleted for good is skipped.
+INDICE_POR_CASO = '.por_caso'
+
+
+def _pasta_do_indice(root):
+    return dentro(root, f'conversas/{INDICE_POR_CASO}')
+
+
+def indexar_conversa(root, caso, identificador):
+    pasta = _pasta_do_indice(root) / caso
+    pasta.mkdir(parents=True, exist_ok=True)
+    (pasta / identificador).touch(exist_ok=True)
+
+
+def _indexar_antigas(root):
+    completo = _pasta_do_indice(root) / '.completo'
+    if completo.exists():
+        return
+    pasta = dentro(root, 'conversas')
+    for path in sorted(pasta.glob('*/conversa.json')) if pasta.is_dir() else []:
+        meta = ler_json(path)
+        if (not isinstance(meta, dict) or meta.get('id') != path.parent.name
+                or not re.fullmatch(lixeira.ID_CONVERSA, path.parent.name)
+                or not isinstance(meta.get('caso'), str) or not re.fullmatch(lixeira.ID_CASO, meta['caso'])):
+            raise ValueError('Conversa ilegível.')
+        indexar_conversa(root, meta['caso'], meta['id'])
+    completo.parent.mkdir(parents=True, exist_ok=True)
+    completo.touch(exist_ok=True)
+
+
+def _conversas_dos_casos(root, casos, removidos):
+    """The conversations of ``casos`` (outside the trash), through the index: only their files are read."""
+    _indexar_antigas(root)
+    for caso in casos:
+        pasta = _pasta_do_indice(root) / caso
+        for marca in sorted(pasta.iterdir()) if pasta.is_dir() else []:
+            if not re.fullmatch(lixeira.ID_CONVERSA, marca.name):
+                continue
+            path = dentro(root, f'conversas/{marca.name}/conversa.json')
+            if not path.exists():  # deleted for good (or never saved): nothing of it is left to export
+                continue
+            meta = ler_json(path)
+            if not isinstance(meta, dict) or meta.get('id') != marca.name or meta.get('caso') != caso:
+                raise ValueError('Conversa ilegível ou fora do índice.')
+            if not lixeira.excluido(root, caso, conversa=marca.name, itens=removidos):
+                yield meta
+
+
+@lixeira.leitura_da_exportacao
+def itens_da_conta(root, conta, casos):
+    """Conversations the account created, for its own data export (E4b-2b of Contas):
+    ``[{tipo: 'conversa', caso, criado_em, id}]``, only in ``casos`` (those it reaches, as the caller says; read
+    through the index by case, never every conversation of the installation) and only those with ``criada_por``
+    equal to it (written at creation from now on; older ones have none and stay out: ``meta['conta']`` is whoever
+    asked last, never a guess at who created it). Never the title, the question or a name. Conversations and cases
+    in the trash stay out. A conversation that cannot be read, or of an unexpected shape, raises ValueError or
+    OSError (the export says it is incomplete)."""
+    casos, removidos = lixeira.casos_da_exportacao(root, conta, casos)
+    return [lixeira.item_exportado('conversa', meta.get('caso'), meta.get('criada_em_utc'), meta.get('id'))
+            for meta in _conversas_dos_casos(root, casos, removidos) if meta.get('criada_por') == conta]
+
+
+@lixeira.leitura_da_exportacao
+def conversas_sem_criador(root, casos):
+    """For the data export (E4b-2b): the ``criada_em_utc`` of the most recent conversation in ``casos`` (outside the
+    trash) without ``criada_por`` (made before it was written, or in the local mode), or None when there is none.
+    From that moment on the conversations of ``itens_da_conta`` are complete; before it, some may be missing. A
+    conversation that cannot be read raises ValueError or OSError."""
+    casos, removidos = lixeira.casos_disponiveis(root, casos)
+    mais_recente = None
+    for meta in _conversas_dos_casos(root, casos, removidos):
+        if not meta.get('criada_por'):
+            criada = meta.get('criada_em_utc')
+            if not isinstance(criada, str) or not criada:
+                raise ValueError('Conversa sem data de criação.')
+            mais_recente = max(mais_recente or criada, criada)
+    return mais_recente
+
+
 class _LoteNaFila(Exception):
     """A batch of the case reached the extraction queue while the freeze took the cadastro lock."""
 
@@ -675,6 +756,11 @@ class Conversas:
                        'modelo': None, 'dono': dono, 'politica': 'read-only; on-request; sem web/conectores/shell'},
                        'events': [], 'busy': False, 'usado_em': time.monotonic(),
                        'uso': next(self._usos)}
+                if isinstance(conta, str) and re.fullmatch(lixeira.ID_CONTA, conta):
+                    # Who created it (E4b-2b, export my data): only the account id, only here; meta['conta'] is
+                    # whoever asked last (CUS-01) and changes with every question and resume.
+                    ctx['meta']['criada_por'] = conta
+                indexar_conversa(self.root, case, identifier)  # the export reads a case's conversations by it
                 self.contexts[identifier] = ctx
                 if feedback:
                     ctx['meta']['rodada_base'] = feedback['conteudo']['rodada_origem']

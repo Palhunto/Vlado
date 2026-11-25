@@ -36,7 +36,7 @@ CODIGOS = ('caso_indisponivel', 'conversa_indisponivel', 'lote_inexistente', 're
            'operacao_inexistente', 'acesso_indisponivel', 'senha_atual_incorreta', 'ultimo_dono', 'senha_necessaria',
            'convite_duplicado', 'limite_de_convites', 'transporte_indisponivel', 'codigo_invalido', 'fator_necessario',
            'recuperacao_pelo_operador', 'link_invalido', 'senha_invalida', 'fator_indisponivel', 'requisicao_invalida',
-           'chave_redacao_ilegivel', 'nome_confirmacao_divergente')
+           'chave_redacao_ilegivel', 'nome_confirmacao_divergente', 'limite_de_exportacoes')
 MOTIVOS = ('sem_participacao', 'outra_redacao', 'inexistente', 'redacao_suspensa', 'senha_incorreta', 'ultimo_dono',
            'link_expirado', 'email_em_uso', 'limite', 'codigo_invalido', 'protegido', 'pendencia', 'chave_ausente',
            'semente_ilegivel')
@@ -151,6 +151,12 @@ class ListasDoContratoTest(unittest.TestCase):
                          alvo=CONTA, organizacao=ORG)
         self.assertEqual((linha['evento'], linha['motivo'], linha['codigo']),
                          ('admin_recusada', 'validacao', 'nome_confirmacao_divergente'))
+
+    def test_teto_de_exportacoes_da_conta(self):
+        # E4b-2b (R2 da Coruja): conta-exportar beyond the ceiling is refused (429) with the reason and the code.
+        linha = r.montar('admin_recusada', 'negado', CONTA, motivo='limite', codigo='limite_de_exportacoes', alvo=CONTA,
+                         organizacao=ORG)
+        self.assertEqual((linha['motivo'], linha['codigo']), ('limite', 'limite_de_exportacoes'))
 
     def test_segundo_fator_indisponivel_e_bloqueado(self):
         # E4: written straight by registrar, failed, with the reason; without an account at the server's start.

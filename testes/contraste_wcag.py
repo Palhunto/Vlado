@@ -200,6 +200,7 @@ EXPLICACAO_EXCECAO = {'P34': 'Seletor de apuração do topo (select#contexto-cas
 JS_TEXTO = r"""(excecoes = {}) => {
   const vc = window.__vc, itens = [], naoMedidos = [], porMotivo = {};
   let isentos = 0, nos = 0;
+  const rolados = new Set();
   const motivo = (m, e, t) => { porMotivo[m] = (porMotivo[m] || 0) + 1; if (naoMedidos.length < 400) naoMedidos.push({motivo: m, s: vc.desc(e), t: (t || '').slice(0, 50)}); };
   const SALTAR = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'OPTION', 'OPTGROUP', 'TEXTAREA', 'TITLE', 'HEAD']);
   const desativado = (e) => !!e.closest(':disabled, [aria-disabled="true"]');
@@ -217,8 +218,16 @@ JS_TEXTO = r"""(excecoes = {}) => {
     if (alfa < 0.02) return motivo('texto transparente', e, txt);
     let x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
     if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) {
+      rolados.add(e);   // uma rolagem só por elemento, nos dois ramos: sem isto o texto fora da janela e fora da pilha do ponto gastava as duas e virava 'não medido'
       e.scrollIntoView({block: 'center', inline: 'center', behavior: 'instant'});
       return null;   // o chamador refaz a medida com o retângulo novo
+    }
+    // Dentro da janela, mas cortado pelo overflow de um ancestral (a faixa que rola, Q5): o elemento não está na pilha do ponto e o que se mediria
+    // seria o fundo do ancestral que cobre o corte (a página), não o do próprio elemento. Rola o elemento à vista uma vez e refaz a medida.
+    if (!svg && !rolados.has(e) && !document.elementsFromPoint(x, y).includes(e)) {
+      rolados.add(e);
+      e.scrollIntoView({block: 'center', inline: 'center', behavior: 'instant'});
+      return null;
     }
     const f = vc.fundoNoPonto(x, y, e, true);
     if (f.coberto) return motivo('coberto por outro elemento', e, txt);
@@ -270,10 +279,16 @@ JS_TEXTO = r"""(excecoes = {}) => {
     const tipoBotao = e.tagName === 'INPUT' && ['button', 'submit'].includes((e.type || '').toLowerCase());
     let rotulo = e.tagName === 'SELECT' ? (e.selectedOptions[0] ? e.selectedOptions[0].text : '') : (e.value || '');
     nos++;
-    if (rotulo) medir(e, rect, rotulo, tipoBotao ? 'texto' : 'campo-texto');
+    // medir() devolve null quando rolou o campo à vista e pede a medida de novo: refaz uma vez e, se ainda não deu, conta o motivo (o campo não some sem registro).
+    const medirCampo = (txt, categoria, forcarCor) => {
+      let r = medir(e, rect, txt, categoria, forcarCor);
+      if (r === null) { rect = e.getBoundingClientRect(); r = medir(e, rect, txt, categoria, forcarCor); if (r === null) motivo('fora da área visível', e, txt); }
+      return r;
+    };
+    if (rotulo) medirCampo(rotulo, tipoBotao ? 'texto' : 'campo-texto');
     else if (e.placeholder) {
       const ph = getComputedStyle(e, '::placeholder');
-      medir(e, rect, e.placeholder, 'placeholder', ph.color);
+      medirCampo(e.placeholder, 'placeholder', ph.color);
     }
     if (tipoBotao) continue;
     // Contorno do campo (WCAG 1.4.11): a borda ou o fundo do campo contra o que o cerca.
