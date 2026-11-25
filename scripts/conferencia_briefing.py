@@ -1,8 +1,8 @@
 """Conferência do briefing contra os achados, sem modelo, antes de publicar a síntese (L5 da auditoria editorial).
 
 O briefing só pode dizer o que os achados revisados dizem. Cada frase factual do briefing precisa estar coberta
-por um achado revisado, com localizador: a marca ``[A001@v1]`` ou o ``A001 v1`` por extenso (que é como se cita a
-pendência, que não leva a marca, e o achado da lista "Outros achados sustentados") ou um ``[fonte:REFERENCIA]`` de uma evidência ligada a um achado, na própria frase ou no
+por um achado revisado, com localizador: a marca ``[A001@v1]`` (ou, na lista "Outros achados sustentados", o
+``A001 v1`` por extenso) ou um ``[fonte:REFERENCIA]`` de uma evidência ligada a um achado, na própria frase ou no
 mesmo parágrafo ou item de lista. Coberta a frase, ela é comparada, por regras fixas, com a redação desses achados
 e com os trechos das evidências deles. A síntese é recusada, com o motivo de cada frase, quando:
 
@@ -19,9 +19,7 @@ Número sempre precisa de achado, em qualquer seção e também numa frase negat
 contrato de R$ 5 milhões" afirma o valor do contrato (B2 da Coruja à L5). Só o quantificador forte fica livre numa
 frase de limite (não localizado, não se aplica, pendência, insuficiência) e na seção de lacunas e diligências, que
 declaram o que falta e não um fato; se citarem um achado, as regras valem igual. Números que já estão na pergunta
-e contagens pequenas (inteiros até 10, sem unidade) não contam como fato novo. No cabeçalho do briefing (o que vem
-antes do primeiro título), os metadados da própria rodada (caso, rodada, data da rodada, versão do corpus, revisão),
-conferidos contra o registro dela, também não precisam de achado; uma data que não é a da rodada continua recusada.
+e contagens pequenas (inteiros até 10, sem unidade) não contam como fato novo.
 
 Quantificador é só o de fato (todos, tudo, sempre, nunca, nenhum, integralmente...): adjetivos como "inteiro teor"
 e "nome completo" não dizem alcance e não entram na lista.
@@ -62,9 +60,7 @@ _RE_LIMITE = re.compile(
 _RE_SECAO_LIVRE = re.compile(r'lacuna|diligenc|pendenc|limite|limitac|gaps?\b|follow|next step|limitation')
 _RE_MARCA = re.compile(r'\[(A[0-9]{3,})@v([1-9][0-9]*)\]')
 _RE_FONTE = re.compile(r'\[fonte:([^\]\n]+)\]')
-# The finding written out with its version (A002 v1, or A002, v1): a pending one cannot take the [A002@v1] marker,
-# so it is cited this way; it covers the sentence like the marker does (R1 of the review).
-_RE_POR_EXTENSO = re.compile(r'(?<![\w@\[])(A[0-9]{3,}),?[ \t]+v([1-9][0-9]*)(?!\d)')
+_RE_POR_EXTENSO = re.compile(r'(?<![\w@\[])(A[0-9]{3,})[ \t]+v([1-9][0-9]*)(?!\d)')
 # A heading, a bold line or a short label ("Outro lado:"), up to five words, on a line of its own.
 _RE_TITULO = re.compile(r'^\s*(?:#{1,6}\s+.*|(?:\*\*|__)[^*_\n]+(?:\*\*|__):?|(?:\*\*|__)?[^\W\d][^.!?:\n]{0,48}:(?:\*\*|__)?)\s*$')
 _RE_ITEM = re.compile(r'^\s*(?:[-*+]|\d+[.)]|\|)\s*')
@@ -153,9 +149,10 @@ def _blocos(texto):
     return blocos
 
 
-def _citacoes(texto):
+def _citacoes(texto, lista):
     marcas = {(a, int(v)) for a, v in _RE_MARCA.findall(texto)}
-    marcas |= {(a, int(v)) for a, v in _RE_POR_EXTENSO.findall(texto)}
+    if lista:
+        marcas |= {(a, int(v)) for a, v in _RE_POR_EXTENSO.findall(texto)}
     return marcas, set(_RE_FONTE.findall(texto))
 
 
@@ -173,10 +170,9 @@ def aplica(instrucoes):
     return len(versao) == 3 and versao >= (1, 5, 0)
 
 
-def conferir(texto, data, evidence_refs, pergunta='', metadados=()):
+def conferir(texto, data, evidence_refs, pergunta=''):
     """{'recusas': [...], 'alertas': [...]} do briefing ``texto`` contra os achados de ``data`` (a revisão que a
-    síntese vai publicar, já com os destinos); ``evidence_refs`` liga cada E-ID à referência que o modelo cita;
-    ``metadados`` são os textos do registro da rodada (caso, rodada, datas, corpus, revisão) que o cabeçalho pode citar."""
+    síntese vai publicar, já com os destinos); ``evidence_refs`` liga cada E-ID à referência que o modelo cita."""
     from registros_achados import secao_fora_do_briefing
     versoes = {(c['id'], v['versao']): v for c in data['achados'] for v in c['versoes']}
     atuais = {c['id']: c['versoes'][-1]['versao'] for c in data['achados']}
@@ -195,12 +191,11 @@ def conferir(texto, data, evidence_refs, pergunta='', metadados=()):
         return [t for t in result if t]
 
     da_pergunta = {k for k, _, _ in valores(pergunta or '')}
-    da_rodada = {k for m in metadados for k, _, _ in valores(m)}
     recusas, alertas, citadas_com_ressalva, frases_por_achado = [], [], set(), {}
     principal, lista = secao_fora_do_briefing(texto)
     partes = [(False, b) for b in _blocos(principal)] + [(True, b) for b in _blocos(lista or '')]
     for na_lista, (titulo, bloco) in partes:
-        marcas, fontes = _citacoes(bloco)
+        marcas, fontes = _citacoes(bloco, na_lista)
         for ref in sorted(fontes - set(por_referencia)):
             recusas.append({'tipo': 'fonte_sem_achado', 'frase': _resumo(bloco),
                             'motivo': f'[fonte:{ref[:16]}...] não sustenta nenhum achado revisado desta rodada; a '
@@ -209,14 +204,12 @@ def conferir(texto, data, evidence_refs, pergunta='', metadados=()):
         for ref in fontes:
             achados |= por_referencia.get(ref, set())
         livre = bool(_RE_SECAO_LIVRE.search(_plano(titulo)))
-        cabecalho = not na_lista and not titulo  # before the first heading: the round's own header (N2)
         for item in conferencia_redacao.dividir(bloco):
             frase = item['texto']
             limpa = _sem_marcas(frase)
             plano = _plano(limpa)
             numeros = [(k, b, p) for k, b, p in valores(limpa)
-                       if k not in da_pergunta and not _contagem_pequena(k, b)
-                       and not (cabecalho and k in da_rodada)]
+                       if k not in da_pergunta and not _contagem_pequena(k, b)]
             fortes = [m.group(0) for m in _RE_QUANTIFICADOR.finditer(plano)]
             if _RE_PARCIAL.search(plano):
                 citadas_com_ressalva |= achados
