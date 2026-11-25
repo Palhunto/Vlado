@@ -218,6 +218,23 @@ def listar_notas(root, case):
     return {'caso': case, 'revisao_caderno': state['revisao'], 'notas': notas}
 
 
+@lixeira.leitura_da_exportacao
+def itens_da_conta(root, conta, casos):
+    """Notes the account created, for its own data export (E4b-2b of Contas; Viga, with the Maestro's consent):
+    ``[{tipo: 'nota', caso, criado_em, id}]``, only in ``casos`` (those it reaches, as the caller says) and only
+    those whose ``criado_por`` is this account. Never the title, the text or a name. Deleted notes and cases in the
+    trash stay out. A notebook that cannot be read raises ValueError or OSError (the export says it is incomplete)."""
+    casos, _ = lixeira.casos_da_exportacao(root, conta, casos)
+    itens = []
+    for case in casos:
+        for note in listar(root, case).get('notas') or []:
+            if not isinstance(note, dict):
+                raise ValueError('Nota fora do esperado.')
+            if (note.get('criado_por') or {}).get('conta_id') == conta:
+                itens.append(lixeira.item_exportado('nota', case, note.get('criado_em_utc'), note.get('id')))
+    return itens
+
+
 def _disponivel(root, case, source, doc):
     try:
         lixeira.conferir_disponivel(root, case, rodada=source['rodada'])

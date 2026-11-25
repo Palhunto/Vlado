@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import functools
 import re
 import uuid
 
@@ -47,6 +48,52 @@ def validar(tipo, caso, conversa=None, rodada=None):
     value, pattern = (conversa, ID_CONVERSA) if tipo == 'conversa' else (rodada, ID_RODADA)
     if tipo != 'caso' and (not isinstance(value, str) or not re.fullmatch(pattern, value)):
         raise ValueError('Identificador de item inválido.')
+
+
+ID_CONTA = r'[0-9a-f]{16}'  # acesso: secrets.token_hex(8)
+
+
+def leitura_da_exportacao(funcao):
+    """For each ``itens_da_conta``: old data, or data of an unexpected shape, gives ValueError (the export says the
+    part is incomplete), never a KeyError or a TypeError out of a field read."""
+    @functools.wraps(funcao)
+    def lida(*args, **kwargs):
+        try:
+            return funcao(*args, **kwargs)
+        except (KeyError, TypeError, IndexError, AttributeError) as exc:
+            raise ValueError(f'Dado fora do esperado ao exportar os itens ({type(exc).__name__}).') from exc
+    return lida
+
+
+def item_exportado(tipo, caso, criado_em, identificador):
+    """One item of ``itens_da_conta``; a missing or malformed date or id gives ValueError."""
+    if not isinstance(criado_em, str) or not criado_em or not isinstance(identificador, str) or not identificador:
+        raise ValueError(f'Item fora do esperado ao exportar ({tipo}).')
+    return {'tipo': tipo, 'caso': caso, 'criado_em': criado_em, 'id': identificador}
+
+
+def casos_da_exportacao(root, conta, casos):
+    """For the ``itens_da_conta`` of each module (export my data, E4b-2b of Contas): checks ``conta`` (an account
+    id) and ``casos`` (the cases the caller says the account reaches; never read here), and gives back
+    ``(cases, trash items)``: the cases that exist and are not in the trash, in the given order, and the active trash
+    items, read once, for what is in the trash inside a case (a conversation, a round)."""
+    if not isinstance(conta, str) or not re.fullmatch(ID_CONTA, conta):
+        raise ValueError('Conta inválida para exportar os itens.')
+    return casos_disponiveis(root, casos)
+
+
+def casos_disponiveis(root, casos):
+    """``(cases, trash items)``: of ``casos`` (checked), those that exist and are not in the trash, in the given
+    order, and the active trash items, read once."""
+    if not isinstance(casos, (list, tuple, set, frozenset)):
+        raise ValueError('Lista de apurações inválida.')
+    itens = ativos(root)
+    disponiveis = []
+    for caso in casos:
+        validar('caso', caso)
+        if caso not in disponiveis and not excluido(root, caso, itens=itens) and dentro(root, f'casos/{caso}').is_dir():
+            disponiveis.append(caso)
+    return disponiveis, itens
 
 
 def salvar(root, itens):

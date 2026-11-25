@@ -202,6 +202,28 @@ def listar(root, case, *, texto='', limite=20, deslocamento=0):
         'proximo_deslocamento': deslocamento + limite if deslocamento + limite < total else None}
 
 
+@lixeira.leitura_da_exportacao
+def itens_da_conta(root, conta, casos):
+    """Notebook records the account created, for its own data export (E4b-2b of Contas; Viga, with the Maestro's
+    consent): ``[{tipo: 'registro_caderno', caso, criado_em, id}]``, only in ``casos`` (those it reaches, as the
+    caller says) and only those authenticated by this account. Never the title, the note, a source or a name.
+    Cases in the trash stay out. A record that cannot be read raises ValueError or OSError (the export says it is
+    incomplete)."""
+    casos, _ = lixeira.casos_da_exportacao(root, conta, casos)
+    itens = []
+    for case in casos:
+        records = dentro(_pasta(root, case), 'registros')
+        for path in sorted(records.glob('N*.json')) if records.exists() else []:
+            if not re.fullmatch(ID, path.stem):
+                continue
+            entry = ler_json(path)
+            if not isinstance(entry, dict) or entry.get('id') != path.stem or entry.get('caso_id') != case:
+                raise ValueError('Registro do caderno inválido.')
+            if entry.get('origem_autoria') == AUTORIA_CONTA and entry.get('conta_id') == conta:
+                itens.append(lixeira.item_exportado('registro_caderno', case, entry.get('criado_em_utc'), entry.get('id')))
+    return itens
+
+
 def selecionar(root, case, choices, *, minimo=1):
     if not isinstance(choices, list) or not minimo <= len(choices) <= 20:
         raise ValueError(f'Selecione de {minimo} a 20 registros humanos.')
