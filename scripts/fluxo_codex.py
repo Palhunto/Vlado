@@ -393,13 +393,15 @@ class Fluxo:
                 'briefing': artifact['arquivo'] if kind in COM_BRIEFING else None,
                 'revisao_suporte': support[0] if kind in COM_BRIEFING else None})
         # L5: before publishing, every factual sentence must be covered by a reviewed finding (no model).
-        question = self.run / '00_pergunta_original.md'
-        checked = conferencia_briefing.conferir(content, data, self.evidence_refs,
-                                                question.read_text(encoding='utf-8') if question.is_file() else '')
-        self.artifact('conferencia_briefing', json.dumps({'briefing_sha256': artifact['sha256'], **checked},
-                                                         ensure_ascii=False, indent=2), 'json')
-        if checked['recusas']:
-            raise ValueError(conferencia_briefing.mensagem(checked))
+        # Only for rounds frozen with the 1.5.0 prompts or later (R3): a legacy round, resumed or not, goes without it.
+        if conferencia_briefing.aplica(self.instrucoes):
+            question = self.run / '00_pergunta_original.md'
+            checked = conferencia_briefing.conferir(content, data, self.evidence_refs,
+                                                    question.read_text(encoding='utf-8') if question.is_file() else '')
+            self.artifact('conferencia_briefing', json.dumps({'briefing_sha256': artifact['sha256'], **checked},
+                                                             ensure_ascii=False, indent=2), 'json')
+            if checked['recusas']:
+                raise ValueError(conferencia_briefing.mensagem(checked))
         if not included and not re.search(r'insufici|não (?:foi|há|foram)|sem (?:suporte|evidência|achados)', content, re.I):
             raise ValueError('Sem achados incluídos, declare explicitamente a insuficiência do suporte.')
         data['procedencia'].append(event)

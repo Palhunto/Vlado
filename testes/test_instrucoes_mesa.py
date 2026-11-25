@@ -169,6 +169,16 @@ class RegrasDoAgentsNoSistemaTest(unittest.TestCase):
             for trecho in self.CORRESPONDENCIA[chave]:
                 self.assertIn(trecho, sistema, chave)
 
+    def test_sobras_do_0b_das_condicoes_desta_versao(self):
+        """As duas regras de "Condições desta versão" do AGENTS.md que faltavam no mesa:sistema."""
+        agents = ' '.join((PROJETO / 'AGENTS.md').read_text(encoding='utf-8').split())
+        sistema = ' '.join(instrucoes_mesa.blocos_mesa(MESA.read_text(encoding='utf-8'))['sistema'].split())
+        for regra_agents, no_sistema in (
+                ('registrar contaminação', 'registre essa contaminação no relatório da etapa'),
+                ('Não afirmar execução local, sigilo local', 'Não afirme execução local, sigilo local')):
+            self.assertIn(regra_agents, agents)
+            self.assertIn(no_sistema, sistema)
+
 
 class ConversaNosDoisModosTest(unittest.TestCase):
     """Pela conversa da Mesa, com o provedor simulado: o que foi ao modelo em cada modo."""

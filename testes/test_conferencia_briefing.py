@@ -103,12 +103,51 @@ class CoberturaTest(unittest.TestCase):
 
 
 class SemFalsoPositivoTest(unittest.TestCase):
-    def test_frase_de_limite_e_secao_de_diligencias_nao_precisam_de_achado(self):
-        texto = ('O pagamento de 2024 não foi localizado no corpus.\n\n'
+    def test_frase_de_limite_e_secao_de_diligencias_sem_numero_nao_precisam_de_achado(self):
+        texto = ('O pagamento do aditivo não foi localizado no corpus.\n\n'
                  '## Lacunas e diligências\n'
-                 '- Pedir ao órgão, por LAI (Lei 12.527/2011, art. 10, § 3º, sem exigir motivo), os pagamentos de 2024.\n\n'
+                 '- Pedir ao órgão, pela Lei de Acesso à Informação e sem exigir motivo, todos os pagamentos do aditivo.\n\n'
                  'Outro lado:\nNão se aplica: nenhum achado atribui conduta a pessoa ou entidade.')
         self.assertEqual(tipos(texto), [])
+
+    def test_adjetivo_solto_nao_e_quantificador(self):
+        """B1: "inteiro teor" e "nome completo" não dizem alcance; a frase com achado e localizador passa."""
+        self.assertEqual(tipos('[A002@v1] O inteiro teor do contrato 041/2025 traz o valor global de '
+                               'R$ 8.750.000,00. [fonte:R2]'), [])
+        self.assertEqual(tipos('[A002@v1] O contrato traz o nome completo da contratada e o valor de '
+                               'R$ 8.750.000,00. [fonte:R2]'), [])
+        for adjetivo in ('integral', 'inteiro', 'inteira', 'completo', 'completa', 'todo', 'toda', 'unanime'):
+            self.assertNotIn(adjetivo, cb.QUANTIFICADORES)
+        # O quantificador de fato continua recusado.
+        self.assertIn('quantificador_mais_forte', tipos('[A002@v1] O contrato foi integralmente pago. [fonte:R2]'))
+
+
+class NumeroSempreTemAchadoTest(unittest.TestCase):
+    """B2: número precisa de achado em qualquer seção e também numa frase negativa."""
+
+    def test_frase_negativa_com_numero_e_recusada(self):
+        self.assertEqual(tipos('Não houve licitação para o contrato de R$ 5 milhões.'), ['afirmacao_sem_achado'])
+        self.assertEqual(tipos('O pagamento de 2024 não foi localizado no corpus.'), ['afirmacao_sem_achado'])
+
+    def test_secao_de_lacunas_ou_limitacoes_com_numero_e_recusada(self):
+        for titulo in ('## Lacunas e diligências', '## Limitações', 'Lacunas:'):
+            texto = f'{titulo}\n- Pedir ao órgão os pagamentos de R$ 2 milhões feitos em 2024.\n'
+            self.assertEqual(tipos(texto), ['afirmacao_sem_achado'], titulo)
+            self.assertIn('cite a lei pelo nome', cb.mensagem(cb.conferir(texto, dados(), REFS)))
+
+    def test_numero_da_pergunta_continua_livre_na_lacuna(self):
+        self.assertEqual(tipos('## Lacunas e diligências\n- Pedir o contrato 041/2025 assinado.\n',
+                               pergunta='O que diz o contrato 041/2025?'), [])
+
+
+class EscopoDaConferenciaTest(unittest.TestCase):
+    """R3 (decisão do Maestro): vale para rodadas congeladas em 1.5.0 ou depois; a legada segue sem ela."""
+
+    def test_versoes(self):
+        for versao, vale in (('1.5.0', True), ('1.5.1', True), ('2.0.0', True), ('1.4.1', False),
+                             ('1.2.0', False), (None, False), ('', False), ('x.y.z', False)):
+            self.assertEqual(cb.aplica({'modo': 'legado', 'versao_prompts': versao}), vale, versao)
+        self.assertFalse(cb.aplica(None))
 
     def test_numeros_da_pergunta_e_contagens_pequenas(self):
         self.assertEqual(tipos('Rodada R001, sobre o contrato 041/2025 e os 3 aditivos citados.',
@@ -127,6 +166,41 @@ class SemFalsoPositivoTest(unittest.TestCase):
         resultado = cb.conferir(texto, dados(), REFS)
         self.assertEqual(len(resultado['recusas']), 9)
         self.assertIn('e mais 3 frase(s)', cb.mensagem(resultado))
+
+
+class RodadaLegadaSemConferenciaTest(unittest.TestCase):
+    """Uma rodada congelada com os prompts 1.4.1 publica o briefing que a conferência recusaria: o novo não trava o
+    antigo. A instalação de teste simula uma de antes da 1.5.0 (comum.VERSAO_PROMPTS = 1.4.1 ao montar e ao
+    congelar), e a rodada guarda a versão no manifesto congelado."""
+    tool, wait_stage, end, step, terminal = (getattr(fluxo.FluxoAutomaticoTest, n) for n in
+                                             ('tool', 'wait_stage', 'end', 'step', 'terminal'))
+
+    def setUp(self):
+        from unittest.mock import patch
+        from codex_apuracao import Conversas
+        from agente_fluxo_fixture import encerrar_gerenciador
+        from modelo_pasta import copiar
+        versao = patch('comum.VERSAO_PROMPTS', '1.4.1')
+        versao.start()
+        self.addCleanup(versao.stop)
+        temp, self.root, _ = copiar('ConferenciaBriefingLegado141', fixture.CodexIntegrationTest.montar)
+        self.addCleanup(temp.cleanup)
+        self.manager = Conversas(self.root, fixture.FakeServer)
+        self.addCleanup(encerrar_gerenciador, self.manager)
+        self.identifier = fixture.CodexIntegrationTest.start(self)
+        self.ctx = self.manager.contexts[self.identifier]
+        self.refs = {}
+
+    def test_rodada_1_4_1_publica_sem_a_conferencia(self):
+        self.assertEqual(self.ctx['meta']['instrucoes']['versao_prompts'], '1.4.1')
+        for etapa in ('inventario', 'plano', 'busca', 'geracao_inicial', 'revisao'):
+            self.step(etapa)
+        ref = self.refs['hit']['referencia']
+        self.step('sintese', {'texto': f'[A001@v1] A fonte sintética sempre declara valor 123 e 456. [fonte:{ref}]',
+                              'destinos': [{'achado_id': 'A001', 'destino': 'incluido', 'motivo': 'Revisado.'}]})
+        self.terminal()
+        self.assertEqual(self.ctx['meta']['estado'], 'concluido', self.ctx['meta'].get('situacao'))
+        self.assertEqual(list((self.ctx['run'] / 'saidas').glob('codex_conferencia_briefing_*.json')), [])
 
 
 class SinteseDoFluxoTest(unittest.TestCase):

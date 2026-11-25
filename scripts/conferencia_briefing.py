@@ -6,7 +6,8 @@ por um achado revisado, com localizador: a marca ``[A001@v1]`` (ou, na lista "Ou
 mesmo parágrafo ou item de lista. Coberta a frase, ela é comparada, por regras fixas, com a redação desses achados
 e com os trechos das evidências deles. A síntese é recusada, com o motivo de cada frase, quando:
 
-- ``afirmacao_sem_achado``: a frase traz número, data, valor ou quantificador forte e nenhum achado a cobre;
+- ``afirmacao_sem_achado``: a frase traz número, data ou valor (em qualquer seção, também numa frase negativa) ou
+  um quantificador forte, e nenhum achado a cobre;
 - ``fonte_sem_achado``: o ``[fonte:...]`` é uma leitura da rodada que não sustenta nenhum achado publicado;
 - ``numero_fora_do_achado``: número, data ou valor que não está na redação nem nos trechos dos achados citados
   (o resultado de uma conta escrita por extenso, depois do ``=``, é derivado e não precisa estar);
@@ -14,9 +15,17 @@ e com os trechos das evidências deles. A síntese é recusada, com o motivo de 
 - ``ressalva_omitida``: o achado diz que algo é parcial ("parcialmente", "em parte") e nenhuma frase que o cita
   conserva a ressalva. É a falha "o Acórdão X reformou tudo" quando a reforma foi parcial.
 
-Frases de limite (não localizado, não se aplica, pendência, insuficiência) e a seção de lacunas e diligências não
-precisam de achado, porque declaram o que falta e não um fato; se citarem um achado, as regras valem igual. Números
-que já estão na pergunta e contagens pequenas (inteiros até 10, sem unidade) não contam como fato novo.
+Número sempre precisa de achado, em qualquer seção e também numa frase negativa: "não houve licitação para o
+contrato de R$ 5 milhões" afirma o valor do contrato (B2 da Coruja à L5). Só o quantificador forte fica livre numa
+frase de limite (não localizado, não se aplica, pendência, insuficiência) e na seção de lacunas e diligências, que
+declaram o que falta e não um fato; se citarem um achado, as regras valem igual. Números que já estão na pergunta
+e contagens pequenas (inteiros até 10, sem unidade) não contam como fato novo.
+
+Quantificador é só o de fato (todos, tudo, sempre, nunca, nenhum, integralmente...): adjetivos como "inteiro teor"
+e "nome completo" não dizem alcance e não entram na lista.
+
+A conferência vale para as rodadas congeladas com os prompts 1.5.0 ou depois, nos dois modos de instrução; uma
+rodada legada (até 1.4.1), inclusive a retomada de uma interrompida, segue sem ela (decisão do Maestro, R3).
 
 Causalidade e certeza onde o achado atribui a alguém (as regras da Conferência da redação) ficam como alerta, sem
 barrar: o falso positivo ali é comum e travaria a pergunta.
@@ -34,12 +43,13 @@ import comparador
 import conferencia_redacao
 
 LIMITE_MOTIVOS = 6
-# Os da Conferência da redação mais os que faltavam para o texto de síntese ("tudo", "integralmente"...).
+# Os da Conferência da redação mais os que faltavam para o texto de síntese ("tudo", "integralmente"...). Só
+# quantificadores e advérbios de alcance: um adjetivo solto ("inteiro teor", "nome completo", "valor integral")
+# não diz alcance, e recusá-lo travaria a frase certa.
 QUANTIFICADORES = tuple(dict.fromkeys(conferencia_redacao._QUANTIFICADORES + (
-    'tudo', 'todo', 'toda', 'integral', 'integralmente', 'na integra', 'por inteiro', 'inteiro', 'inteira',
-    'totalidade', 'por completo', 'completo', 'completa', 'plenamente', 'unanime', 'unanimemente',
-    'por unanimidade', 'exclusivamente', 'all', 'every', 'entire', 'entirely', 'fully', 'totally', 'wholly',
-    'always', 'never', 'none', 'nobody', 'everything', 'completely', 'unanimous', 'unanimously')))
+    'tudo', 'integralmente', 'na integra', 'por inteiro', 'totalidade', 'por completo', 'plenamente',
+    'unanimemente', 'por unanimidade', 'all', 'every', 'everything', 'entirely', 'fully', 'totally', 'wholly',
+    'always', 'never', 'none', 'nobody', 'completely', 'unanimously')))
 _RE_QUANTIFICADOR = re.compile(r'\b(?:' + '|'.join(re.escape(q) for q in sorted(QUANTIFICADORES, key=len, reverse=True)) + r')\b')
 _RE_PARCIAL = re.compile(r'\b(?:parcial|parciais|parcialmente|em parte|partial|partially|in part)\b')
 _RE_LIMITE = re.compile(
@@ -151,6 +161,15 @@ def _resumo(frase):
     return frase if len(frase) <= 160 else frase[:157] + '...'
 
 
+def aplica(instrucoes):
+    """A conferência vale para rodadas congeladas com os prompts 1.5.0 ou depois (R3); a legada segue sem ela."""
+    try:
+        versao = tuple(int(x) for x in str((instrucoes or {}).get('versao_prompts') or '').split('.'))
+    except ValueError:
+        return False
+    return len(versao) == 3 and versao >= (1, 5, 0)
+
+
 def conferir(texto, data, evidence_refs, pergunta=''):
     """{'recusas': [...], 'alertas': [...]} do briefing ``texto`` contra os achados de ``data`` (a revisão que a
     síntese vai publicar, já com os destinos); ``evidence_refs`` liga cada E-ID à referência que o modelo cita."""
@@ -197,11 +216,15 @@ def conferir(texto, data, evidence_refs, pergunta=''):
             for chave in achados:
                 frases_por_achado.setdefault(chave, []).append(frase)
             if not achados:
-                if (numeros or fortes) and not livre and not _RE_LIMITE.search(plano):
+                # A number is always a fact (B2): also in a negative sentence and in the gaps section.
+                forte_livre = livre or _RE_LIMITE.search(plano)
+                if numeros or (fortes and not forte_livre):
                     recusas.append({'tipo': 'afirmacao_sem_achado', 'frase': _resumo(frase),
                                     'motivo': 'a frase afirma ' + (f'"{numeros[0][1]}"' if numeros else f'"{fortes[0]}"')
                                               + ' sem achado revisado: ponha na frase ou no parágrafo a marca [A…@v…] '
-                                                'do achado incluído que a sustenta, ou retire a frase.'})
+                                                'do achado incluído que a sustenta, ou retire a frase'
+                                              + (' (número precisa de achado mesmo numa frase negativa ou de lacuna; '
+                                                 'cite a lei pelo nome, sem número).' if numeros else '.')})
                 continue
             redacoes = [versoes[k]['redacao'] for k in achados]
             conhecidas_texto = redacoes + [t for k in achados for t in trechos(k)]

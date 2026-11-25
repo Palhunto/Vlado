@@ -36,7 +36,7 @@
   },
   "mesa": {
     "arquivo": "prompts/MESA.md",
-    "versao": "1.1.0",
-    "sha256": "924e7e8e2956d5a48980deda889e9d93d926fb8fa4865f4369ea591df098e2e3"
+    "versao": "1.2.0",
+    "sha256": "437f220dcf638e6df27879b41f03a7df05cf7f6fb4a2645288f400db7d598a37"
   }
 }
