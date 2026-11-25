@@ -86,3 +86,13 @@ test('em inglês: "Outside the briefing (supported)" para o rótulo, a opção d
   assert.equal(t(opcao.textContent), 'Outside the briefing (supported)');
   assert.ok(!/'/.test('Outside the briefing (supported)'), 'sem apóstrofo reto no inglês');
 });
+
+test('em inglês: o achado incluído diz "Included in the briefing."', async () => {
+  const mesa = await abrir('en');
+  await mesa.esperar(6);
+  const botoes = [...mesa.$('achados-resultados').querySelectorAll('.finding-open')];
+  botoes[0].click(); await mesa.esperar(4);
+  const linha = [...mesa.$('achados-inspecao').querySelectorAll('p')].find(p => p.textContent === 'Incluído no briefing.');
+  assert.ok(linha, 'a frase em português é a chave que a tela escreve');
+  assert.equal(mesa.janela.I18N.t(linha.textContent), 'Included in the briefing.');
+});

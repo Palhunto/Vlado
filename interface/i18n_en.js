@@ -502,6 +502,7 @@ window.VLADO_I18N_EN = {
     "Incluído": "Included",
     "Substituído": "Replaced",
     "Retirado": "Withdrawn",
+    "Incluído no briefing.": "Included in the briefing.",
     "Fora do briefing (sustentado)": "Outside the briefing (supported)",
     "Sustentado, fora do texto do briefing; consta na lista de outros achados sustentados.": "Supported, outside the briefing text; listed among the other supported findings.",
     "Sem inclusão atual": "Not currently included",
