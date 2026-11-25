@@ -536,14 +536,15 @@
 })();
 
 // Faixa que rola para o lado (docs/design/componentes.md#faixa-que-rola, Q5): a linha de etapas, as pílulas dos quadros e as abas do Caderno, de Documentos e de Minha conta, quando passam da largura. Só a faixa rola (scrollLeft,
-// nunca a página), sem animação, até o item ativo caber inteiro com a folga de --espaco-4; `data-rola` (fim, inicio, ambos) diz de que lado ainda há conteúdo e o CSS esmaece
+// nunca a página), sem animação, até o item ativo caber inteiro, fora do esmaecido (folga de --espaco-8); `data-rola` (fim, inicio, ambos) diz de que lado ainda há conteúdo e o CSS esmaece
 // esse lado; sem estouro, sem atributo. O item ativo é o que a faixa já marca (aria-current, aria-selected ou aria-pressed): ela é observada, então quem a desenha ou troca o item não muda.
 (() => {
   const ativo = '[aria-current],[aria-selected="true"],[aria-pressed="true"]';
   const SELETOR = '#mesa-etapas,.quadros-abas,.mesa-tabs,.notebook-tabs';
   const faixas = new WeakSet(), pendentes = new Set();
   let quadro = 0;
-  const folgaDe = faixa => { const valor = parseFloat(getComputedStyle(faixa).getPropertyValue('--espaco-4')); return Number.isFinite(valor) ? valor : 16; };
+  // A folga é a largura do esmaecido (--espaco-8): o item ativo nunca fica sob a máscara da borda, que apagaria o fundo e o texto dele (portão de contraste).
+  const folgaDe = faixa => { const valor = parseFloat(getComputedStyle(faixa).getPropertyValue('--espaco-8')); return Number.isFinite(valor) ? valor : 32; };
   function marcar(faixa) {
     const resto = faixa.scrollWidth - faixa.clientWidth, esq = faixa.scrollLeft;
     const lado = resto <= 1 ? '' : esq <= 1 ? 'fim' : esq >= resto - 1 ? 'inicio' : 'ambos';
@@ -553,7 +554,7 @@
     const item = faixa.querySelector(ativo);
     if (item && faixa.clientWidth > 0 && faixa.scrollWidth > faixa.clientWidth) {
       const dentro = faixa.getBoundingClientRect(), caixa = item.getBoundingClientRect(), folga = folgaDe(faixa);
-      // O destino é sempre o ponto de encaixe das pílulas (o início do item, com o scroll-padding de --espaco-4 do CSS): assim o scroll-snap proximity não desfaz a rolagem
+      // O destino é sempre o ponto de encaixe das pílulas (o início do item, com o scroll-padding de --espaco-8 do CSS, igual ao esmaecido): assim o scroll-snap proximity não desfaz a rolagem
       // (Q5e); nas pontas o navegador limita ao que a faixa alcança, e o item segue inteiro.
       if (caixa.left < dentro.left + folga || caixa.right > dentro.right - folga) faixa.scrollLeft += caixa.left - dentro.left - folga;
     }
