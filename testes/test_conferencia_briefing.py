@@ -1,0 +1,167 @@
+"""L5: a conferência do briefing contra os achados, sem modelo, antes de publicar a síntese.
+
+A falha real que ela tem de pegar: o achado diz que o acórdão reformou a decisão em parte, e o briefing diz que
+reformou tudo. As regras são fixas (scripts/conferencia_briefing.py); os testes também prendem o que elas NÃO
+recusam (frase de limite, seção de diligências, número da pergunta, conta escrita por extenso), para que uma
+pergunta legítima não fique sem resposta por falso positivo.
+"""
+import json
+from pathlib import Path
+import sys
+import unittest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import conferencia_briefing as cb
+import test_codex_integracao as fixture  # módulos, para não recoletar os TestCases deles
+import test_fluxo_codex as fluxo
+
+ACORDAO = 'O Acórdão 1.234/2024 reformou parcialmente a decisão, só quanto à multa de R$ 50.000,00.'
+CONTRATO = ('O contrato 041/2025 declara valor global de R$ 8.750.000,00 e assinatura em 3 de março de 2025; '
+            'o aditivo soma R$ 250.000,00.')
+TRECHO_ACORDAO = 'dar provimento parcial ao recurso, apenas para reduzir a multa a R$ 50.000,00'
+TRECHO_CONTRATO = 'Valor global: R$ 8.750.000,00. Data de assinatura: 3 de marco de 2025. Aditivo: R$ 250.000,00.'
+
+
+def dados():
+    """Dois achados revisados, cada um com uma evidência de suporte (E001 → R1, E002 → R2)."""
+    achado = lambda i, redacao, natureza='declaracao_documental': {
+        'id': i, 'subquestao': '...', 'versoes': [{'versao': 1, 'redacao': redacao, 'natureza': natureza,
+                                                   'limitacoes': '...'}]}
+    evidencia = lambda i, trecho: {'id': i, 'trecho': trecho, 'localizador': {'tipo': 'linhas', 'descricao': ''}}
+    return {'achados': [achado('A001', ACORDAO), achado('A002', CONTRATO)],
+            'evidencias': [evidencia('E001', TRECHO_ACORDAO), evidencia('E002', TRECHO_CONTRATO)],
+            'vinculos': [{'achado_id': 'A001', 'versao': 1, 'evidencia_id': 'E001', 'papel': 'suporte'},
+                         {'achado_id': 'A002', 'versao': 1, 'evidencia_id': 'E002', 'papel': 'suporte'}],
+            'destinos': []}
+
+
+REFS = {'E001': 'R1', 'E002': 'R2'}
+
+
+def tipos(texto, pergunta=''):
+    return [r['tipo'] for r in cb.conferir(texto, dados(), REFS, pergunta)['recusas']]
+
+
+class FalhaRealTest(unittest.TestCase):
+    def test_reformou_tudo_quando_a_reforma_foi_parcial_e_recusado(self):
+        resultado = cb.conferir('[A001@v1] O Acórdão 1.234/2024 reformou tudo. [fonte:R1]', dados(), REFS)
+        self.assertEqual([r['tipo'] for r in resultado['recusas']], ['quantificador_mais_forte', 'ressalva_omitida'])
+        motivo = resultado['recusas'][0]['motivo']
+        self.assertIn('"tudo"', motivo)
+        self.assertIn('alcance parcial (A001 v1)', motivo)
+        self.assertIn('Conferência do briefing contra os achados', cb.mensagem(resultado))
+        self.assertIn('O Acórdão 1.234/2024 reformou tudo.', cb.mensagem(resultado))
+
+    def test_outras_formas_da_mesma_falha(self):
+        self.assertIn('quantificador_mais_forte', tipos('[A001@v1] O acórdão reformou integralmente a decisão.'))
+        self.assertIn('quantificador_mais_forte', tipos('[A001@v1] The ruling reversed everything.'))
+        # Sem exagero, mas sem a ressalva: a omissão também é recusada.
+        self.assertEqual(tipos('[A001@v1] O Acórdão 1.234/2024 reformou a decisão. [fonte:R1]'), ['ressalva_omitida'])
+
+    def test_a_redacao_no_alcance_do_achado_passa(self):
+        self.assertEqual(tipos('[A001@v1] O Acórdão 1.234/2024 reformou a decisão em parte, só quanto à multa '
+                               'de R$ 50 mil. [fonte:R1]'), [])
+        # A ressalva basta numa das frases que citam o achado.
+        self.assertEqual(tipos('[A001@v1] O Acórdão 1.234/2024 reformou parcialmente a decisão. [fonte:R1]\n\n'
+                               '[A001@v1] A multa ficou em R$ 50.000,00. [fonte:R1]'), [])
+
+
+class CoberturaTest(unittest.TestCase):
+    def test_frase_factual_sem_achado_e_recusada(self):
+        self.assertEqual(tipos('O contrato vale R$ 10 milhões.'), ['afirmacao_sem_achado'])
+        self.assertEqual(tipos('Todos os pagamentos foram feitos.'), ['afirmacao_sem_achado'])
+
+    def test_fonte_que_nao_sustenta_achado_e_recusada(self):
+        # Uma passagem lida na rodada, mas que nenhum achado usa: é o fato que nasce só na síntese.
+        self.assertIn('fonte_sem_achado', tipos('O pagamento foi de R$ 8.750.000,00. [fonte:LIDA_SEM_ACHADO]'))
+
+    def test_numero_fora_do_achado_e_recusado(self):
+        self.assertEqual(tipos('[A002@v1] O contrato vale R$ 9.750.000,00. [fonte:R2]'), ['numero_fora_do_achado'])
+        self.assertEqual(tipos('[A002@v1] O contrato foi assinado em 4 de março de 2025. [fonte:R2]'),
+                         ['numero_fora_do_achado'])
+
+    def test_formatos_diferentes_do_mesmo_valor_passam(self):
+        self.assertEqual(tipos('[A002@v1] O contrato 041/2025 vale R$ 8,75 milhões e foi assinado em 03/03/2025, '
+                               'em março de 2025. [fonte:R2]'), [])
+
+    def test_a_marca_vale_para_o_paragrafo_inteiro(self):
+        self.assertEqual(tipos('O contrato foi assinado em 3 de março de 2025. O valor é de R$ 8,75 milhões. '
+                               '[A002@v1] [fonte:R2]'), [])
+        # Mas cada frase é conferida contra o achado citado no parágrafo.
+        self.assertEqual(tipos('O contrato foi pago em 2026. [A002@v1]'), ['numero_fora_do_achado'])
+
+    def test_conta_escrita_por_extenso_tem_resultado_derivado(self):
+        conta = '[A002@v1] Valor com aditivo: R$ 8.750.000,00 + R$ 250.000,00 = R$ 9.000.000,00. [fonte:R2]'
+        self.assertEqual(tipos(conta), [])
+        self.assertEqual(tipos('[A002@v1] Com o aditivo, o total chega a R$ 9.000.000,00. [fonte:R2]'),
+                         ['numero_fora_do_achado'])
+
+    def test_lista_fora_do_briefing_e_conferida_pelo_id_por_extenso(self):
+        base = '[A002@v1] O contrato vale R$ 8.750.000,00. [fonte:R2]\n\n## Outros achados sustentados\n'
+        self.assertEqual(tipos(base + '- A001 v1: reforma parcial, só da multa. [fonte:R1]\n'), [])
+        self.assertIn('quantificador_mais_forte', tipos(base + '- A001 v1: a decisão foi reformada por inteiro. [fonte:R1]\n'))
+
+
+class SemFalsoPositivoTest(unittest.TestCase):
+    def test_frase_de_limite_e_secao_de_diligencias_nao_precisam_de_achado(self):
+        texto = ('O pagamento de 2024 não foi localizado no corpus.\n\n'
+                 '## Lacunas e diligências\n'
+                 '- Pedir ao órgão, por LAI (Lei 12.527/2011, art. 10, § 3º, sem exigir motivo), os pagamentos de 2024.\n\n'
+                 'Outro lado:\nNão se aplica: nenhum achado atribui conduta a pessoa ou entidade.')
+        self.assertEqual(tipos(texto), [])
+
+    def test_numeros_da_pergunta_e_contagens_pequenas(self):
+        self.assertEqual(tipos('Rodada R001, sobre o contrato 041/2025 e os 3 aditivos citados.',
+                               pergunta='O que diz o contrato 041/2025?'), [])
+
+    def test_titulos_e_marcas_nao_viram_numeros(self):
+        self.assertEqual(tipos('## Resposta direta (R001)\n\n[A002@v1] O contrato vale R$ 8.750.000,00. [fonte:R2]'), [])
+
+    def test_causalidade_fica_como_alerta(self):
+        resultado = cb.conferir('[A002@v1] O aditivo de R$ 250.000,00 provocou o atraso. [fonte:R2]', dados(), REFS)
+        self.assertEqual(resultado['recusas'], [])
+        self.assertEqual([a['tipo'] for a in resultado['alertas']], ['causalidade_sem_suporte'])
+
+    def test_mensagem_limita_os_motivos(self):
+        texto = '\n\n'.join(f'O contrato {n} vale R$ {n}0 milhões.' for n in range(11, 20))
+        resultado = cb.conferir(texto, dados(), REFS)
+        self.assertEqual(len(resultado['recusas']), 9)
+        self.assertIn('e mais 3 frase(s)', cb.mensagem(resultado))
+
+
+class SinteseDoFluxoTest(unittest.TestCase):
+    """A conferência no fluxo da Mesa: recusa na primeira tentativa, a mesma etapa refaz e publica."""
+
+    start = fixture.CodexIntegrationTest.start
+    setUp = fluxo.FluxoAutomaticoTest.setUp
+    tool, wait_stage, end, step, terminal = (getattr(fluxo.FluxoAutomaticoTest, n) for n in
+                                             ('tool', 'wait_stage', 'end', 'step', 'terminal'))
+
+    def test_recusa_explica_e_a_segunda_tentativa_publica(self):
+        from agente_fluxo_fixture import entrega
+        for etapa in ('inventario', 'plano', 'busca', 'geracao_inicial', 'revisao'):
+            self.step(etapa)
+        self.wait_stage('sintese')
+        ref = self.refs['hit']['referencia']
+        exagero = {'texto': f'[A001@v1] A fonte sintética sempre declara valor 123 e 456. [fonte:{ref}]',
+                   'destinos': [{'achado_id': 'A001', 'destino': 'incluido', 'motivo': 'Revisado.'}]}
+        with self.assertRaisesRegex(ValueError, 'Conferência do briefing') as recusa:
+            self.tool({'acao': 'guardar', 'etapa': 'sintese', 'texto': json.dumps(exagero, ensure_ascii=False)})
+        self.assertIn('"456" não está na redação', str(recusa.exception))
+        self.assertIn('"sempre" é mais forte que A001 v1', str(recusa.exception))
+        revisoes = self.ctx['run'] / 'saidas/achados/revisoes'
+        self.assertEqual(sorted(p.name for p in revisoes.iterdir()), ['r1_busca', 'r2_revisao'])
+        self.end()
+        self.wait_stage('sintese', 2)
+        self.assertIn('Conferência do briefing', self.manager.rpc.calls[-1][1]['input'][0]['text'])
+        self.tool({'acao': 'guardar', 'etapa': 'sintese', 'texto': entrega('sintese', self.tool, self.refs)})
+        self.end()
+        self.terminal()
+        self.assertEqual(self.ctx['meta']['estado'], 'concluido', self.ctx['meta'].get('situacao'))
+        registros = sorted((self.ctx['run'] / 'saidas').glob('codex_conferencia_briefing_*.json'))
+        resultados = [json.loads(p.read_text(encoding='utf-8')) for p in registros]
+        self.assertEqual(sorted(len(r['recusas']) for r in resultados), [0, 2])
+
+
+if __name__ == '__main__':
+    unittest.main()
