@@ -1,6 +1,8 @@
 # Prompts ativos
 
-Versão 1.3.0 online, com cadastro antes da pergunta, consulta documental SQLite/FTS5, leitura dos originais e registro estruturado de achados no fluxo, com banco separado para consulta. Os sete módulos 00 a 06 são a fonte de autoria; [FLUXO_COMPLETO.md](FLUXO_COMPLETO.md) é montado por script e contém exatamente esses módulos. O [manifesto dos prompts](manifesto_prompts.json) registra os hashes. Rodadas antigas preservam os prompts congelados que efetivamente utilizaram.
+Prompts online, com cadastro antes da pergunta, consulta documental SQLite/FTS5, leitura dos originais e registro estruturado de achados no fluxo, com banco separado para consulta. Os sete módulos 00 a 06 são a fonte de autoria; [FLUXO_COMPLETO.md](FLUXO_COMPLETO.md) é montado por script e contém exatamente esses módulos. O [manifesto dos prompts](manifesto_prompts.json) registra os hashes. A versão dos prompts é uma só, `VERSAO_PROMPTS` em `scripts/comum.py`, e aparece no cabeçalho do `FLUXO_COMPLETO.md`; os módulos não escrevem número de versão. Rodadas antigas preservam os prompts congelados que efetivamente utilizaram.
+
+O [MESA.md](MESA.md) é a instrução que a Mesa de apuração manda ao modelo. Ele não entra no `FLUXO_COMPLETO.md`, que continua sendo o roteiro do agente de chat. O manifesto o registra na chave `mesa`, com versão e hash, e cada rodada escolhe a instrução pelo manifesto que congelou: sem a chave, a Mesa manda o sistema antigo; com a chave e o hash divergente, recusa a rodada.
 
 O agente deve carregar o fluxo completo como instrução, respeitar os estados e aguardar a pergunta. Ler os módulos não autoriza executar todas as tarefas imediatamente.
 

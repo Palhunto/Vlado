@@ -10,15 +10,15 @@ Com pergunta e rodada já autorizadas, seguir os módulos 03–06. Não criar um
 python scripts/achados.py validar --caso CASO --rodada R001 --arquivo execucoes/CASO/R001/saidas/achados_busca_r1.json
 python scripts/achados.py registrar --caso CASO --rodada R001 --arquivo execucoes/CASO/R001/saidas/achados_busca_r1.json
 python scripts/achados.py listar --caso CASO --rodada R001
-python scripts/achados.py construir --caso CASO --rodada R001 --revisao r3_briefing --geracao g1
-python scripts/achados.py verificar --caso CASO --rodada R001 --revisao r3_briefing --geracao g1
-python scripts/achados.py buscar --caso CASO --rodada R001 --revisao r3_briefing --geracao g1 --suporte sustentado --briefing sim
-python scripts/achados.py detalhe --caso CASO --rodada R001 --revisao r3_briefing --geracao g1 --achado-id A001
-python scripts/achados.py evidencia --caso CASO --rodada R001 --revisao r3_briefing --evidencia-id E001
-python scripts/achados.py exportar --caso CASO --rodada R001 --revisao r3_briefing --geracao g1 --briefing sim
+python scripts/achados.py construir --caso CASO --rodada R001 --revisao r3_sintese --geracao g1
+python scripts/achados.py verificar --caso CASO --rodada R001 --revisao r3_sintese --geracao g1
+python scripts/achados.py buscar --caso CASO --rodada R001 --revisao r3_sintese --geracao g1 --suporte sustentado --briefing sim
+python scripts/achados.py detalhe --caso CASO --rodada R001 --revisao r3_sintese --geracao g1 --achado-id A001
+python scripts/achados.py evidencia --caso CASO --rodada R001 --revisao r3_sintese --evidencia-id E001
+python scripts/achados.py exportar --caso CASO --rodada R001 --revisao r3_sintese --geracao g1 --briefing sim
 ```
 
-Substituir CASO, revisão e geração pelos valores publicados. IDs de revisão/geração aceitam letras minúsculas, números, `_` e `-`, até 32 caracteres, começando por letra/número. Não há escolha automática da revisão mais recente. `registrar` retorna `publicado_sem_indice`; `construir` retorna `indexado`. Só anunciar consulta pronta depois de construir/verificar a geração. A CLI devolve JSON UTF-8 e código 2 em erro.
+Substituir CASO, revisão e geração pelos valores publicados. A revisão final é `r3_sintese`, na Mesa e no prompt 05 (desde os prompts 1.5.0); rodadas antigas com `r3_briefing` continuam válidas e são consultadas pelo nome que publicaram. O destino `fora_do_briefing` é o achado sustentado listado em "Outros achados sustentados", fora do texto principal; o filtro `--briefing sim` continua só para o `incluido`. IDs de revisão/geração aceitam letras minúsculas, números, `_` e `-`, até 32 caracteres, começando por letra/número. Não há escolha automática da revisão mais recente. `registrar` retorna `publicado_sem_indice`; `construir` retorna `indexado`. Só anunciar consulta pronta depois de construir/verificar a geração. A CLI devolve JSON UTF-8 e código 2 em erro.
 
 `buscar` e `exportar` aceitam `--texto`, `--documento`, `--natureza`, `--suporte`, `--humana`, `--destino`, `--briefing`, `--limite` (1–50) e `--deslocamento`. O texto procura substring sem diferença de caixa/acentos na redação e no histórico de justificativas. Não usa o FTS documental. Filtros são combinados com AND. Documento, natureza, suporte, retorno humano, destino e presença no briefing referem-se à versão atual da redação. A busca textual inclui o histórico, que permanece visível. O filtro humano `retorno_recebido` indica existência de retorno para a versão atual; não é aprovação integral.
 

@@ -1,9 +1,9 @@
 {
-  "versao": "1.4.1",
+  "versao": "1.5.0",
   "modulos": [
     {
       "arquivo": "prompts/00_REGRAS.md",
-      "sha256": "0d91db3585f9a219af7574d75e90296c654f73ca24b78244dcd94e6ce0d5b420"
+      "sha256": "8582bc96bd75673d5fd22bac913110bb91a4fbef934ca0fc7a14a005c6421f5a"
     },
     {
       "arquivo": "prompts/01_DESCREVER_CORPUS.md",
@@ -11,27 +11,32 @@
     },
     {
       "arquivo": "prompts/02_PLANEJAR.md",
-      "sha256": "73aacf6f4a7bb6eccad3adf7a961af3a95ffaba8b7f0afcbabcabc30adf265ad"
+      "sha256": "6a0c69e9649ffa1934a0cf8ea026dded195183a0c072ac201a4f64af15339b6f"
     },
     {
       "arquivo": "prompts/03_BUSCAR_E_CRUZAR.md",
-      "sha256": "33e0c26b24736e9c987189e9fe65659296e8513fd31d600aeb27db83066e40f5"
+      "sha256": "8b06db671e540ca20d844a3842703957d48b0eab124bf15d58ba36da6bb5e7fe"
     },
     {
       "arquivo": "prompts/04_REVISAR_SUPORTE.md",
-      "sha256": "d205058aa8fc94df42e4867e5d69af825e2b6735a5483cb72d8104b2f97f6090"
+      "sha256": "47efb82080b602070252a833799a0c4eae0624eab06510728fff4b945fa86cfc"
     },
     {
       "arquivo": "prompts/05_SINTETIZAR.md",
-      "sha256": "6387ae818bb70040ff91180c151509eaff68043eeb632cb4dba6947df37d3210"
+      "sha256": "01b08e77bdc0ca61afb5a8555ea01cb3262b7d82cea51c1e205f1154a4bc0d1e"
     },
     {
       "arquivo": "prompts/06_INCORPORAR_REVISAO_HUMANA.md",
-      "sha256": "b8c1f53a6d7a5bcd55b783e104c66ee520a41ac991ce2b7e85571e214cc2e5c1"
+      "sha256": "2bb5a5bd9a9d2f25e20abb23c8c1c00e9ebe4ad2ad96c9c0b1ac68ab274b7eba"
     }
   ],
   "fluxo_completo": {
     "arquivo": "prompts/FLUXO_COMPLETO.md",
-    "sha256": "249a86d9cf52c326ef257caf238122cedd1286b41196cd7e969d4389711dea85"
+    "sha256": "593c45ab582c5dac65cd5528cb0ec208581cc5c91e4778970acca68924f5e029"
+  },
+  "mesa": {
+    "arquivo": "prompts/MESA.md",
+    "versao": "1.2.0",
+    "sha256": "437f220dcf638e6df27879b41f03a7df05cf7f6fb4a2645288f400db7d598a37"
   }
 }

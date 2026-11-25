@@ -12,7 +12,7 @@ from comum import dentro, ler_json, sha256
 from cadastrar_documentos import inventario
 from indice_sqlite import _entradas
 from indice_achados import resumo
-from registros_achados import carregar
+from registros_achados import carregar, COM_BRIEFING
 import diligencias
 import hipoteses
 import lixeira
@@ -262,7 +262,7 @@ def comparar(bundle, data, references, evidence_refs, payload):
             raise ValueError('Classificação ou justificativa incompatível com os vínculos do comparativo.')
         if kind == 'pendencia_respondida':
             if (not all(old[i]['natureza'] == 'pendencia' or old[i]['destino'] == 'pendencia' for i in before)
-                    or not all(current[i]['suporte'] == 'sustentado' and current[i]['destino'] == 'incluido' for i in after)
+                    or not all(current[i]['suporte'] == 'sustentado' and current[i]['destino'] in COM_BRIEFING for i in after)
                     or not all(any(e['documento_id'] in added and any(v['evidencia_id'] == e['id']
                         and v['papel'] == 'suporte' for v in current[i]['vinculos'])
                         for e in current[i]['evidencias']) for i in after)):
