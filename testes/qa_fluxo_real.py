@@ -53,7 +53,8 @@ def main():
     root = base / ('real_' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S') + '_' + uuid.uuid4().hex[:8])
     root.mkdir()
     (root / 'prompts').mkdir()
-    for name in (*PARTES, 'FLUXO_COMPLETO.md', 'manifesto_prompts.json'):
+    # MESA.md é o prompt do modo mesa (1.5.0): sem ele a instalação copiada não tem a instrução que a Mesa carrega.
+    for name in (*PARTES, 'FLUXO_COMPLETO.md', 'MESA.md', 'manifesto_prompts.json'):
         shutil.copyfile(ROOT / 'prompts' / name, root / 'prompts' / name)
     for name in ('AGENTS.md', 'README.md'):
         shutil.copyfile(ROOT / name, root / name)

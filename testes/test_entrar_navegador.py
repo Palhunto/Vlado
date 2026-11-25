@@ -9,7 +9,6 @@ Sem modelo e sem rede (o transporte de e-mail é o ``simulado``).
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import unittest
@@ -18,18 +17,18 @@ from unittest.mock import patch
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from auxiliar_node import requer_navegador_node
 import acesso
 import cenario_redacoes as cenario
 import correio
 from test_acesso import SENHA
 
-PLAYWRIGHT = RAIZ / '.ferramentas' / 'node' / 'node_modules' / 'playwright'
 NOVA = 'uma-senha-nova-bem-longa'
 SENHA_DO_CONVITE = 'senha-do-convite-bem-longa'
 VARIACOES = 4  # duas telas (375 e 1440) vezes dois temas
 
 
-@unittest.skipUnless(shutil.which('node') and PLAYWRIGHT.is_dir(), 'precisa do Node e do Playwright em .ferramentas/node')
+@requer_navegador_node
 class EntrarNoNavegadorTest(cenario.DuasRedacoes):
     def test_o_roteiro_inteiro_pelo_navegador(self):
         acesso.limpar_limites()
