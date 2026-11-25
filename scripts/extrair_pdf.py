@@ -10,10 +10,49 @@ ERRO_TEXTO = '[ERRO DE EXTRACAO NESTA PAGINA]'
 # Pages with fewer alphanumeric characters than this (e.g. only a stamped page number) are
 # treated as lacking usable native text and become OCR candidates.
 MINIMO_ALFANUMERICOS_NATIVO = 10
+# L7: a scanned page often carries a native footer (electronic signature, verification code, page number)
+# with more than the minimum above, and its body, an image, was never read. A page whose images cover at
+# least COBERTURA_MINIMA_IMAGEM of its area and whose native text is short (a footer) is also a candidate.
+# For those pages the OCR reading replaces the native one only when it brings at least GANHO_MINIMO_OCR more
+# alphanumeric characters (about a sentence), so a native page with a large photo and a caption keeps its native text.
+MAXIMO_ALFANUMERICOS_RODAPE = 400
+COBERTURA_MINIMA_IMAGEM = 0.6
+GANHO_MINIMO_OCR = 50
 
 
 def _alfanumericos(texto: str) -> int:
     return sum(1 for c in texto if c.isalnum())
+
+
+def cobertura_de_imagem(source: Path, paginas) -> dict:
+    """{página: fração da área coberta por imagens}, pelo PyMuPDF (as caixas onde cada imagem é desenhada,
+    recortadas à página). Sem PyMuPDF ou com o PDF ilegível para ele, {}: vale só o mínimo de texto nativo."""
+    paginas = sorted(set(paginas))
+    if not paginas:
+        return {}
+    try:
+        import pymupdf
+        documento = pymupdf.open(str(source))
+    except Exception:  # noqa: BLE001 - optional: the extraction goes on with the native-text rule only
+        return {}
+    result = {}
+    try:
+        if documento.needs_pass and not documento.authenticate(''):
+            return {}
+        for numero in paginas:
+            pagina = documento[numero - 1]
+            area = abs(pagina.rect)
+            coberta = 0.0
+            for info in pagina.get_image_info():
+                caixa = pymupdf.Rect(info['bbox']) & pagina.rect
+                if not caixa.is_empty:
+                    coberta += abs(caixa)
+            result[numero] = min(1.0, coberta / area) if area else 0.0
+    except Exception:  # noqa: BLE001
+        return {}
+    finally:
+        documento.close()
+    return result
 
 
 def _tentar_ocr(source: Path, candidatas: list, result: dict) -> dict:
@@ -66,6 +105,14 @@ def _orientacao_resumo(registro: dict) -> str:
     return f'{lida} (OSD, confianca {registro["osd_confianca"]}{texto_de})'
 
 
+def _rodape(result: dict) -> str:
+    paginas = result.get('paginas_imagem_com_rodape')
+    if not paginas:
+        return ''
+    return (' e nas paginas ' + ', '.join(map(str, paginas)) + ', cobertas por imagem com so um rodape de texto '
+            'nativo')
+
+
 def _metodo(pypdf_version: str, result: dict) -> str:
     base = f'pypdf {pypdf_version}; extract_text por pagina'
     motor = result.get('ocr_motor')
@@ -84,9 +131,11 @@ def _metodo(pypdf_version: str, result: dict) -> str:
                 nome += ('; paginas ' + ', '.join(map(str, diretas)) + ' lidas pelo Tesseract direto sobre a '
                          'renderizacao do PyMuPDF, sem o OCRmyPDF')
         return (f'{base}; OCR local ({nome}; {versoes}; idiomas {motor["idiomas"]}) somente nas '
-                'paginas sem texto nativo; reconhecimento automatico sujeito a erros; sem correcao editorial.')
+                'paginas sem texto nativo' + _rodape(result) + '; reconhecimento automatico sujeito a erros; '
+                'sem correcao editorial.')
     if result['ocr_tentado']:
-        return f'{base}; OCR local tentado nas paginas sem texto nativo, sem texto reconhecido; sem correcao editorial.'
+        return (f'{base}; OCR local tentado nas paginas sem texto nativo{_rodape(result)}, sem texto reconhecido; '
+                'sem correcao editorial.')
     return f'{base}; sem OCR ou correcao editorial.'
 
 
@@ -136,6 +185,13 @@ def extrair_pdf(source: Path, identifier: str, target: Path, *, ocr_ativo: bool 
         ocr._avisar('texto', number, count)  # progress for the extraction queue (ocr.execucao); no-op outside it
     candidates = [n for n in range(1, count + 1)
                   if _alfanumericos(native[n]) < MINIMO_ALFANUMERICOS_NATIVO]
+    curtas = [n for n in range(1, count + 1) if n not in candidates and n not in native_errors
+              and _alfanumericos(native[n]) <= MAXIMO_ALFANUMERICOS_RODAPE]
+    cobertura = cobertura_de_imagem(source, curtas) if ocr_ativo else {}
+    rodape = sorted(n for n, fracao in cobertura.items() if fracao >= COBERTURA_MINIMA_IMAGEM)
+    if rodape:
+        result['paginas_imagem_com_rodape'] = rodape
+        candidates = sorted(candidates + rodape)
     recognized = _tentar_ocr(source, candidates, result) if candidates and ocr_ativo else {}
     if candidates and not ocr_ativo:
         result['ocr_indisponivel'] = 'OCR nao solicitado para esta extracao.'
@@ -145,7 +201,9 @@ def extrair_pdf(source: Path, identifier: str, target: Path, *, ocr_ativo: bool 
         body.extend([f'## {identifier} - pagina PDF {number}', ''])
         outcome = recognized.get(number, {})
         ocr_text = outcome.get('texto', '')
-        use_ocr = _alfanumericos(ocr_text) > _alfanumericos(native[number])
+        nativos = _alfanumericos(native[number])
+        lidos = _alfanumericos(ocr_text)
+        use_ocr = lidos >= nativos + GANHO_MINIMO_OCR if number in rodape else lidos > nativos
         if use_ocr:
             lines, origin = ocr_text.splitlines(), 'ocr'
             if outcome.get('orientacao'):
