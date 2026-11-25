@@ -55,7 +55,7 @@ class SeusDadosNoNavegadorTest(cenario.DuasRedacoes):
             correio.aguardar()
         self.assertEqual(processo.returncode, 0, (processo.stdout + processo.stderr)[-3000:])
         resultado = json.loads(processo.stdout.strip().splitlines()[-1])
-        self.assertEqual(resultado['exportado']['incompleto'], ['itens_criados', 'registro_de_acesso'])
+        self.assertEqual(resultado['exportado']['incompleto'], ['conversas_anteriores'])
 
         # A repórter excluiu a conta: a senha certa já não a deixa entrar. A dona, que não saiu, segue.
         acesso.limpar_limites()
