@@ -93,7 +93,7 @@ def _candidatos_ia(root, case, analise, cache):
                         'origem': 'ia', 'tipo_fonte': 'achado_ia', 'texto': version['redacao'], 'referencia': ref,
                         'achado': {'id': claim['id'], 'versao': version['versao'],
                                    'destino': fates[-1]['destino'] if fates else None},
-                        'justificativa': link['justificativa']})
+                        'justificativa': link['justificativa'], 'papel': link['papel']})
     return out
 
 
@@ -124,7 +124,7 @@ def _resultado(root, case, entry, ligadas, cache):
     except ValueError as exc:  # the source stopped resolving: listed as unavailable, never as linkable
         resolved, error = None, str(exc)
     # B1 of the Coruja: the values come from this result's finding, never from another finding with the same E-ID.
-    review = (vinculo_ia.revisao_ia(root, case, entry['referencia'], cache, entry['achado']['id'])
+    review = (vinculo_ia.revisao_ia(root, case, entry['referencia'], cache, entry['achado']['id'], entry['papel'])
               if entry['origem'] == 'ia' else None)
     fill = vinculo_ia.preenchimento(review)
     human = None

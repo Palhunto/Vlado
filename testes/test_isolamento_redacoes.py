@@ -134,7 +134,9 @@ class TravessiaTest(cenario.DuasRedacoes):
         causas = {'outra redação': 'beta', 'sem participação': 'gama', 'sem posse': 'orfa', 'id malformado': '../beta',
                   'id que não é texto': 123, 'id vazio': '', 'sem id': None}
         for operacao in ('analises', 'apuracao-notas', 'original', 'achados-revisao-salvar', 'caso-participantes',
-                         'rascunhos-listar', 'codex-listar', 'codex-perguntar', 'evidencia-buscar'):
+                         'rascunhos-listar', 'codex-listar', 'codex-perguntar', 'evidencia-buscar',
+                         'sugestoes-listar', 'sugestoes-descartar', 'mapa-entidade-detalhe',
+                         'comparar-processos'):
             for causa, caso in causas.items():
                 with self.subTest(operacao=operacao, causa=causa):
                     resposta = self.post('editor', operacao, {'caso': caso, 'pergunta': 'x'} if operacao == 'codex-perguntar'

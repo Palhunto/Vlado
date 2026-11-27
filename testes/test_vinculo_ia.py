@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from fixture_achados import Ambiente
 from registros_achados import carregar, publicar
 import caderno
+import conferencia_redacao as redacao
 import erros
 import evidencias as ev
 import hipoteses
@@ -142,7 +143,8 @@ class VinculoIaTest(unittest.TestCase):
                 fill = vinculo_ia.preenchimento(review)
                 self.assertEqual((fill['papel'], fill['suporte'], fill['natureza']),
                                  (review['papel'], expected, review['natureza']))
-        self.assertEqual(vinculo_ia.preenchimento(None), {'papel': 'suporte', 'suporte': 'nao_revisado', 'natureza': None})
+        self.assertEqual(vinculo_ia.preenchimento(None), {'papel': 'suporte', 'suporte': 'nao_revisado', 'natureza': None,
+                                                          'destino': None})
 
     def test_achado_retirado_ligado_com_sustentado_fica_como_escolha_da_pessoa(self):
         review = {**vinculo_ia.revisao_ia(self.root, 'alpha', self.ia(), {}), 'destino': 'retirado'}
@@ -247,7 +249,7 @@ class VinculoIaTest(unittest.TestCase):
         self.assertEqual(seletor_evidencia.ORIGENS, ('tudo', 'ia', 'caderno'))
 
 
-def publicar_r3_com_e_id_compartilhada(env):
+def publicar_r3_com_e_id_compartilhada(env, contexto=False):
     """r3 over r2: A003 (retirado, não sustentado) also links E001, the support of A001 (incluído), and E004 has no
     link at all. The findings validator lets both through (B1 and R3 of the Coruja on adffc2e)."""
     data, manifest = carregar(env.root, 'alpha', 'R001', 'r2')
@@ -257,6 +259,9 @@ def publicar_r3_com_e_id_compartilhada(env):
          'limitacoes': 'Sintético.'}]})
     r3['vinculos'].append({'achado_id': 'A003', 'versao': 1, 'evidencia_id': 'E001', 'papel': 'suporte',
                            'justificativa': 'Mesma linha, outra afirmação.'})
+    if contexto:  # R2 of the Coruja on 446bfc6: the same E-ID in two roles of the same finding
+        r3['vinculos'].append({'achado_id': 'A001', 'versao': 2, 'evidencia_id': 'E001', 'papel': 'contexto',
+                               'justificativa': 'A mesma linha dá o contexto.'})
     r3['revisoes_assistidas'].append({'achado_id': 'A003', 'versao': 1, 'suporte': 'nao_sustentado',
                                       'motivo': 'Pagamento não consta.', 'fontes_reabertas': ['E001'],
                                       'limitacoes': 'Revisão pela IA.', 'acao': 'retirar'})
@@ -352,7 +357,74 @@ class EvidenciaEmDoisAchadosTest(unittest.TestCase):
             rotas_evidencia.executar(self.root, 'evidencia-buscar', {'caso': 'alpha'})
         self.assertEqual(calls, [('alpha', 'R001', 'r3')])
 
+    def test_a_escolha_do_achado_nao_viaja_dentro_do_vinculo(self):
+        # R1 of the Coruja on 446bfc6: links built outside a board (the story claims) carry nothing extra.
+        links = ev.vinculos(self.root, 'alpha', [{**self.link(self.ref()), 'achado_id': 'A003'}])
+        self.assertEqual(set(links[0]), ev.CAMPOS_SALVOS)
+        ev.validar_vinculo_salvo(links[0])
+        # The claim panel of the story check sends what the picker suggests, with achado_id (the Coruja saw it fail).
+        story = redacao.criar(self.root, {'caso': 'alpha', 'requisicao_id': uuid.uuid4().hex, 'autor': 'Ana Lima',
+                                          'titulo': 'Reportagem sintética', 'texto': 'A fonte declara valor 12. O valor foi pago.'})
+        found = rotas_evidencia.executar(self.root, 'evidencia-buscar', {'caso': 'alpha', 'origem': 'ia'})
+        picked = next(r['vinculo_sugerido'] for r in found['resultados'] if r['achado']['id'] == 'A003')
+        linked = redacao.vincular(self.root, {'caso': 'alpha', 'requisicao_id': uuid.uuid4().hex, 'autor': 'Ana Lima',
+                                              'id': story['id'], 'anterior_sha256': story['sha256'],
+                                              'afirmacao_id': story['estado']['afirmacoes'][0]['id'], 'evidencias': [picked]})
+        self.assertEqual(set(linked['estado']['afirmacoes'][0]['evidencias'][0]), ev.CAMPOS_SALVOS)
+
+    def test_ligar_a_versao_nova_e_voltar_ao_da_ia_com_o_preenchimento_nao_marcam_a_pessoa(self):
+        # B1 of the Coruja on the forms (3c1b363): the fill the server sends is never a person's change.
+        item = self.hipotese([{**self.link(self.ia('E001', 'r1'), suporte='nao_revisado'), 'achado_id': 'A001'}])
+        read = ev.conferir_vinculos(self.root, 'alpha', item['estado']['evidencias'])[0]
+        self.assertEqual(read['preenchimento_ia'], {'papel': 'suporte', 'suporte': 'nao_revisado',
+                                                    'natureza': 'alegacao_atribuida', 'destino': None})
+        new = read['versao_nova']
+        self.assertEqual(new['preenchimento'], {'papel': 'suporte', 'suporte': 'sustentado',
+                                                'natureza': 'alegacao_atribuida', 'destino': 'incluido'})
+        fill = {k: new['preenchimento'][k] for k in ('papel', 'suporte', 'natureza')}
+        moved = VinculoIaTest.atualizar(self, item, [{'referencia': new['referencia'], **fill, 'achado_id': new['achado_id'],
+                                                       'justificativa': 'Versão nova.'}])
+        self.assertNotIn('alteracoes', moved['estado']['evidencias'][0])
+        # Two changes by people, then "Voltar ao da IA" with the fill (not the mark's "anterior").
+        once = VinculoIaTest.atualizar(self, moved, [{**self.link(self.ref()), 'achado_id': 'A001', 'suporte': 'parcial'}])
+        twice = VinculoIaTest.atualizar(self, once, [{**self.link(self.ref()), 'achado_id': 'A001', 'suporte': 'ilegivel'}])
+        mark = twice['estado']['evidencias'][0]['alteracoes']['suporte']
+        self.assertEqual((mark['anterior'], mark['valor']), ('parcial', 'ilegivel'))
+        read = ev.conferir_vinculos(self.root, 'alpha', twice['estado']['evidencias'])[0]
+        back = VinculoIaTest.atualizar(self, twice, [{**self.link(self.ref()), 'achado_id': 'A001',
+                                                      'suporte': read['preenchimento_ia']['suporte']}])
+        self.assertNotIn('alteracoes', back['estado']['evidencias'][0])
+
+    def test_versao_nova_retirada_vem_com_o_preenchimento_nao_revisado(self):
+        item = self.hipotese([{**self.link(self.ia('E001', 'r1'), suporte='nao_revisado'), 'achado_id': 'A001'}])
+        retirada = {**vinculo_ia.revisao_ia(self.root, 'alpha', self.ref(), {}, 'A001'), 'destino': 'retirado'}
+        with patch.object(vinculo_ia, '_valores', side_effect=lambda *a, **k: {**retirada, 'versao': 2}):
+            new = ev.conferir_vinculos(self.root, 'alpha', item['estado']['evidencias'])[0]['versao_nova']
+        self.assertEqual((new['revisao_ia']['suporte'], new['preenchimento']['suporte'], new['preenchimento']['destino']),
+                         ('sustentado', 'nao_revisado', 'retirado'))
+
     ia, humana = VinculoIaTest.ia, VinculoIaTest.humana
+
+
+class EvidenciaEmDoisPapeisTest(EvidenciaEmDoisAchadosTest):
+    """R2 of the Coruja on 446bfc6: E001 is support and context of A001: one picker result per role."""
+
+    def setUp(self):
+        self.setUp_base()
+        self.r3 = publicar_r3_com_e_id_compartilhada(self.env, contexto=True)
+
+    test_seletor_da_a_cada_achado_os_valores_dele = None  # one result per role here: the test below covers it
+
+    def test_seletor_da_a_cada_papel_a_revisao_dele(self):
+        found = rotas_evidencia.executar(self.root, 'evidencia-buscar', {'caso': 'alpha', 'origem': 'ia'})
+        e001 = [r for r in found['resultados'] if r['vinculo_sugerido']['referencia']['evidencia_id'] == 'E001'
+                and r['achado']['id'] == 'A001']
+        self.assertEqual(sorted((r['revisao_ia']['papel'], r['vinculo_sugerido']['papel'], r['vinculo_sugerido']['suporte'])
+                                for r in e001),
+                         [('contexto', 'contexto', 'nao_revisado'), ('suporte', 'suporte', 'sustentado')])
+        item = self.hipotese([r['vinculo_sugerido'] for r in e001])
+        self.assertEqual(sorted((x['papel'], x['revisao_ia']['papel'], 'alteracoes' in x) for x in item['estado']['evidencias']),
+                         [('contexto', 'contexto', False), ('suporte', 'suporte', False)])
 
 
 if __name__ == '__main__':

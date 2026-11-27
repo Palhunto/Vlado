@@ -158,11 +158,13 @@ _linhas(MATRIZ, 'caso', 'E', MESA, 'apuracao-salvar apuracao-adicionar apuracao-
 # 5.11 Quadros de evidência e tabelas.
 _linhas(MATRIZ, 'caso', 'L', LEITURA, 'hipoteses-listar hipoteses-detalhe hipoteses-quadro linha-tempo-listar '
                                       'linha-tempo-detalhe comparar-evidencias comparar-documentos mapa-ver mapa-homonimos '
-                                      'tabelas-listar tabelas-detalhe tabelas-historico-celula tabelas-calcular evidencia-buscar')
+                                      'tabelas-listar tabelas-detalhe tabelas-historico-celula tabelas-calcular evidencia-buscar '
+                                      'sugestoes-listar comparar-processos')
 _linhas(MATRIZ, 'caso', 'B', LEITURA, 'tabelas-exportar')
 _linhas(MATRIZ, 'caso', 'E', MESA, 'hipoteses-criar hipoteses-atualizar linha-tempo-criar linha-tempo-atualizar '
                                    'mapa-entidade-criar mapa-entidade-atualizar mapa-relacao-criar mapa-relacao-atualizar '
-                                   'tabelas-criar tabelas-atualizar tabelas-corrigir')
+                                   'tabelas-criar tabelas-atualizar tabelas-corrigir sugestoes-confirmar sugestoes-corrigir '
+                                   'sugestoes-descartar sugestoes-restaurar mapa-entidade-detalhe')
 # 5.12 Texto da matéria e entrevistas.
 _linhas(MATRIZ, 'caso', 'L', LEITURA, 'redacao-listar redacao-conferir redacao-dividir entrevistas-lacunas '
                                       'entrevistas-listar entrevistas-detalhe')

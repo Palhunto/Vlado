@@ -80,6 +80,7 @@ COPY scripts/acesso.py \
      scripts/cadastrar_documentos.py \
      scripts/caderno.py \
      scripts/codex_apuracao.py \
+     scripts/comparacao_processos.py \
      scripts/comparador.py \
      scripts/comum.py \
      scripts/custo.py \

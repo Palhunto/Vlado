@@ -8,6 +8,7 @@ Agente sintético e provedor simulado; sem rede e sem modelo. Nomes sintéticos 
 import copy
 import json
 import unittest
+from unittest.mock import patch
 
 import test_codex_integracao as fixture
 import test_fora_do_briefing as fora
@@ -87,6 +88,23 @@ class CandidatosNaSinteseTest(unittest.TestCase):
         self.assertEqual(self.ctx['meta']['estado'], 'concluido', self.ctx['meta'].get('situacao'))
         self.assertEqual(ler_json(self.arquivo())['candidatos'], [])
 
+    def test_falha_ao_gravar_os_candidatos_nao_publica_a_sintese_e_a_nova_tentativa_sai(self):
+        # N2 of the Coruja: the candidates are written before the synthesis is published.
+        self.ate_a_sintese()
+        real = sq.escrever_json
+        with patch.object(sq, 'escrever_json', side_effect=OSError('Disco cheio (sintético).')):
+            with self.assertRaisesRegex(OSError, 'Disco cheio'):
+                self.guardar({**self.briefing(), 'candidatos': BONS})
+        self.assertFalse((self.ctx['run'] / 'saidas/achados/revisoes/r3_sintese').exists())
+        self.assertFalse(self.arquivo().exists())
+        self.assertIs(sq.escrever_json, real)
+        self.guardar({**self.briefing(), 'candidatos': BONS})
+        self.end()
+        self.terminal()
+        self.assertEqual(self.ctx['meta']['estado'], 'concluido', self.ctx['meta'].get('situacao'))
+        _, manifest = carregar(self.root, 'alpha', 'R001', 'r3_sintese')
+        self.assertEqual(ler_json(self.arquivo())['registros_sha256'], manifest['registros_sha256'])
+
     def test_sem_candidatos_nao_ha_arquivo(self):
         self.ate_a_sintese()
         self.step('sintese', self.briefing())
@@ -107,6 +125,7 @@ class CandidatosNoLegadoTest(CandidatosNaSinteseTest):
         self.terminal()
 
     test_lista_malformada_recusa_a_sintese_e_a_mesma_etapa_aceita_a_correcao = None
+    test_falha_ao_gravar_os_candidatos_nao_publica_a_sintese_e_a_nova_tentativa_sai = None
 
 
 class RegrasDoCandidatoTest(unittest.TestCase):

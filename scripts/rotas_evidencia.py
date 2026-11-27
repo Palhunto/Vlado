@@ -10,6 +10,7 @@ módulos dentro de ``casos/<caso>`` e ``execucoes/<caso>/<rodada>``.
 import re
 
 import caderno
+import comparacao_processos
 import comparador
 from indice_sqlite import ID_DOCUMENTO
 import evidencias as ev
@@ -18,15 +19,19 @@ import linha_tempo
 import lixeira
 import mapa_relacoes
 import seletor_evidencia
+import sugestoes_quadros
 
 LEITURA = ('hipoteses-listar', 'hipoteses-detalhe', 'hipoteses-quadro',
            'linha-tempo-listar', 'linha-tempo-detalhe',
            'comparar-evidencias', 'comparar-documentos',
-           'mapa-ver', 'mapa-homonimos', 'evidencia-buscar')
+           'mapa-ver', 'mapa-homonimos', 'mapa-entidade-detalhe', 'evidencia-buscar', 'sugestoes-listar',
+           'comparar-processos')
 # Pedidos que gravam um evento com vínculos de evidência: o servidor aceita corpo de até 128 KB.
 SALVAR = ('hipoteses-criar', 'hipoteses-atualizar', 'linha-tempo-criar', 'linha-tempo-atualizar',
           'mapa-entidade-criar', 'mapa-entidade-atualizar', 'mapa-relacao-criar', 'mapa-relacao-atualizar')
-OPERACOES = LEITURA + SALVAR
+# P45: decisions on the AI's suggestions for the boards (sugestoes_quadros); also up to 128 KB (corrigir carries the item).
+SUGESTOES = ('sugestoes-confirmar', 'sugestoes-corrigir', 'sugestoes-descartar', 'sugestoes-restaurar')
+OPERACOES = LEITURA + SALVAR + SUGESTOES
 
 _SALVADORES = {'hipoteses': hipoteses.salvar, 'linha-tempo': linha_tempo.salvar,
                'mapa-entidade': mapa_relacoes.salvar_entidade, 'mapa-relacao': mapa_relacoes.salvar_relacao}
@@ -35,8 +40,9 @@ _CAMPOS = {'hipoteses-listar': {'caso'}, 'hipoteses-detalhe': {'caso', 'id'}, 'h
            'linha-tempo-listar': {'caso', 'tipos', 'incluir_retirados'}, 'linha-tempo-detalhe': {'caso', 'id'},
            'comparar-evidencias': {'caso', 'a', 'b'},
            'comparar-documentos': {'caso', 'rodada', 'documento_a', 'documento_b', 'contexto'},
-           'mapa-ver': {'caso', 'incluir_retirados'}, 'mapa-homonimos': {'caso'},
-           'evidencia-buscar': seletor_evidencia.CAMPOS}
+           'mapa-ver': {'caso', 'incluir_retirados'}, 'mapa-homonimos': {'caso'}, 'mapa-entidade-detalhe': {'caso', 'id'},
+           'evidencia-buscar': seletor_evidencia.CAMPOS, 'sugestoes-listar': {'caso', 'quadro', 'incluir_decididas'},
+           'comparar-processos': {'caso', 'rodada'}}
 
 
 def _caso(root, case, casos):
@@ -66,6 +72,8 @@ def executar(root, operation, data, conta=None, casos=None):
     if operation not in OPERACOES or not isinstance(data, dict):
         raise ValueError('Operação dos quadros de evidência desconhecida.')
     case = _caso(root, data.get('caso'), casos)
+    if operation in SUGESTOES:
+        return sugestoes_quadros.decidir(root, data, operation.split('-', 1)[1], conta)
     if operation in SALVAR:
         prefix, action = operation.rsplit('-', 1)
         return _SALVADORES[prefix](root, data, action, conta)
@@ -94,6 +102,14 @@ def executar(root, operation, data, conta=None, casos=None):
         return comparador.comparar_documentos(root, case, run, *docs, contexto=data.get('contexto', 2))
     if operation == 'evidencia-buscar':
         return seletor_evidencia.buscar(root, case, data)
+    if operation == 'sugestoes-listar':
+        return sugestoes_quadros.listar(root, case, data)
+    if operation == 'comparar-processos':
+        return comparacao_processos.comparar(root, case, data)
+    if operation == 'mapa-entidade-detalhe':
+        # The record as saved (identifiers unmasked, as hipoteses-detalhe), for the Edit form: mapa-ver masks them.
+        # In the matrix it goes with the edit capabilities (E/MESA), so a reader never gets the unmasked value.
+        return _com_evidencias(root, case, mapa_relacoes.detalhe_entidade(root, case, data.get('id')))
     if operation == 'mapa-ver':
         return mapa_relacoes.mapa(root, case, incluir_retirados=_sim_nao(data, 'incluir_retirados'))
     return {'caso': case, 'homonimos': mapa_relacoes.homonimos(root, case)}
