@@ -7,7 +7,6 @@ pulado. Sem modelo e sem rede.
 """
 import json
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import unittest
@@ -16,14 +15,14 @@ from unittest.mock import patch
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from auxiliar_node import requer_navegador_node
 import acesso
 import cenario_redacoes as cenario
 from test_acesso import SENHA
 
-PLAYWRIGHT = RAIZ / '.ferramentas' / 'node' / 'node_modules' / 'playwright'
 
 
-@unittest.skipUnless(shutil.which('node') and PLAYWRIGHT.is_dir(), 'precisa do Node e do Playwright em .ferramentas/node')
+@requer_navegador_node
 class NovaApuracaoNoNavegadorTest(cenario.DuasRedacoes):
     def test_o_cabecalho_diz_o_nome_da_apuracao_nova_no_passo_3(self):
         acesso.limpar_limites()
