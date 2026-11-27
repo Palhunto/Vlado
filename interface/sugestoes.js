@@ -41,7 +41,7 @@ window.Quadros.sugestoes = (() => {
   function vinculo(sug, i) {
     const salvo = sug.campos?.evidencias?.[i] || {}, ev = sug.evidencias?.[i] || {};
     return {referencia: ev.referencia || salvo.referencia, papel: salvo.papel, suporte: salvo.suporte, natureza: salvo.natureza, justificativa: salvo.justificativa || '',
-      estado: ev.estado, erro: ev.erro, localizador: ev.localizador,
+      estado: ev.estado, erro: ev.erro, localizador: ev.localizador, suporte_so_da_ia: !!ev.revisao_ia && ev.conferencia_humana?.estado !== 'conferida_no_original' && salvo.suporte === ev.revisao_ia.suporte,
       evidencia: ev.estado === 'indisponivel' ? null : {documento: ev.documento, trecho: ev.trecho, localizador: ev.localizador}, revisao_ia: ev.revisao_ia, conferencia_humana: ev.conferencia_humana};
   }
   const nomeDa = (sug, ponta) => sug.pontas?.[ponta]?.nome || '';

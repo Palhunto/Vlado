@@ -102,3 +102,15 @@ test('voltar chama aoVoltar', async () => {
   m.sel.querySelector('.seletor-voltar').click();
   assert.ok(m.janela.__voltou === true);
 });
+
+test('R2: resultado indisponível não é ligável: não abre, não tem "Ligar" e diz o motivo', async () => {
+  const dados = {...DADOS, resultados: [ACHADO(1, {indisponivel: true}), ACHADO(2)]};
+  const m = montar(() => dados); await quando(m);
+  const [indisp, normal] = m.sel.querySelectorAll('.seletor-resultado');
+  assert.ok(indisp.tagName === 'DIV', 'não é botão');
+  assert.match(indisp.textContent, /A evidência não está mais disponível\./);
+  indisp.click();
+  assert.equal(m.sel.querySelector('.seletor-aberto'), null, 'não abre');
+  normal.click();
+  assert.ok(m.sel.querySelector('.seletor-aberto'), 'o resultado normal abre');
+});

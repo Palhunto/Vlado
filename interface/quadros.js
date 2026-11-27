@@ -74,8 +74,10 @@ window.Quadros = (() => {
     }
     item.append(dado('blockquote', ev.trecho || t('Fonte visual: consulte o original.')));
     const selos = element('p', undefined, 'quadro-selos small');
-    // The seal is the assessment of this link, also in the "contradicts" column: say so.
-    selos.append(element('span', t('Avaliação: {s}', {s: t(SUPORTE[vinculo.suporte] || vinculo.suporte).toLowerCase()}), `quadro-selo suporte-${vinculo.suporte}`),
+    // The seal is the assessment of this link, also in the "contradicts" column: say so. Quando o suporte vem só da revisão da IA (sugestão
+    // ainda não confirmada, ou `suporte_so_da_ia` do servidor), a marca é a pílula da P20a, "IA · sustentado", e nunca o selo da avaliação humana.
+    selos.append(vinculo.suporte_so_da_ia === true ? seloIA(vinculo.suporte)
+      : element('span', t('Avaliação: {s}', {s: t(SUPORTE[vinculo.suporte] || vinculo.suporte).toLowerCase()}), `quadro-selo suporte-${vinculo.suporte}`),
       element('span', t(NATUREZA[vinculo.natureza] || vinculo.natureza), 'quadro-selo'));
     item.append(selos);
     if (vinculo.justificativa) item.append(dado('p', vinculo.justificativa, 'quadro-justificativa'));
@@ -204,8 +206,9 @@ window.Quadros = (() => {
     const efetiva = () => { const c = consulta(); return {...c, texto: c.texto.length >= 2 ? c.texto : ''}; };
 
     function cartao(r) {
-      const bloco = element(r.ligada ? 'div' : 'button', undefined, 'seletor-resultado');
-      if (!r.ligada) bloco.type = 'button';
+      const fechado = r.ligada || r.indisponivel;
+      const bloco = element(fechado ? 'div' : 'button', undefined, 'seletor-resultado');
+      if (!fechado) bloco.type = 'button';
       bloco.dataset.chave = r.chave; bloco.dataset.origem = r.origem;
       bloco.append(element('span', t(r.tipo || (r.origem === 'ia' ? 'Achado da IA' : 'Trecho do caderno')), 'seletor-tipo'),
         dado('span', r.texto || '', 'seletor-texto'), dado('span', r.localizador || '', 'seletor-localizador'));
@@ -216,6 +219,7 @@ window.Quadros = (() => {
       if (r.destino === 'retirado') situacao.append(element('span', t('retirado pela revisão'), 'seletor-retirado'));
       else if (r.destino === 'fora_do_briefing') situacao.append(element('span', t('fora do briefing (sustentado)'), 'seletor-nota'));
       bloco.append(situacao);
+      if (r.indisponivel) { bloco.classList.add('is-ligada', 'is-indisponivel'); bloco.append(element('span', t('A evidência não está mais disponível.'), 'seletor-nota')); return bloco; }
       if (r.ligada) { bloco.classList.add('is-ligada'); bloco.append(element('span', t('Já ligada a este item'), 'seletor-nota')); return bloco; }
       bloco.setAttribute('aria-expanded', 'false');
       bloco.addEventListener('click', () => abrir(r, bloco));

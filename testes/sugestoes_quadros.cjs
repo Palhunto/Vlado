@@ -30,13 +30,15 @@ const entrada = (id, tipo, valor, precisao) => ({evento_id: id, sha256: 'e'.repe
 const MAPA = {caso: 'alpha', aviso: '', homonimos: [], relacoes: [], entidades: [{id: ALFA, nome: 'Construtora Alfa Ltda.', tipo: 'organizacao', situacao: 'com_evidencia', identificadores: []}]};
 const hip = (id, situacao) => ({id, enunciado: `Hipótese ${id}`, situacao, condicao: 'pendencia', natureza: null, situacao_sem_base: false, sustentam: [], contrariam: [], faltam: [], contexto: [], indisponiveis: []});
 
-function montar({sugestoes, quando = {}, permissao = true, listarFalha = false, confirmarFalha = null} = {}) {
+const FONTE_HUMANA = {referencia: referencia(3), papel: 'suporte', suporte: 'sustentado', natureza: 'declaracao_documental', justificativa: 'Conferida por pessoa.', documento_id: 'D001', estado: 'conferida',
+  evidencia: {documento: {nome: 'edital.pdf'}, trecho: 'Edital publicado.', localizador: {pagina_pdf: 2, legivel: 'D001 · p. 2'}}, localizador: {legivel: 'D001 · p. 2'}};
+function montar({sugestoes, quando = {}, permissao = true, listarFalha = false, confirmarFalha = null, comFonte = false} = {}) {
   const estado = sugestoes.map(s => ({...s}));
   const m = criarMesa({scripts: [...PILHA, 'quadros.js', 'sugestoes.js', 'analise.js', 'indicador_salvamento.js'], desktop: true,
     api: (operacao, dados) => {
       if (operacao === 'mapa-ver') return MAPA;
       if (operacao === 'linha-tempo-listar') return {caso: 'alpha', total: 2, divergencias: [], fontes_indisponiveis: [], divergentes: [], tipos_data: TIPOS, aviso: '',
-        entradas: [entrada('T1', 'fato', '2025-02-10', 'dia'), entrada('T2', 'fato', '2025-06-01', 'dia')]};
+        entradas: [entrada('T1', 'fato', '2025-02-10', 'dia'), entrada('T2', 'fato', '2025-06-01', 'dia')].map(e => (comFonte && e.evento_id === 'T1' ? {...e, fonte_da_data: FONTE_HUMANA} : e))};
       if (operacao === 'hipoteses-quadro') return {caso: 'alpha', total: 2, divergentes: [], aviso: '', hipoteses: [hip('H1', 'sustentada'), hip('H2', 'em_aberto')]};
       if (operacao === 'sugestoes-listar') {
         if (listarFalha) throw Object.assign(new Error('Operação desconhecida.'), {result: {erro: 'Operação desconhecida.', codigo: 'operacao_desconhecida'}});
@@ -219,3 +221,42 @@ test('hipóteses: grupo "Sugestões da IA (n)" entre a hipótese em aberto e as 
   assert.ok(m.$('quadros-hipoteses').querySelector('.hipotese-sugestao-painel .sugestao-painel'));
   assert.match(texto(m.$('quadros-hipoteses').querySelector('.sugestoes-titulo')), /Sugestões da IA \(1\)/);
 });
+
+test('B1: na linha do tempo, a evidência da data de uma sugestão leva a pílula "IA · sustentado", nunca o selo humano "Avaliação: sustentado"', async () => {
+  const m = montar({sugestoes: [EVENTO()], comFonte: true}); await abrirAba(m, 'tempo');
+  const evento = m.$('quadros-tempo').querySelector('.tempo-evento.is-sugestao');
+  const evidencia = evento.querySelector('.tempo-evidencia');
+  assert.ok(evidencia, 'a evidência da data segue a um clique');
+  assert.equal(evidencia.querySelector('.quadro-selo.suporte-sustentado'), null, 'sem o selo da avaliação humana');
+  assert.doesNotMatch(texto(evidencia), /Avaliação: sustentado/);
+  const pilula = evidencia.querySelector('.support-badge.ai-support');
+  assert.ok(pilula, 'pílula do veredito da IA');
+  assert.match(texto(pilula), /^IA · sustentado$/);
+  assert.match(texto(evidencia), /Declaração documental/, 'a natureza continua à vista');
+  // Um item que já está no quadro, com avaliação de pessoa, continua com o selo humano.
+  const outro = m.$('quadros-tempo').querySelector('.tempo-evento:not(.is-sugestao) .tempo-evidencia');
+  assert.ok(outro.querySelector('.quadro-selo.suporte-sustentado'), 'o item do quadro mantém o selo da avaliação');
+  assert.equal(outro.querySelector('.ai-support'), null);
+});
+
+// R1: cada razão pela qual Confirmar não está disponível (componentes.md#sugestao-ia, tabela "Quando Confirmar fica indisponível").
+const BLOQUEIOS = [
+  ['nao_sustentado', /A revisão da IA não sustentou esta evidência\. Corrija com outra evidência ou descarte\./],
+  ['ilegivel', /A revisão da IA não conseguiu ler esta evidência\. Confira no original e corrija, ou descarte\./],
+  ['achado_retirado', /A revisão da IA retirou este achado\. Corrija com outra evidência ou descarte\./],
+  ['versao_substituida', /Há uma versão mais nova deste achado\. Corrija para ligar a nova versão\./],
+  ['evidencia_indisponivel', /A evidência não está mais disponível\. Descarte ou corrija com outra\./],
+];
+for (const [codigo, razao] of BLOQUEIOS) {
+  test(`R1: com bloqueio ${codigo}, Confirmar fica indisponível com a razão ligada por aria-describedby e Descartar continua ativo`, async () => {
+    const m = montar({sugestoes: [{...PESSOA(), bloqueio: codigo}]}); await abrirAba(m, 'mapa');
+    m.$('quadros-mapa').querySelector('.mapa-no.is-sugestao').dispatchEvent(new Evento('click', {bubbles: true}));
+    const botoes = [...m.$('quadros-mapa').querySelectorAll('.sugestao-acoes button')];
+    const confirmar = botoes.find(b => b.textContent === 'Confirmar'), descartar = botoes.find(b => b.textContent === 'Descartar');
+    assert.ok(confirmar.disabled === true);
+    assert.match(texto(m.doc.getElementById(confirmar.getAttribute('aria-describedby'))), razao);
+    assert.ok(descartar.disabled === false);
+    confirmar.click(); await espera(m);
+    assert.ok(!m.chamadas.some(c => c.operacao === 'sugestoes-confirmar'), 'nada é enviado');
+  });
+}
