@@ -195,7 +195,9 @@ test('linha do tempo: a sugestão fica na ordem das datas, com marco e cartão t
   assert.match(texto(painel.querySelector('.quadro-conta')), /2 acontecimentos, 1 sugestão da IA/);
   assert.match(texto(painel.querySelector('.tempo-como-ler')), /Sugestão da IA: marco e cartão tracejados/);
   abrir.click();
-  assert.match(texto(painel.querySelector('.tempo-sugestao-painel .sugestao-titulo')), /Assinatura do Contrato 041\/2025 · 3 mar 2025, data exata/);
+  assert.equal(painel.querySelector('.quadro-lateral').hidden, false, 'o painel abre na coluna da direita');
+  assert.match(texto(painel.querySelector('.quadro-lateral .sugestao-titulo')), /Assinatura do Contrato 041\/2025 · 3 mar 2025, data exata/);
+  assert.equal(painel.querySelectorAll('.quadro-principal .tempo-evento').length, 3, 'a linha do tempo continua à vista');
   assert.equal(abrir.getAttribute('aria-pressed'), 'true');
 });
 
@@ -208,17 +210,18 @@ test('linha do tempo sem sugestões: nada muda (sem selo, sem contagem extra, se
 
 test('hipóteses: grupo "Sugestões da IA (n)" entre a hipótese em aberto e as fechadas', async () => {
   const m = montar({sugestoes: [HIPOTESE()]}); await abrirAba(m, 'hipoteses');
-  const filhos = [...m.$('quadros-hipoteses').children].map(no => no.className || no.tagName);
-  const iAberta = filhos.findIndex((c, i) => /quadro-hipotese/.test(c) && /Hipótese H2/.test(texto(m.$('quadros-hipoteses').children[i])));
+  const principal = m.$('quadros-hipoteses').querySelector('.quadro-principal');
+  const filhos = [...principal.children].map(no => no.className || no.tagName);
+  const iAberta = filhos.findIndex((c, i) => /quadro-hipotese/.test(c) && /Hipótese H2/.test(texto(principal.children[i])));
   const iGrupo = filhos.findIndex(c => /sugestoes-secao/.test(c));
-  const iFechada = filhos.findIndex((c, i) => /quadro-hipotese/.test(c) && /Hipótese H1/.test(texto(m.$('quadros-hipoteses').children[i])));
+  const iFechada = filhos.findIndex((c, i) => /quadro-hipotese/.test(c) && /Hipótese H1/.test(texto(principal.children[i])));
   assert.ok(iAberta >= 0 && iGrupo > iAberta && iFechada > iGrupo, `ordem: aberta ${iAberta}, grupo ${iGrupo}, fechada ${iFechada}`);
   const cartao = m.$('quadros-hipoteses').querySelector('.hipotese-sugestoes .sugestao-abrir');
   assert.match(texto(cartao), /A sócia da contratada assinou o contrato também como testemunha\./);
   assert.match(texto(cartao), /contrato_social_alfa\.pdf, D002/);
   assert.equal(cartao.getAttribute('aria-label'), 'Sugestão da IA: A sócia da contratada assinou o contrato também como testemunha.');
   cartao.click();
-  assert.ok(m.$('quadros-hipoteses').querySelector('.hipotese-sugestao-painel .sugestao-painel'));
+  assert.ok(m.$('quadros-hipoteses').querySelector('.quadro-lateral .sugestao-painel'), 'painel na coluna da direita');
   assert.match(texto(m.$('quadros-hipoteses').querySelector('.sugestoes-titulo')), /Sugestões da IA \(1\)/);
 });
 

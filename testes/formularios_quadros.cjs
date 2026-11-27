@@ -240,6 +240,8 @@ test('Corrigir uma sugestão da IA: o formulário chega preenchido, mostra a rev
   await clicar(m, painel.querySelector('.mapa-no.is-sugestao .mapa-cartao'));
   await clicar(m, por(painel, '.sugestao-acoes button', 'Corrigir'));
   assert.equal(texto(painel.querySelector('.form-titulo')), 'Corrigir sugestão da IA');
+  assert.ok(painel.querySelector('.quadro-principal .mapa-no'), 'o mapa continua à vista enquanto a pessoa corrige');
+  assert.ok(painel.querySelector('.quadro-lateral .form-quadro'), 'o formulário está no painel da direita');
   assert.equal(painel.querySelector('.form-quadro input[type=text]').value, 'Marta Reis');
   assert.match(texto(painel.querySelector('.vinculo-cartao')), /Da revisão da IA: IA · sustentado/);
   digitar(painel.querySelector('.form-quadro input[type=text]'), 'Marta Reis Lima');
@@ -323,4 +325,44 @@ test('B1 da Coruja: o vínculo reenvia o achado_id que o seletor traz em vinculo
   await clicar(m, por(painel, 'button', 'Salvar'));
   assert.equal(m.salvos.length, 1);
   assert.equal(m.salvos[0].dados.evidencias[0].achado_id, 'A009', 'vale o de vinculo_sugerido, não o do resultado');
+});
+
+test('Corrigir e Cancelar volta à sugestão intacta, no mesmo painel da direita', async () => {
+  const SID = 'S' + '2'.repeat(32);
+  const sug = {id: SID, tipo: 'pessoa', quadro: 'mapa', campos: {tipo: 'pessoa', nome: 'Carlos Prado', variantes: [], identificadores: [], evidencias: [{referencia: referencia(3), papel: 'suporte', suporte: 'sustentado', natureza: 'declaracao_documental', justificativa: ''}]},
+    evidencias: [{referencia: referencia(3), estado: 'conferida', documento: {documento_id: 'D002', nome: 'contrato_social_alfa.pdf'}, localizador: {legivel: 'D002 · p. 1'}, trecho: 'Carlos Prado.', revisao_ia: IA(), conferencia_humana: null}],
+    achado: {id: 'A002', versao: 1, destino: 'incluido'}, analise: {em_utc: '2026-11-26T17:32:00+00:00', pergunta: 'Quem?'}, estado: 'aberta', decisao: null, descartada_antes: null, bloqueio: null, avisos: []};
+  const m = montar({sugestoes: [sug]}); await abrirAba(m, 'mapa');
+  const painel = m.$('quadros-mapa');
+  await clicar(m, painel.querySelector('.mapa-no.is-sugestao .mapa-cartao'));
+  await clicar(m, por(painel, '.sugestao-acoes button', 'Corrigir'));
+  assert.ok(!painel.querySelector('.quadro-lateral .sugestao-painel'), 'o formulário ocupa o lugar do painel da sugestão');
+  await clicar(m, por(painel, 'button', 'Cancelar'));
+  const lateral = painel.querySelector('.quadro-lateral');
+  assert.equal(lateral.hidden, false, 'continua aberto');
+  assert.match(texto(lateral.querySelector('.sugestao-titulo')), /^Carlos Prado · pessoa$/, 'voltou à sugestão');
+  assert.equal(m.salvos.length, 0);
+  await clicar(m, lateral.querySelector('.quadro-lateral-voltar'));
+  assert.equal(lateral.hidden, true, '"Voltar" fecha o painel');
+});
+
+test('Editar entidade: abre com o registro sem máscara (mapa-entidade-detalhe), mantém o identificador e salva por mapa-entidade-atualizar', async () => {
+  const sha = 'a'.repeat(64);
+  const detalhe = {'mapa-entidade-detalhe': {id: MARTA, sha256: sha, estado: {tipo: 'pessoa', nome: 'Marta Reis', variantes: ['M. Reis'], identificadores: [{tipo: 'cpf', valor: '12345678909', fonte: 0}], conferencias: [], retirado: false, motivo_retirada: ''},
+    evidencias: [vinculoSalvo()]}};
+  const m = montar({detalhe}); await abrirAba(m, 'mapa');
+  const painel = m.$('quadros-mapa');
+  const editar = [...painel.querySelectorAll('.quadro-editar')].find(b => /Marta Reis/.test(b.getAttribute('aria-label')));
+  await clicar(m, editar);
+  assert.equal(texto(painel.querySelector('.form-titulo')), 'Editar entidade');
+  assert.equal([...painel.querySelectorAll('.form-quadro input[type=text]')].find(i => i.value === '12345678909') !== undefined, true, 'o valor salvo, sem máscara');
+  const segmentos = [...painel.querySelector('.form-segmentado').querySelectorAll('.form-segmento')];
+  assert.ok(segmentos.every(b => b.disabled), 'o tipo da entidade não muda');
+  digitar(painel.querySelector('.form-quadro input[type=text]'), 'Marta Reis Lima');
+  await clicar(m, por(painel, 'button', 'Salvar'));
+  assert.equal(m.salvos.length, 1, texto(painel.querySelector('.form-erro-geral') || painel));
+  const {operacao, dados} = m.salvos[0];
+  assert.equal(operacao, 'mapa-entidade-atualizar'); assert.equal(dados.id, MARTA); assert.equal(dados.anterior_sha256, sha);
+  assert.equal(dados.nome, 'Marta Reis Lima');
+  assert.equal(dados.identificadores[0].valor, '12345678909'); assert.equal(dados.identificadores[0].fonte, 0);
 });

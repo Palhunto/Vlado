@@ -453,15 +453,17 @@ window.Quadros.formularios = (() => {
   // e o foco volta ao que abriu o formulário (`gatilho`) ou ao título do quadro. `carregar` busca o detalhe de um item existente.
   async function abrirNoPainel({tipo, abaId, casoId, itemId = null, sugestao = null, entidades = [], tiposData = null, gatilho = null, inicial = null}) {
     const painel = document.getElementById(`quadros-${abaId}`); if (!painel) return null;
-    const def = QUADROS[tipo], host = element('div', undefined, 'form-host');
+    const def = QUADROS[tipo], host = element('div', undefined, 'form-host'), L = painel.__lateral;
     let item = null;
     if (itemId) {
       try { item = await def.detalhe(casoId, itemId); }
       catch (erro) { Q.sugestoes.anunciar(`${t('Não deu para abrir:')} ${erro.message}`); return null; }
     }
     if (!tiposData && tipo === 'acontecimento') { try { tiposData = (await api('linha-tempo-listar', {caso: casoId})).tipos_data || {}; } catch (_) { tiposData = {}; } }
-    painel.replaceChildren(host);
-    const voltar = async () => { await Q.selecionar(abaId, true); (gatilho && document.contains(gatilho) ? gatilho : painel.querySelector('h3,h4'))?.focus?.(); };
+    // O formulário abre no painel da direita (em 1440) ou na camada de tela cheia (abaixo de 1024 px); o quadro continua à vista. Aberto a partir de uma sugestão,
+    // "Cancelar" volta à sugestão intacta; senão, fecha o painel e devolve o foco a quem abriu.
+    if (L) L.abrir([host], {empilhar: !!sugestao, origem: gatilho}); else painel.replaceChildren(host);
+    const voltar = async () => { if (L) L.voltar(); else { await Q.selecionar(abaId, true); (gatilho && document.contains(gatilho) ? gatilho : painel.querySelector('h3,h4'))?.focus?.(); } };
     return abrir({tipo, casoId, host, item, sugestao, entidades, tiposData, inicial, aoCancelar: voltar,
       aoSalvar: async (_, extra = {}) => { await Q.selecionar(abaId, true); Q.sugestoes.anunciar(t(extra.retirado ? 'Retirado. O item fica no registro, com o motivo.' : sugestao ? 'Sugestão corrigida e confirmada.' : item ? 'Alterações salvas.' : 'Salvo.')); painel.querySelector('h3,h4')?.focus?.(); }});
   }

@@ -89,7 +89,7 @@
     const inventario = await api('inventario', {caso: casoId});
     if (!vigente()) return;
     const rodadas = (typeof cases !== 'undefined' ? cases : []).find(c => c.id === casoId)?.rodadas || [];
-    if (!rodadas.length) { const vazio = element('div'); Q.estado(vazio, 'vazio', t('Esta apuração ainda não tem análise com documentos preservados para comparar.'), {titulo: t('Nada para comparar ainda'), acao: Q.perguntar()}); painel.replaceChildren(...comModos(casoId, vazio)); return; }
+    if (!rodadas.length) { const vazio = element('div'); Q.estado(vazio, 'vazio', t('Esta apuração ainda não tem análise com documentos preservados para comparar.'), {titulo: t('Nada para comparar ainda'), acao: Q.perguntar()}); Q.montarQuadro(painel, comModos(casoId, vazio)); return; }
     const form = element('form', undefined, 'comparar-form');
     const rodada = element('select'); rodada.id = 'comparar-rodada';
     rodada.replaceChildren(...rodadas.map(r => new Option(t('Análise {id}', {id: r.id}), r.id))); rodada.value = rodadas.at(-1).id;
@@ -113,7 +113,7 @@
       finally { enviar.disabled = false; }
     });
     const docs = element('div', undefined, 'comparar-docs'); docs.append(element('p', t('Compara o texto extraído de dois documentos da mesma análise. As diferenças aparecem com o contexto de cada lado; confira valores e tabelas no original.'), 'small'), form, saida);
-    painel.replaceChildren(...comModos(casoId, docs));
+    Q.montarQuadro(painel, comModos(casoId, docs));
   })});
 
   // ---------- Verifiable tables: a source per cell, corrected cells, calculation panel ----------
@@ -611,7 +611,7 @@
     for (const sug of S.abertas) if (sug.tipo === 'ligacao') for (const ponta of ['origem', 'destino']) if (sug.pontas?.[ponta]) sug.pontas[ponta].nome ||= nomes[sug.campos[ponta]] || '';
     const reais = () => ({entidades: mapa.entidades.map(e => ({id: e.id, nome: e.nome}))});
     const ctx = Q.sugestoes ? Q.sugestoes.contexto(casoId, 'mapa', Q.formularios ? {corrigir: sug => Q.formularios.abrirNoPainel({tipo: sug.tipo === 'ligacao' ? 'ligacao' : 'entidade', abaId: 'mapa', casoId, sugestao: sug, ...reais()})} : {}) : null;
-    const abrirSugestao = (sug, origem) => { saida.replaceChildren(Q.sugestoes.painel(sug, ctx)); saida.querySelector('.sugestao-titulo')?.setAttribute('tabindex', '-1'); saida.querySelector('.sugestao-titulo')?.focus(); };
+    const abrirSugestao = (sug, origem) => painel.__lateral.abrir([Q.sugestoes.painel(sug, ctx)], {origem});
     const layout = element('div', undefined, 'mapa-layout');
     const visual = element('div', undefined, 'mapa-visual');
     // O desenho só existe de 1024 px para cima (abaixo, o mapa se lê como a lista): não se calcula a disposição com ele oculto, e ele se monta
@@ -635,6 +635,6 @@
     if (novos.length) corpo[0].append(...novos);
     const descartadas = Q.sugestoes?.descartadas(S.descartadas, ctx);
     if (descartadas) corpo.push(descartadas);
-    painel.replaceChildren(...corpo);
+    Q.montarQuadro(painel, corpo);
   })});
 })();
