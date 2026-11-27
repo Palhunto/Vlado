@@ -293,6 +293,28 @@ def _decisoes(root, case):
     return grouped, broken
 
 
+@lixeira.leitura_da_exportacao
+def itens_da_conta(root, conta, casos):
+    """The decisions the account made on the AI's suggestions, for its own data export (E4b-2b of Contas; the
+    Maestro, 27/11): ``[{tipo: 'sugestao_<acao>', caso, criado_em, id: '<quadro>/<sugestão>[/<item criado>]'}]``,
+    only in ``casos`` (those it reaches, as the caller says) and only decisions of this account: never the
+    suggestion's content nor anything of another person. Cases in the trash stay out. A decision record that cannot
+    be read raises ValueError (whose decision it is would be unknown)."""
+    casos, _ = lixeira.casos_da_exportacao(root, conta, casos)
+    itens = []
+    for case in casos:
+        for record in DECISOES.listar(root, case):
+            historico = record.get('historico')
+            if record.get('divergente') or not historico:
+                raise ValueError('Registro ilegível nas decisões sobre sugestões.')
+            first, state = historico[0], record['estado']
+            if first.get('conta_id') == conta and first.get('origem_autoria') == caderno.AUTORIA_CONTA:
+                ref = '/'.join(x for x in (state['quadro'], state['sugestao_id'], state['item_id']) if x)
+                itens.append(lixeira.item_exportado(f'sugestao_{state["acao"]}', case, first.get('em_utc'), ref))
+    itens.sort(key=lambda item: (item['criado_em'], item['id']))
+    return itens
+
+
 # --- suggestions ---------------------------------------------------------------------------------------------------
 
 def _normal(value):

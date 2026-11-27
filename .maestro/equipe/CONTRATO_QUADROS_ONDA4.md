@@ -148,7 +148,7 @@ Em toda leitura que já resolve vínculos (`*-detalhe`, `hipoteses-quadro`, `lin
 |---|---|
 | `revisao_ia` | o guardado (seção 3.1) ou `null` (vínculo antigo ou do caderno). |
 | `alteracoes` | o guardado ou `{}`. |
-| `preenchimento_ia` | `null` (vínculo antigo ou do caderno) ou `{papel, suporte, natureza, destino}`: o preenchimento P47 da `revisao_ia` guardada (seção 3.3; retirado já vem `nao_revisado`). É o valor que "Voltar ao da IA" envia, nunca o `anterior` da marca nem o `revisao_ia` cru. |
+| `preenchimento_ia` | `null` (vínculo antigo ou do caderno) ou `{papel, suporte, natureza, destino}`: o preenchimento P47 da `revisao_ia` guardada (seção 3.3; retirado já vem `nao_revisado`), corrigido pela revisão mais nova da rodada: se ela retirou o achado ou o achou não sustentado ou ilegível, o preenchimento vem `nao_revisado` com esse `destino` (R1 da Coruja sobre os formulários). É o valor que "Voltar ao da IA" envia, nunca o `anterior` da marca nem o `revisao_ia` cru. |
 | `conferencia_humana` | `null` ou `{estado, por, em_utc}` da marca humana do achado dessa evidência na rodada (`conferida_no_original`, `precisa_de_ajuste`, `sem_suporte_suficiente`, `pendente`). |
 | (rodada na lixeira) | `conferencia_humana`, `destino_atual` e `versao_nova` vêm `null` e `suporte_so_da_ia` `false`: a rodada na lixeira não alimenta nada (R1). O `revisao_ia` guardado continua vindo. |
 | `suporte_so_da_ia` | `true` quando há `revisao_ia`, o suporte é o dela, não há `alteracoes.suporte` e `conferencia_humana.estado` não é `conferida_no_original`. |
@@ -237,7 +237,7 @@ Cada conferência é `mesmo`, `diferente` ou `a_conferir`. Os E-IDs têm de ser 
 `POST /api/comparar-processos` `{"caso", "rodada": null | "R…"}` →
 `{"caso", "analise": {…como na seção 4}, "estruturada": true, "comparacoes": [{"achado": {…}, "chave": {…}, "lados": [{"processo", "fundamento": <evidência resolvida>, "questao", "fase", "desfecho", "desfecho_evidencia": <evidência resolvida>}], "conferencias": {…}, "mesmo_arquivo": true|false, "pendente": true|false, "revisao_ia": {…}}]}`.
 
-`mesmo_arquivo` é a comparação dos hashes dos originais dos dois fundamentos (feita pela Mesa). `pendente` segue a regra do topo da especificação (veredito diferente de sustentado, natureza ou destino pendência, ou alguma conferência diferente de `mesmo`). Em rodada sem os campos, `estruturada: false` e `comparacoes: []`; a tela não reconstrói do texto.
+Cada evidência resolvida (`fundamento`, `desfecho_evidencia`) traz também `achado_id`, `revisao_ia` e `preenchimento` (P47, como na seção 3.2): "Criar hipótese com esta comparação" liga com esses valores e o `achado_id`, nunca com papel ou suporte fixos (N2 da Coruja sobre os formulários). `mesmo_arquivo` é a comparação dos hashes dos originais dos dois fundamentos (feita pela Mesa). `pendente` segue a regra do topo da especificação (veredito diferente de sustentado, natureza ou destino pendência, ou alguma conferência diferente de `mesmo`). Em rodada sem os campos, `estruturada: false` e `comparacoes: []`; a tela não reconstrói do texto.
 
 ## 6. Códigos de recusa novos
 

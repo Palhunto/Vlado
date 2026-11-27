@@ -147,6 +147,29 @@ def preenchimento(revisao):
     return {'papel': revisao['papel'], 'suporte': suporte, 'natureza': revisao['natureza'], 'destino': revisao['destino']}
 
 
+def rebaixado(fill, values):
+    """The fill once a later revision of the round speaks (R1 of the Coruja on the forms): a finding withdrawn
+    there, or found not supported or illegible, starts from "not reviewed", with that destino (P47)."""
+    if fill is None or values is None:
+        return fill
+    if values['destino'] == 'retirado' or values['suporte'] in ('nao_sustentado', 'ilegivel'):
+        return {**fill, 'suporte': 'nao_revisado', 'destino': values['destino']}
+    return fill
+
+
+def preenchimento_atual(root, case, ref, review, cache):
+    """``preenchimento(review)`` adjusted by the newest revision of the round (``rebaixado``); the round in the
+    trash, or a source that no longer loads, leaves the fill of the saved review."""
+    fill = preenchimento(review) if review is not None else None
+    if review is None or ref.get('tipo') != 'ia' or lixeira.excluido(root, case, rodada=ref['rodada']):
+        return fill
+    try:
+        values, _ = atual(root, case, ref, cache, review['achado_id'], review['papel'])
+    except (ValueError, OSError, KeyError, TypeError):
+        return fill
+    return rebaixado(fill, values)
+
+
 def validar(item):
     """Shape of the optional fields of a saved link (raises ValueError)."""
     error = ValueError('Vínculo de evidência preservado é inválido.')
@@ -224,7 +247,7 @@ def registrar(root, case, novos, antigos, quem, agora, chave, escolhas=None, cac
             continue  # legacy link to the findings: nothing to compare with
         if review is not None:
             link['revisao_ia'] = review
-        base = preenchimento(review)
+        base = preenchimento_atual(root, case, link['referencia'], review, cache) if review else preenchimento(None)
         changes = {}
         for field in (ALTERAVEIS if review is not None else ('suporte',)):
             if link[field] == base[field]:
@@ -284,6 +307,8 @@ def leitura(root, case, item, cache):
             out['conferencia_humana'] = _marca_humana(root, case, ref['rodada'], own['achado_id'], own['versao'], cache)
         if values is not None:
             out['destino_atual'] = values['destino']
+            if review is not None:
+                out['preenchimento_ia'] = rebaixado(out['preenchimento_ia'], values)
             if own is not None and values['versao'] > own['versao']:
                 new_review = {k: values[k] for k in CAMPOS_REVISAO}
                 out['versao_nova'] = {'referencia': newest, 'achado_id': values['achado_id'], 'versao': values['versao'],

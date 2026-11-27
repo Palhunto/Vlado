@@ -105,13 +105,21 @@ def gravar(run, data, lista, versao_mesa):
                                     conferir_lista=conferir)
 
 
-def _resolvida(root, case, ref, cache):
+def _resolvida(root, case, ref, achado_id, cache):
+    # N2 of the Coruja on the forms: the review and the P47 fill of each evidence, so "Criar hipótese com esta
+    # comparação" links them as the AI said, never with a role or support fixed as if a person had chosen it.
+    try:
+        review = vinculo_ia.revisao_ia(root, case, ref, cache, achado_id)
+    except ValueError:
+        review = None
+    fill = vinculo_ia.preenchimento_atual(root, case, ref, review, cache)
+    common = {'achado_id': achado_id, 'revisao_ia': review, 'preenchimento': fill}
     try:
         resolved = ev.resolver(root, case, ref, cache)
     except ValueError as exc:
-        return {'referencia': ref, 'estado': 'indisponivel', 'erro': str(exc), 'documento': None, 'localizador': None,
-                'trecho': None, 'original_sha256': None}
-    return {'referencia': ref, 'estado': 'conferida',
+        return {'referencia': ref, **common, 'estado': 'indisponivel', 'erro': str(exc), 'documento': None,
+                'localizador': None, 'trecho': None, 'original_sha256': None}
+    return {'referencia': ref, **common, 'estado': 'conferida',
             'documento': {'documento_id': resolved['documento']['documento_id'], 'nome': resolved['documento']['nome']},
             'localizador': resolved['localizador'], 'trecho': resolved['trecho'],
             'original_sha256': resolved['documento']['original_sha256']}
@@ -164,8 +172,9 @@ def _leitura(root, case, analise, latest, item, cache):
                        'registros_sha256': analise['registros_sha256'], 'evidencia_id': eid}
     sides = []
     for side in item['lados']:
-        sides.append({**{k: side[k] for k in LIMITES_LADO}, 'fundamento': _resolvida(root, case, ref(side['fundamento']), cache),
-                      'desfecho_evidencia': (_resolvida(root, case, ref(side['desfecho_evidencia']), cache)
+        sides.append({**{k: side[k] for k in LIMITES_LADO},
+                      'fundamento': _resolvida(root, case, ref(side['fundamento']), item['achado_id'], cache),
+                      'desfecho_evidencia': (_resolvida(root, case, ref(side['desfecho_evidencia']), item['achado_id'], cache)
                                              if side['desfecho_evidencia'] else None)})
     hashes = [s['fundamento']['original_sha256'] for s in sides]
     support = reviews[-1]['suporte'] if reviews else 'nao_revisado'
