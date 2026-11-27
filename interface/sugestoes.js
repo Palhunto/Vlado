@@ -67,6 +67,7 @@ window.Quadros.sugestoes = (() => {
   function razaoBloqueio(sug) {
     const ponta = ['origem', 'destino'].map(p => sug.pontas?.[p]).find(p => p && p.estado !== 'confirmada' && !p.item_id);
     switch (sug.bloqueio) {
+      case 'historico_divergente': return t('O histórico das decisões desta sugestão está divergente. As ações ficam indisponíveis para ela até o registro ser conferido.');
       case 'ponta_ainda_sugestao': return t('Confirme antes {nome}, a outra ponta da ligação.', {nome: ponta?.nome || ''});
       case 'ponta_descartada': return t('{nome}, a outra ponta, está em Descartadas. Restaure-o ou troque a ponta em Corrigir.', {nome: ponta?.nome || ''});
       case 'achado_retirado': return t('A revisão da IA retirou este achado. Corrija com outra evidência ou descarte.');
@@ -82,7 +83,8 @@ window.Quadros.sugestoes = (() => {
     const texto = {analise_sem_revisao: t('Esta análise não passou pela revisão de suporte. O vínculo começa em “não revisado”.'),
       achado_retirado: t('A revisão da IA retirou este achado: «{motivo}». Ele pode continuar ligado, com o suporte em “não revisado”: só sustenta o item se uma pessoa escolher.', {motivo: sug.achado?.motivo_destino || ''}),
       versao_substituida: t('Há uma versão mais nova deste achado.'),
-      evidencia_indisponivel: t('A evidência não está mais disponível. O vínculo fica no registro, mas não abre o original.')};
+      evidencia_indisponivel: t('A evidência não está mais disponível. O vínculo fica no registro, mas não abre o original.'),
+      decisao_divergente: t('O histórico das decisões desta sugestão está divergente: o registro precisa ser conferido antes de decidir.')};
     return (sug.avisos || []).filter(codigo => texto[codigo]).map(codigo => {
       const aviso = element('p', undefined, 'notice sugestao-aviso'); aviso.setAttribute('role', 'status');
       aviso.append(codigo === 'achado_retirado' ? dado('span', texto[codigo]) : element('span', texto[codigo])); return aviso;
@@ -135,10 +137,11 @@ window.Quadros.sugestoes = (() => {
     const confirmar = botao(t('Confirmar'), ''), descartar = botao(t('Descartar')), corrigir = ctx.corrigir ? botao(t('Corrigir')) : null;
     const todos = [confirmar, corrigir, descartar].filter(Boolean);
     acoes.append(...todos);
+    const travada = permitido && sug.bloqueio === 'historico_divergente';
     const razao = !permitido ? t(PODE_EDITAR) : bloqueio;
     if (razao) {
       const nota = element('p', razao, 'small sugestao-razao'); nota.id = `sugestao-razao-${sug.id}`;
-      if (!permitido) for (const b of todos) { b.disabled = true; b.setAttribute('aria-describedby', nota.id); }
+      if (!permitido || travada) for (const b of todos) { b.disabled = true; b.setAttribute('aria-describedby', nota.id); }
       else { confirmar.disabled = true; confirmar.setAttribute('aria-describedby', nota.id); }
       raiz.append(erro, nota, acoes);
     } else raiz.append(erro, acoes);
@@ -155,7 +158,7 @@ window.Quadros.sugestoes = (() => {
         await aoConcluir(resposta);
       } catch (falha) {
         raiz.removeAttribute('aria-busy'); botaoAtivo.textContent = rotulo;
-        for (const b of todos) b.disabled = (!permitido) || (b === confirmar && !!bloqueio);
+        for (const b of todos) b.disabled = (!permitido) || travada || (b === confirmar && !!bloqueio);
         erro.textContent = `${t(operacao === 'sugestoes-confirmar' ? 'Não deu para confirmar:' : 'Não deu para descartar:')} ${falha.message}`; erro.hidden = false;
       }
     }

@@ -126,6 +126,30 @@
       for (const v of a.evidencias) lista.append(Q.evidencia(casoId, v));
       if (!a.evidencias.length) lista.append(element('li', t('Nenhuma evidência vinculada a esta afirmação.'), 'small quadro-vazio'));
       suporte.append(lista);
+      // "Ligar outra evidência" (P47): o seletor comum abre no painel da afirmação, com "Voltar à afirmação"; ligar substitui os vínculos da afirmação pelos de agora mais o novo.
+      if (Q.seletorEvidencia && Q.buscaEvidencias && (!window.Sessao?.pode || window.Sessao.pode('redacao-vincular'))) {
+        const ligar = Q.linkBotao('+ ' + t('Ligar outra evidência'), 'redacao-ligar'), retornoLigar = element('p', '', 'small'); retornoLigar.setAttribute('role', 'alert');
+        ligar.disabled = a.evidencias.length >= 100;
+        ligar.addEventListener('click', () => {
+          const lado = painel.parentNode; if (!lado) return;
+          const voltar = () => { lado.replaceChildren(painel); ligar.focus?.(); };
+          const seletor = Q.seletorEvidencia({buscar: Q.buscaEvidencias(casoId), rotuloVoltar: 'Voltar à afirmação', aoVoltar: voltar, limite: () => ({atingido: a.evidencias.length >= 100, razao: 'Este item já tem 100 evidências, o limite.'}),
+            aoAbrirOriginal: (r, gatilho, retorno) => Q.abrirOriginal(casoId, {referencia: r.preenchimento?.referencia, evidencia: {documento: r.bruto?.documento, trecho: r.bruto?.trecho, localizador: r.bruto?.localizador}, localizador: r.bruto?.localizador}, gatilho, retorno),
+            aoLigar: async r => {
+              const p = r.preenchimento || {};
+              if (!p.referencia || !p.natureza) return;
+              const atuais = a.evidencias.map(v => ({referencia: v.referencia, papel: v.papel, suporte: v.suporte, natureza: v.natureza, justificativa: v.justificativa || ''}));
+              const novo = {referencia: p.referencia, ...((p.achado_id || r.bruto?.achado?.id) ? {achado_id: p.achado_id || r.bruto.achado.id} : {}), papel: p.papel || 'suporte', suporte: p.suporte || 'nao_revisado', natureza: p.natureza, justificativa: p.justificativa || ''};
+              try {
+                const nova = await api('redacao-vincular', {caso: casoId, requisicao_id: rid(), autor: '', id: visao.id, anterior_sha256: visao.sha256, afirmacao_id: a.id, evidencias: [...atuais, novo]});
+                recarregar(nova, a.id);
+                Q.sugestoes?.anunciar(t('Evidência ligada.'));
+              } catch (erro) { voltar(); retornoLigar.textContent = `${t('Não deu para ligar:')} ${erro.message}`; }
+            }});
+          lado.replaceChildren(seletor); seletor.foco();
+        });
+        suporte.append(ligar, retornoLigar);
+      }
       painel.append(sinais, suporte, formRevisao(casoId, visao, a, recarregar));
       return painel;
     }

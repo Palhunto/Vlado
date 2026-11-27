@@ -168,6 +168,44 @@ window.Quadros = (() => {
     caminho.setAttribute('d', CAMINHOS[nome] || CAMINHOS.documento); no.append(caminho);
     return no;
   }
+  // Moldura do quadro com o painel da direita (componentes.md#sugestao-ia e #formularios-quadros; #telas-aprovadas): o conteúdo do quadro fica à esquerda e o painel
+  // (sugestão da IA, formulário, seletor de evidência) abre numa coluna de 360 px à direita, para a pessoa continuar vendo o mapa ou a linha do tempo. Abaixo de 1024 px
+  // o painel é uma camada de tela cheia sobre o quadro (o quadro fica `inert` enquanto ela está aberta). Devolve {lateral, abrir, voltar, fechar}.
+  const celularLargo = () => !!window.matchMedia?.('(max-width:1023px)').matches;
+  function montarQuadro(painel, corpo) {
+    const grade = element('div', undefined, 'quadro-grade'), principal = element('div', undefined, 'quadro-principal');
+    principal.append(...corpo);
+    const lateral = element('aside', undefined, 'quadro-lateral'); lateral.hidden = true; lateral.setAttribute('aria-label', t('Painel do quadro'));
+    grade.append(principal, lateral); painel.replaceChildren(grade);
+    let pilha = [], gatilho = null;
+    const fechar = () => {
+      lateral.hidden = true; lateral.replaceChildren(); pilha = []; grade.classList.remove('tem-lateral'); principal.inert = false; principal.removeAttribute('inert');
+      if (gatilho && document.contains(gatilho)) gatilho.focus?.();
+      gatilho = null;
+    };
+    const mostrar = nos => {
+      const topo = element('div', undefined, 'quadro-lateral-topo');
+      const voltar = linkBotao('‹ ' + t('Voltar'), 'quadro-lateral-voltar');
+      voltar.addEventListener('click', () => api_.voltar());
+      topo.append(voltar);
+      lateral.replaceChildren(topo, ...nos); lateral.hidden = false; grade.classList.add('tem-lateral');
+      if (celularLargo()) principal.inert = true; else principal.inert = false;
+    };
+    const api_ = {
+      lateral,
+      // `empilhar`: guarda o que está aberto (a sugestão) para "Cancelar" voltar a ela intacta.
+      abrir(nos, {empilhar = false, origem = null} = {}) {
+        if (empilhar && !lateral.hidden) pilha.push([...lateral.childNodes].slice(1));
+        else { pilha = []; if (origem) gatilho = origem; }
+        mostrar(nos);
+        const alvo = lateral.querySelector('.sugestao-titulo, .form-titulo, .seletor-titulo'); if (alvo) { alvo.tabIndex = -1; alvo.focus?.(); alvo.scrollIntoView?.({block: 'nearest'}); }
+      },
+      voltar() { if (pilha.length) { mostrar(pilha.pop()); const alvo = lateral.querySelector('.sugestao-titulo'); alvo?.focus?.(); } else fechar(); },
+      fechar,
+    };
+    painel.__lateral = api_;
+    return api_;
+  }
   // Botão com aparência de link (componentes.md#link): texto --theme-accent, 44 px de altura.
   const linkBotao = (rotulo, classe = '') => botao(rotulo, `link-botao ${classe}`.trim());
 
@@ -237,10 +275,24 @@ window.Quadros = (() => {
       }
       const acoes = element('div', undefined, 'seletor-acoes');
       const original = botao(t('Abrir o original')), retorno = element('p', '', 'small'); retorno.setAttribute('role', 'status');
+      const semNatureza = !p.natureza;
+      let escolhaNatureza = null;
+      if (semNatureza) {
+        // Fonte do caderno: a natureza não tem preenchimento. A pessoa escolhe o que a fonte é; sem isso, "Ligar" não se habilita.
+        escolhaNatureza = element('select', undefined, 'seletor-natureza'); escolhaNatureza.id = 'seletor-natureza';
+        const vazioOp = element('option', t('Escolha a natureza')); vazioOp.value = ''; escolhaNatureza.append(vazioOp);
+        for (const [k, rot] of Object.entries(NATUREZA)) { const o = element('option', t(rot)); o.value = k; escolhaNatureza.append(o); }
+        const rotuloNat = element('label', t('Natureza'), 'seletor-rotulo'); rotuloNat.setAttribute('for', escolhaNatureza.id);
+        detalhe.append(rotuloNat, escolhaNatureza, element('p', t('Falta a natureza. Escolha o que a fonte é: declaração documental, alegação atribuída, inferência ou pendência.'), 'small seletor-nota'));
+      }
       original.addEventListener('click', () => opcoes.aoAbrirOriginal?.(r, original, retorno));
       const ligar = botao(t('Ligar'), 'seletor-ligar');
       const lim = opcoes.limite?.();
       if (lim?.atingido) { ligar.disabled = true; const razao = element('p', t(lim.razao), 'small seletor-nota'); razao.id = 'seletor-razao'; ligar.setAttribute('aria-describedby', razao.id); detalhe.append(razao); }
+      if (escolhaNatureza) {
+        if (!lim?.atingido) ligar.disabled = true;
+        escolhaNatureza.addEventListener('change', () => { r.preenchimento = {...r.preenchimento, natureza: escolhaNatureza.value}; ligar.disabled = !escolhaNatureza.value || !!lim?.atingido; });
+      }
       ligar.addEventListener('click', () => opcoes.aoLigar?.(r));
       acoes.append(original, ligar);
       detalhe.prepend(campos); detalhe.append(acoes, retorno);
@@ -292,6 +344,30 @@ window.Quadros = (() => {
   }
   const PAPEL = {suporte: 'Suporte', contradicao: 'Contradição', contexto: 'Contexto'};
 
+  // dd/mm, hhHmm de uma data ISO: "26/11, 14h32" (a análise mais recente, no seletor).
+  function quando(iso) {
+    const d = new Date(iso); if (Number.isNaN(d.getTime())) return '';
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}, ${d.getHours()}h${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+  // A busca do seletor contra `evidencia-buscar` (CONTRATO_QUADROS_ONDA4.md, seção 4): só nesta apuração. `item` ({quadro, id}) marca o que já está ligado.
+  // Devolve a forma que seletorEvidencia entende; `bruto` guarda o resultado do servidor para montar o vínculo (P47: papel, suporte e natureza já preenchidos).
+  function buscaEvidencias(casoId, item = null) {
+    return async ({texto, origem, analise}) => {
+      const dados = await api('evidencia-buscar', {caso: casoId, texto, origem, rodada: analise || null, ...(item ? {item} : {}), limite: 50, deslocamento: 0});
+      const rotuloDe = a => quando(a.em_utc);
+      const resultados = (dados.resultados || []).map(r => {
+        const nome = r.documento?.nome || '', loc = r.localizador?.legivel || '';
+        return {chave: `${r.origem}:${JSON.stringify(r.vinculo_sugerido?.referencia || {})}:${r.achado?.id || ''}:${r.vinculo_sugerido?.papel || ''}`, origem: r.origem,
+          tipo: r.origem === 'ia' ? 'Achado da IA' : 'Trecho do caderno', texto: r.texto || r.trecho || '', localizador: `${nome ? nome + ', ' : ''}${loc}`,
+          conferencia: r.conferencia_humana?.estado === 'conferida_no_original' ? 'conferido' : 'a_conferir',
+          suporte_ia: r.revisao_ia?.suporte || null, natureza: r.revisao_ia?.natureza || null, destino: r.achado?.destino || null,
+          ligada: !!r.ja_ligado, indisponivel: r.estado === 'indisponivel', preenchimento: r.vinculo_sugerido || {}, bruto: r};
+      });
+      return {analise_atual: dados.analise ? {id: dados.analise.rodada, rotulo: rotuloDe(dados.analise)} : null,
+        analises: (dados.analises || []).map(a => ({id: a.rodada, rotulo: rotuloDe(a), pergunta: a.pergunta || ''})), resultados};
+    };
+  }
+
   // Selo "IA · sugestão" (P45, componentes.md#sugestao-ia): a pílula do veredito da IA (P20a), sem fundo, borda tracejada e sem sinal.
   function seloSugestao() {
     const selo = element('span', undefined, 'selo-sugestao');
@@ -307,7 +383,7 @@ window.Quadros = (() => {
     selo.append(element('span', t(texto || SUPORTE_IA[suporte] || `IA · ${suporte}`), 'badge-origin'));
     return selo;
   }
-  return {t, dado, botao, estado, irPara, perguntar, evidencia, abrirOriginal, disponivel, registrarAba, selecionar, quadro, SUPORTE, NATUREZA, caso, icone, CAMINHOS, seloSugestao, seloIA, linkBotao, seletorEvidencia};
+  return {t, dado, botao, estado, irPara, perguntar, evidencia, abrirOriginal, disponivel, registrarAba, selecionar, quadro, SUPORTE, NATUREZA, caso, icone, CAMINHOS, seloSugestao, seloIA, linkBotao, seletorEvidencia, buscaEvidencias, quando, montarQuadro};
 })();
 
 // Hypotheses: three columns per hypothesis; the declared situation is a person's, never the board's.
@@ -341,9 +417,15 @@ window.Quadros = (() => {
     const titulo = Q.dado('h3', h.enunciado); titulo.id = `hipotese-${h.id}`;
     cartao.setAttribute('aria-labelledby', titulo.id);
     const meta = element('p', undefined, 'small quadro-meta');
-    meta.append(element('span', t('Situação declarada: {situacao}', {situacao: t({em_aberto: 'Em aberto', sustentada: 'Sustentada', contrariada: 'Contrariada', inconclusiva: 'Inconclusiva', descartada: 'Descartada'}[h.situacao] || h.situacao)})),
-      element('span', h.condicao === 'com_evidencia' ? t('Com evidência conferida') : t('Pendente de evidência conferida'), `quadro-condicao condicao-${h.condicao}`));
+    // Suporte só da IA (componentes.md#suporte-so-da-ia): se toda a base da hipótese vem da revisão da IA, sem pessoa que mudasse ou conferisse, a condição não
+    // diz "conferida": vem na pílula da P20a ("Com evidência sustentada pela revisão da IA"). Com uma só base humana, vale a condição de sempre.
+    const base = [...(h.sustentam || []), ...(h.contrariam || [])].filter(v => v.suporte === 'sustentado' && ['declaracao_documental', 'alegacao_atribuida'].includes(v.natureza));
+    const soIA = h.condicao === 'com_evidencia' && base.length > 0 && base.every(v => v.suporte_so_da_ia === true);
+    const condicao = soIA ? element('span', t('Com evidência sustentada pela revisão da IA'), 'support-badge ai-support quadro-condicao condicao-so-ia')
+      : element('span', h.condicao === 'com_evidencia' ? t('Com evidência conferida') : t('Pendente de evidência conferida'), `quadro-condicao condicao-${h.condicao}`);
+    meta.append(element('span', t('Situação declarada: {situacao}', {situacao: t({em_aberto: 'Em aberto', sustentada: 'Sustentada', contrariada: 'Contrariada', inconclusiva: 'Inconclusiva', descartada: 'Descartada'}[h.situacao] || h.situacao)})), condicao);
     cartao.append(titulo, meta);
+    const editar = Q.formularios?.botaoEditar('hipotese', 'hipoteses', casoId, h.id, h.enunciado); if (editar) cartao.append(editar);
     if (h.situacao_sem_base) cartao.append(element('p', t('A situação declarada perdeu a evidência que a fundamentava. Confira antes de usar.'), 'notice'));
     const grade = element('div', undefined, 'quadro-colunas');
     for (const c of COLUNAS) grade.append(coluna(casoId, h, c));
@@ -369,18 +451,18 @@ window.Quadros = (() => {
     const S = Q.sugestoes ? await Q.sugestoes.listar(casoId, 'hipoteses') : {abertas: [], descartadas: []};
     if (!vigente()) return;
     if (!dados.hipoteses?.length && !S.abertas.length && !S.descartadas.length) { Q.estado(painel, 'vazio', t('Uma hipótese é uma afirmação que os documentos podem sustentar ou contrariar.'), {titulo: t('Nenhuma hipótese ainda'), acao: Q.perguntar()}); return; }
-    const corpo = [element('p', t(dados.aviso || ''), 'small quadro-aviso')];
+    const novo = Q.formularios?.botaoNovo('hipotese', 'hipoteses', casoId);
+    const corpo = [...(novo ? [novo] : []), element('p', t(dados.aviso || ''), 'small quadro-aviso')];
     // Sugestões da IA: grupo próprio entre a hipótese em aberto e as fechadas (componentes.md#sugestao-ia). Nunca entram na contagem de hipóteses.
-    const ctx = Q.sugestoes ? Q.sugestoes.contexto(casoId, 'hipoteses') : null;
-    const slot = element('div', undefined, 'hipotese-sugestao-painel'); slot.setAttribute('aria-live', 'polite');
-    const grupo = Q.sugestoes?.secao(S.abertas, sug => { slot.replaceChildren(Q.sugestoes.painel(sug, ctx)); const h = slot.querySelector('.sugestao-titulo'); h.tabIndex = -1; slot.scrollIntoView?.({block: 'nearest'}); h.focus(); }, 'hipotese-sugestoes');
+    const ctx = Q.sugestoes ? Q.sugestoes.contexto(casoId, 'hipoteses', Q.formularios?.podeCriar('hipoteses') ? {corrigir: sug => Q.formularios.abrirNoPainel({tipo: 'hipotese', abaId: 'hipoteses', casoId, sugestao: sug})} : {}) : null;
+    const grupo = Q.sugestoes?.secao(S.abertas, (sug, origem) => painel.__lateral.abrir([Q.sugestoes.painel(sug, ctx)], {origem}), 'hipotese-sugestoes');
     const abertas = dados.hipoteses.filter(h => h.situacao === 'em_aberto'), fechadas = dados.hipoteses.filter(h => h.situacao !== 'em_aberto');
     for (const h of abertas) corpo.push(hipotese(casoId, h));
-    if (grupo) corpo.push(grupo, slot);
+    if (grupo) corpo.push(grupo);
     for (const h of fechadas) corpo.push(hipotese(casoId, h));
     if (dados.divergentes?.length) corpo.push(element('p', t('{n} registros com histórico divergente ficaram de fora.', {n: dados.divergentes.length}), 'notice'));
     const descartadas = Q.sugestoes?.descartadas(S.descartadas, ctx); if (descartadas) corpo.push(descartadas);
-    painel.replaceChildren(...corpo);
+    Q.montarQuadro(painel, corpo);
   })});
 })();
 
@@ -472,6 +554,7 @@ window.Quadros = (() => {
       const selo = Q.seloSugestao(); selo.setAttribute('aria-hidden', 'true'); texto.append(noCartao, selo);
     } else texto.append(noCartao);
     texto.append(titulo, element('p', t(e.data.rotulo || e.data.tipo), 'small tempo-tipo'));
+    const editar = e.sugestao ? null : Q.formularios?.botaoEditar('acontecimento', 'tempo', casoId, e.evento_id, e.descricao, () => ({tiposData: tipos})); if (editar) texto.append(editar);
     if (e.data.observacao) texto.append(Q.dado('p', e.data.observacao, 'small'));
     if (e.divergente) texto.append(element('p', t('Há datas divergentes do mesmo tipo neste evento. O quadro não escolhe uma: confira as fontes.'), 'notice'));
     if (e.retirado) { const aviso = element('p', `${t('Evento retirado:')} `, 'notice'); aviso.append(Q.dado('span', e.motivo_retirada)); texto.append(aviso); }
@@ -539,13 +622,14 @@ window.Quadros = (() => {
     if (!vigente()) return;
     tipos = dados.tipos_data || tipos || {};
     const entradas = juntar(dados.entradas || [], S.abertas), reais = (dados.entradas || []).length;
-    const ctx = Q.sugestoes ? Q.sugestoes.contexto(casoId, 'tempo') : null;
-    const slot = element('div', undefined, 'tempo-sugestao-painel'); slot.setAttribute('aria-live', 'polite');
-    const abrirSugestao = sug => { slot.replaceChildren(Q.sugestoes.painel(sug, ctx)); const h = slot.querySelector('.sugestao-titulo'); h.tabIndex = -1; slot.scrollIntoView?.({block: 'nearest'}); h.focus(); };
+    const comTipos = () => ({tiposData: tipos});
+    const ctx = Q.sugestoes ? Q.sugestoes.contexto(casoId, 'tempo', Q.formularios?.podeCriar('linha-tempo') ? {corrigir: sug => Q.formularios.abrirNoPainel({tipo: 'acontecimento', abaId: 'tempo', casoId, sugestao: sug, ...comTipos()})} : {}) : null;
+    const novo = Q.formularios?.botaoNovo('acontecimento', 'tempo', casoId, comTipos);
+    const abrirSugestao = (sug, origem) => painel.__lateral.abrir([Q.sugestoes.painel(sug, ctx)], {origem});
     const conta = element('p', undefined, 'small quadro-conta');
     conta.append(t(reais === 1 ? '{n} acontecimento' : '{n} acontecimentos', {n: reais}));
     if (S.abertas.length) conta.append(element('span', Q.sugestoes.contagemTexto(S.abertas.length), 'quadro-conta-sugestoes'));
-    const corpo = [filtro(painel, casoId, carregar), comoLer(S.abertas.length > 0), element('p', t(dados.aviso || ''), 'small quadro-aviso'), conta, slot];
+    const corpo = [...(novo ? [novo] : []), filtro(painel, casoId, carregar), comoLer(S.abertas.length > 0), element('p', t(dados.aviso || ''), 'small quadro-aviso'), conta];
     if (!entradas.length) corpo.push(escolhidos ? Q.estado(element('div'), 'vazio', t('Nenhum acontecimento tem os tipos de data escolhidos.'), {titulo: t('Nenhum acontecimento com esses tipos de data'), acao: {rotulo: t('Mostrar tudo'), aoClicar: () => { escolhidos = null; carregar(painel, casoId); }}})
       : Q.estado(element('div'), 'vazio', t('A linha do tempo reúne os acontecimentos datados que os documentos registram.'), {titulo: t('Nenhum acontecimento com data ainda'), acao: Q.perguntar()}));
     else {
@@ -556,7 +640,7 @@ window.Quadros = (() => {
     }
     if (dados.fontes_indisponiveis?.length) corpo.push(element('p', t('{n} fontes de data estão indisponíveis.', {n: dados.fontes_indisponiveis.length}), 'notice'));
     const descartadas = Q.sugestoes?.descartadas(S.descartadas, ctx); if (descartadas) corpo.push(descartadas);
-    painel.replaceChildren(...corpo);
+    Q.montarQuadro(painel, corpo);
   });
   window.addEventListener('mesa-contexto-alterado', () => { tipos = null; escolhidos = null; });
   Q.registrarAba({id: 'tempo', rotulo: t('Linha do tempo'), carregar});

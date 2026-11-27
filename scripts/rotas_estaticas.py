@@ -98,6 +98,8 @@ ARQUIVOS = {'/': ('index.html', 'text/html; charset=utf-8'),
             '/documentos.js': ('documentos.js', 'text/javascript; charset=utf-8'),
             '/quadros.js': ('quadros.js', 'text/javascript; charset=utf-8'),
             '/sugestoes.js': ('sugestoes.js', 'text/javascript; charset=utf-8'),
+            '/formularios.js': ('formularios.js', 'text/javascript; charset=utf-8'),
+            '/processos.js': ('processos.js', 'text/javascript; charset=utf-8'),
             '/analise.js': ('analise.js', 'text/javascript; charset=utf-8'),
             '/indicador_salvamento.js': ('indicador_salvamento.js', 'text/javascript; charset=utf-8'),
             # Fonts cut to Latin (the Lume's part C).
