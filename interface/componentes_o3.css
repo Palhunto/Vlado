@@ -519,6 +519,12 @@ button[aria-disabled="true"]{cursor:progress}
 .form-linha,.form-data,.form-identificador{display:flex;flex-direction:column;gap:var(--espaco-2);padding:var(--espaco-3);border:1px solid var(--theme-line);border-radius:var(--raio-cartao)}
 .form-linha{padding:0;border:0}
 .form-remover{align-self:flex-start}
+/* Tabela: colunas e linhas novas, cada célula com valor e fonte; correção da célula no painel dela. */
+.form-colunas,.form-linhas{display:flex;flex-direction:column;gap:var(--espaco-3)}
+.form-coluna,.form-linha-nova{display:flex;flex-direction:column;gap:var(--espaco-2);min-width:0;margin:0;padding:var(--espaco-3);border:1px solid var(--theme-line);border-radius:var(--raio-cartao)}
+.form-linha-nova>legend{padding:0 var(--espaco-1)}
+.form-celula{display:flex;flex-direction:column;gap:var(--espaco-3);margin-top:var(--espaco-3)}
+.tabela-corrigir{align-self:flex-start;margin-top:var(--espaco-2)}
 .form-mais,.form-ligar{align-self:flex-start;min-height:44px}
 .link-botao:disabled{color:var(--theme-disabled-text);text-decoration:none;cursor:default}
 .form-pe{position:sticky;bottom:0;z-index:1;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--espaco-2);padding:var(--espaco-3) 0;background:var(--theme-surface);border-top:1px solid var(--theme-line)}

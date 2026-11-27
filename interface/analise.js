@@ -132,7 +132,8 @@
     if (!expressao) return {expressao: String(calc.expressao), resultado: String(calc.resultado)};
     return {expressao, resultado: formatarNumero(calc.resultado)};
   }
-  function detalheCelula(saida, linha, coluna, celula) {
+  function detalheCelula(saida, linha, coluna, celula, ctx = {}) {
+    if (saida.dataset.editando) return;
     saida.replaceChildren(element('p', t('Célula {linha} · {coluna}', {linha, coluna: coluna.nome}), 'eyebrow'));
     saida.append(dado('p', celula.valor === null ? t('(vazia)') : `${valorCelula(coluna, celula.valor)}${unidadeColuna(coluna) ? ' ' + unidadeColuna(coluna) : ''}`, 'tabela-valor'),
       element('p', t('Estado: {estado}', {estado: t(ESTADO_CELULA[celula.estado] || celula.estado)}), 'small'));
@@ -147,8 +148,20 @@
         c.valor_anterior === null || c.valor_anterior === undefined ? element('span', t('(vazio)')) : dado('span', valorCelula(coluna, c.valor_anterior)), '.');
       saida.append(linha, dado('p', t('Justificativa: {j}', {j: c.justificativa}), 'small'));
     }
+    // Corrigir a célula: só para quem pode mudar a tabela; o painel fica travado enquanto o formulário está aberto.
+    if (ctx.tabela && Q.formularios?.podeAtualizar('tabelas')) {
+      const corrigir = botao(t('Corrigir esta célula'), 'tabela-corrigir'); corrigir.setAttribute('aria-label', `${t('Corrigir esta célula')}: ${linha} · ${coluna.nome}`);
+      corrigir.addEventListener('click', () => {
+        saida.dataset.editando = '1';
+        const fechar = () => { delete saida.dataset.editando; detalheCelula(saida, linha, coluna, celula, ctx); saida.querySelector('.tabela-corrigir')?.focus(); };
+        const form = Q.formularios.corrigirCelula({tabela: ctx.tabela, linha, coluna, celula, casoId: ctx.casoId, aoCancelar: fechar,
+          aoSalvar: async () => { delete saida.dataset.editando; Q.sugestoes?.anunciar(t('Correção salva. O valor anterior fica guardado.')); await ctx.recarregar?.(); }});
+        saida.replaceChildren(form); form.querySelector('.form-titulo')?.focus();
+      });
+      saida.append(corrigir);
+    }
   }
-  function grade(tabela, saida) {
+  function grade(tabela, saida, ctx = {}) {
     const wrap = element('div', undefined, 'tabela-rolagem');
     const tab = element('table', undefined, 'tabela-conferivel');
     const legenda = dado('caption', tabela.titulo); tab.append(legenda);
@@ -164,7 +177,7 @@
         td.tabIndex = (i === 0 && j === 0) ? 0 : -1; td.dataset.linha = linha.id; td.dataset.coluna = coluna.id;
         td.append(dado('span', cel.valor === null ? '—' : valorCelula(coluna, cel.valor)));
         if (cel.estado !== 'extraido') td.append(element('span', ` (${t(ESTADO_CELULA[cel.estado])})`, 'tabela-marca'));
-        const mostrar = () => detalheCelula(saida, linha.id, coluna, cel);
+        const mostrar = () => detalheCelula(saida, linha.id, coluna, cel, {...ctx, tabela});
         td.addEventListener('focus', mostrar); td.addEventListener('mouseenter', mostrar); td.addEventListener('click', () => td.focus());
         td.addEventListener('keydown', evento => {
           const passo = {ArrowRight: [0, 1], ArrowLeft: [0, -1], ArrowDown: [1, 0], ArrowUp: [-1, 0]}[evento.key];
@@ -215,17 +228,25 @@
   Q.registrarAba({id: 'tabelas', rotulo: t('Tabelas'), carregar: Q.quadro('tabelas_apuracao', async (painel, casoId, vigente) => {
     const lista = await api('tabelas-listar', {caso: casoId});
     if (!vigente()) return;
-    if (!lista.tabelas.length) { Q.estado(painel, 'vazio', t('Uma tabela conferível reúne números tirados dos documentos, cada um com a sua fonte.'), {titulo: t('Nenhuma tabela ainda'), acao: Q.perguntar()}); return; }
+    const nova = Q.formularios?.botaoNovo('tabela', 'tabelas', casoId);
+    if (!lista.tabelas.length) {
+      const vazio = element('div'); Q.estado(vazio, 'vazio', t('Uma tabela conferível reúne números tirados dos documentos, cada um com a sua fonte.'), {titulo: t('Nenhuma tabela ainda'), acao: Q.perguntar()});
+      Q.montarQuadro(painel, [...(nova ? [nova] : []), vazio]); return;
+    }
     const escolha = element('select'); escolha.id = 'tabelas-escolha';
     escolha.replaceChildren(...lista.tabelas.map(tb => { const o = new Option(`${tb.titulo} · ${t('{n} linhas', {n: tb.total_linhas})}`, tb.id); o.setAttribute('translate', 'no'); return o; }));
     const area = element('div', undefined, 'tabela-area');
+    // duas escolhas seguidas com o servidor lento: só a última resposta é pintada
+    let pedidoAbrir = 0;
     async function abrir() {
+      const pedido = ++pedidoAbrir;
       Q.estado(area, 'carregando', t('Carregando…'));
       try {
         const tabela = await api('tabelas-detalhe', {caso: casoId, id: escolha.value});
+        if (pedido !== pedidoAbrir || !vigente()) return;
         const fonte = element('aside', undefined, 'tabela-fonte'); fonte.setAttribute('aria-live', 'polite'); fonte.id = 'tabela-fonte';
         fonte.append(element('p', t('Leve o foco a uma célula para ver a fonte, o estado e a última correção.'), 'small'));
-        const {wrap, celulas} = grade(tabela, fonte);
+        const {wrap, celulas} = grade(tabela, fonte, {casoId, recarregar: abrir});
         const n = tabela.celulas_por_estado || {};
         const contar = (q, um, varios) => t(q === 1 ? um : varios, {n: q});
         area.replaceChildren(element('p', [contar(n.extraido || 0, '{n} com fonte', '{n} com fonte'), contar(n.corrigido_manual || 0, '{n} corrigida', '{n} corrigidas'),
@@ -233,10 +254,15 @@
           element('p', t('Use as setas para andar pelas células.'), 'small'), element('div', undefined, 'tabela-layout'));
         area.lastChild.append(wrap, fonte);
         area.append(painelCalculo(tabela, celulas), element('p', t(tabela.aviso || ''), 'small quadro-aviso'));
-      } catch (erro) { Q.estado(area, 'erro', erro.message); }
+      } catch (erro) { if (pedido === pedidoAbrir && vigente()) Q.estado(area, 'erro', erro.message); }
     }
-    escolha.addEventListener('change', abrir);
-    painel.replaceChildren(campo(t('Tabela'), escolha), area);
+    if (Q.tabelaEscolhida && lista.tabelas.some(tb => tb.id === Q.tabelaEscolhida)) escolha.value = Q.tabelaEscolhida;
+    Q.tabelaEscolhida = null;
+    const editar = element('div', undefined, 'quadro-acoes'); if (nova) editar.append(nova);
+    const editarAtual = () => { editar.querySelector('.quadro-editar')?.remove(); const b = Q.formularios?.botaoEditar('tabela', 'tabelas', casoId, escolha.value, escolha.selectedOptions?.[0]?.textContent || ''); if (b) editar.append(b); };
+    escolha.addEventListener('change', () => { editarAtual(); abrir(); });
+    editarAtual();
+    Q.montarQuadro(painel, [campo(t('Tabela'), escolha), ...(editar.children.length ? [editar] : []), area]);
     await abrir();
   })});
 
@@ -263,6 +289,7 @@
     saida.replaceChildren(dado('h4', `${nomes[r.origem]} — ${r.tipo} — ${nomes[r.destino]}`),
       element('p', t('Situação: {s}', {s: t(SIT_RELACAO[r.situacao] || r.situacao)}), 'small'));
     if (r.descricao) saida.append(dado('p', r.descricao, 'small'));
+    const origem = Q.sugestoes?.nota('mapa', r.id); if (origem) saida.append(origem);
     // Suporte só da IA (componentes.md#suporte-so-da-ia): "✓ n evidências conferidas no original" fica para o que uma pessoa conferiu; o suporte que veio só da revisão
     // da IA vai na pílula da P20a ("IA · n evidências sustentadas"), sem a cor nem o sinal da conferência humana. Havendo as duas coisas, as duas pílulas.
     const evs = r.evidencias || [], conferidas = evs.filter(v => v.conferencia_humana?.estado === 'conferida_no_original').length;
@@ -551,6 +578,7 @@
       const li = element('li', undefined, `mapa-entidade ${e.tipo}`);
       li.append(dado('h4', e.nome), element('p', `${e.tipo === 'organizacao' ? t('Organização') : t('Pessoa')} · ${t({com_evidencia: 'Com evidência', evidencia_indisponivel: 'Evidência indisponível', sem_evidencia: 'Sem evidência'}[e.situacao] || e.situacao)}`, 'small'));
       if (e.identificadores?.length) li.append(dado('p', e.identificadores.map(i => `${i.tipo.toUpperCase()} ${i.valor_exibicao}`).join(' · '), 'small'));
+      const origem = e.sugestao ? null : Q.sugestoes?.nota('mapa', e.id); if (origem) li.append(origem);
       const ligacoes = mapa.relacoes.filter(r => r.origem === e.id || r.destino === e.id);
       const sub = element('ul', undefined, 'mapa-ligacoes');
       for (const r of ligacoes) {

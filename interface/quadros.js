@@ -425,6 +425,7 @@ window.Quadros = (() => {
       : element('span', h.condicao === 'com_evidencia' ? t('Com evidência conferida') : t('Pendente de evidência conferida'), `quadro-condicao condicao-${h.condicao}`);
     meta.append(element('span', t('Situação declarada: {situacao}', {situacao: t({em_aberto: 'Em aberto', sustentada: 'Sustentada', contrariada: 'Contrariada', inconclusiva: 'Inconclusiva', descartada: 'Descartada'}[h.situacao] || h.situacao)})), condicao);
     cartao.append(titulo, meta);
+    const origem = Q.sugestoes?.nota('hipoteses', h.id); if (origem) cartao.append(origem);
     const editar = Q.formularios?.botaoEditar('hipotese', 'hipoteses', casoId, h.id, h.enunciado); if (editar) cartao.append(editar);
     if (h.situacao_sem_base) cartao.append(element('p', t('A situação declarada perdeu a evidência que a fundamentava. Confira antes de usar.'), 'notice'));
     const grade = element('div', undefined, 'quadro-colunas');
@@ -554,6 +555,7 @@ window.Quadros = (() => {
       const selo = Q.seloSugestao(); selo.setAttribute('aria-hidden', 'true'); texto.append(noCartao, selo);
     } else texto.append(noCartao);
     texto.append(titulo, element('p', t(e.data.rotulo || e.data.tipo), 'small tempo-tipo'));
+    const origem = e.sugestao ? null : Q.sugestoes?.nota('linha_tempo', e.evento_id); if (origem) texto.append(origem);
     const editar = e.sugestao ? null : Q.formularios?.botaoEditar('acontecimento', 'tempo', casoId, e.evento_id, e.descricao, () => ({tiposData: tipos})); if (editar) texto.append(editar);
     if (e.data.observacao) texto.append(Q.dado('p', e.data.observacao, 'small'));
     if (e.divergente) texto.append(element('p', t('Há datas divergentes do mesmo tipo neste evento. O quadro não escolhe uma: confira as fontes.'), 'notice'));
