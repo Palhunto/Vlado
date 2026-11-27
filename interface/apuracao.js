@@ -204,7 +204,10 @@
       originReturn = {scroll:window.scrollY || 0};
       try {
         const {operacao, ...scope} = doc.abrir;
-        await window.abrirOriginal(await api('apuracao-original', scope, true), doc.nome_documento, doc.pagina_pdf);
+        const blob = await api('apuracao-original', scope, true);
+        // a resposta de uma apuração que já não é a selecionada não abre o original por cima da outra
+        const atual = window.contextoCaso?.(); if (scope.caso && atual && atual !== scope.caso) { originReturn = null; return; }
+        await window.abrirOriginal(blob, doc.nome_documento, doc.pagina_pdf);
       } catch (failure) { originReturn = null; error(failure.message); }
       finally { button.disabled = false; }
     });

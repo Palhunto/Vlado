@@ -24,7 +24,8 @@
   }
   window.registrarOriginalConferido = (scope, evidenceId) => {
     openedOriginals.add(evidenceKey(scope, evidenceId));
-    if (session) { markPending(evidenceId, false); guard(); }
+    // só mexe na tela se ela ainda é a conferência do mesmo achado e escopo: o mesmo id de evidência (E001) existe em outras rodadas e revisões
+    if (session && evidenceKey(session.scope, evidenceId) === evidenceKey(scope, evidenceId)) { markPending(evidenceId, false); guard(); }
   };
   function fail(message = '') {
     $('revisao-erro').textContent = message; $('revisao-erro').hidden = !message;
@@ -85,6 +86,8 @@
           original.disabled = true;
           try {
             const blob = await api('achados-original', {...scope, evidencia_id:evidence.id}, true);
+            // a resposta de uma conferência que já foi trocada ou fechada não abre o original por cima da outra nem o registra como conferido
+            if (request !== sequence || !dialog.open) return;
             await window.abrirOriginal(blob, evidence.original.split('/').pop(), page, claim.redacao + '\n\n' + (evidence.trecho || 'Fonte visual: confira o original.'));
             window.registrarOriginalConferido(scope, evidence.id);
           } catch (error) { feedback.textContent = error.message; }

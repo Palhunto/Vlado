@@ -48,7 +48,7 @@
         block.append(element('h4',`${Leitura.nome(source)} · ${source.localizador}`),element('blockquote',source.trecho),
           element('p',source.conferencia_textual==='literal_localizado'?'Trecho localizado no texto. Isso não valida a interpretação.':'Transcrição humana: o trecho não foi validado automaticamente pelo extrator.','small'));
         const original=element('button',Leitura.rotuloOriginal(Leitura.pagina(source)),'secondary'),feedback=element('p','','small');original.type='button';feedback.setAttribute('role','status');
-        original.addEventListener('click',async()=>{original.disabled=true;try{await window.abrirOriginal(await api('caderno-original',{caso:bundle.caso_id,registro_id:entry.id,sha256:item.sha256,fonte_indice:index},true),source.nome_documento,source.pagina_pdf);}catch(failure){feedback.textContent=failure.message;}finally{original.disabled=false;}});
+        original.addEventListener('click',async()=>{original.disabled=true;try{const blob=await api('caderno-original',{caso:bundle.caso_id,registro_id:entry.id,sha256:item.sha256,fonte_indice:index},true);const atual=window.contextoCaso?.();if(atual&&atual!==bundle.caso_id)return;await window.abrirOriginal(blob,source.nome_documento,source.pagina_pdf);}catch(failure){feedback.textContent=failure.message;}finally{original.disabled=false;}});
         block.append(original,feedback);card.append(block);
       }
       if(entry.vinculos.length){const parents=element('details');parents.append(element('summary','Contribuições humanas relacionadas'));for(const parent of entry.vinculos)parents.append(element('p',`${parent.titulo} · autoria: ${parent.autor}`));card.append(parents);}
@@ -133,7 +133,7 @@
   $('caderno-fontes-atualizar').addEventListener('click',async()=>{formError();try{await loadDocuments({},true);}catch(failure){formError(failure.message);}});
   $('caderno-original').addEventListener('click',async()=>{
     const doc=sourceDoc();if(!session||!doc)return;
-    try{await window.abrirOriginal(await api('caderno-original',{...session.scope,origem_id:session.documents.origem_id,documento_id:doc.documento_id,documento_sha256:doc.sha256},true),doc.nome_recebido,$('caderno-pagina').value);}
+    try{const scope=session.scope,blob=await api('caderno-original',{...scope,origem_id:session.documents.origem_id,documento_id:doc.documento_id,documento_sha256:doc.sha256},true);const atual=window.contextoCaso?.();if(atual&&scope.caso&&atual!==scope.caso)return;await window.abrirOriginal(blob,doc.nome_recebido,$('caderno-pagina').value);}
     catch(failure){formError(failure.message);}
   });
   $('caderno-form').addEventListener('submit',async event=>{

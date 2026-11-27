@@ -428,8 +428,10 @@
   }
   async function openOriginal(hit, trigger) {
     trigger.disabled = true;
+    const caso = $('codex-caso').value;
     try {
       const blob = await api('codex-original', {conversa:sourceChats.get(hit.referencia), referencia:hit.referencia}, true);
+      if ($('codex-caso').value !== caso) return;   // a apuração mudou enquanto o original vinha
       await window.abrirOriginal(blob, hit.original.split('/').pop(), Leitura.pagina(hit), hit.trecho);
     } catch (error) { fail(error.message); }
     finally { trigger.disabled = false; }
