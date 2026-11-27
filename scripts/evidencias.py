@@ -255,7 +255,7 @@ def vinculos(root, case, items, *, minimo=0, papeis=PAPEIS, cache=None, preserva
         raise ValueError(f'Vincule de {minimo} a {MAXIMO_VINCULOS} evidências.')
     cache = {} if cache is None else cache
     result, seen, signatures = [], set(), set()
-    for item in items:
+    for posicao, item in enumerate(items, 1):
         chosen = vinculo_ia.escolha(item)  # Onda 4 (B1): the finding chosen for an E-ID in several findings
         if isinstance(item, dict) and 'achado_id' in item:
             item = {k: v for k, v in item.items() if k != 'achado_id'}
@@ -286,8 +286,14 @@ def vinculos(root, case, items, *, minimo=0, papeis=PAPEIS, cache=None, preserva
         if signature in signatures:
             raise ValueError('A mesma evidência já está vinculada com este papel (por outra revisão ou registro).')
         signatures.add(signature)
+        try:
+            justification = texto(item['justificativa'], 'Justificativa do vínculo', 2000)
+        except ValueError:  # say which card: the form may hold several links (R1 of the Coruja on the real server)
+            ident = ref.get('evidencia_id') or ref.get('registro_id')
+            raise ValueError(f'Justificativa do vínculo {posicao} ({ident}): escreva por que esta evidência se liga '
+                             'ao item, até 2000 caracteres.') from None
         result.append({'referencia': ref, 'papel': item['papel'], 'suporte': support, 'natureza': nature,
-                       'justificativa': texto(item['justificativa'], 'Justificativa do vínculo', 2000),
+                       'justificativa': justification,
                        'documento_id': document['documento_id'], 'original_sha256': document['original_sha256'],
                        'localizador': dict(resolved['localizador'])})
         choices = _ESCOLHAS.get()

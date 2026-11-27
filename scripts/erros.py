@@ -89,6 +89,7 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('vinculo_contexto_com_suporte', r'^Evidência de contexto não recebe avaliação de suporte'),
     ('vinculo_pendencia_sustentada', r'^Pendência não pode ser sustentada'),
     ('vinculos_demais', r'^Limite de (?P<maximo>\d+) evidências por item'),
+    ('vinculo_sem_justificativa', r'^Justificativa do vínculo (?P<posicao>\d{1,3}) \((?P<evidencia>[A-Za-z0-9]{1,40})\)'),
     ('vinculo_achado_ambiguo', r'^E[0-9]{3,} está ligada a mais de um achado'),
     ('vinculo_achado_invalido', r'^(O achado indicado \(A[0-9]{3,}\) não está ligado|Achado do vínculo inválido)'),
     ('evidencia_sem_achado', r'^E[0-9]{3,} não está ligada a nenhum achado'),
