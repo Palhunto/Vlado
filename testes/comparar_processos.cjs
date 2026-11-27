@@ -7,7 +7,7 @@ const {criarMesa, Evento, PILHA} = require('./dom_minimo.cjs');
 
 const ref = n => ({tipo: 'ia', caso_id: 'alpha', rodada: 'R002', revisao: 'r3_sintese', registros_sha256: '7'.repeat(64), evidencia_id: `E0${n}`});
 const evid = (n, trecho, extra = {}) => ({referencia: ref(n), estado: 'conferida', documento: {documento_id: 'D007', nome: 'parecer_12_2025.pdf'}, localizador: {legivel: 'D007 · página PDF 2', pagina_pdf: 2}, trecho,
-  achado_id: 'A004', revisao_ia: {suporte: 'sustentado', natureza: 'declaracao_documental', destino: 'incluido'}, conferencia_humana: null,
+  achado_id: 'A004', justificativa_ia: `Trecho do parecer na evidência E0${n}.`, revisao_ia: {suporte: 'sustentado', natureza: 'declaracao_documental', destino: 'incluido'}, conferencia_humana: null,
   preenchimento: {papel: 'suporte', suporte: 'sustentado', natureza: 'declaracao_documental', destino: 'incluido'}, ...extra});
 const COMPARACAO = (extra = {}) => ({achado: {id: 'A004', versao: 1, destino: 'incluido', redacao: 'O parecer foi usado nos dois processos.'},
   chave: {identificador: 'Parecer jurídico nº 12/2025', data: '2025-02-10', emissor: 'Procuradoria de Vila Serena', versao: 'única'},
@@ -18,12 +18,16 @@ const COMPARACAO = (extra = {}) => ({achado: {id: 'A004', versao: 1, destino: 'i
 const IGUAIS = () => COMPARACAO({achado: {id: 'A005', versao: 1, destino: 'incluido'}, mesmo_arquivo: true, pendente: false, revisao_ia: {suporte: 'sustentado', natureza: 'declaracao_documental'},
   conferencias: {versao: 'mesmo', data: 'mesmo', emissor: 'mesmo', trecho: 'mesmo', questao: 'mesmo', fase: 'a_conferir'}});
 
-function montar({resposta = {caso: 'alpha', estruturada: true, comparacoes: [COMPARACAO(), IGUAIS()]}, permissao = true, falha = null} = {}) {
+function montar({resposta = {caso: 'alpha', estruturada: true, comparacoes: [COMPARACAO(), IGUAIS()]}, permissao = true, falha = null, recusaCriar = null} = {}) {
   const salvos = [];
   const m = criarMesa({scripts: [...PILHA, 'quadros.js', 'sugestoes.js', 'formularios.js', 'processos.js', 'analise.js', 'indicador_salvamento.js'], desktop: true,
     catalogo: [{id: 'alpha', titulo: 'Alfa', rodadas: [{id: 'R001', geracoes: ['g1']}]}],
     api: (operacao, dados) => {
-      if (operacao.endsWith('-criar')) { salvos.push({operacao, dados}); return {id: 'H001'}; }
+      if (operacao.endsWith('-criar')) {
+        if (recusaCriar) throw Object.assign(new Error(recusaCriar.erro), {result: recusaCriar});
+        if ((dados.evidencias || []).some(v => !String(v.justificativa || '').trim())) throw new Error('Justificativa do vínculo: o texto não pode ser vazio.');
+        salvos.push({operacao, dados}); return {id: 'H001'};
+      }
       if (operacao === 'inventario') return {caso_id: 'alpha', documentos: [{id: 'D001', nome_recebido: 'a.txt', arquivo: 'a'}, {id: 'D002', nome_recebido: 'b.txt', arquivo: 'b'}]};
       if (operacao === 'comparar-processos') { if (falha) throw new Error(falha); return resposta; }
       if (operacao === 'sugestoes-listar') return {sugestoes: []};
@@ -123,6 +127,7 @@ test('"Criar hipótese" liga cada evidência com o achado_id e o preenchimento d
   [...vista.querySelectorAll('.processo-acoes button')].find(b => b.textContent === 'Criar hipótese com esta comparação').click(); await espera(m);
   const painel = m.$('quadros-comparador');
   const area = painel.querySelector('textarea'); area.value = 'O parecer sustenta as duas decisões.'; area.dispatchEvent(new Evento('input', {bubbles: true}));
+  for (const j of painel.querySelectorAll('.vinculo-cartao textarea')) { j.value = 'Mesmo parecer nos dois processos.'; j.dispatchEvent(new Evento('input', {bubbles: true})); }
   [...painel.querySelectorAll('button')].find(b => b.textContent === 'Salvar').click(); await espera(m);
   assert.equal(m.salvos.length, 1);
   const vs = m.salvos[0].dados.evidencias;
@@ -131,6 +136,55 @@ test('"Criar hipótese" liga cada evidência com o achado_id e o preenchimento d
   assert.equal(deRetirada.papel, 'contexto'); assert.equal(deRetirada.suporte, 'nao_revisado', 'achado retirado: não revisado, não o sustentado cru');
   const normal = vs.find(v => v.achado_id === 'A004');
   assert.equal(normal.papel, 'suporte'); assert.equal(normal.suporte, 'sustentado'); assert.equal(normal.natureza, 'declaracao_documental');
+  assert.deepEqual(m.erros, []);
+});
+
+test('"Criar hipótese" preenche cada cartão com a justificativa_ia da evidência e salva sem a pessoa digitar (R1 da Coruja)', async () => {
+  const m = montar(); const {vista} = await abrirProcessos(m);
+  [...vista.querySelectorAll('.processo-acoes button')].find(b => b.textContent === 'Criar hipótese com esta comparação').click(); await espera(m);
+  const painel = m.$('quadros-comparador');
+  assert.deepEqual([...painel.querySelectorAll('.vinculo-cartao textarea')].map(j => j.value), ['E07', 'E08', 'E09', 'E010'].map(e => `Trecho do parecer na evidência ${e}.`));
+  const area = painel.querySelector('textarea'); area.value = 'O parecer sustenta as duas decisões.'; area.dispatchEvent(new Evento('input', {bubbles: true}));
+  [...painel.querySelectorAll('button')].find(b => b.textContent === 'Salvar').click(); await espera(m);
+  assert.equal(m.salvos.length, 1);
+  assert.deepEqual(m.salvos[0].dados.evidencias.map(v => v.justificativa), [7, 8, 9, 10].map(n => `Trecho do parecer na evidência E0${n}.`));
+  assert.deepEqual(m.erros, []);
+});
+
+test('recusa vinculo_sem_justificativa do servidor (por exemplo, texto longo demais): a tela aponta o cartão pela posição e leva o foco (ce980b6)', async () => {
+  const m = montar({recusaCriar: {erro: 'Justificativa do vínculo inválida.', codigo: 'vinculo_sem_justificativa', parametros: {posicao: 3, evidencia: 'E09'}}}); const {vista} = await abrirProcessos(m);
+  [...vista.querySelectorAll('.processo-acoes button')].find(b => b.textContent === 'Criar hipótese com esta comparação').click(); await espera(m);
+  const painel = m.$('quadros-comparador');
+  const area = painel.querySelector('textarea'); area.value = 'O parecer sustenta as duas decisões.'; area.dispatchEvent(new Evento('input', {bubbles: true}));
+  [...painel.querySelectorAll('button')].find(b => b.textContent === 'Salvar').click(); await espera(m);
+  const terceiro = [...painel.querySelectorAll('.vinculo-cartao textarea')][2];
+  assert.match(texto(painel.querySelector('.form-erro-geral')), /Não deu para salvar: Justificativa do vínculo inválida\./);
+  assert.equal(terceiro.getAttribute('aria-invalid'), 'true'); assert.equal(m.doc.activeElement, terceiro);
+  assert.equal([...painel.querySelectorAll('.vinculo-cartao textarea')].filter(j => j.getAttribute('aria-invalid') === 'true').length, 1);
+  assert.deepEqual(m.erros, []);
+});
+
+test('Salvar confere a justificativa de cada cartão antes de enviar e aponta o cartão que falta, com mensagem e foco no campo (R1 da Coruja)', async () => {
+  const sem = COMPARACAO(); for (const l of sem.lados) for (const e of [l.fundamento, l.desfecho_evidencia]) e.justificativa_ia = '';
+  const m = montar({resposta: {caso: 'alpha', estruturada: true, comparacoes: [sem]}}); const {vista} = await abrirProcessos(m);
+  [...vista.querySelectorAll('.processo-acoes button')].find(b => b.textContent === 'Criar hipótese com esta comparação').click(); await espera(m);
+  const painel = m.$('quadros-comparador');
+  const area = painel.querySelector('textarea'); area.value = 'O parecer sustenta as duas decisões.'; area.dispatchEvent(new Evento('input', {bubbles: true}));
+  const justs = () => [...painel.querySelectorAll('.vinculo-cartao textarea')];
+  assert.equal(justs().length, 4);
+  justs().slice(0, 2).forEach(j => { j.value = 'Mesmo parecer.'; j.dispatchEvent(new Evento('input', {bubbles: true})); });
+  const salvar = () => [...painel.querySelectorAll('button')].find(b => b.textContent === 'Salvar').click();
+  salvar(); await espera(m);
+  assert.equal(m.salvos.length, 0, 'nada sai com justificativa vazia');
+  assert.match(texto(painel.querySelector('.form-erro-geral')), /Falta a justificativa de parecer_12_2025\.pdf, D007 · página PDF 2\./);
+  const terceiro = justs()[2];
+  assert.equal(terceiro.getAttribute('aria-invalid'), 'true', 'o campo do cartão que falta está marcado');
+  assert.equal(m.doc.activeElement, terceiro, 'o foco vai para o campo');
+  assert.equal(justs()[0].getAttribute('aria-invalid'), null);
+  assert.match(texto(terceiro.parentNode), /Escreva a justificativa\./);
+  justs().slice(2).forEach(j => { j.value = 'Mesmo parecer.'; j.dispatchEvent(new Evento('input', {bubbles: true})); });
+  salvar(); await espera(m);
+  assert.equal(m.salvos.length, 1); assert.equal(m.salvos[0].dados.evidencias.length, 4);
   assert.deepEqual(m.erros, []);
 });
 

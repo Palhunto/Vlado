@@ -1291,6 +1291,13 @@ window.VLADO_I18N_EN = {
     // Quadros, Onda 4 (a9264ac)
     "O histórico das decisões desta sugestão está divergente. As ações ficam indisponíveis para ela até o registro ser conferido.": "The decision history of this suggestion is inconsistent. The actions stay unavailable for it until the record is checked.",
     "O histórico das decisões desta sugestão está divergente: o registro precisa ser conferido antes de decidir.": "The decision history of this suggestion is inconsistent: the record needs to be checked before deciding.",
+    // Quadros, justificativa de cada cartão antes do envio
+    "Falta a justificativa de {onde}. Escreva por que esta evidência entra neste item.": "The justification for {onde} is missing. Write why this evidence belongs in this item.",
+    "Escreva a justificativa.": "Write the justification.",
+    "Escolha a natureza.": "Choose the nature.",
+    "a evidência": "the evidence",
+    // Quadros, recusa de justificativa apontada pelo cartão
+    "Revise a justificativa: vazia ou longa demais.": "Review the justification: empty or too long.",
     // Fase 06 — quadros de evidência (interface/quadros.js)
     "Hipóteses e acontecimentos registrados por pessoas a partir das evidências desta apuração. Cada evidência abre o original conferido; os quadros organizam e apontam lacunas, sem avaliar veracidade.": "Hypotheses and events recorded by people from this investigation’s evidence. Each piece of evidence opens the checked original; the boards organise and point out gaps, without judging truth.",
     "Hipóteses": "Hypotheses",
