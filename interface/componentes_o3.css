@@ -369,3 +369,125 @@ button[aria-disabled="true"]{cursor:progress}
 .termos-erro[hidden],.termos-aviso[hidden],.termos-estado[hidden]{display:none}
 .termos-nao-aceitar{margin:0}
 .termos-ler{font-weight:600;text-decoration:underline;color:var(--theme-accent)}
+
+/* === Sugestão da IA nos quadros (componentes.md#sugestao-ia, P45) ===
+   Três sinais, os mesmos do veredito da IA (P20a): sem fundo próprio, borda 1 px tracejada --theme-muted e o selo "IA · sugestão".
+   A seleção nunca tira um dos três (tracejado, selo e transparência ficam). "A confirmar" (--theme-warning, 6 6) é outra coisa. */
+.selo-sugestao{display:inline-flex;align-items:center;gap:var(--espaco-1);width:fit-content;max-width:100%;padding:var(--espaco-1) var(--espaco-3);border:1px dashed var(--theme-muted);border-radius:var(--raio-pilula);background:transparent;color:var(--theme-text);font-size:var(--text-md);font-weight:600;line-height:1.5}
+.selo-sugestao .badge-origin{font-weight:700;letter-spacing:.04em}
+/* Mapa: nó (pessoa ou organização) com a forma do tipo vazada, ligação com tracejado 10 6 e rótulo "IA ·". */
+/* Sem fundo próprio: o cartão leva a cor do fundo do desenho (--quadro-coluna-fundo), não a do cartão comum, para que a linha da ligação não o atravesse. */
+.mapa-no.is-sugestao .mapa-cartao{background:var(--quadro-coluna-fundo);border:1px dashed var(--theme-muted)}
+.mapa-no.is-sugestao .mapa-ico{background:transparent;border:2px solid currentColor;box-sizing:border-box}
+.mapa-no.is-sugestao.pessoa .mapa-ico{color:var(--mapa-pessoa)}
+.mapa-no.is-sugestao.organizacao .mapa-ico{color:var(--mapa-organizacao)}
+.mapa-no.is-sugestao:hover .mapa-cartao{border-color:var(--theme-text)}
+.mapa-no.is-sugestao.is-ativa .mapa-cartao{border:2px dashed var(--theme-accent)}
+.mapa-no.is-sugestao foreignObject{overflow:visible}
+.mapa-no.is-sugestao:focus-visible .mapa-cartao{outline:var(--foco-largura) solid var(--theme-focus);outline-offset:var(--foco-afastamento)}
+.mapa-ligacao.is-sugestao .mapa-linha{stroke:var(--theme-muted);stroke-dasharray:10 6;stroke-linecap:round}
+.mapa-ligacao.is-sugestao.is-ativa .mapa-linha,.mapa-ligacao.is-sugestao:focus-visible .mapa-linha,.mapa-ligacao.is-sugestao:hover .mapa-linha{stroke:var(--mapa-ligacao-aberta);stroke-width:4;stroke-dasharray:10 6}
+.mapa-pilula.is-sugestao .mapa-pilula-fundo{fill:var(--mapa-rotulo-fundo);stroke:var(--theme-muted);stroke-dasharray:4 3}
+.mapa-pilula.is-sugestao.is-ativa .mapa-pilula-fundo{fill:var(--mapa-rotulo-fundo);stroke:var(--theme-accent)}
+.mapa-pilula.is-sugestao.is-ativa .mapa-pilula-texto{fill:var(--ink)}
+.mapa-pilula.is-sugestao.is-ativa .mapa-pilula-icone{stroke:var(--ink)}
+.mapa-legenda .legenda-sugestao::before{width:24px;height:0;border-top:2px dashed var(--theme-muted)}
+.mapa-ligacoes li.is-sugestao,.mapa-entidade.is-sugestao{background:transparent;border:1px dashed var(--theme-muted);border-left-style:dashed}
+.mapa-ligacoes li.is-sugestao{border-width:1px 0 0;padding-top:var(--espaco-1)}
+/* Linha do tempo: marco de 36 px sem fundo (borda 2 px tracejada) e cartão sem fundo, borda 1 px tracejada. O trilho continua contínuo. */
+.tempo-evento.is-sugestao .tempo-marco{background:transparent;border:2px dashed var(--theme-muted);color:var(--theme-muted)}
+.tempo-evento.is-sugestao .tempo-cartao{background:transparent;border:1px dashed var(--theme-muted)}
+.tempo-evento.is-sugestao:hover .tempo-cartao{border-color:var(--theme-text)}
+.tempo-evento.is-sugestao.is-ativa .tempo-marco,.tempo-evento.is-sugestao.is-ativa .tempo-cartao{border-color:var(--theme-accent)}
+.tempo-evento.is-sugestao.is-ativa .tempo-cartao{border-width:2px}
+.tempo-como-ler .tempo-marca.sugestao{background:transparent;border-style:dashed;border-color:var(--theme-muted)}
+/* Hipóteses: cartão-botão de largura cheia, sem fundo, enunciado em serifa 18, selo e evidência em 14 muted. */
+.hipotese-sugestao{display:flex;flex-direction:column;align-items:flex-start;gap:var(--espaco-2);width:100%;padding:var(--espaco-4) var(--espaco-5);border:1px dashed var(--theme-muted);border-radius:var(--raio-cartao);background:transparent;color:var(--theme-text);text-align:left;font-weight:400;cursor:pointer}
+.hipotese-sugestao:hover{border-color:var(--theme-text)}
+.hipotese-sugestao[aria-pressed=true]{border:2px dashed var(--theme-accent)}
+.hipotese-sugestao-texto{font:400 var(--text-lg)/1.35 var(--fonte-titulo);overflow-wrap:anywhere}
+.hipotese-sugestao-fonte{font-size:var(--text-md);color:var(--theme-muted)}
+.quadro-sugestoes-titulo{margin:var(--espaco-5) 0 var(--espaco-3);font-size:var(--text-base);font-weight:600}
+.quadro-conta-sugestoes{font-size:var(--text-md);color:var(--theme-muted)}
+
+/* === Seletor comum de evidência (componentes.md#seletor-evidencia, P47) === */
+.link-botao{min-height:44px;padding:0;border:0;background:transparent;color:var(--theme-accent);font-size:var(--text-base);font-weight:600;text-decoration:underline;text-align:left;cursor:pointer}
+.link-botao:hover{background:transparent;color:var(--theme-primary-hover)}
+.seletor-evidencia{display:flex;flex-direction:column;gap:var(--espaco-3)}
+.seletor-evidencia>*{margin:0}
+.seletor-titulo{font:600 var(--text-xl)/1.25 var(--fonte-titulo);color:var(--theme-text)}
+.seletor-rotulo{font-size:var(--text-md);font-weight:600;color:var(--theme-muted)}
+.seletor-busca{width:100%;min-height:44px;box-sizing:border-box;font-size:var(--text-base)}
+.seletor-origens{display:flex;flex-wrap:wrap;gap:var(--espaco-2)}
+.seletor-pilula{min-height:44px;padding:0 var(--espaco-4);border:1px solid var(--theme-input-line);border-radius:var(--raio-pilula);background:var(--theme-surface);color:var(--theme-text);font-size:var(--text-base);font-weight:400}
+.seletor-pilula[aria-pressed=true]{background:var(--theme-accent);border-color:var(--theme-accent);color:var(--theme-on-primary);font-weight:600}
+.seletor-analise,.seletor-nota{color:var(--theme-muted);font-size:var(--text-md)}
+.seletor-analises{list-style:none;margin:0;padding:0}
+.seletor-status:empty{display:none}
+.seletor-status{color:var(--theme-muted);font-size:var(--text-md)}
+.seletor-resultados{display:flex;flex-direction:column;gap:var(--espaco-2)}
+.seletor-resultado{display:flex;flex-direction:column;align-items:flex-start;gap:var(--espaco-1);width:100%;padding:var(--espaco-3);box-sizing:border-box;border:1px solid var(--theme-line);border-radius:var(--raio-cartao);background:var(--theme-surface);color:var(--theme-text);font-weight:400;text-align:left}
+.seletor-resultado.is-aberto{border:2px solid var(--theme-accent)}
+.seletor-resultado.is-ligada{cursor:default}
+.seletor-tipo{font-size:var(--text-md);font-weight:600;color:var(--theme-muted)}
+.seletor-texto{font:400 var(--text-base)/1.4 var(--fonte-titulo);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.seletor-localizador{font-size:var(--text-md);color:var(--theme-muted)}
+.seletor-estado{display:flex;flex-wrap:wrap;align-items:center;gap:var(--espaco-1) var(--espaco-2);font-size:var(--text-md)}
+.seletor-conferencia{font-weight:600}
+.seletor-conferencia.is-conferido{color:var(--theme-accent)}
+.seletor-conferencia.is-a-conferir{color:var(--theme-text)}
+.seletor-retirado{font-weight:600;color:var(--theme-warning)}
+.seletor-aberto{display:flex;flex-direction:column;gap:var(--espaco-2);padding:var(--espaco-3);border:2px solid var(--theme-accent);border-top:0;border-radius:0 0 var(--raio-cartao) var(--raio-cartao);margin-top:calc(-1 * var(--espaco-2))}
+.seletor-campos{display:grid;grid-template-columns:max-content 1fr;gap:var(--espaco-1) var(--espaco-3);margin:0;font-size:var(--text-md)}
+.seletor-campos dt{color:var(--theme-muted)}
+.seletor-campos dd{margin:0;color:var(--theme-text)}
+.seletor-acoes{display:flex;flex-wrap:wrap;gap:var(--espaco-2)}
+@media (max-width:719px){.seletor-acoes>button{flex:1 1 100%;min-height:48px}}
+
+/* Painel da sugestão (componentes.md#painel-sugestao): rubrica muted (nada foi conferido), proposta em serifa 22, evidência, origem, avisos, ações, nota do pé. */
+.sugestao-painel{display:flex;flex-direction:column;gap:var(--espaco-4)}
+.sugestao-painel>*{margin:0}
+.sugestao-painel:focus-visible,.sugestao-titulo:focus-visible{outline-offset:var(--foco-afastamento)}
+.sugestao-rubrica{font-size:var(--text-md);font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--theme-muted)}
+.sugestao-titulo{font:600 var(--text-xl)/1.25 var(--fonte-titulo);color:var(--theme-text);overflow-wrap:anywhere}
+.sugestao-evidencias{display:flex;flex-direction:column;gap:var(--espaco-4)}
+.sugestao-evidencia{display:flex;flex-direction:column;gap:var(--espaco-2)}
+.sugestao-evidencia blockquote{margin:0;padding:0;border:0;font:400 var(--text-base)/1.5 var(--fonte-titulo);overflow-wrap:anywhere}
+.sugestao-localizador,.sugestao-origem,.sugestao-nota,.sugestao-pe,.sugestao-razao{color:var(--theme-muted);font-size:var(--text-md)}
+.sugestao-evidencia .link-botao{min-height:0;font-size:var(--text-md)}
+.sugestao-veredito{display:flex;flex-wrap:wrap;align-items:center;gap:var(--espaco-2)}
+.sugestao-natureza{color:var(--theme-muted)}
+.sugestao-pergunta>summary{min-height:0;padding:0;font-size:var(--text-md);font-weight:600;color:var(--theme-muted)}
+.sugestao-erro{color:var(--theme-danger);font-size:var(--text-md);line-height:1.5}
+.sugestao-erro[hidden]{display:none}
+.sugestao-acoes{display:flex;flex-wrap:wrap;gap:var(--espaco-2)}
+@media (max-width:719px){.sugestao-acoes{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,6.5rem),1fr))}.sugestao-acoes>button{min-height:48px}}
+/* Lista das sugestões (a leitura abaixo de 1024 px) e cartão-botão: sem fundo, borda tracejada --theme-muted. */
+.sugestoes-secao{margin:var(--espaco-5) 0 var(--espaco-3)}
+.sugestoes-titulo{margin:0 0 var(--espaco-3);font-size:var(--text-base);font-weight:600}
+.sugestao-abrir{display:flex;flex-direction:column;align-items:flex-start;gap:var(--espaco-1);width:100%;box-sizing:border-box;padding:var(--espaco-3) var(--espaco-4);border:1px dashed var(--theme-muted);border-radius:var(--raio-cartao);background:transparent;color:var(--theme-text);font-weight:400;text-align:left}
+.sugestao-abrir:hover{background:transparent;border-color:var(--theme-text)}
+.sugestao-abrir[aria-pressed=true]{border:2px dashed var(--theme-accent)}
+.sugestao-texto{font:400 var(--text-base)/1.4 var(--fonte-titulo);overflow-wrap:anywhere}
+.sugestao-fonte{font-size:var(--text-md);color:var(--theme-muted)}
+.sugestoes-descartadas{margin:var(--espaco-5) 0 0;border:1px solid var(--theme-line);border-radius:var(--raio-cartao);padding:0 var(--espaco-4)}
+.sugestoes-descartadas>summary{min-height:44px;display:flex;align-items:center;font-size:var(--text-base);font-weight:600;color:var(--theme-muted)}
+.sugestao-descartada{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--espaco-2) var(--espaco-4);padding:var(--espaco-2) 0}
+.sugestao-descartada-texto{display:flex;flex-direction:column;min-width:0;overflow-wrap:anywhere}
+.quadro-conta{margin:0 0 var(--espaco-3);color:var(--theme-muted)}
+/* O nó da sugestão cabe nos 80 px do nó: nome em uma linha e o selo compacto. */
+.mapa-no.is-sugestao .mapa-nome{-webkit-line-clamp:1}
+.mapa-no.is-sugestao .selo-sugestao{padding:0 var(--espaco-2);line-height:1.4}
+.mapa-no.is-sugestao{cursor:pointer}
+.mapa-no.is-sugestao:focus,.mapa-no.is-sugestao:focus-visible{outline:none}
+/* Linha do tempo: o título da sugestão é o botão que abre o painel (sem aparência de botão); o painel abre acima da linha. */
+.tempo-abrir{display:block;width:auto;min-height:0;padding:0;border:0;border-radius:0;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.tempo-abrir:hover,.tempo-abrir[aria-pressed=true]{background:transparent;border:0;text-decoration:underline}
+.tempo-sugestao-painel:not(:empty),.hipotese-sugestao-painel:not(:empty){margin:0 0 var(--espaco-5);padding:var(--espaco-4);border:1px dashed var(--theme-muted);border-radius:var(--raio-cartao)}
+.tempo-evento.is-sugestao .selo-sugestao{margin:var(--espaco-1) 0}
+/* Hipóteses: cartão-botão de largura cheia; o selo e a evidência vêm depois do enunciado. */
+.hipotese-sugestoes .sugestao-abrir{padding:var(--espaco-4) var(--espaco-5)}
+.hipotese-sugestoes .sugestao-texto{order:1;font-size:var(--text-lg)}
+.hipotese-sugestoes .selo-sugestao{order:2}
+.hipotese-sugestoes .sugestao-fonte{order:3}
+.sugestao-evidencia p:empty{display:none}
