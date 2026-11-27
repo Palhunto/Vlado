@@ -195,13 +195,13 @@ Pedido:
   {"origem": "caderno", "tipo_fonte": "trecho", "texto": "Anotação de Ana Lima sobre o termo aditivo",
    "trecho": "…", "documento": {"documento_id": "D004", "nome": "termo_aditivo_1.pdf"},
    "localizador": {"legivel": "D004 · página PDF 2", "…": "…"}, "achado": null, "revisao_ia": null,
-   "conferencia_humana": {"estado": "trecho_localizado_no_texto_autorizado"},
+   "conferencia_humana": null, "conferencia_textual": "trecho_localizado_no_texto_autorizado",
    "vinculo_sugerido": {"referencia": {"tipo": "humana", "…": "…"}, "papel": "suporte", "suporte": "nao_revisado",
                         "natureza": null, "justificativa": ""},
    "ja_ligado": false}]}
 ```
 
-- Resultado da IA: um por par (evidência, achado) na revisão mais recente da rodada escolhida; a referência aponta essa revisão. No caderno: um por fonte de registro (`trecho`, `achado`, `cruzamento`), com a `conferencia_textual` da fonte em `conferencia_humana.estado`.
+- Resultado da IA: um por par (evidência, achado) na revisão mais recente da rodada escolhida; a referência aponta essa revisão. No caderno: um por fonte de registro (`trecho`, `achado`, `cruzamento`), com `conferencia_humana: null` (o caderno não tem marca "Conferida no original"; a tela mostra "A conferir") e a `conferencia_textual` da fonte num campo à parte, só informativo. Na IA, `conferencia_textual` não vem.
 - `vinculo_sugerido` é o preenchimento da seção 3.3. No caderno, `natureza` vem `null` e `justificativa` vazia: a pessoa preenche.
 - Só a apuração aberta: `rodada` de outro caso ou na lixeira é recusada; nada fora de `casos/<caso>` e `execucoes/<caso>`.
 
