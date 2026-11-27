@@ -437,6 +437,12 @@ window.Quadros.formularios = (() => {
         } catch (falhaServidor) {
           ocupado = false; salvar.textContent = t('Salvar'); salvar.disabled = cancelarB.disabled = false; raiz.removeAttribute('aria-busy');
           erroGeral.textContent = `${t('Não deu para salvar:')} ${falhaServidor.message}`; erroGeral.hidden = false;
+          // vinculo_sem_justificativa traz a posição do cartão no pedido (a ordem de estado.vinculos): a tela aponta o campo e leva o foco até ele.
+          const r = falhaServidor.result;
+          if (r?.codigo === 'vinculo_sem_justificativa') {
+            const alvo = estado.vinculos[Number(r.parametros?.posicao) - 1]?.vista.campos?.justificativa;
+            if (alvo) { alvo.erro('Revise a justificativa: vazia ou longa demais.'); alvo.controle.focus(); }
+          }
         }
       });
       host.replaceChildren(raiz);

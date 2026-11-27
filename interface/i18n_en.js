@@ -1296,6 +1296,8 @@ window.VLADO_I18N_EN = {
     "Escreva a justificativa.": "Write the justification.",
     "Escolha a natureza.": "Choose the nature.",
     "a evidência": "the evidence",
+    // Quadros, recusa de justificativa apontada pelo cartão
+    "Revise a justificativa: vazia ou longa demais.": "Review the justification: empty or too long.",
     // Fase 06 — quadros de evidência (interface/quadros.js)
     "Hipóteses e acontecimentos registrados por pessoas a partir das evidências desta apuração. Cada evidência abre o original conferido; os quadros organizam e apontam lacunas, sem avaliar veracidade.": "Hypotheses and events recorded by people from this investigation’s evidence. Each piece of evidence opens the checked original; the boards organise and point out gaps, without judging truth.",
     "Hipóteses": "Hypotheses",

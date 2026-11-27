@@ -18,12 +18,13 @@ const COMPARACAO = (extra = {}) => ({achado: {id: 'A004', versao: 1, destino: 'i
 const IGUAIS = () => COMPARACAO({achado: {id: 'A005', versao: 1, destino: 'incluido'}, mesmo_arquivo: true, pendente: false, revisao_ia: {suporte: 'sustentado', natureza: 'declaracao_documental'},
   conferencias: {versao: 'mesmo', data: 'mesmo', emissor: 'mesmo', trecho: 'mesmo', questao: 'mesmo', fase: 'a_conferir'}});
 
-function montar({resposta = {caso: 'alpha', estruturada: true, comparacoes: [COMPARACAO(), IGUAIS()]}, permissao = true, falha = null} = {}) {
+function montar({resposta = {caso: 'alpha', estruturada: true, comparacoes: [COMPARACAO(), IGUAIS()]}, permissao = true, falha = null, recusaCriar = null} = {}) {
   const salvos = [];
   const m = criarMesa({scripts: [...PILHA, 'quadros.js', 'sugestoes.js', 'formularios.js', 'processos.js', 'analise.js', 'indicador_salvamento.js'], desktop: true,
     catalogo: [{id: 'alpha', titulo: 'Alfa', rodadas: [{id: 'R001', geracoes: ['g1']}]}],
     api: (operacao, dados) => {
       if (operacao.endsWith('-criar')) {
+        if (recusaCriar) throw Object.assign(new Error(recusaCriar.erro), {result: recusaCriar});
         if ((dados.evidencias || []).some(v => !String(v.justificativa || '').trim())) throw new Error('Justificativa do vínculo: o texto não pode ser vazio.');
         salvos.push({operacao, dados}); return {id: 'H001'};
       }
@@ -147,6 +148,19 @@ test('"Criar hipótese" preenche cada cartão com a justificativa_ia da evidênc
   [...painel.querySelectorAll('button')].find(b => b.textContent === 'Salvar').click(); await espera(m);
   assert.equal(m.salvos.length, 1);
   assert.deepEqual(m.salvos[0].dados.evidencias.map(v => v.justificativa), [7, 8, 9, 10].map(n => `Trecho do parecer na evidência E0${n}.`));
+  assert.deepEqual(m.erros, []);
+});
+
+test('recusa vinculo_sem_justificativa do servidor (por exemplo, texto longo demais): a tela aponta o cartão pela posição e leva o foco (ce980b6)', async () => {
+  const m = montar({recusaCriar: {erro: 'Justificativa do vínculo inválida.', codigo: 'vinculo_sem_justificativa', parametros: {posicao: 3, evidencia: 'E09'}}}); const {vista} = await abrirProcessos(m);
+  [...vista.querySelectorAll('.processo-acoes button')].find(b => b.textContent === 'Criar hipótese com esta comparação').click(); await espera(m);
+  const painel = m.$('quadros-comparador');
+  const area = painel.querySelector('textarea'); area.value = 'O parecer sustenta as duas decisões.'; area.dispatchEvent(new Evento('input', {bubbles: true}));
+  [...painel.querySelectorAll('button')].find(b => b.textContent === 'Salvar').click(); await espera(m);
+  const terceiro = [...painel.querySelectorAll('.vinculo-cartao textarea')][2];
+  assert.match(texto(painel.querySelector('.form-erro-geral')), /Não deu para salvar: Justificativa do vínculo inválida\./);
+  assert.equal(terceiro.getAttribute('aria-invalid'), 'true'); assert.equal(m.doc.activeElement, terceiro);
+  assert.equal([...painel.querySelectorAll('.vinculo-cartao textarea')].filter(j => j.getAttribute('aria-invalid') === 'true').length, 1);
   assert.deepEqual(m.erros, []);
 });
 
