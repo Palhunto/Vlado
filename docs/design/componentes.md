@@ -440,7 +440,7 @@ Onde: Mapa de relações. Área do mapa de 960 × 828 à esquerda; painel da lig
 | Foco | anel de foco na caixa | canvas (regra geral) |
 | Ocupado | esqueleto da área inteira enquanto o mapa monta | derivado |
 | Erro, desabilitado | não se aplicam ao nó | — |
-| Vazio | mapa sem entidades: [estado vazio](#estados) "Nenhuma ligação ainda" com "Adicionar ligação" | derivado de W11 (regra 1) |
+| Vazio | mapa sem entidades: [estado vazio](#estados) "Nenhuma ligação ainda" com "Criar a primeira entidade" (uma ligação precisa de duas) e "Fazer uma pergunta" ([textos](#estados-vazios)) | derivado de W11 (regra 1) |
 
 **Ligação e rótulo**
 
@@ -501,7 +501,7 @@ Onde: Linha do tempo. Conteúdo com preenchimento 28 40; painel de filtros de 36
 | Ocupado | esqueleto de três cartões | derivado de W11 (regra 2) |
 | Erro | não se aplica ao evento; falha ao carregar a lista usa o bloco de erro do serviço | derivado |
 | Desabilitado | não se aplica | — |
-| Vazio | "Nenhum acontecimento com data ainda" e "Adicionar acontecimento" (até a Onda 4, "Fazer uma pergunta"); com filtro ligado, "Nenhum acontecimento com esses tipos de data" e "Mostrar tudo" ([textos](#estados-vazios)) | derivado de W11 (regra 1) |
+| Vazio | "Nenhum acontecimento com data ainda", com "Adicionar acontecimento" e "Fazer uma pergunta"; com filtro ligado, "Nenhum acontecimento com esses tipos de data" e "Mostrar tudo" ([textos](#estados-vazios)) | derivado de W11 (regra 1) |
 
 **Painel de filtros e resumo** (`<aside aria-label="Filtros e resumo">`): largura 360, fundo `--theme-surface`, borda esquerda 1 px `--theme-line`, preenchimento 28 24, intervalo de 20.
 
@@ -518,7 +518,7 @@ Onde: toda a Mesa (W11). O wireframe fixa a estrutura e o texto; a aparência ab
 
 | Estado | Estrutura (W11) | Cores |
 |---|---|---|
-| Vazio | o que é a coisa e uma ação ("Nenhuma hipótese ainda", "Uma hipótese é uma afirmação que os documentos podem sustentar ou contrariar.", "Criar a primeira"); enquanto o formulário de criar não existe (Onda 4), a ação leva a um destino que existe e diz aonde vai ([textos](#estados-vazios)) | bloco base; ação principal |
+| Vazio | o que é a coisa e uma ação ("Nenhuma hipótese ainda", "Uma hipótese é uma afirmação que os documentos podem sustentar ou contrariar.", "Criar a primeira hipótese", com "Fazer uma pergunta" ao lado) ([textos](#estados-vazios)) | bloco base; ação principal |
 | Ocupado, curto (até 10 s) | esqueleto no lugar do conteúdo, que não aparece se a resposta chega em menos de 0,3 s; `aria-busy` | barras de 14 px de altura, raio 4, fundo `--theme-line`, larguras 70 %, 90 % e 50 % |
 | Ocupado, longo (OCR, IA) | etapa por extenso ("Lendo a página 2 de 5"), barra, aviso de que pode sair da tela, "Cancelar"; `aria-busy` | barra como o [medidor](#medidor) de 8 px; "Cancelar" secundário |
 | Erro que a pessoa resolve | "✕" e o que houve; o que fazer e o que foi preservado; duas ações | fundo `--theme-danger-bg`, borda 1 px `--theme-danger-line`, título `--theme-danger`; ações principal e secundária |
@@ -528,13 +528,13 @@ Onde: toda a Mesa (W11). O wireframe fixa a estrutura e o texto; a aparência ab
 
 <a id="estados-vazios"></a>
 
-**Textos dos vazios dos quadros** *(derivado, 22/11/2026)*. Título no bloco base, texto abaixo, uma ação principal.
+**Textos dos vazios dos quadros** *(derivado, 22/11/2026; ações de criar da Onda 4, 27/11/2026, `e4c9792`)*. Título no bloco base, texto abaixo e as ações. Quando a pessoa pode criar, a ação de criar o primeiro item é a principal e "Fazer uma pergunta" fica ao lado, secundária. O formulário abre no painel do quadro. Sem a capacidade de criar, só "Fazer uma pergunta". Na linha do tempo, "Adicionar acontecimento" só aparece se a apuração tem análise, porque a evidência vem dela. Fora do vazio, o botão volta a ser "+ Nova hipótese", "+ Nova entidade" e assim por diante.
 
-| Onde | Título | Texto | Ação até a Onda 4 | Ação depois |
+| Onde | Título | Texto | Ação sem poder criar | Ação de criar (principal) |
 |---|---|---|---|---|
-| Hipóteses | Nenhuma hipótese ainda | Uma hipótese é uma afirmação que os documentos podem sustentar ou contrariar. | Fazer uma pergunta | Criar a primeira |
-| Tabelas | Nenhuma tabela ainda | Uma tabela conferível reúne números tirados dos documentos, cada um com a sua fonte. | Fazer uma pergunta | Adicionar linha |
-| Mapa | Nenhuma ligação ainda | O mapa mostra as pessoas e organizações que os documentos citam e como elas se ligam. | Fazer uma pergunta | Adicionar ligação |
+| Hipóteses | Nenhuma hipótese ainda | Uma hipótese é uma afirmação que os documentos podem sustentar ou contrariar. | Fazer uma pergunta | Criar a primeira hipótese |
+| Tabelas | Nenhuma tabela ainda | Uma tabela conferível reúne números tirados dos documentos, cada um com a sua fonte. | Fazer uma pergunta | Criar a primeira tabela |
+| Mapa | Nenhuma ligação ainda | O mapa mostra as pessoas e organizações que os documentos citam e como elas se ligam. | Fazer uma pergunta | Criar a primeira entidade |
 | Linha do tempo | Nenhum acontecimento com data ainda | A linha do tempo reúne os acontecimentos datados que os documentos registram. | Fazer uma pergunta | Adicionar acontecimento |
 | Linha do tempo, com filtro | Nenhum acontecimento com esses tipos de data | Nenhum acontecimento tem os tipos de data escolhidos. | Mostrar tudo | a mesma |
 | Comparador | Nada para comparar ainda | Esta apuração ainda não tem análise com documentos preservados para comparar. | Fazer uma pergunta | a mesma |
@@ -1184,7 +1184,7 @@ Fora do formulário, onde a evidência aparece (coluna da hipótese, painel da l
 
 <a id="apagar-revisao"></a>
 
-**Confirmação antes de apagar uma revisão humana.** Três ações desfazem o que uma pessoa decidiu e passam pelo [diálogo](#dialogo) destrutivo:
+**Confirmação antes de apagar uma revisão humana.** Quatro ações desfazem o que uma pessoa decidiu e passam pelo [diálogo](#dialogo) destrutivo:
 
 - **Desligar** um vínculo com "alterado por pessoa", ou um vínculo do caderno cujo suporte uma pessoa escolheu (qualquer um diferente de "Não revisado");
 - **"Ligar a versão nova"** num vínculo com "alterado por pessoa";

@@ -176,6 +176,15 @@ class VinculoIaTest(unittest.TestCase):
 
     # --- códigos das regras do modelo -----------------------------------------------------------
 
+    def test_justificativa_vazia_diz_qual_evidencia(self):
+        with self.assertRaises(ValueError) as caught:
+            self.hipotese([self.link(self.ia()), {**self.link(self.ia('E002'), papel='contradicao'), 'justificativa': '  '}])
+        self.assertEqual(erros.codigo_de(str(caught.exception)), ('vinculo_sem_justificativa', {'posicao': 2, 'evidencia': 'E002'}))
+        with self.assertRaises(ValueError) as caught:
+            self.hipotese([{**self.link(self.humana(), suporte='nao_revisado', natureza='declaracao_documental'), 'justificativa': ''}])
+        self.assertEqual(erros.codigo_de(str(caught.exception)),
+                         ('vinculo_sem_justificativa', {'posicao': 1, 'evidencia': self.nota['registro']['id']}))
+
     def test_regras_do_modelo_tem_codigo_proprio(self):
         cases = [([self.link(self.ia('E003'), papel='contexto', suporte='parcial')], 'vinculo_contexto_com_suporte'),
                  ([self.link(self.ia(), suporte='sustentado', natureza='pendencia')], 'vinculo_pendencia_sustentada'),

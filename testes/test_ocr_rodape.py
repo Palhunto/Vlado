@@ -2,7 +2,8 @@
 
 O caso comum: um documento escaneado ganha, na assinatura eletrônica, um rodapé de texto nativo (quem assinou,
 quando, o código de verificação). Esse rodapé passa do mínimo de 10 caracteres, e o corpo da página, que é imagem,
-nunca era lido. Agora a página entra no OCR quando imagens cobrem a maior parte dela e o texto nativo é curto; o
+nunca era lido. Agora a página entra no OCR quando desenha uma imagem e o texto nativo é curto (R11: quanto da
+página a imagem cobre não conta mais; as peças do TCE-MT colam a imagem com margens largas); o
 OCR só vai à página quando o texto nativo dela fica só nas faixas de cabeçalho e rodapé (B3 da Coruja: o ofício
 com timbre como imagem de página inteira e corpo nativo curto continua nativo), e só substitui o texto nativo quando traz ao menos GANHO_MINIMO_OCR caracteres a mais (cerca de uma frase), para que uma página nativa com uma
 foto grande e a legenda continue com o texto nativo.
@@ -38,7 +39,8 @@ def _png(texto, largura=480, altura=600):
 
 def pdf(caminho, paginas):
     """paginas: lista de ('digitalizada_com_rodape' | 'foto_com_legenda' | 'nativa' | 'foto_pequena' |
-    'oficio_com_timbre')."""
+    'oficio_com_timbre' | 'margens_largas_NN' (imagem cobrindo NN% da página entre margens largas, só rodapé
+    nativo, como nas peças do TCE-MT) | 'so_rodape' (nenhuma imagem, só o rodapé nativo))."""
     import pymupdf
     documento = pymupdf.open()
     for tipo in paginas:
@@ -54,6 +56,17 @@ def pdf(caminho, paginas):
             # Letterhead drawn as a full-page image (logo on top, line at the bottom), short native body.
             pagina.insert_image(pagina.rect, stream=_png('PREFEITURA SINTETICA - GABINETE', 480, 640))
             pagina.insert_textbox(pymupdf.Rect(40, 200, 440, 400), OFICIO, fontsize=11, fontname='helv')
+        elif tipo.startswith('margens_largas_'):
+            # R11: the image sits centred between wide margins, 400 wide, covering NN% of the page (480 x 640).
+            altura = 480 * 640 * int(tipo.rsplit('_', 1)[1]) / 100 / 400
+            topo = (640 - altura) / 2
+            pagina.insert_image(pymupdf.Rect(40, topo, 440, topo + altura), stream=_png(CORPO, 400, 300),
+                                keep_proportion=False)
+            pagina.insert_text((20, 625), RODAPE[:80], fontsize=7, fontname='helv')
+            pagina.insert_text((20, 635), RODAPE[80:], fontsize=7, fontname='helv')
+        elif tipo == 'so_rodape':
+            pagina.insert_text((20, 625), RODAPE[:80], fontsize=7, fontname='helv')
+            pagina.insert_text((20, 635), RODAPE[80:], fontsize=7, fontname='helv')
         elif tipo == 'foto_pequena':
             pagina.insert_image(pymupdf.Rect(20, 20, 160, 120), stream=_png('', 140, 100))
             pagina.insert_text((20, 300), LEGENDA, fontsize=9, fontname='helv')
@@ -92,7 +105,7 @@ class RodapeTest(unittest.TestCase):
         self.assertEqual(info['paginas_imagem_com_rodape'], [1])
         self.assertEqual(info['paginas_origem'], {'1': 'ocr', '2': 'texto_nativo'})
         self.assertIn('prorroga a vigencia', texto)
-        self.assertIn('cobertas por imagem com so um rodape de texto nativo', info['metodo'])
+        self.assertIn('com imagem e texto nativo so no cabecalho e no rodape', info['metodo'])
 
     def test_rodape_sozinho_passa_do_minimo_de_texto_nativo(self):
         # The premise of L7: without the image rule, the footer alone keeps the page away from the OCR.
@@ -103,7 +116,7 @@ class RodapeTest(unittest.TestCase):
         self.assertGreater(ex._alfanumericos(nativo), ex.MINIMO_ALFANUMERICOS_NATIVO)
         self.assertLessEqual(ex._alfanumericos(nativo), ex.MAXIMO_ALFANUMERICOS_RODAPE)
         fracao, corpo = ex.imagem_e_corpo(fonte, [1])[1]
-        self.assertGreaterEqual(fracao, ex.COBERTURA_MINIMA_IMAGEM)
+        self.assertGreater(fracao, 0)
         self.assertFalse(corpo)  # o texto nativo só está na faixa do rodapé
 
     def test_foto_grande_com_legenda_fica_com_o_texto_nativo(self):
@@ -122,13 +135,58 @@ class RodapeTest(unittest.TestCase):
         nativo = pypdf.PdfReader(fonte).pages[0].extract_text()
         self.assertLessEqual(ex._alfanumericos(nativo), ex.MAXIMO_ALFANUMERICOS_RODAPE)  # curto como um rodapé
         fracao, corpo = ex.imagem_e_corpo(fonte, [1])[1]
-        self.assertGreaterEqual(fracao, ex.COBERTURA_MINIMA_IMAGEM)
+        self.assertGreaterEqual(fracao, 0.6)  # a imagem cobre a página toda, e mesmo assim o corpo nativo decide
         self.assertTrue(corpo)
         info, chamadas, texto = self.extrair(['oficio_com_timbre'], {1: 'PREFEITURA SINTETICA GABINETE ' + OFICIO * 3})
         self.assertEqual(chamadas, [])
         self.assertNotIn('paginas_imagem_com_rodape', info)
         self.assertEqual(info['paginas_origem'], {'1': 'texto_nativo'})
         self.assertIn('Encaminhamos a copia do contrato', texto)
+
+    def test_imagem_entre_margens_largas_vai_ao_ocr(self):
+        """R11: a peça do TCE-MT cola a imagem entre cabeçalho e rodapé com margens largas, e ela cobre de 40% a 55%
+        da página (D002 p. 88 tem 0,47; D009 p. 100 e 101, 0,53 e 0,49); a 60% da L7 elas ficavam fora. Uma tabela de
+        cálculo a 25% (D001 p. 62) também vai."""
+        tipos = ['margens_largas_40', 'margens_largas_47', 'margens_largas_55', 'margens_largas_25']
+        fonte = self.pasta / 'margens.pdf'
+        pdf(fonte, tipos)
+        analise = ex.imagem_e_corpo(fonte, [1, 2, 3, 4])
+        self.assertEqual({n: (round(f, 2), c) for n, (f, c) in analise.items()},
+                         {1: (0.4, False), 2: (0.47, False), 3: (0.55, False), 4: (0.25, False)})
+        lido = CORPO + '\n' + RODAPE
+        info, chamadas, texto = self.extrair(tipos, {n: lido for n in range(1, 5)})
+        self.assertEqual(chamadas, [[1, 2, 3, 4]])
+        self.assertEqual(info['paginas_imagem_com_rodape'], [1, 2, 3, 4])
+        self.assertEqual(info['paginas_origem'], {str(n): 'ocr' for n in range(1, 5)})
+        self.assertEqual(texto.count('prorroga a vigencia'), 4)
+
+    def test_imagem_entre_margens_largas_com_leitura_curta_fica_com_o_texto_nativo(self):
+        # GANHO_MINIMO_OCR, unchanged: an OCR reading that brings only the footer back does not replace it.
+        info, chamadas, _ = self.extrair(['margens_largas_47'], {1: RODAPE + ' ~'})
+        self.assertEqual(chamadas, [[1]])
+        self.assertEqual(info['paginas_origem'], {'1': 'texto_nativo'})
+
+    def test_abaixo_do_que_vai_ao_ocr(self):
+        """O lado de baixo: a página sem imagem e só com o rodapé nativo não vai ao OCR (não há corpo em imagem a
+        ler), e a imagem entre margens largas com uma palavra nativa no corpo continua nativa (B3)."""
+        info, chamadas, _ = self.extrair(['so_rodape'], {1: CORPO})
+        self.assertEqual(chamadas, [])
+        self.assertNotIn('paginas_imagem_com_rodape', info)
+        self.assertEqual(info['paginas_origem'], {'1': 'texto_nativo'})
+        import pymupdf
+        fonte = self.pasta / 'com_corpo.pdf'
+        pdf(fonte, ['margens_largas_47'])
+        documento = pymupdf.open(str(fonte))
+        documento[0].insert_text((60, 320), 'Parecer sintetico.', fontsize=9, fontname='helv')
+        documento.saveIncr()
+        documento.close()
+        fracao, corpo = ex.imagem_e_corpo(fonte, [1])[1]
+        self.assertEqual((round(fracao, 2), corpo), (0.47, True))
+        with patch('extrair_pdf.ocr.diagnostico', return_value={'disponivel': True}), \
+                patch('extrair_pdf.ocr.reconhecer') as reconhecer:
+            info = ex.extrair_pdf(fonte, 'D002', self.pasta / 'D002.md')
+        reconhecer.assert_not_called()
+        self.assertEqual(info['paginas_origem'], {'1': 'texto_nativo'})
 
     def test_foto_pequena_e_pagina_nativa_nao_vao_ao_ocr(self):
         info, chamadas, _ = self.extrair(['foto_pequena', 'nativa'])
