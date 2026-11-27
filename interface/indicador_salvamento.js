@@ -41,12 +41,17 @@ window.IndicadorSalvamento = (() => {
   document.addEventListener('vlado:rascunho-estado', evento => mostrar(evento.detail));
 
   // Resume summary at the top of the evidence boards (collapsed, admins only).
+  // O painel é um só: abrir os quadros e trocar de apuração disparam a retomada quase juntas, então nada é lido antes do `await` (caixa e caso valem o que for
+  // no momento de pintar) e só a chamada mais nova segue; a resposta de uma apuração que já não é a selecionada nunca é pintada.
+  let pedidoRetomada = 0;
   async function retomada() {
     const area = $('area-quadros');
     if (!area || !window.Sessao.pode('continuidade-resumo') || typeof window.Continuidade?.montar !== 'function') return;
+    const pedido = ++pedidoRetomada;
+    const anunciado = window.Quadros ? await window.Quadros.disponivel('continuidade_resumo') : false;
+    if (pedido !== pedidoRetomada) return;
     let caixa = $('quadros-retomada');
     const caso = window.contextoCaso?.() || '';
-    const anunciado = window.Quadros ? await window.Quadros.disponivel('continuidade_resumo') : false;
     if (!anunciado || !caso) { if (caixa) caixa.hidden = true; return; }
     if (!caixa) {
       caixa = element('details', undefined, 'quadros-retomada'); caixa.id = 'quadros-retomada';

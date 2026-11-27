@@ -657,6 +657,8 @@ window.Quadros.formularios = (() => {
       catch (erro) { Q.sugestoes.anunciar(`${t('Não deu para abrir:')} ${erro.message}`); return null; }
     }
     if (!tiposData && tipo === 'acontecimento') { try { tiposData = (await api('linha-tempo-listar', {caso: casoId})).tipos_data || {}; } catch (_) { tiposData = {}; } }
+    // a resposta de uma apuração que já não é a selecionada não abre formulário no painel da outra
+    const atual = window.contextoCaso?.(); if (atual && atual !== casoId) return null;
     // O formulário abre no painel da direita (em 1440) ou na camada de tela cheia (abaixo de 1024 px); o quadro continua à vista. Aberto a partir de uma sugestão,
     // "Cancelar" volta à sugestão intacta; senão, fecha o painel e devolve o foco a quem abriu.
     if (L) L.abrir([host], {empilhar: !!sugestao, origem: gatilho}); else painel.replaceChildren(host);

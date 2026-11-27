@@ -236,10 +236,14 @@
     const escolha = element('select'); escolha.id = 'tabelas-escolha';
     escolha.replaceChildren(...lista.tabelas.map(tb => { const o = new Option(`${tb.titulo} · ${t('{n} linhas', {n: tb.total_linhas})}`, tb.id); o.setAttribute('translate', 'no'); return o; }));
     const area = element('div', undefined, 'tabela-area');
+    // duas escolhas seguidas com o servidor lento: só a última resposta é pintada
+    let pedidoAbrir = 0;
     async function abrir() {
+      const pedido = ++pedidoAbrir;
       Q.estado(area, 'carregando', t('Carregando…'));
       try {
         const tabela = await api('tabelas-detalhe', {caso: casoId, id: escolha.value});
+        if (pedido !== pedidoAbrir || !vigente()) return;
         const fonte = element('aside', undefined, 'tabela-fonte'); fonte.setAttribute('aria-live', 'polite'); fonte.id = 'tabela-fonte';
         fonte.append(element('p', t('Leve o foco a uma célula para ver a fonte, o estado e a última correção.'), 'small'));
         const {wrap, celulas} = grade(tabela, fonte, {casoId, recarregar: abrir});
@@ -250,7 +254,7 @@
           element('p', t('Use as setas para andar pelas células.'), 'small'), element('div', undefined, 'tabela-layout'));
         area.lastChild.append(wrap, fonte);
         area.append(painelCalculo(tabela, celulas), element('p', t(tabela.aviso || ''), 'small quadro-aviso'));
-      } catch (erro) { Q.estado(area, 'erro', erro.message); }
+      } catch (erro) { if (pedido === pedidoAbrir && vigente()) Q.estado(area, 'erro', erro.message); }
     }
     if (Q.tabelaEscolhida && lista.tabelas.some(tb => tb.id === Q.tabelaEscolhida)) escolha.value = Q.tabelaEscolhida;
     Q.tabelaEscolhida = null;
