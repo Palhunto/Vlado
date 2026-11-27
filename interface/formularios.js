@@ -490,16 +490,17 @@ window.Quadros.formularios = (() => {
     b.addEventListener('click', () => abrirNoPainel({tipo, abaId, casoId, itemId, gatilho: b, ...extra()})); return b;
   };
   // Hipótese a partir de uma comparação entre processos (componentes.md#comparar-processos): enunciado em branco, situação "em aberto" e as evidências dos dois lados
-  // ligadas, com o preenchimento da P47 (papel suporte; suporte e natureza da revisão da IA; achado retirado nasce "não revisado").
+  // ligadas com o que o servidor entrega em cada evidência (achado_id, revisao_ia e preenchimento da P47, a9264ac/785cfec): a tela não fixa papel nem suporte.
   function hipoteseDaComparacao(c) {
     const vistos = new Set(), vinculos = [];
     for (const lado of c.lados || []) for (const ev of [lado.fundamento, lado.desfecho_evidencia]) {
       if (!ev || ev.estado === 'indisponivel') continue;
       const chave = JSON.stringify(ev.referencia); if (vistos.has(chave)) continue; vistos.add(chave);
-      const ia = ev.revisao_ia ? {...ev.revisao_ia, achado_id: c.achado?.id} : null, retirado = (ia?.destino || c.achado?.destino) === 'retirado';
-      vinculos.push(vinculoDeItem({referencia: ev.referencia, papel: 'suporte', suporte: !ia || retirado ? 'nao_revisado' : ia.suporte, natureza: ia?.natureza || '', justificativa: '', estado: ev.estado,
-        evidencia: {documento: ev.documento, trecho: ev.trecho, localizador: ev.localizador}, localizador: ev.localizador, revisao_ia: ia, conferencia_humana: ev.conferencia_humana, destino_atual: c.achado?.destino,
-        preenchimento_ia: ia ? {papel: 'suporte', suporte: retirado ? 'nao_revisado' : ia.suporte, natureza: ia.natureza || '', destino: ia.destino || c.achado?.destino || null} : null}));
+      const p = ev.preenchimento || null, achadoId = ev.achado_id || c.achado?.id || null, ia = ev.revisao_ia ? {...ev.revisao_ia, achado_id: achadoId} : null;
+      // sem preenchimento (servidor antigo) o vínculo nasce "não revisado" e a pessoa preenche; com ele, vale o valor do servidor, e "Voltar ao da IA" também.
+      vinculos.push(vinculoDeItem({referencia: ev.referencia, achado_id: achadoId, papel: p?.papel || 'suporte', suporte: p?.suporte || 'nao_revisado', natureza: p?.natureza || '', justificativa: '', estado: ev.estado,
+        evidencia: {documento: ev.documento, trecho: ev.trecho, localizador: ev.localizador}, localizador: ev.localizador, revisao_ia: ia, conferencia_humana: ev.conferencia_humana, destino_atual: p?.destino || c.achado?.destino,
+        preenchimento_ia: p}));
     }
     return {enunciado: '', situacao: 'em_aberto', lacunas: [], vinculos};
   }

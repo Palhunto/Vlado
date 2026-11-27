@@ -7,7 +7,8 @@ const {criarMesa, Evento, PILHA} = require('./dom_minimo.cjs');
 
 const ref = n => ({tipo: 'ia', caso_id: 'alpha', rodada: 'R002', revisao: 'r3_sintese', registros_sha256: '7'.repeat(64), evidencia_id: `E0${n}`});
 const evid = (n, trecho, extra = {}) => ({referencia: ref(n), estado: 'conferida', documento: {documento_id: 'D007', nome: 'parecer_12_2025.pdf'}, localizador: {legivel: 'D007 · página PDF 2', pagina_pdf: 2}, trecho,
-  revisao_ia: {suporte: 'sustentado', natureza: 'declaracao_documental', destino: 'incluido'}, conferencia_humana: null, ...extra});
+  achado_id: 'A004', revisao_ia: {suporte: 'sustentado', natureza: 'declaracao_documental', destino: 'incluido'}, conferencia_humana: null,
+  preenchimento: {papel: 'suporte', suporte: 'sustentado', natureza: 'declaracao_documental', destino: 'incluido'}, ...extra});
 const COMPARACAO = (extra = {}) => ({achado: {id: 'A004', versao: 1, destino: 'incluido', redacao: 'O parecer foi usado nos dois processos.'},
   chave: {identificador: 'Parecer jurídico nº 12/2025', data: '2025-02-10', emissor: 'Procuradoria de Vila Serena', versao: 'única'},
   lados: [{processo: 'Processo 2025/118 · Contrato 041/2025', fundamento: evid(7, 'A dispensa é cabível nos termos do art. 75.'), questao: 'Validade da dispensa', fase: 'primeira instância', desfecho: 'Dispensa considerada regular', desfecho_evidencia: evid(8, 'Julgo regular a dispensa.')},
@@ -18,9 +19,11 @@ const IGUAIS = () => COMPARACAO({achado: {id: 'A005', versao: 1, destino: 'inclu
   conferencias: {versao: 'mesmo', data: 'mesmo', emissor: 'mesmo', trecho: 'mesmo', questao: 'mesmo', fase: 'a_conferir'}});
 
 function montar({resposta = {caso: 'alpha', estruturada: true, comparacoes: [COMPARACAO(), IGUAIS()]}, permissao = true, falha = null} = {}) {
+  const salvos = [];
   const m = criarMesa({scripts: [...PILHA, 'quadros.js', 'sugestoes.js', 'formularios.js', 'processos.js', 'analise.js', 'indicador_salvamento.js'], desktop: true,
     catalogo: [{id: 'alpha', titulo: 'Alfa', rodadas: [{id: 'R001', geracoes: ['g1']}]}],
-    api: operacao => {
+    api: (operacao, dados) => {
+      if (operacao.endsWith('-criar')) { salvos.push({operacao, dados}); return {id: 'H001'}; }
       if (operacao === 'inventario') return {caso_id: 'alpha', documentos: [{id: 'D001', nome_recebido: 'a.txt', arquivo: 'a'}, {id: 'D002', nome_recebido: 'b.txt', arquivo: 'b'}]};
       if (operacao === 'comparar-processos') { if (falha) throw new Error(falha); return resposta; }
       if (operacao === 'sugestoes-listar') return {sugestoes: []};
@@ -31,6 +34,7 @@ function montar({resposta = {caso: 'alpha', estruturada: true, comparacoes: [COM
       janela.fetch = async (rota, opcoes) => String(rota) === '/api/integracao' ? {ok: true, json: async () => ({quadros_evidencia: true})} : original(rota, opcoes);
     }});
   m.avaliar("window.contextoCaso = () => 'alpha'; window.abrirOriginal = async () => {};");
+  m.salvos = salvos;
   if (!permissao) m.avaliar('window.Sessao = {pode: op => op === "inventario", pronta: Promise.resolve()};');
   return m;
 }
@@ -109,6 +113,25 @@ test('"Criar hipótese com esta comparação" abre o formulário com as evidênc
   assert.equal(cartoes.length, 4, 'fundamento e desfecho dos dois lados');
   assert.match(texto(cartoes[0]), /A dispensa é cabível nos termos do art\. 75\./);
   assert.match(texto(cartoes[0]), /Da revisão da IA: IA · sustentado declaração documental/);
+});
+
+test('"Criar hipótese" liga cada evidência com o achado_id e o preenchimento do servidor, sem papel nem suporte fixos (785cfec)', async () => {
+  const retirada = evid(9, 'A dispensa é cabível nos termos do art. 75, I.', {achado_id: 'A009', revisao_ia: {suporte: 'sustentado', natureza: 'declaracao_documental', destino: 'retirado'},
+    preenchimento: {papel: 'contexto', suporte: 'nao_revisado', natureza: 'declaracao_documental', destino: 'retirado'}});
+  const comp = COMPARACAO(); comp.lados[1].fundamento = retirada;
+  const m = montar({resposta: {caso: 'alpha', estruturada: true, comparacoes: [comp]}}); const {vista} = await abrirProcessos(m);
+  [...vista.querySelectorAll('.processo-acoes button')].find(b => b.textContent === 'Criar hipótese com esta comparação').click(); await espera(m);
+  const painel = m.$('quadros-comparador');
+  const area = painel.querySelector('textarea'); area.value = 'O parecer sustenta as duas decisões.'; area.dispatchEvent(new Evento('input', {bubbles: true}));
+  [...painel.querySelectorAll('button')].find(b => b.textContent === 'Salvar').click(); await espera(m);
+  assert.equal(m.salvos.length, 1);
+  const vs = m.salvos[0].dados.evidencias;
+  const deRetirada = vs.find(v => v.achado_id === 'A009');
+  assert.ok(deRetirada, 'o achado_id do servidor vai no vínculo');
+  assert.equal(deRetirada.papel, 'contexto'); assert.equal(deRetirada.suporte, 'nao_revisado', 'achado retirado: não revisado, não o sustentado cru');
+  const normal = vs.find(v => v.achado_id === 'A004');
+  assert.equal(normal.papel, 'suporte'); assert.equal(normal.suporte, 'sustentado'); assert.equal(normal.natureza, 'declaracao_documental');
+  assert.deepEqual(m.erros, []);
 });
 
 test('sem permissão de editar o quadro, "Criar hipótese" fica indisponível com a razão', async () => {
