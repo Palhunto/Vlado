@@ -230,8 +230,9 @@
     if (!vigente()) return;
     const nova = Q.formularios?.botaoNovo('tabela', 'tabelas', casoId);
     if (!lista.tabelas.length) {
-      const vazio = element('div'); Q.estado(vazio, 'vazio', t('Uma tabela conferível reúne números tirados dos documentos, cada um com a sua fonte.'), {titulo: t('Nenhuma tabela ainda'), acao: Q.perguntar()});
-      Q.montarQuadro(painel, [...(nova ? [nova] : []), vazio]); return;
+      const primeira = Q.formularios?.botaoNovo('tabela', 'tabelas', casoId, undefined, 'Criar a primeira tabela');
+      const vazio = element('div'); Q.estado(vazio, 'vazio', t('Uma tabela conferível reúne números tirados dos documentos, cada um com a sua fonte.'), {titulo: t('Nenhuma tabela ainda'), acao: primeira ? [{no: primeira}, {...Q.perguntar(), secundaria: true}] : Q.perguntar()});
+      Q.montarQuadro(painel, [vazio]); return;
     }
     const escolha = element('select'); escolha.id = 'tabelas-escolha';
     escolha.replaceChildren(...lista.tabelas.map(tb => { const o = new Option(`${tb.titulo} · ${t('{n} linhas', {n: tb.total_linhas})}`, tb.id); o.setAttribute('translate', 'no'); return o; }));
@@ -630,7 +631,12 @@
     const mapa = await api('mapa-ver', {caso: casoId});
     const S = Q.sugestoes ? await Q.sugestoes.listar(casoId, 'mapa') : {abertas: [], descartadas: []};
     if (!vigente()) return;
-    if (!mapa.entidades.length && !S.abertas.length && !S.descartadas.length) { Q.estado(painel, 'vazio', t('O mapa mostra as pessoas e organizações que os documentos citam e como elas se ligam.'), {titulo: t('Nenhuma ligação ainda'), acao: Q.perguntar()}); return; }
+    if (!mapa.entidades.length && !S.abertas.length && !S.descartadas.length) {
+      // mapa vazio: criar a primeira entidade (uma ligação precisa de duas) e fazer uma pergunta; o formulário abre no painel do quadro
+      const primeira = Q.formularios?.botaoNovo('entidade', 'mapa', casoId, undefined, 'Criar a primeira entidade');
+      const vazio = element('div'); Q.estado(vazio, 'vazio', t('O mapa mostra as pessoas e organizações que os documentos citam e como elas se ligam.'), {titulo: t('Nenhuma ligação ainda'), acao: primeira ? [{no: primeira}, {...Q.perguntar(), secundaria: true}] : Q.perguntar()});
+      Q.montarQuadro(painel, [vazio]); return;
+    }
     const visual_ = comSugestoes(mapa, S.abertas);
     const nomes = Object.fromEntries(visual_.entidades.map(e => [e.id, e.nome]));
     const saida = element('section', undefined, 'mapa-detalhe'); saida.tabIndex = -1; saida.setAttribute('aria-live', 'polite');

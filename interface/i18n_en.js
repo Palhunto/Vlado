@@ -1347,6 +1347,11 @@ window.VLADO_I18N_EN = {
     "Corrigido por": "Corrected by",
     "Confirmado por": "Confirmed by",
     "em {dia}, às {hora}, a partir de sugestão da IA": "on {dia}, at {hora}, from an AI suggestion",
+    // Onda 4: quadro vazio
+    "Criar a primeira hipótese": "Create the first hypothesis",
+    "Criar a primeira entidade": "Create the first entity",
+    "Adicionar acontecimento": "Add event",
+    "Criar a primeira tabela": "Create the first table",
     // Fase 06 — quadros de evidência (interface/quadros.js)
     "Hipóteses e acontecimentos registrados por pessoas a partir das evidências desta apuração. Cada evidência abre o original conferido; os quadros organizam e apontam lacunas, sem avaliar veracidade.": "Hypotheses and events recorded by people from this investigation’s evidence. Each piece of evidence opens the checked original; the boards organise and point out gaps, without judging truth.",
     "Hipóteses": "Hypotheses",

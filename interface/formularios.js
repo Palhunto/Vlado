@@ -666,10 +666,13 @@ window.Quadros.formularios = (() => {
     return abrir({tipo, casoId, host, item, sugestao, entidades, tiposData, inicial, aoCancelar: voltar,
       aoSalvar: async (resposta, extra = {}) => { if (tipo === 'tabela') Q.tabelaEscolhida = itemId || resposta?.id || null; await Q.selecionar(abaId, true); Q.sugestoes.anunciar(t(extra.retirado ? 'Retirado. O item fica no registro, com o motivo.' : sugestao ? 'Sugestão corrigida e confirmada.' : item ? 'Alterações salvas.' : 'Salvo.')); painel.querySelector('h3,h4')?.focus?.(); }});
   }
+  // A apuração tem análise (rodada com achados publicados)? Acontecimento e ligação só se criam com evidência, que vem dessas análises.
+  const temAnalise = casoId => (typeof cases !== 'undefined' ? cases : []).find(c => c.id === casoId)?.rodadas?.length > 0;
   // "+ Nova ..." no topo do quadro e "Editar" em cada item só para quem pode mudar o quadro (o servidor continua sendo a barreira).
-  const botaoNovo = (tipo, abaId, casoId, extra = () => ({})) => {
+  // `rotulo`: o texto do botão no estado vazio do quadro ("Criar a primeira hipótese"), sem o "+"; sem ele, "+ Nova hipótese".
+  const botaoNovo = (tipo, abaId, casoId, extra = () => ({}), rotulo = '') => {
     const def = QUADROS[tipo]; if (!podeCriar(def.prefixo)) return null;
-    const b = botao('+ ' + t(def.rotuloNovo), 'quadro-novo'); b.dataset.tipo = tipo;
+    const b = botao(rotulo ? t(rotulo) : '+ ' + t(def.rotuloNovo), 'quadro-novo'); b.dataset.tipo = tipo;
     b.addEventListener('click', () => abrirNoPainel({tipo, abaId, casoId, gatilho: b, ...extra()})); return b;
   };
   const botaoEditar = (tipo, abaId, casoId, itemId, nomeItem, extra = () => ({})) => {
@@ -692,5 +695,5 @@ window.Quadros.formularios = (() => {
     }
     return {enunciado: '', situacao: 'em_aberto', lacunas: [], vinculos};
   }
-  return {abrir, abrirNoPainel, hipoteseDaComparacao, botaoNovo, botaoEditar, podeCriar, podeAtualizar, corrigirCelula, numeroDoTexto, QUADROS, campo, segmentado, cartaoVinculo, vinculoDeItem, vinculoDeResultado, vinculoDeSugestao, normalizaData, mostraData, confirmarApagar, algumaMarca, marca};
+  return {abrir, abrirNoPainel, hipoteseDaComparacao, temAnalise, botaoNovo, botaoEditar, podeCriar, podeAtualizar, corrigirCelula, numeroDoTexto, QUADROS, campo, segmentado, cartaoVinculo, vinculoDeItem, vinculoDeResultado, vinculoDeSugestao, normalizaData, mostraData, confirmarApagar, algumaMarca, marca};
 })();

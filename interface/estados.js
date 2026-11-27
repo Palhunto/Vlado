@@ -1,7 +1,7 @@
 'use strict';
 // Estados de tela da Mesa (docs/design/componentes.md#estados, W11 regras 1 a 6 e 9; UX-08, UX-15, UX-18).
 //
-//   Estados.vazio(alvo, {titulo, texto, acao: {rotulo, aoClicar}})   o que é a coisa e uma ação (regra 1)
+//   Estados.vazio(alvo, {titulo, texto, acao: {rotulo, aoClicar}})   o que é a coisa e uma ação (regra 1); `acao` pode ser uma lista (a primeira é a principal)
 //   Estados.esqueleto(alvo, {atraso, rotulo})                        espera curta: esqueleto só depois de `atraso` ms (padrão 300)
 //   Estados.espera(alvo, {etapa, aoCancelar})                        espera longa: etapa por extenso, barra, aviso e Cancelar (regras 2 e 3)
 //   Estados.erro(alvo, {titulo, texto, preservado, acoes, detalhes}) erro em três partes, nas cores de erro (regras 4 e 6)
@@ -41,8 +41,9 @@
     if (titulo) bloco.append(no('p', 'estado-titulo', t(titulo)));
     if (texto) bloco.append(no('p', 'estado-texto', t(texto)));
     if (acao) {
+      // uma ação, ou uma lista: {rotulo, aoClicar, secundaria} ou {no} (um botão já montado, como o de criar o primeiro item); a primeira é a principal
       const acoes = no('div', 'estado-acoes');
-      acoes.append(botao(acao.rotulo, '', acao.aoClicar));
+      for (const a of [].concat(acao).filter(Boolean)) acoes.append(a.no || botao(a.rotulo, a.secundaria ? 'secondary' : '', a.aoClicar));
       bloco.append(acoes);
     }
     alvo.replaceChildren(bloco);

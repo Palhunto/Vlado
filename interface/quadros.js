@@ -55,6 +55,8 @@ window.Quadros = (() => {
       const blob = ref.tipo === 'ia'
         ? await api('achados-original', {caso: casoId, rodada: ref.rodada, revisao: ref.revisao, evidencia_id: ref.evidencia_id}, true)
         : await api('caderno-original', {caso: casoId, registro_id: ref.registro_id, sha256: ref.sha256, fonte_indice: ref.fonte}, true);
+      // o original pedido numa apuração não abre por cima de outra: se a pessoa trocou enquanto o servidor respondia, a resposta é descartada
+      const atual = window.contextoCaso?.(); if (atual && atual !== casoId) return;
       const loc = ev.localizador || vinculo.localizador || {};
       await window.abrirOriginal(blob, ev.documento?.nome || 'original', loc.pagina_pdf || 1, ev.trecho || '');
     } catch (erro) { retorno.textContent = erro.message; }
@@ -451,7 +453,12 @@ window.Quadros = (() => {
     const dados = await api('hipoteses-quadro', {caso: casoId});
     const S = Q.sugestoes ? await Q.sugestoes.listar(casoId, 'hipoteses') : {abertas: [], descartadas: []};
     if (!vigente()) return;
-    if (!dados.hipoteses?.length && !S.abertas.length && !S.descartadas.length) { Q.estado(painel, 'vazio', t('Uma hipótese é uma afirmação que os documentos podem sustentar ou contrariar.'), {titulo: t('Nenhuma hipótese ainda'), acao: Q.perguntar()}); return; }
+    if (!dados.hipoteses?.length && !S.abertas.length && !S.descartadas.length) {
+      // quadro vazio: criar a primeira hipótese (principal, quando a pessoa pode criar) e fazer uma pergunta; o formulário abre no painel do quadro
+      const primeira = Q.formularios?.botaoNovo('hipotese', 'hipoteses', casoId, undefined, 'Criar a primeira hipótese');
+      const vazio = element('div'); Q.estado(vazio, 'vazio', t('Uma hipótese é uma afirmação que os documentos podem sustentar ou contrariar.'), {titulo: t('Nenhuma hipótese ainda'), acao: primeira ? [{no: primeira}, {...Q.perguntar(), secundaria: true}] : Q.perguntar()});
+      Q.montarQuadro(painel, [vazio]); return;
+    }
     const novo = Q.formularios?.botaoNovo('hipotese', 'hipoteses', casoId);
     const corpo = [...(novo ? [novo] : []), element('p', t(dados.aviso || ''), 'small quadro-aviso')];
     // Sugestões da IA: grupo próprio entre a hipótese em aberto e as fechadas (componentes.md#sugestao-ia). Nunca entram na contagem de hipóteses.
@@ -626,14 +633,16 @@ window.Quadros = (() => {
     const entradas = juntar(dados.entradas || [], S.abertas), reais = (dados.entradas || []).length;
     const comTipos = () => ({tiposData: tipos});
     const ctx = Q.sugestoes ? Q.sugestoes.contexto(casoId, 'tempo', Q.formularios?.podeCriar('linha-tempo') ? {corrigir: sug => Q.formularios.abrirNoPainel({tipo: 'acontecimento', abaId: 'tempo', casoId, sugestao: sug, ...comTipos()})} : {}) : null;
-    const novo = Q.formularios?.botaoNovo('acontecimento', 'tempo', casoId, comTipos);
+    const vazioSemFiltro = !entradas.length && !escolhidos;
+    const novo = vazioSemFiltro ? null : Q.formularios?.botaoNovo('acontecimento', 'tempo', casoId, comTipos);
+    const primeiro = vazioSemFiltro && Q.formularios?.temAnalise(casoId) ? Q.formularios.botaoNovo('acontecimento', 'tempo', casoId, comTipos, 'Adicionar acontecimento') : null;
     const abrirSugestao = (sug, origem) => painel.__lateral.abrir([Q.sugestoes.painel(sug, ctx)], {origem});
     const conta = element('p', undefined, 'small quadro-conta');
     conta.append(t(reais === 1 ? '{n} acontecimento' : '{n} acontecimentos', {n: reais}));
     if (S.abertas.length) conta.append(element('span', Q.sugestoes.contagemTexto(S.abertas.length), 'quadro-conta-sugestoes'));
     const corpo = [...(novo ? [novo] : []), filtro(painel, casoId, carregar), comoLer(S.abertas.length > 0), element('p', t(dados.aviso || ''), 'small quadro-aviso'), conta];
     if (!entradas.length) corpo.push(escolhidos ? Q.estado(element('div'), 'vazio', t('Nenhum acontecimento tem os tipos de data escolhidos.'), {titulo: t('Nenhum acontecimento com esses tipos de data'), acao: {rotulo: t('Mostrar tudo'), aoClicar: () => { escolhidos = null; carregar(painel, casoId); }}})
-      : Q.estado(element('div'), 'vazio', t('A linha do tempo reúne os acontecimentos datados que os documentos registram.'), {titulo: t('Nenhum acontecimento com data ainda'), acao: Q.perguntar()}));
+      : Q.estado(element('div'), 'vazio', t('A linha do tempo reúne os acontecimentos datados que os documentos registram.'), {titulo: t('Nenhum acontecimento com data ainda'), acao: primeiro ? [{no: primeiro}, {...Q.perguntar(), secundaria: true}] : Q.perguntar()}));
     else {
       const linha = element('div', undefined, 'tempo-linha');
       linha.setAttribute('role', 'group'); linha.setAttribute('aria-label', t('Linha do tempo: {n} eventos', {n: reais}));

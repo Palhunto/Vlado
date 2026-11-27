@@ -496,6 +496,7 @@ button[aria-disabled="true"]{cursor:progress}
 .quadro-acoes{display:flex;flex-wrap:wrap;gap:var(--espaco-2);margin:0 0 var(--espaco-3)}
 .quadro-novo{align-self:flex-start;margin:0 0 var(--espaco-3)}
 .quadro-acoes>.quadro-novo{margin:0}
+.estado-acoes>.quadro-novo{margin:0;align-self:auto}
 .quadro-editar{margin:var(--espaco-2) 0 0}
 .form-quadro{display:flex;flex-direction:column;gap:var(--espaco-4);max-width:720px;scroll-padding-bottom:96px}
 .form-quadro>*{margin:0}

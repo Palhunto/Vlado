@@ -21,6 +21,7 @@ const HIP = id => ({id, enunciado: 'A dispensa seguiu o rito legal.', situacao: 
 function montar({permissao = true, sugestoes = [], detalhe = {}, busca = [RESULTADO], entradas = []} = {}) {
   const salvos = [];
   const m = criarMesa({scripts: [...PILHA, 'quadros.js', 'sugestoes.js', 'formularios.js', 'analise.js', 'indicador_salvamento.js'], desktop: true,
+    catalogo: [{id: 'alpha', titulo: 'Alfa', rodadas: [{id: 'R002', geracoes: ['g1']}]}],
     api: (operacao, dados) => {
       if (operacao === 'hipoteses-quadro') return {caso: 'alpha', total: 1, divergentes: [], aviso: '', hipoteses: [HIP('H' + '1'.repeat(32))]};
       if (operacao === 'linha-tempo-listar') return {caso: 'alpha', total: 0, divergencias: [], fontes_indisponiveis: [], divergentes: [], tipos_data: TIPOS, aviso: '', entradas};
@@ -87,7 +88,7 @@ test('sem permissão de criar e atualizar o quadro: nenhum botão "Nova" nem "Ed
 test('seletor dentro do formulário: a evidência liga com papel, suporte e natureza da revisão da IA, e o acontecimento salva com a data e a fonte', async () => {
   const m = montar(); await abrirAba(m, 'tempo');
   const painel = m.$('quadros-tempo');
-  await clicar(m, por(painel, 'button', '+ Novo acontecimento'));
+  await clicar(m, por(painel, 'button', 'Adicionar acontecimento'));
   digitar(painel.querySelector('textarea'), 'Assinatura do Contrato 041/2025');
   await ligarEvidencia(m, painel);
   const cartao = painel.querySelector('.vinculo-cartao');
@@ -113,7 +114,7 @@ test('seletor dentro do formulário: a evidência liga com papel, suporte e natu
 test('acontecimento sem evidência de suporte não sai: a mensagem do Design fica no formulário', async () => {
   const m = montar(); await abrirAba(m, 'tempo');
   const painel = m.$('quadros-tempo');
-  await clicar(m, por(painel, 'button', '+ Novo acontecimento'));
+  await clicar(m, por(painel, 'button', 'Adicionar acontecimento'));
   digitar(painel.querySelector('textarea'), 'Pagamento');
   digitar([...painel.querySelectorAll('.form-data input[type=text]')][0], '2025');
   await clicar(m, por(painel, 'button', 'Salvar'));
@@ -124,7 +125,7 @@ test('acontecimento sem evidência de suporte não sai: a mensagem do Design fic
 test('o que uma pessoa muda no vínculo ganha "alterado por você" e "Voltar ao da IA" desfaz; contexto fixa o suporte e pendência tira Sustentado', async () => {
   const m = montar(); await abrirAba(m, 'tempo');
   const painel = m.$('quadros-tempo');
-  await clicar(m, por(painel, 'button', '+ Novo acontecimento'));
+  await clicar(m, por(painel, 'button', 'Adicionar acontecimento'));
   await ligarEvidencia(m, painel);
   const suporte = () => [...painel.querySelectorAll('.vinculo-cartao select')][0];
   suporte().value = 'parcial'; suporte().dispatchEvent(new Evento('change', {bubbles: true})); await espera(m);

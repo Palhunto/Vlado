@@ -134,3 +134,26 @@ test('formulário aberto por uma apuração que já não é a selecionada não a
   assert.equal(m.$('quadros-tabelas').querySelectorAll('.form-quadro').length, 0, 'nenhum formulário da outra apuração');
   assert.deepEqual(m.erros, []);
 });
+
+test('N1 da Coruja: o original pedido numa apuração não abre por cima de outra se a pessoa trocou enquanto o servidor respondia', async () => {
+  const REF = {tipo: 'ia', caso_id: 'sinfra', rodada: 'R001', revisao: 'r2', registros_sha256: 'a'.repeat(64), evidencia_id: 'E001'};
+  const evidencia = {referencia: REF, papel: 'suporte', suporte: 'sustentado', natureza: 'declaracao_documental', justificativa: 'A passagem declara o valor.', documento_id: 'D001', original_sha256: 'd'.repeat(64),
+    estado: 'conferida', erro: null, localizador: {tipo: 'pagina', pagina_pdf: 4, linha_inicio: 3, linha_fim: 3, descricao: '', legivel: 'D001 · p. 4'},
+    evidencia: {documento: {documento_id: 'D001', nome: 'contrato.pdf'}, trecho: 'A fonte declara valor 12.', localizador: {pagina_pdf: 4, legivel: 'D001 · p. 4'}}};
+  const quadro = {caso: 'sinfra', total: 1, divergentes: [], aviso: '', hipoteses: [{...hip('H' + '1'.repeat(32), 'Hipótese da Sinfra'), condicao: 'com_evidencia', sustentam: [evidencia]}]};
+  const vazio = {caso: 'paranaita', total: 0, divergentes: [], aviso: '', hipoteses: []};
+  for (const trocou of [true, false]) {
+    const original = adiada();
+    const m = montar({respostas: {'hipoteses-quadro': {sinfra: quadro, paranaita: vazio}, 'achados-original': {sinfra: original.promessa}}});
+    m.avaliar('window.__abertos = []; window.abrirOriginal = async (...args) => { window.__abertos.push(args); };');
+    m.$('ver-quadros').click(); await espera(m);
+    const botao = [...m.$('quadros-hipoteses').querySelectorAll('.quadro-evidencia button')].find(b => /original/i.test(texto(b)));
+    assert.ok(botao, 'botão Abrir o original');
+    botao.click(); await espera(m);
+    if (trocou) m.trocar('paranaita');
+    await espera(m);
+    original.resolver('bytes'); await espera(m);
+    assert.equal(m.janela.__abertos.length, trocou ? 0 : 1, trocou ? 'a resposta da apuração anterior não abre nada' : 'sem troca, o original abre');
+    assert.deepEqual(m.erros, []);
+  }
+});
