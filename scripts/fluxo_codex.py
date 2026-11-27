@@ -411,9 +411,9 @@ class Fluxo:
         if not included and not re.search(r'insufici|não (?:foi|há|foram)|sem (?:suporte|evidência|achados)', content, re.I):
             raise ValueError('Sem achados incluídos, declare explicitamente a insuficiência do suporte.')
         data['procedencia'].append(event)
+        if candidates is not None:  # before publishing (N2): a failed write leaves nothing published
+            sugestoes_quadros.gravar(self.run, data, candidates, self.instrucoes.get('versao'))
         receipt = self.publish(data)
-        if candidates is not None:
-            sugestoes_quadros.gravar(self.run, data, receipt['manifesto'], candidates, self.instrucoes.get('versao'))
         self.data, self.receipt, self.briefing = data, receipt, content
 
     def submit(self, stage, raw):

@@ -803,7 +803,8 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                                                              *rotas_tabelas.SALVAR, *rascunhos.SALVAR)
                        else rotas_redacao.LIMITE_CORPO_TEXTO if operation in rotas_redacao.TEXTO
                        else 128 * 1024 if operation in ('caderno-salvar', 'diligencias-criar', 'diligencias-atualizar', 'diligencias-responder',
-                                                     *rotas_evidencia.SALVAR, *rotas_redacao.SALVAR) else 32768)
+                                                     *rotas_evidencia.SALVAR, *rotas_evidencia.SUGESTOES,
+                                                     *rotas_redacao.SALVAR) else 32768)
             if not 0 < length <= maximum:
                 raise ValueError('Requisição vazia ou muito grande.')
             if em_fluxo:

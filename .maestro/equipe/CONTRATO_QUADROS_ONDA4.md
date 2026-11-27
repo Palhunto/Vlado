@@ -16,7 +16,7 @@ Exemplos com dados sintéticos (Vila Serena, Construtora Alfa, Marta Reis, Carlo
 
 - **Rodadas e itens antigos abrem como sempre.** Todo campo novo é opcional na leitura (seção 7). Rodada sem candidatos devolve lista vazia; vínculo salvo antes desta onda volta sem `revisao_ia` e sem `alteracoes` (a tela não deduz nada).
 - **Erros** seguem o padrão de sempre: HTTP 400 com `erro` (português), `codigo` e, quando houver, `parametros`. Os códigos novos estão na seção 6. Permissão continua no portão: sem a capacidade, a resposta é a de hoje (`operacao_proibida`, 403); não há `sem_permissao` à parte.
-- **Capacidades.** Leituras novas (`sugestoes-listar`, `evidencia-buscar`, `comparar-processos`) ficam na linha `L`/LEITURA dos quadros; as ações (`sugestoes-confirmar`, `-corrigir`, `-descartar`, `-restaurar`) na linha `E`/MESA, a mesma de `hipoteses-criar` e dos outros `*-criar`/`*-atualizar`. Linhas novas em `autorizacao.py` e `rotas_evidencia.py` dependem do aval da Tranca (o Maestro repassa).
+- **Capacidades.** Leituras novas (`sugestoes-listar`, `evidencia-buscar`, `comparar-processos`, `mapa-entidade-detalhe`) ficam na linha `L`/LEITURA dos quadros; as ações (`sugestoes-confirmar`, `-corrigir`, `-descartar`, `-restaurar`) na linha `E`/MESA, a mesma de `hipoteses-criar` e dos outros `*-criar`/`*-atualizar`. Linhas novas em `autorizacao.py` e `rotas_evidencia.py` dependem do aval da Tranca (o Maestro repassa).
 - **Idempotência.** Toda ação leva `requisicao_id` (32 hex), como nos quadros: repetir com o mesmo id e o mesmo conteúdo devolve o mesmo resultado; com outro conteúdo, `tentativa_reutilizada`.
 
 ## 1. Formato do candidato (MESA.md e prompt 05)
@@ -48,9 +48,9 @@ A IA entrega os candidatos na síntese, numa chave opcional `candidatos` ao lado
 | `campos` | pessoa e organização: `nome` (até 300), `variantes` (até 20, cada uma até 300). Ligação: `de` e `para` (chaves de pessoa ou organização desta lista, diferentes), `tipo` (até 120), `descricao` (até 2.000, pode ser vazia). Acontecimento: `descricao` (até 1.000), `datas` (1 a 10; `tipo` de `linha_tempo.TIPOS_DATA`, `valor` AAAA, AAAA-MM ou AAAA-MM-DD, `aproximada`, `fonte` = posição em `evidencias`, padrão 0, `observacao` até 500). Hipótese: `enunciado` (até 1.000). |
 | limite | até 40 candidatos por rodada. |
 
-Sem identificadores (CPF, CNPJ) no candidato: dado pessoal fica para a pessoa digitar em "Corrigir". A IA nunca preenche situação de hipótese nem decisão de homônimo.
+Sem identificadores (CPF, CNPJ) no candidato: dado pessoal fica para a pessoa digitar em "Corrigir". Um CPF ou CNPJ escrito em qualquer texto do candidato (com ou sem pontuação) recusa o candidato, com o código `dado_pessoal` (R2 da Coruja sobre `c06ea1e`). A IA nunca preenche situação de hipótese nem decisão de homônimo.
 
-**Validação no servidor** (`scripts/sugestoes_quadros.py`, sem modelo). A lista malformada (não é lista, mais de 40, chave repetida) recusa a síntese, e o modelo corrige na tentativa seguinte. Um candidato com referência inválida (achado ou E-ID fora da rodada, E-ID que não é do achado, ponta que não existe, campo fora do limite) é **recusado sozinho**: não vira sugestão e fica registrado com o código em `recusados`; o briefing não cai por causa dele. Os aceitos e os recusados vão para `saidas/achados/candidatos/r3_sintese.json` da rodada (imutável, preso por `registros_sha256` à revisão `r3_sintese`). A leitura confere tudo de novo, também nos arquivos do agente de chat.
+**Validação no servidor** (`scripts/sugestoes_quadros.py`, sem modelo). A lista malformada (não é lista, mais de 40, chave repetida) recusa a síntese, e o modelo corrige na tentativa seguinte. Um candidato com referência inválida (achado ou E-ID fora da rodada, E-ID que não é do achado, ponta que não existe, campo fora do limite) é **recusado sozinho**: não vira sugestão e fica registrado com o código em `recusados`; o briefing não cai por causa dele. Os aceitos e os recusados vão para `saidas/achados/candidatos/r3_sintese.json` da rodada, gravado **antes** de publicar a síntese, com o hash que a publicação terá (N2): se a gravação falhar, nada fica publicado e a tentativa seguinte começa limpa; depois de publicada a revisão, o arquivo é imutável. A leitura confere tudo de novo, também nos arquivos do agente de chat, e ignora o campo `recusados` do arquivo (R1).
 
 ## 2. Sugestões
 
@@ -91,7 +91,7 @@ Pedido: `{"caso": "vila-serena", "quadro": "mapa" | "linha_tempo" | "hipoteses",
 
 | Campo | Significado |
 |---|---|
-| `campos` | o item no formato do `*-criar` do quadro, pronto para enviar (sem `caso` e `requisicao_id`). Pessoa e organização: `{tipo, nome, variantes, identificadores: [], evidencias}`; ligação: `{origem, destino, tipo, descricao, evidencias}` (ponta ainda não confirmada vem `null`); acontecimento: `{descricao, datas, evidencias, retirado: false, motivo_retirada: ""}`; hipótese: `{enunciado, situacao: "em_aberto", lacunas: [], evidencias}`. Os vínculos vêm preenchidos pela P47 (seção 3.3). |
+| `campos` | o item no formato do `*-criar` do quadro, pronto para enviar (sem `caso` e `requisicao_id`). Pessoa e organização: `{tipo, nome, variantes, identificadores: [], evidencias}`; ligação: `{origem, destino, tipo, descricao, evidencias}` (ponta ainda não confirmada vem `null`); acontecimento: `{descricao, datas, evidencias, retirado: false, motivo_retirada: ""}`; hipótese: `{enunciado, situacao: "em_aberto", lacunas: [], evidencias}`. Os vínculos vêm preenchidos pela P47 (seção 3.3), com o `achado_id` do candidato (N1): reenvie como vêm. |
 | `pontas` | só na ligação: por ponta, a sugestão de origem, o estado dela, o item confirmado (P-ID) e o nome. |
 | `evidencias` | cada evidência resolvida como em `conferir_vinculos` (`estado` `conferida` ou `indisponivel`, com `erro`), mais `revisao_ia` e `conferencia_humana` (seção 3.2). |
 | `achado` | o achado de origem na revisão da sugestão; `versao_atual` é a última versão do achado na rodada (maior que `versao` quando foi substituída). |
@@ -116,6 +116,10 @@ Todas: `{"caso", "id": "S…", "requisicao_id", "autor"?}` (o `autor` só no mod
 | `sugestoes-restaurar` | nada | volta a `aberta` (também a nascida `descartada` por `descartada_antes`). Nunca cria item. |
 
 Confirmada não volta: confirmar ou corrigir de novo responde `sugestao_ja_decidida`; descartar uma confirmada também. O item criado depois se edita no quadro, como qualquer item.
+
+### 2.3 `POST /api/mapa-entidade-detalhe` (leitura; pedido do Lume)
+
+`{"caso", "id": "P…"}` → o registro como `hipoteses-detalhe`: `{caso, colecao, id, sha256, estado, historico, divergente, evidencias}`, com `estado.identificadores` sem máscara (o valor salvo, para o formulário "Editar entidade" reenviar) e `evidencias` resolvidas como na seção 3.2. O `mapa-ver` continua mascarando CPF e CNPJ. Recusas: `registro_inexistente`, `registro_invalido`, `quadro_campos_invalidos`. Linha L/LEITURA, resolvedor `caso`.
 
 ## 3. Registro do vínculo (aditivo em `scripts/evidencias.py`)
 
