@@ -12,6 +12,7 @@ import re
 import caderno
 import comparacao_processos
 import comparador
+import comum
 from indice_sqlite import ID_DOCUMENTO
 import evidencias as ev
 import hipoteses
@@ -68,7 +69,13 @@ def _com_evidencias(root, case, item):
 
 
 def executar(root, operation, data, conta=None, casos=None):
-    """Despacha uma operação dos quadros. ``casos`` é None para administradores (todas as apurações)."""
+    """Despacha uma operação dos quadros. ``casos`` é None para administradores (todas as apurações). Cada pedido
+    confere as entradas congeladas de cada rodada uma vez (``comum.pedido``)."""
+    with comum.pedido():
+        return _executar(root, operation, data, conta, casos)
+
+
+def _executar(root, operation, data, conta=None, casos=None):
     if operation not in OPERACOES or not isinstance(data, dict):
         raise ValueError('Operação dos quadros de evidência desconhecida.')
     case = _caso(root, data.get('caso'), casos)

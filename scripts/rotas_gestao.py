@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import acesso
 import apagamento
+import comum
 import continuidade
 from inferencia_api import resumo_inferencia, salvar_inferencia
 import lixeira
@@ -126,7 +127,8 @@ class RotasGestao:
             # Admin only (not a guest operation): metadata of the active case, never draft text.
             conta = ({'id': principal['conta'], 'nome': principal['nome']}
                      if self.server.com_contas else None)
-            with self.server.cadastro_lock:
+            # A pure read (interface_pesquisa.LEITURAS_PURAS): shares the lock, waits only for a write.
+            with self.server.cadastro_lock.leitura(), comum.pedido():
                 return continuidade.executar_resumo(self.server.root, data, conta,
                     lambda caso: self.server.conversas.listar(caso)['conversas'])
         raise ValueError('Operação de gestão desconhecida.')
