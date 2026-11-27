@@ -200,3 +200,51 @@ test('sem a capacidade de atualizar tabelas, nem "Nova tabela", nem "Editar", ne
   painel.querySelectorAll('td.tabela-celula')[0].dispatchEvent(new Evento('focus'));
   assert.ok(!por(painel.querySelector('#tabela-fonte'), 'button', 'Corrigir esta célula'));
 });
+
+test('R1 da Coruja: número no formato brasileiro, o ponto é milhar e a vírgula é decimal; ponto ambíguo é recusado, nunca adivinhado', async () => {
+  const m = montar();
+  const ler = texto => JSON.parse(m.avaliar(`JSON.stringify(window.Quadros.formularios.numeroDoTexto(${JSON.stringify(texto)}))`));
+  for (const [entrada, valor] of [['1.500', '1500'], ['8.750.000', '8750000'], ['1.500,25', '1500.25'], ['0,5', '0.5'], ['12', '12'], ['8.750.000,50', '8750000.50'], ['-1.200,00', '-1200.00'], ['  1 500 ', null], ['1500,5', '1500.5']]) {
+    if (valor === null) continue;
+    assert.deepEqual(ler(entrada), {valor}, entrada);
+  }
+  assert.deepEqual(ler(''), {vazio: true});
+  for (const ambiguo of ['1.5', '8.75', '1.50', '0.500', '1.5000', '1.500.5', '1.5,2']) assert.match(ler(ambiguo).erro, /O ponto separa milhares/, `${ambiguo} é ambíguo: recusa`);
+  for (const invalido of ['abc', '1,2,3', '12,', '1e3', '1,5a']) assert.match(ler(invalido).erro, /Escreva só o número, com vírgula decimal/, `${invalido} não é número`);
+});
+
+test('R1 da Coruja: na célula, "1.500" vai como 1500 e "1.5" fica no campo com a mensagem, sem enviar', async () => {
+  const m = montar(); await abrirAba(m);
+  const painel = m.$('quadros-tabelas');
+  await clicar(m, por(painel, 'button', '+ Nova tabela'));
+  digitar(painel.querySelector('.form-campo input[type=text]'), 'Valores');
+  digitar(painel.querySelector('.form-coluna input[type=text]'), 'Valor');
+  escolher(painel.querySelector('.form-coluna select'), 'monetario'); await espera(m);
+  await clicar(m, por(painel, 'button', '+ Adicionar linha'));
+  const celula = () => painel.querySelector('.form-linha-nova input[type=text]');
+  digitar(celula(), '1.5');
+  await clicar(m, por(painel, 'button', 'Salvar'));
+  assert.equal(m.salvos.length, 0);
+  assert.match(texto(painel.querySelector('.form-linha-nova')), /O ponto separa milhares/);
+  digitar(celula(), '1.500');
+  await clicar(m, por(painel, 'button', 'Salvar'));
+  assert.equal(m.salvos.length, 1, texto(painel.querySelector('.form-erro-geral') || painel));
+  assert.deepEqual(JSON.parse(JSON.stringify(m.salvos[0].dados.linhas)), [{celulas: {valor: {valor: '1500', fonte: null}}}]);
+});
+
+test('R1 da Coruja: a correção de célula usa a mesma regra ("8.750.000" vai como 8750000; "8.75" é recusado no campo)', async () => {
+  const m = montar({tabelas: [ID]}); await abrirAba(m);
+  const painel = m.$('quadros-tabelas');
+  painel.querySelectorAll('td.tabela-celula')[1].dispatchEvent(new Evento('focus'));
+  const fonte = painel.querySelector('#tabela-fonte');
+  await clicar(m, por(fonte, 'button', 'Corrigir esta célula'));
+  const campo = () => fonte.querySelector('.form-celula input[type=text]');
+  digitar(campo(), '8.75'); digitar(fonte.querySelector('textarea'), 'Conferido na planilha.');
+  await clicar(m, por(fonte, 'button', 'Salvar correção'));
+  assert.equal(m.salvos.length, 0);
+  assert.match(texto(fonte), /O ponto separa milhares/);
+  digitar(campo(), '8.750.000');
+  await clicar(m, por(fonte, 'button', 'Salvar correção'));
+  assert.equal(m.salvos.length, 1, texto(fonte));
+  assert.equal(m.salvos[0].dados.correcoes[0].valor, '8750000');
+});

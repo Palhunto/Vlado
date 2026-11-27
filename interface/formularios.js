@@ -364,12 +364,23 @@ window.Quadros.formularios = (() => {
     let id = base, n = 2; while (usados.has(id)) id = `${base.slice(0, 36)}_${n++}`;
     return id;
   }
-  // Número como a pessoa escreve ("8.750.000,50") vira o texto do servidor ("8750000.50"); inválido devolve null.
+  // Número como a pessoa escreve, no formato brasileiro: o ponto separa milhares e a vírgula, os decimais. "1.500" é 1500, "8.750.000" é 8750000, "1.500,25" é 1500.25,
+  // "0,5" é 0.5 e "12" é 12 (o texto do servidor tem ponto decimal e nenhum milhar). Ponto que não é milhar ("1.5", "8.75") é ambíguo: a tela recusa e pede a vírgula,
+  // em vez de adivinhar, porque um valor em reais lido errado muda a conta. Devolve {vazio}, {valor} ou {erro: mensagem}.
+  const NUMERO_INVALIDO = 'Escreva só o número, com vírgula decimal: 8.750.000,00.';
+  const NUMERO_AMBIGUO = 'O ponto separa milhares (8.750 é oito mil setecentos e cinquenta). Para decimais, use vírgula: 8,75.';
   function numeroDoTexto(texto) {
-    let v = String(texto || '').trim().replace(/\s/g, '');
-    if (!v) return {vazio: true};
-    if (v.includes(',')) v = v.replace(/\./g, '').replace(',', '.');
-    return /^-?\d{1,30}(\.\d{1,12})?$/.test(v) ? {valor: v} : null;
+    const bruto = String(texto || '').trim().replace(/\s/g, '');
+    if (!bruto) return {vazio: true};
+    const negativo = bruto.startsWith('-'), v = negativo ? bruto.slice(1) : bruto;
+    const [inteiro, decimal, resto] = v.split(',');
+    if (resto !== undefined || (decimal !== undefined && !/^\d{1,12}$/.test(decimal))) return {erro: NUMERO_INVALIDO};
+    let digitos;
+    if (/^\d+$/.test(inteiro)) digitos = inteiro;
+    else if (/^[1-9]\d{0,2}(\.\d{3})+$/.test(inteiro)) digitos = inteiro.replace(/\./g, '');
+    else return {erro: /^[\d.]+$/.test(inteiro) ? NUMERO_AMBIGUO : NUMERO_INVALIDO};
+    if (digitos.length > 30) return {erro: NUMERO_INVALIDO};
+    return {valor: `${negativo ? '-' : ''}${digitos}${decimal !== undefined ? `.${decimal}` : ''}`};
   }
   const rotuloColuna = c => { const g = [c.moeda, c.unidade].filter(Boolean).join(' '); return g ? `${c.nome} (${g})` : c.nome; };
   function formTabela(ctx) {
@@ -434,7 +445,7 @@ window.Quadros.formularios = (() => {
       const usados = new Set(e.colunas.filter(c => c.fixa).map(c => c.id));
       for (const c of e.colunas) if (!c.fixa) { c.id = idDaColuna(c.nome, usados); usados.add(c.id); }
       const antigas = e.colunas.filter(c => c.fixa);
-      const valorNovo = (c, cel) => c.tipo === 'data' ? (normalizaData(cel.texto) || null) : c.tipo === 'texto' ? (cel.texto.trim() || null) : (numeroDoTexto(cel.texto)?.valor ?? null);
+      const valorNovo = (c, cel) => c.tipo === 'data' ? (normalizaData(cel.texto) || null) : c.tipo === 'texto' ? (cel.texto.trim() || null) : (numeroDoTexto(cel.texto).valor ?? null);
       return {titulo: e.titulo.trim(), descricao: e.descricao.trim(),
         colunas: e.colunas.map(c => c.fixa ? {id: c.id, nome: c.nome.trim(), tipo: c.tipo, moeda: c.moeda || null, unidade: c.unidade || null}
           : {id: c.id, nome: c.nome.trim(), tipo: c.tipo, moeda: c.tipo === 'monetario' ? (c.moeda || '').trim() || null : null, unidade: (c.tipo === 'numero' || c.tipo === 'monetario') ? ((c.unidade || '').trim() || null) : null}),
@@ -454,7 +465,7 @@ window.Quadros.formularios = (() => {
       for (const {c, cel, valor} of camposCelula) {
         let msg = '';
         if (c.tipo === 'data') msg = !cel.texto.trim() || /^\d{4}(-\d{2}(-\d{2})?)?$/.test(normalizaData(cel.texto)) ? '' : 'Use ano, mês e ano ou dia completo: 2025, 03/2025 ou 03/03/2025.';
-        else if (c.tipo !== 'texto') msg = numeroDoTexto(cel.texto) ? '' : 'Escreva só o número, com vírgula decimal: 8.750.000,00.';
+        else if (c.tipo !== 'texto') msg = numeroDoTexto(cel.texto).erro || '';
         valor.erro(msg); if (msg) falhas.push(msg);
       }
       // uma célula só tem como fonte uma evidência de suporte ligada a esta tabela
@@ -488,7 +499,7 @@ window.Quadros.formularios = (() => {
       erroGeral.hidden = true; valor.erro(''); just.erro('');
       let novo;
       if (coluna.tipo === 'data') { novo = normalizaData(texto) || null; if (novo && !/^\d{4}(-\d{2}(-\d{2})?)?$/.test(novo)) { valor.erro('Use ano, mês e ano ou dia completo: 2025, 03/2025 ou 03/03/2025.'); valor.controle.focus(); return; } }
-      else if (numerica) { const n = numeroDoTexto(texto); if (!n) { valor.erro('Escreva só o número, com vírgula decimal: 8.750.000,00.'); valor.controle.focus(); return; } novo = n.valor ?? null; }
+      else if (numerica) { const n = numeroDoTexto(texto); if (n.erro) { valor.erro(n.erro); valor.controle.focus(); return; } novo = n.valor ?? null; }
       else novo = texto.trim() || null;
       const novaFonte = fonteTexto === '' ? null : Number(fonteTexto), antes = celula.valor ?? null, fonteAntes = celula.fonte ?? null;
       if (novo === antes && novaFonte === fonteAntes) { erroGeral.textContent = t('Mude o valor ou a fonte para corrigir a célula.'); erroGeral.hidden = false; valor.controle.focus(); return; }
