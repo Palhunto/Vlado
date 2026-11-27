@@ -3,9 +3,11 @@
 Um evidencia-buscar refazia o hash de todas as entradas da rodada a cada evidência (86 s na Sinfra). Agora, dentro
 de um pedido (``comum.pedido``, aberto por ``rotas_evidencia.executar``), cada conferência é feita uma vez, e o hash
 de um arquivo é reaproveitado enquanto ele mantém a identidade (caminho, tamanho, mtime_ns, ctime_ns, inode). Aqui a
-garantia que não pode mudar: o arquivo alterado continua recusado no pedido seguinte. Dados sintéticos
-(``fixture_achados``).
+garantia que não pode mudar: o arquivo alterado continua recusado no pedido seguinte, também quando a escrita é
+por mmap (B1 da Coruja sobre 7f05beb: no NTFS ela não muda tamanho, mtime, ctime nem inode). Por isso, no Windows o
+hash só é reaproveitado dentro do pedido; no Linux, entre pedidos. Dados sintéticos (``fixture_achados``).
 """
+import mmap
 import os
 from pathlib import Path
 import sys
@@ -50,6 +52,7 @@ class ConferenciaPorPedidoTest(unittest.TestCase):
             return carregar(self.root, 'alpha', 'R001', 'r2')
 
     def guardado(self, path):
+        """The hash kept between requests (only where comum.GUARDA_ENTRE_PEDIDOS)."""
         return os.fspath(path.resolve()) in comum._HASHES
 
     def test_mesma_resposta_com_e_sem_o_pedido(self):
@@ -70,12 +73,17 @@ class ConferenciaPorPedidoTest(unittest.TestCase):
             self.buscar()
         self.assertTrue(primeiro)
         self.assertEqual(len(primeiro), len(set(primeiro)))  # once per file in the first request
-        self.assertEqual(chamadas, primeiro)  # none in the second: the files kept their identity
-        self.assertTrue(self.guardado(self.fonte) and self.guardado(self.banco))
+        segundo = chamadas[len(primeiro):]
+        if comum.GUARDA_ENTRE_PEDIDOS:
+            self.assertEqual(segundo, [])  # Linux: none in the second, the files kept their identity
+            self.assertTrue(self.guardado(self.fonte) and self.guardado(self.banco))
+        else:
+            self.assertEqual(sorted(segundo), sorted(primeiro))  # Windows: each file again, once per request
+            self.assertEqual(comum._HASHES, {})
 
     def test_fonte_alterada_continua_recusada(self):
         self.buscar()
-        self.assertTrue(self.guardado(self.fonte))
+        self.assertEqual(self.guardado(self.fonte), comum.GUARDA_ENTRE_PEDIDOS)
         with self.fonte.open('ab') as stream:  # another size
             stream.write(b' ')
         with self.assertRaisesRegex(ValueError, 'hash divergente'):
@@ -89,8 +97,8 @@ class ConferenciaPorPedidoTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'hash divergente'):
             self.carregar_num_pedido()
 
-    @unittest.skipIf(os.name == 'nt', 'No Windows o ctime é a data de criação: limite aceito, descrito em comum.py')
-    def test_mtime_reposto_a_mao_continua_recusado_no_linux(self):
+    def test_mtime_reposto_a_mao_continua_recusado(self):
+        # Linux: the ctime changes. Windows: the hash is not kept between requests.
         self.buscar()
         info = self.fonte.stat()
         conteudo = self.fonte.read_bytes()
@@ -101,11 +109,34 @@ class ConferenciaPorPedidoTest(unittest.TestCase):
 
     def test_banco_do_indice_alterado_continua_recusado(self):
         self.buscar()
-        self.assertTrue(self.guardado(self.banco))
+        self.assertEqual(self.guardado(self.banco), comum.GUARDA_ENTRE_PEDIDOS)
         with self.banco.open('ab') as stream:
             stream.write(b'\0')
         with self.assertRaisesRegex(ValueError, 'Hash do banco divergente'):
             self.carregar_num_pedido()
+
+    def test_escrita_por_mmap_entre_dois_pedidos_continua_recusada(self):
+        """B1 da Coruja: no NTFS a escrita por mmap não muda tamanho, mtime, ctime nem inode."""
+        self.buscar()
+        antes = self.fonte.stat()
+        with self.fonte.open('r+b') as stream, mmap.mmap(stream.fileno(), 0) as mapa:
+            mapa[0] = mapa[0] ^ 1
+            mapa.flush()
+        if os.name == 'nt':  # the premise of B1, where it holds
+            depois = self.fonte.stat()
+            self.assertEqual((depois.st_size, depois.st_mtime_ns), (antes.st_size, antes.st_mtime_ns))
+        with self.assertRaisesRegex(ValueError, 'hash divergente'):
+            self.carregar_num_pedido()
+        self.assertEqual(self.buscar()['analises'], [])
+
+    def test_dentro_do_pedido_cada_arquivo_e_lido_uma_vez_tambem_no_windows(self):
+        chamadas = []
+        original = comum._hash_do_arquivo
+        with patch('comum._hash_do_arquivo', side_effect=lambda p: chamadas.append(os.fspath(p)) or original(p)):
+            with comum.pedido():
+                comum.sha256(self.fonte)
+                comum.sha256(self.fonte)
+        self.assertEqual(len(chamadas), 1)
 
     def test_arquivo_recente_nao_tem_o_hash_guardado(self):
         novo = self.root / 'recente.txt'
