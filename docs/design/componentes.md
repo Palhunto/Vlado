@@ -1184,7 +1184,7 @@ Fora do formulário, onde a evidência aparece (coluna da hipótese, painel da l
 
 <a id="apagar-revisao"></a>
 
-**Confirmação antes de apagar uma revisão humana.** Três ações desfazem o que uma pessoa decidiu e passam pelo [diálogo](#dialogo) destrutivo:
+**Confirmação antes de apagar uma revisão humana.** Quatro ações desfazem o que uma pessoa decidiu e passam pelo [diálogo](#dialogo) destrutivo:
 
 - **Desligar** um vínculo com "alterado por pessoa", ou um vínculo do caderno cujo suporte uma pessoa escolheu (qualquer um diferente de "Não revisado");
 - **"Ligar a versão nova"** num vínculo com "alterado por pessoa";
