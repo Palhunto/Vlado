@@ -257,7 +257,7 @@ Onde: cabeçalho dos quadros. Linha com intervalo de 4. Cada aba é `<a>`: altur
 
 **Faixa que rola para o lado** (Q5 da Coruja, 23/11/2026). Vale, abaixo de 720 px, para as quatro faixas da Mesa que rolam por dentro: a linha de etapas (`#mesa-etapas`, item ativo por `aria-current="step"`), as pílulas dos Quadros (`.quadros-abas`, por `aria-selected="true"`), as abas de Documentos (`.mesa-tabs`, "Acervo cadastrado" e "Pesquisar no conteúdo") e as do Caderno (`.notebook-tabs`, "Notas e redação" e "Trechos com fonte e contribuições"), as duas últimas por `aria-pressed="true"` (escopo completado pela T1 da Coruja sobre `bb83992`; a 320 px, "Pesquisar no conteúdo" fica cortada). A 320 px, a linha de etapas do Caderno deixava o passo atual, "4 Caderno", fora da vista. Nos Quadros, apareciam duas das cinco pílulas, cortadas na divisa entre elas, e a faixa parecia completa. Quando o conteúdo passa da largura da faixa:
 
-- **O item ativo fica à vista.** Ao desenhar a faixa e ao trocar de item, só a faixa rola (`scrollLeft`, nunca a página) até o item ativo caber inteiro, com 16 px de folga do lado de onde veio. A rolagem é instantânea, sem animação.
+- **O item ativo fica à vista.** Ao desenhar a faixa e ao trocar de item, só a faixa rola (`scrollLeft`, nunca a página) até o item ativo caber inteiro, com 32 px de folga do lado de onde veio (`--espaco-8`, a mesma largura do esmaecido, para o ativo nunca parar sob a máscara; o `scroll-padding-inline` das pílulas também é `--espaco-8`; decisão do Maestro, código em `4e7c77f`). A rolagem é instantânea, sem animação.
 - **Esmaecido na borda.** Do lado em que ainda há conteúdo, os últimos 32 px da faixa esmaecem até sumir. O esmaecido é uma máscara (`mask-image` com gradiente de opaco a transparente), e não uma cor, para valer nos dois temas sem token novo. O lado vem de `data-rola` (`fim`, `inicio` ou `ambos`), recalculado ao rolar e ao redimensionar. Sem estouro, a faixa fica sem o atributo e sem máscara. A máscara vai no próprio elemento que rola. Nenhuma das quatro faixas tem fundo próprio no CSS (as pílulas dos Quadros ficam sobre o fundo do painel), então o esmaecido revela o fundo de trás. Se alguma ganhar fundo, ele passa ao elemento pai, para não esmaecer junto.
 - **Nada além disso.** Sem setas e sem barra de rolagem à vista (a linha de etapas já a esconde). Pelo teclado, o navegador já traz à vista o item que recebe o foco. Como não há animação, `prefers-reduced-motion` não muda nada aqui.
 - **Prova:** capturas a 320, 390 e 430 px do Caderno (etapas e abas), de Documentos (etapas e abas, com "Pesquisar no conteúdo" ativa) e dos Quadros, nos dois temas, com o item ativo inteiro dentro da faixa. A medida de reflow passa a conferir também os elementos que rolam por dentro, além da página.
@@ -455,7 +455,7 @@ Cada linha é `role="img"` com `aria-label` em frase ("Marta Reis é sócia da C
 
 **Painel da ligação selecionada** (`<aside aria-label="Ligação selecionada">`): fundo `--theme-surface`, borda esquerda 1 px `--theme-line`, preenchimento 28, intervalo de 18. Rubrica "LIGAÇÃO SELECIONADA" em `--theme-accent`; título da ligação em serifa 22/600, entrelinha 1,25; selo "✓ 2 evidências conferidas no original"; lista de evidências, cada uma `<a>` com preenchimento 12 0 e bordas de 1 px `--theme-line` entre elas: a citação em serifa 16 e a fonte em 14 `--theme-muted` ("Contrato 041/2025, p. 1 · abrir o original"). Abaixo, o alerta de homônimo: fundo `--theme-warning-bg`, borda 1 px `--theme-warning-line`, raio 12, preenchimento 14 16, intervalo de 8; título 16/600 `--theme-warning`; texto 14; dois secundários de 44 px (preenchimento 0 14, intervalo de 8). No pé (`margin-top:auto`, intervalo de 10): secundário de largura cheia "Anexar outra evidência" e a nota "O mapa organiza o que os documentos dizem. Ele não avalia se é verdade." em 14 `--theme-muted`.
 
-Ações do cabeçalho: "Ver como lista" (secundário) e "Adicionar ligação" (principal). O formulário de "Adicionar ligação" é da Onda 4 (PROD-01).
+Ações do cabeçalho: "Ver como lista" (secundário) e "Adicionar ligação" (principal). O formulário de "Adicionar ligação" é da Onda 4 (PROD-01) e está em [Formulários dos quadros](#formularios-quadros); as sugestões da IA no mapa, em [Sugestão da IA](#sugestao-ia).
 
 **Enquanto os dados não distinguem empresa de órgão público** *(derivado, 22/11/2026)*. A Mesa só sabe se a entidade é pessoa ou organização. Toda organização usa a forma e a cor de empresa (quadrado de raio 9, `--mapa-organizacao`), mas o texto diz "Organização" (no nó, "Organização · 3 documentos"; na legenda, "Organização"): chamar de empresa um órgão público seria afirmar o que os documentos não dizem. Nada é deduzido do nome. A forma ameixa do órgão público fica pronta e entra, com "Empresa" e "Órgão público" na legenda, quando Produto acrescentar a natureza da organização. Até lá, a legenda é: Pessoa, Organização, Ligação com documento, A confirmar, sem documento, e, se houver ligação pontilhada, "Suporte parcial ou não revisado"; sem descrição da marca entre parênteses. O raio do quadrado da organização é o token de 8 px (`--raio-controle`), o mais perto dos 9 do canvas.
 
@@ -1022,6 +1022,239 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 | Adicionar ou remover sites depois, em "Fontes" (regra 4) | o site é escolhido só na criação | houver a área "Fontes", que ainda não tem desenho |
 
 ---
+
+<a id="quadros-onda4"></a>
+
+## Quadros na Onda 4: sugestões da IA, formulários e comparação entre processos
+
+> **Derivado, 27/11/2026, a pedido do Maestro (Onda 4, passo 1).** Parte das decisões do dono P45 (25/11, opção a: a IA sugere candidatos para os quadros, cada um preso a uma evidência publicada) e P47 (25/11: seletor comum de evidência e preenchimento do vínculo), da L9 (comparação entre processos: prompts 03 e 04, `prompts/MESA.md:84` e `:104`) e do modelo de `scripts/evidencias.py`. Não há prancha. A aparência sai dos componentes acima, com os tokens de sempre, nos dois temas, medida em 1440 e 375 px (P11.1). Os exemplos usam só dados sintéticos: Vila Serena, Construtora Alfa, Marta Reis, Carlos Prado, Contrato 041/2025 e Ana Lima. O Lume faz a tela e a Viga, o servidor. Se o dono quiser outro desenho, vale o dele.
+
+Três regras valem para a seção inteira:
+
+- **O que está sem pessoa nunca aparece como conferido** (P45). Sugestão da IA, veredito da IA e item confirmado sem conferência no original têm cada um a sua marca, e nenhuma delas usa a aparência da conferência humana ([selo](#selo)).
+- **Confirmar não é conferir.** Confirmar uma sugestão põe o item no quadro. Conferir no original continua sendo o que se faz no achado.
+- **A diferença não é acusação.** Divergência de data, de desfecho ou de versão aparece em cor neutra ou de aviso, nunca nas cores de erro (W07, regra 8; W11, regra 6).
+
+<a id="sugestao-ia"></a>
+
+### Sugestão da IA nos quadros (P45)
+
+A IA sugere cinco tipos de candidato: pessoa, organização, ligação, acontecimento datado e hipótese. Cada candidato traz a evidência publicada a que está preso, com o localizador. O servidor recusa candidato sem referência válida, então a tela nunca mostra sugestão sem fonte.
+
+**Tabelas não recebem sugestão.** A P45 não prevê candidato de célula. Se um dia vier, valem as mesmas regras: a célula candidata nunca entra num cálculo antes de ser confirmada, e o cálculo diz que a deixou de fora.
+
+**Os três sinais da sugestão.** São os mesmos do veredito da IA (P20a), para a pessoa reconhecer de uma vez tudo o que a IA propôs:
+
+- **sem fundo próprio:** a sugestão fica transparente sobre o fundo do quadro;
+- **borda 1 px tracejada `--theme-muted`;**
+- **selo "IA · sugestão"** (inglês "AI · suggestion"): a pílula do veredito da IA, sem fundo, com borda 1 px tracejada `--theme-muted`, texto 14/600 `--theme-text` e sem sinal.
+
+Sugestão da IA não é "a confirmar". "A confirmar" é o que uma pessoa marcou sem documento e continua em `--theme-warning` com o tracejado 6 6. A sugestão tem documento, mas ninguém a confirmou ainda: ela fica em `--theme-muted`, e no mapa com o tracejado 10 6. Os contrastes de `--theme-muted` já medidos passam: 5,58 e 6,97 sobre `--theme-surface` e 5,16 e 7,89 sobre `--theme-background`, no claro e no escuro.
+
+| Quadro | Candidato | Forma, 1440 | Forma, 375 |
+|---|---|---|---|
+| Mapa | pessoa ou organização | nó de 200 px, de altura mínima 80, sem fundo, com borda 1 px tracejada `--theme-muted`. O ícone do tipo vem **vazado**: a forma sem preenchimento, com borda 2 px e desenho interno na cor do tipo (`--mapa-pessoa`, `--mapa-organizacao`; as bordas passam 3:1). Abaixo do nome, o selo "IA · sugestão" no lugar de "Pessoa · 3 documentos"; o tipo vai para o `aria-label` e para o painel | cartão da entidade na lista de ligações, sem fundo, com borda 1 px tracejada `--theme-muted`, a forma de 36 px vazada e o selo abaixo do nome |
+| Mapa | ligação | linha de 2 px `--theme-muted`, tracejado **10 6**, ponta arredondada (os outros tracejados são 6 6, "a confirmar", e 2 5, parcial ou não revisado). O rótulo mantém o fundo `--mapa-rotulo-fundo`, que é o do mapa e precisa cobrir a linha; a borda fica 1 px tracejada `--theme-muted` e o texto começa por "IA ·" ("IA · sócia") | linha da ligação com filete superior tracejado `--theme-muted` e o tipo começando por "IA ·" ("IA · sócia de Construtora Alfa"); a fonte em 14 `--theme-muted` |
+| Linha do tempo | acontecimento datado | marco de 36 px sem fundo, com borda 2 px tracejada `--theme-muted` e o ícone do tipo de data em `--theme-muted`. Cartão sem fundo, com borda 1 px tracejada `--theme-muted`, e o selo "IA · sugestão" antes da linha do tipo. O [selo de fonte](#selo-fonte) fica, porque a sugestão tem fonte. O trilho continua contínuo: ele liga datas, não afirma nada | marco de 32 px com o mesmo traço e cartão como no 1440 |
+| Hipóteses | hipótese | grupo próprio, "Sugestões da IA (2)" (título 16/600), entre a hipótese aberta e as fechadas. Cada uma é um cartão-botão de largura cheia, sem fundo, com borda 1 px tracejada `--theme-muted` e preenchimento 16 20: o enunciado em serifa 18, o selo e, em 14 `--theme-muted`, a evidência ("Contrato 041/2025, p. 1") | o mesmo grupo, em coluna, logo abaixo de "Nova hipótese" |
+
+**Onde aparecem.** No mapa e na linha do tempo, a sugestão ocupa o lugar que teria como item: no anel do mapa e na ordem das datas, para a pessoa ver o que ela muda no quadro. Ao lado da contagem do quadro vem ", 3 sugestões da IA" em 14 `--theme-muted`. A contagem some quando não há sugestão, e ela nunca entra na contagem de itens ("6 acontecimentos · 5 com documento" não muda). A legenda do mapa ganha o item "Sugestão da IA", com a linha 10 6 de exemplo. O "COMO LER" da linha do tempo ganha "Sugestão da IA: marco e cartão tracejados".
+
+**Leitura acessível.** O nome acessível começa pela origem. No nó: "Sugestão da IA: Carlos Prado, pessoa". Na linha: "Sugestão da IA: Marta Reis é sócia da Construtora Alfa". No evento: "Sugestão da IA: assinatura do Contrato 041/2025, 3 de março de 2025". O selo dentro do nó é `aria-hidden`, para não repetir.
+
+<a id="painel-sugestao"></a>
+
+**Painel da sugestão.** Abre ao escolher uma sugestão. Em 1440, ocupa o painel da direita do quadro ([padrão](#telas-aprovadas), 360 px) ou o painel da ligação selecionada no mapa. Em 375 é uma camada de tela cheia, com as ações no pé (P12.3). As partes, de cima para baixo, com intervalo de 16:
+
+| Parte | Medida e token |
+|---|---|
+| Rubrica | "SUGESTÃO DA IA", 14/600 maiúsculas, `--theme-muted` (não `--theme-accent`: nada foi conferido) |
+| O que a IA propõe | serifa 22/600, como o título da ligação selecionada: "Marta Reis é sócia da Construtora Alfa", "Carlos Prado · pessoa", "Assinatura do Contrato 041/2025 · 3 mar 2025, data exata" ou o enunciado da hipótese |
+| Evidência | a citação em serifa 16 e, em 14 `--theme-muted`, o localizador e "abrir o original" ("Contrato 041/2025, p. 1, linhas 12 a 14 · abrir o original"). Abaixo, o veredito da revisão da IA ([selo da P20a](#selo), por exemplo "IA · sustentado") e a natureza em 14 `--theme-muted` ("Declaração documental") |
+| Origem | em 14 `--theme-muted`: "Da análise de 26/11, às 14h32", com a pergunta num `<details>` "Ver a pergunta" |
+| Avisos | os de [avisos do vínculo](#avisos-vinculo), quando valem: análise não revisada, achado retirado, versão substituída. Destino "fora do briefing" é nota, não aviso |
+| Ações | "Confirmar" (principal), "Corrigir" e "Descartar" (secundários). Em 1440 ficam numa linha, com intervalo de 8. Em 375 formam uma grade de três colunas de 48 px (`repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr))`, intervalo de 8; cabem em 343 px) |
+| Nota do pé | em 14 `--theme-muted`: "Confirmar põe a sugestão no quadro. A conferência no original continua no achado." |
+
+**O que acontece depois de cada ação.**
+
+| Ação | O que acontece | Foco e anúncio |
+|---|---|---|
+| Confirmar | A sugestão vira item do quadro com os dados que a IA propôs e o vínculo preenchido pela revisão da IA: papel, suporte e natureza da última revisão (P47). O item perde o tracejado de sugestão e segue as regras de sempre do quadro (a linha do mapa fica contínua só com suporte sustentado, senão pontilhada 2 5). O suporte continua mostrado com o selo da IA ("IA · sustentado") até uma pessoa mudá-lo. O item guarda "Confirmado por Ana Lima em 27/11, às 10h05, a partir de sugestão da IA", em 14 `--theme-muted` no painel do item. Hipótese confirmada nasce "em aberto": a situação é sempre declarada por pessoa (`scripts/hipoteses.py`), e a IA nunca a preenche | foco no item novo; `role="status"`: "Sugestão confirmada: Carlos Prado entrou no mapa." |
+| Corrigir | Abre o [formulário](#formularios-quadros) do quadro, preenchido com a sugestão, com o título "Corrigir sugestão da IA". Ao salvar, o item nasce com a marca [alterado por pessoa](#alterado-por-pessoa) em cada campo mudado. "Cancelar" volta à sugestão intacta | foco no primeiro campo; ao salvar, no item novo |
+| Descartar | Sem diálogo, porque se desfaz: a sugestão sai da vista e vai para "Descartadas (n)", um `<details>` fechado no pé do quadro, em que cada uma tem "Restaurar" (secundário). Restaurar a devolve como sugestão, nunca como item. Se uma análise nova sugerir de novo o mesmo item com a mesma evidência, ele volta direto a "Descartadas", marcado "já descartada em 27/11" | foco na próxima sugestão ou, sem outra, no título do quadro; `role="status"`: "Sugestão descartada. Ela fica em Descartadas, com Restaurar." |
+
+**Quando "Confirmar" fica indisponível.** Usa a variante desabilitada do [botão](#botao), com a razão em 14 `--theme-muted` ligada por `aria-describedby`. "Corrigir" e "Descartar" continuam ativos.
+
+| Caso | Razão |
+|---|---|
+| Ligação com uma ponta que ainda é sugestão | "Confirme antes Carlos Prado, a outra ponta da ligação." No formulário de "Corrigir", a ponta pode ser trocada por uma entidade que já está no mapa |
+| A revisão da IA retirou o achado da evidência, ou ela foi substituída | "A revisão da IA retirou este achado. Corrija com outra evidência ou descarte." Na versão substituída: "Há uma versão mais nova deste achado. Corrija para ligar a nova versão." |
+| A evidência deixou de estar disponível (rodada apagada) | "A evidência não está mais disponível. Descarte ou corrija com outra." |
+| Sem permissão de editar o quadro (sem as capacidades de criar e atualizar do quadro na sessão: `hipoteses-criar` e `-atualizar`, `linha-tempo-criar` e `-atualizar`, `mapa-entidade-criar`, `mapa-relacao-criar` e os `-atualizar`) | as três ações ficam indisponíveis, com "Só repórter e editor mudam os quadros." A pessoa continua vendo as sugestões |
+
+| Estado | Aparência | Origem |
+|---|---|---|
+| Padrão | tabela dos sinais acima | derivado (P20a, P45) |
+| Selecionado | borda 2 px `--theme-accent` contínua e a sombra do selecionado, como no nó e no evento. O selo "IA · sugestão" e a transparência ficam: a seleção não pode apagar a origem | derivado |
+| Ao passar o mouse | a borda tracejada passa a `--theme-text`, e o fundo continua transparente | derivado |
+| Foco | anel de foco do lado de fora da borda tracejada | regra geral |
+| Ocupado | `aria-busy` no painel; o botão escolhido no gerúndio ("Confirmando…", "Descartando…"), os outros dois desabilitados até a resposta | derivado de W11, regra 2 |
+| Erro | mensagem em 14 `--theme-danger` acima das ações, com `role="alert"`, no formato de W11: "Não deu para confirmar: a evidência não está mais publicada. Descarte ou corrija com outra." A sugestão continua aberta | derivado de W11, regra 4 |
+| Desabilitado | tabela acima | derivado |
+| Vazio | sem sugestões, nada aparece: sem grupo, sem contagem e sem "Descartadas" | derivado |
+
+**Para a Viga.** O formato do candidato ainda não está no `MESA.md`, e ele é versionado ali (P45). A tela precisa, por candidato: o tipo (`pessoa`, `organizacao`, `ligacao`, `acontecimento`, `hipotese`), os campos do item no formato do quadro, a referência da evidência publicada com o localizador, a análise de origem (caso, rodada, data), o veredito e a natureza da última revisão da IA, o destino do achado (`incluido`, `fora_do_briefing`, `pendencia`, `retirado`, `substituido`) e, na ligação, quais pontas ainda são sugestão. O estado da sugestão (aberta, confirmada, descartada) com quem decidiu e quando também precisa vir.
+
+<a id="formularios-quadros"></a>
+
+### Formulários de criar e editar dos quatro quadros
+
+**Moldura.** Em 1440, o formulário ocupa o painel da direita do quadro (360 px; [padrão](#telas-aprovadas)), no lugar do painel do item selecionado. Enquanto os quadros ficam no cartão com abas sem painel (mapa e linha do tempo), o formulário abre como uma coluna de 360 px à direita, dentro do cartão. Abaixo de 1024 px, e em 375, é uma camada de tela cheia (P12.3). No topo da camada vem "‹ Voltar" (secundário, 44 px) e o título. As ações ficam no pé fixo, que nunca cobre o campo com foco (`scroll-padding-bottom` na altura do pé, UX-19).
+
+| Parte | Medida e token |
+|---|---|
+| Título | serifa 22/600: "Nova ligação", "Editar acontecimento", "Corrigir sugestão da IA" |
+| Campos | o [campo de texto](#campo) de sempre, rótulo acima, com intervalo de 16 entre campos. Os limites de tamanho são os do servidor, e o contador aparece só nos últimos 10% ("980 de 1.000") |
+| Evidências | rubrica "EVIDÊNCIAS" (14/600 maiúsculas, `--theme-muted`) e um [cartão do vínculo](#cartao-vinculo) por evidência, com intervalo de 8. Abaixo, "+ Ligar evidência" ([link](#link) 600, 44 px de altura), que abre o [seletor](#seletor-evidencia) |
+| Pé | "Cancelar" (secundário) e "Salvar" (principal), à direita, com intervalo de 8. No item já existente, "Retirar…" fica à esquerda, em texto `--theme-danger`, para os quadros que guardam retirada com motivo (linha do tempo e mapa) |
+
+**Campos por quadro.** Nomes e limites como no servidor.
+
+| Quadro | Campos | Regras que a tela mostra antes do servidor |
+|---|---|---|
+| Hipótese | "Hipótese" (área de texto, até 1.000; rótulo de P15.2: "Escreva como afirmação que os documentos possam sustentar ou contrariar"); "Situação" (grupo de opções: Em aberto, Sustentada, Contrariada, Inconclusiva, Descartada); "O que falta" (lista, cada item até 1.000, com "+ O que falta" e, em cada um, "Virar pergunta ou pedido"); evidências | Sustentada e Contrariada ficam indisponíveis até haver evidência sustentada e documental no papel certo, com a razão "Sustentada pede ao menos uma evidência de suporte sustentada e documental" (e "de contradição", para Contrariada). A situação é sempre escolhida por pessoa; o formulário de "Corrigir sugestão" chega com "Em aberto". Criar uma hipótese continua pelo formulário do pé (P15.2), só com o enunciado; "Editar" abre este formulário completo |
+| Acontecimento | "Acontecimento" (área de texto, até 1.000); "Datas", uma ou mais, cada uma com "Tipo de data" (lista com os rótulos de `TIPOS_DATA`: "Data de assinatura", "Data de pagamento"…), "Data" (campo com o apoio "Ano, mês e ano ou dia completo, como o documento traz: 2025, 03/2025 ou 03/03/2025"), "Data aproximada" (caixa de seleção), "Fonte da data" (lista das evidências ligadas a este acontecimento) e "Observação" (até 500); evidências | Ao menos uma evidência de suporte: "Falta a evidência. Ligue ao menos um documento que registre o acontecimento." A precisão vem do que foi digitado e é mostrada logo abaixo do campo, em 14 `--theme-muted` ("Precisão: mês"). Duas datas do mesmo tipo e diferentes não são erro: ficam as duas, com o aviso "Duas datas de assinatura diferentes: 03/03/2025 no Contrato 041/2025 e 05/03/2025 no Termo aditivo nº 1. As duas ficam na linha do tempo; confira no original." |
+| Entidade do mapa | "Nome" (até 300); "Tipo" ([seletor segmentado](#caderno): Pessoa \| Organização); "Variantes de nome" (lista, cada uma até 300, com "+ Variante"); "Identificadores" (cada um com tipo: CPF, CNPJ, registro profissional, matrícula ou outro; valor até 100; fonte entre as evidências ligadas); evidências | CPF com 11 dígitos e CNPJ com 14, com o erro no campo ("CPF tem 11 dígitos. Confira o número no documento."). O valor aparece inteiro só enquanto é digitado; salvo, aparece mascarado como no mapa. A confirmação de homônimo continua sendo só de pessoa, no alerta do painel; o formulário não junta entidades |
+| Ligação do mapa | "De" e "Para" (caixa de combinação com busca entre as entidades do mapa, mais "+ Nova entidade", que abre o formulário de entidade e volta); "Tipo de relação" (até 120, campo livre, com as sugestões que dão ícone: sócio, irmão, cargo, contrato, pagamento); "Descrição" (opcional, até 2.000); evidências | Mesma entidade nas duas pontas: "A ligação precisa de duas entidades diferentes. Troque uma das pontas." Ao menos uma evidência de suporte. Nota em 14 `--theme-muted` acima do pé: "A linha fica contínua só com evidência de suporte sustentada. Sem ela, fica pontilhada." |
+| Tabela | "Título da tabela" (até 300); "Descrição" (opcional, até 2.000); "Colunas", cada uma com nome (até 120), tipo (texto, data, monetário, número) e unidade (até 30). "Adicionar linha" abre uma linha nova com uma célula por coluna, cada uma com valor e fonte (pelo seletor) | Célula sem fonte nasce "○ a conferir". A tabela só acrescenta: linhas não se apagam, e corrigir uma célula continua no painel "Célula selecionada" (P15.3), com justificativa obrigatória e o valor anterior guardado (W06). O cálculo continua só com soma, diferença, contagem e média, com a conta à vista |
+
+**Retirar.** Na linha do tempo e no mapa, "Retirar…" abre o [diálogo](#dialogo) destrutivo com campo: "Retirar “Assinatura do Contrato 041/2025” da linha do tempo?", com "Motivo (obrigatório)" e a ação "Retirar", desabilitada até haver motivo. O item retirado sai da vista e fica no registro, com o motivo.
+
+**Sair com alterações não salvas.** O diálogo destrutivo de sempre: "Descartar alterações" (`apuracao.js:413`).
+
+<a id="cartao-vinculo"></a>
+
+**Cartão do vínculo.** Um por evidência ligada. Fundo `--theme-surface`, borda 1 px `--theme-line`, raio 8, preenchimento 12, coluna com intervalo de 8.
+
+| Parte | Medida e token |
+|---|---|
+| Cabeça | o tipo da fonte em 14/600 `--theme-muted` ("Achado da IA", "Trecho do caderno"); à direita, a marca "alterado por pessoa" quando houver |
+| Citação | serifa 16, até três linhas, com "Mostrar tudo" ([link](#link)) quando passa disso |
+| Localizador | 14 `--theme-muted`: "Contrato 041/2025, p. 1, linhas 12 a 14 · abrir o original" |
+| Papel | [seletor segmentado](#caderno): Suporte \| Contradição \| Contexto |
+| Suporte | lista: Não revisado, Sustentado, Parcial, Não sustentado, Ilegível |
+| Natureza | lista: Declaração documental, Alegação atribuída, Inferência, Pendência |
+| Justificativa | área de texto, até 2.000 |
+| Linha da IA | em 14 `--theme-muted`, só em evidência da IA: "Da revisão da IA:" e o [selo da P20a](#selo) ("IA · sustentado") com a natureza ("declaração documental") |
+| Pé | "Desligar" (botão de texto, 44 px de altura, `--theme-danger`) |
+
+As regras do modelo (`scripts/evidencias.py`) aparecem antes do envio, sempre com a razão em 14 `--theme-muted`:
+
+- **Papel "Contexto":** o suporte fica fixo em "Não revisado", desabilitado, com "Evidência de contexto não recebe suporte."
+- **Natureza "Pendência":** a opção "Sustentado" fica indisponível, com "Uma pendência nunca é sustentada."
+- **Limite de 100 evidências por item:** "+ Ligar evidência" fica indisponível, com "Este item já tem 100 evidências, o limite."
+
+**Preenchimento do vínculo (P47).** De onde vem a evidência decide como o cartão chega:
+
+- **Achado da IA:** papel, suporte e natureza da última revisão da IA, com a linha "Da revisão da IA" visível.
+- **Fonte do caderno** (trecho com fonte, anotação, achado do jornalista): suporte em "Não revisado" e natureza sem escolha. O erro no envio é "Falta a natureza. Escolha o que a fonte é: declaração documental, alegação atribuída, inferência ou pendência." Sem linha da IA.
+- **Vínculo antigo,** de antes desta marca: sem linha da IA e sem "alterado por pessoa". A tela não deduz nada que o registro não traz.
+
+<a id="alterado-por-pessoa"></a>
+
+**"Alterado por pessoa" (I1).** Quando uma pessoa muda um campo que veio da revisão da IA (papel, suporte ou natureza), o campo ganha, ao lado do rótulo, o ícone `sinal-corrigido` de 16 px e "alterado por Ana Lima", em 14/600 `--theme-warning`. É o mesmo sinal da célula corrigida das tabelas (W06). A linha "Da revisão da IA: sustentado" continua abaixo, para o valor da IA nunca sumir. A cabeça do cartão mostra "Alterado por pessoa", com o mesmo ícone e a mesma cor. Para a própria pessoa, o texto é "alterado por você".
+
+Fora do formulário, onde a evidência aparece (coluna da hipótese, painel da ligação, cartão do evento, painel da afirmação no caderno), a marca vai junto da fonte, em 14 `--theme-muted` com o ícone em `--theme-warning`: "Contrato 041/2025, p. 1 · alterado por Ana Lima · abrir o original". Cada campo alterado tem "Voltar ao da IA" ([link](#link) 14/600), que apaga a revisão humana e por isso pede confirmação (abaixo).
+
+<a id="avisos-vinculo"></a>
+
+**Avisos do vínculo.** Usam o aviso em linha da Mesa (`.notice`: fundo `--theme-warning-bg`, filete esquerdo `--theme-notice-line`, texto `--theme-warning`, `role="status"`), dentro do cartão do vínculo, acima da citação. Nenhum é erro, nem usa as cores de erro.
+
+| Caso | Texto |
+|---|---|
+| Análise sem revisão de suporte | "Esta análise não passou pela revisão de suporte. O vínculo começa em “não revisado”." |
+| Achado retirado pela revisão da IA | "A revisão da IA retirou este achado: «motivo». Ele pode continuar ligado, mas não sustenta o item." |
+| Versão substituída | "Há uma versão mais nova deste achado." e "Ligar a versão nova" ([link](#link)), que troca a referência e mantém o papel; o suporte volta ao da revisão da versão nova |
+| Evidência indisponível (rodada apagada) | "A evidência não está mais disponível. O vínculo fica no registro, mas não abre o original." |
+
+**Fora do briefing não é aviso.** O destino `fora_do_briefing` é um achado sustentado que a síntese deixou de fora. Ele vem como nota em 14 `--theme-muted`, abaixo da linha da IA: "Fora do briefing (sustentado): a revisão sustentou o achado, mas ele não entrou no briefing." O rótulo é o da P48.
+
+<a id="apagar-revisao"></a>
+
+**Confirmação antes de apagar uma revisão humana.** Três ações desfazem o que uma pessoa decidiu e passam pelo [diálogo](#dialogo) destrutivo:
+
+- **Desligar** um vínculo com "alterado por pessoa";
+- **"Voltar ao da IA"** num campo alterado;
+- **desmarcar "revisada"** no caderno (P14b.8).
+
+O diálogo tem a rubrica "APAGAR REVISÃO" e o título "Apagar a revisão de Ana Lima?" ("Apagar a sua revisão?" para a própria pessoa). O texto diz o que muda: "Ana Lima mudou o suporte de “sustentado” (da revisão da IA) para “parcial” em 26/11, às 16h10. O vínculo volta ao que a revisão da IA disse." A ação é "Apagar a revisão" e o foco inicial fica em "Cancelar". Desligar um vínculo sem revisão humana não pede confirmação.
+
+<a id="seletor-evidencia"></a>
+
+### Seletor comum de evidência (P47)
+
+Um componente só, aberto por "+ Ligar evidência" nos quatro formulários e por "Ligar outra evidência" no painel da afirmação do caderno (conferência do texto, P14.1). Ele nunca procura fora da apuração aberta.
+
+**Moldura.** O seletor abre no mesmo painel ou camada do formulário, no lugar dele, com "‹ Voltar ao formulário" ([link](#link), 44 px) no topo. Ao abrir, o foco vai ao campo de busca. Ao voltar, vai a "+ Ligar evidência" ou ao cartão novo. No caderno, abre no painel da afirmação (340 px) com "‹ Voltar à afirmação".
+
+| Parte | Medida e token |
+|---|---|
+| Título | serifa 22/600, "Ligar evidência" |
+| Busca | rótulo "Buscar nos achados e no caderno" (14/600 `--theme-muted`), campo de 44 px em largura cheia. Procura no texto do achado, na citação e no nome do documento, a partir do segundo caractere |
+| Origem | pílulas de 44 px ([filtro em pílula](#botao), `aria-pressed`): "Tudo", "Achados da IA", "Caderno" |
+| Análise | em 14 `--theme-muted`: "Achados da análise mais recente (26/11, 14h32)". "Avançado" é um `<details>` fechado com a lista das análises da apuração, por data e com a pergunta, para escolher outra. Só as desta apuração |
+| Resultado | botão de largura cheia, fundo `--theme-surface`, borda 1 px `--theme-line`, raio 8, preenchimento 12, intervalo 4: o tipo em 14/600 `--theme-muted`; o texto em serifa 16, até três linhas; o localizador em 14 `--theme-muted`; na linha de baixo, o estado. Intervalo de 8 entre resultados |
+| Estado do resultado | duas marcas que não se confundem: a conferência humana ([selo](#selo) "✓ Conferido no original" ou "○ A conferir"; W05, regra 3) e, no achado da IA, o veredito (selo da P20a). Destino retirado: "retirado pela revisão" em 14/600 `--theme-warning`; fora do briefing, a nota curta "fora do briefing (sustentado)" em 14 `--theme-muted` |
+| Resultado aberto | ao escolher, o resultado vira cartão aberto (borda 2 px `--theme-accent`) com os campos do vínculo já preenchidos (P47), "Abrir o original" (secundário) e "Ligar" (principal) |
+| Já ligado | o resultado aparece com "Já ligada a este item" em 14 `--theme-muted` e não abre |
+
+Depois de "Ligar", o seletor fecha, o cartão novo entra no formulário e o foco vai a ele, com `role="status"`: "Evidência ligada."
+
+| Estado | Aparência | Origem |
+|---|---|---|
+| Padrão | lista dos resultados da análise mais recente, sem busca digitada | derivado |
+| Foco | anel no resultado; setas não movem o foco (é lista de botões, não `listbox`), Tab passa de um a outro | regra geral |
+| Ocupado | esqueleto de três resultados enquanto busca; nada de piscar abaixo de 0,3 s | W11, regra 2 |
+| Erro | bloco de erro do serviço no lugar da lista; a busca digitada fica | W11, regra 4 |
+| Desabilitado | "Ligar" indisponível no item que chegou a 100 evidências, com a razão do cartão do vínculo | derivado |
+| Vazio, com busca | "Nada encontrado para “Marta”." e "A busca não encontrou. Isso não prova que não esteja nos documentos." com a ação "Limpar a busca" | W11, regra 1 |
+| Vazio, sem nada | "Esta apuração ainda não tem achados nem trechos com fonte." e a ação "Fazer uma pergunta" | W11, regra 1 |
+
+<a id="comparar-processos"></a>
+
+### Comparação entre processos (L9)
+
+Quando o acervo tem mais de um processo sobre a mesma matéria, a análise procura o mesmo documento, parecer ou fundamento em mais de um deles e compara os desfechos (`prompts/MESA.md:84`, prompt 03). A revisão confere se o fundamento é de fato o mesmo (versão, data, emissor e trecho) e se os desfechos são comparáveis (mesma questão decidida, mesma fase). Sem essa conferência, a comparação fica como pendência (`prompts/MESA.md:104`, prompt 04). A tela mostra isso no Comparador, a quinta aba dos quadros.
+
+**Modo.** No topo do Comparador vem o [seletor segmentado](#caderno) "Documentos \| Processos" (`role="group"`, `aria-pressed`). Documentos é o comparador de hoje (W07, P15.4). Processos é a vista abaixo. Em 375, o seletor fica em largura cheia.
+
+| Parte, 1440 | Medida e token |
+|---|---|
+| Topo | "Comparação entre processos" (título dentro dos quadros, serifa 22/600) e "2 comparações · 1 pendente" em 14 `--theme-muted`; "Anterior" e "Próxima" (secundários) à direita, como no Comparador |
+| Fundamento comum | cartão no bloco base, preenchimento 20: rubrica "FUNDAMENTO COMUM" (14/600 `--theme-muted`); o fundamento em serifa 18 ("Parecer jurídico nº 12/2025 da Procuradoria de Vila Serena"); a chave que liga os processos numa lista de definições em 14 (Identificador, Data, Emissor, Versão: rótulo em `--theme-muted`, valor em `--theme-text`); a identidade: "✓ O mesmo arquivo nos dois processos (mesmo hash)" em 14/600 `--theme-accent`, ou "○ Mesmo fundamento a conferir: versões ou trechos diferentes" em 14 `--theme-muted`, com "Comparar os dois trechos" ([link](#link)), que abre o modo Documentos com os dois lados escolhidos |
+| Processo A e B | dois cartões lado a lado, como os lados do Comparador (intervalo 16, preenchimento 20, intervalo interno 12): "Processo A" e "Processo B" em 14/600 `--theme-muted`; o processo em 16/600 ("Processo 2025/118 · Contrato 041/2025 com a Construtora Alfa"); o trecho do fundamento em serifa 16, com o localizador e "abrir o original" em 14; a rubrica "DESFECHO" e o desfecho em serifa 16, com a fonte |
+| O que muda | tabela num cartão (o padrão das [tabelas](#quadros)): linhas Questão decidida, Fase, Desfecho; colunas Processo A, Processo B e Comparação. A comparação diz "igual" ou "diferente" em 14/600 `--theme-text`, precedida de "=" ou "≠" `aria-hidden`. A cor é neutra: diferença de desfecho não é aviso nem erro |
+| Conferência da comparação | rubrica "CONFERÊNCIA DA COMPARAÇÃO" e o veredito da revisão da IA (selo da P20a, "IA · sustentado" ou "IA · parcial"). Seis linhas com sinal e texto, intervalo de 8: mesma versão, mesma data, mesmo emissor, mesmo trecho, mesma questão decidida, mesma fase. Cada uma com "✓" em `--theme-accent` ("✓ Mesmo emissor"), "○" em `--theme-muted` ("○ Fase a conferir") ou "✕" em `--theme-muted` com o que difere ("✕ Fases diferentes: recurso e primeira instância"). O "✕" aqui não é erro, porque diz só que a comparação não se sustenta |
+| Pendência | se alguma linha não tiver "✓", o cartão inteiro da comparação vira item a resolver (borda 1 px tracejada `--theme-warning`, fundo `--theme-warning-bg`), com "! Comparação pendente: falta conferir que o fundamento e os desfechos são comparáveis." em 16/600 `--theme-warning` e a [ação de lacuna](#telas-aprovadas) "Virar pergunta ou pedido" |
+| Frase do pé | "A diferença de desfecho não prova irregularidade." em 16, como a frase do Comparador (W07, regra 8) |
+| Ações | "Abrir o achado para conferir" (principal), que leva a Conferir achado: a comparação é um achado da análise e se confere lá (W07, regra 5). "Criar hipótese com esta comparação" (secundário) abre o formulário de hipótese com o enunciado em branco, a situação "em aberto" e as evidências dos dois lados ligadas, com o preenchimento da P47 |
+
+**Em 375.** Os dois processos se empilham (W07, regra 7). "O que muda" vira três cartões, um por linha (Questão decidida, Fase, Desfecho), com A e B um abaixo do outro e "igual" ou "diferente" no título do cartão. A conferência vem em coluna e as ações, em largura cheia, com 48 px.
+
+| Estado | Aparência | Origem |
+|---|---|---|
+| Padrão | acima | derivado (L9) |
+| Foco | anel de foco nos controles; "Anterior" e "Próxima" pelo teclado (W07, regra 3) | regra geral |
+| Ocupado | esqueleto do fundamento e dos dois lados | W11, regra 2 |
+| Erro | bloco de erro do serviço; o modo Documentos continua disponível | W11, regra 4 |
+| Desabilitado | "Criar hipótese com esta comparação" indisponível sem permissão de editar o quadro, com "Só repórter e editor mudam os quadros." | derivado |
+| Vazio | "Nenhuma comparação entre processos", "A análise compara processos quando o acervo tem mais de um sobre a mesma matéria e o mesmo fundamento aparece em mais de um deles." e "Fazer uma pergunta". Análises feitas com instruções anteriores a esta comparação não a trazem, e a tela não a reconstrói | W11, regra 1 |
+
+**Para a Viga, e exceção declarada.** Hoje a análise guarda a comparação só como texto: na redação do achado e na justificativa das duas evidências (formato `geracao_inicial` e `revisao` do `MESA.md`). Para a vista inteira, a tela precisa, por comparação: a referência do fundamento em cada lado, a chave (identificador, data, emissor, versão), o processo de cada lado, a questão, a fase e o desfecho de cada lado, e o resultado das seis conferências da revisão. Até esses campos existirem, a vista mostra o fundamento, os dois lados com as evidências e a conferência pelo veredito da IA, sem a tabela "O que muda" e sem as seis linhas. A tela não lê o texto livre para montar a tabela. A tabela volta quando os campos chegarem, e a tela é conferida de novo nesse ponto.
+
+---
+
 
 <a id="contas"></a>
 
@@ -1648,11 +1881,11 @@ Nota do wireframe: "Muda o que existe hoje: o manifesto guarda um único domíni
 
 ## O que ainda falta desenhar
 
-Pela regra 1 do contrato, nada disto é construído antes de o Design desenhar e o dono aprovar: os formulários de resposta e de recurso dos pedidos de LAI, com o cálculo do prazo (PROD-07); fontes e capturas de site dentro da apuração; lixeira; configuração da organização; página pública; versões de celular das demais telas de desktop (e, no sentido inverso, o Entrar em desktop); faixa de 720 a 1023 px; tema escuro das telas do canvas fora as três de desktop; sem aviso com "Desfazer" por ora (P12.7). Desenhados na fase 3 e aprovados pelo dono em 21/11/2026: diálogo de confirmação, escuro de conferir achado, visão geral e design system, tablet de 1024 px e celular de 390 px de conferir achado e visão geral ([Telas derivadas](#telas-derivadas)). O conjunto de ícones (parte E) está na seção [Conjunto de ícones do Vlado](#conjunto-de-icones), com cinco ícones derivados, aprovados pelo dono em 21/11/2026. Aprovados também em 21/11/2026, em [Áreas sem tela final](#telas-aprovadas): caderno, hipóteses, tabelas, comparador, mapa e linha do tempo no celular, Pedidos e prazos e Documentos. Têm só a captura da Mesa de hoje, sem desenho: Perguntar no desktop (há o W03), Diligências, Apurações e lixeira, e Configurações. Minha conta, Equipe e Configurações (W08 e W09) têm especificação sem prancha em [Contas](#contas), de 22/11/2026.
+Pela regra 1 do contrato, nada disto é construído antes de o Design desenhar e o dono aprovar: os formulários de resposta e de recurso dos pedidos de LAI, com o cálculo do prazo (PROD-07); fontes e capturas de site dentro da apuração; lixeira; configuração da organização; página pública; versões de celular das demais telas de desktop (e, no sentido inverso, o Entrar em desktop); faixa de 720 a 1023 px; tema escuro das telas do canvas fora as três de desktop; sem aviso com "Desfazer" por ora (P12.7). Desenhados na fase 3 e aprovados pelo dono em 21/11/2026: diálogo de confirmação, escuro de conferir achado, visão geral e design system, tablet de 1024 px e celular de 390 px de conferir achado e visão geral ([Telas derivadas](#telas-derivadas)). O conjunto de ícones (parte E) está na seção [Conjunto de ícones do Vlado](#conjunto-de-icones), com cinco ícones derivados, aprovados pelo dono em 21/11/2026. Aprovados também em 21/11/2026, em [Áreas sem tela final](#telas-aprovadas): caderno, hipóteses, tabelas, comparador, mapa e linha do tempo no celular, Pedidos e prazos e Documentos. Têm só a captura da Mesa de hoje, sem desenho: Perguntar no desktop (há o W03), Diligências, Apurações e lixeira, e Configurações. Minha conta, Equipe e Configurações (W08 e W09) têm especificação sem prancha em [Contas](#contas), de 22/11/2026. Sugestão da IA nos quadros, formulários de criar e editar dos quatro quadros, o seletor comum de evidência e a comparação entre processos têm especificação sem prancha em [Quadros na Onda 4](#quadros-onda4), de 27/11/2026. Ainda falta, ali, o que depende do servidor: o formato do candidato no `MESA.md` e os campos estruturados da comparação entre processos (Viga). Da fase 10 (P47), falta desenhar a nova versão do texto, o rascunho e a confirmação da reabertura; o seletor já está desenhado.
 
 ## Decisões do dono (21/11/2026)
 
-Respostas do dono às perguntas desta especificação e às pranchas de `aprovacao/`, repassadas pelo Maestro (P11, P12, P14, P14b, P15 e P16 da nota de decisões; P20a, P20b, P30 e P34, de 22/11/2026). Não há pergunta aberta nesta seção.
+Respostas do dono às perguntas desta especificação e às pranchas de `aprovacao/`, repassadas pelo Maestro (P11, P12, P14, P14b, P15 e P16 da nota de decisões; P20a, P20b, P30 e P34, de 22/11/2026; P45 e P47, de 25/11/2026). Não há pergunta aberta nesta seção.
 
 | Nº | Pergunta | Decisão |
 |---|---|---|
@@ -1690,5 +1923,7 @@ Respostas do dono às perguntas desta especificação e às pranchas de `aprovac
 | P20b | Altura das abas em pílula no celular (22/11/2026) | 44 px, pelo alvo de toque; o canvas desenha 40. Mudança no canvas autorizada pelo dono ([abas](#abas)). |
 | P34 | Seletor de apuração do topo (22/11/2026) | Segue o canvas, sem caixa. O que precisa de 3:1 (WCAG 1.4.11) é o que o identifica: o texto e a seta ([foco-aa](#foco-aa)). |
 | P30 | Saída das `contas-*` (22/11/2026) | Ficam até o convite por e-mail da E3 e saem junto com ele, na mesma integração. A Equipe entra sem "Convidar" e "Contas de acesso" continua em Configurações até lá ([exceções](#contas-excecoes)). |
+| P45 | Como a IA entra nos quadros (25/11/2026) | Opção (a): a IA sugere candidatos (pessoa, organização, ligação, acontecimento datado e hipótese), cada um preso a uma evidência publicada; na tela, tracejados como "Sugestão da IA", com Confirmar, Corrigir e Descartar, e só o confirmado vira item ([Sugestão da IA](#sugestao-ia)). |
+| P47 | Vincular evidência (25/11/2026) | Seletor comum, com busca no caderno e nos achados da IA ([seletor](#seletor-evidencia)); evidência da IA chega com o tipo e o suporte da última revisão, e qualquer mudança aparece como "alterado por pessoa"; fonte do caderno começa em "não revisado" ([cartão do vínculo](#cartao-vinculo)). |
 
 As 27 pranchas da fase 3 e as de `aprovacao/` foram aprovadas e regeneradas com estas decisões, inclusive a barra de 256 px. As telas finais do canvas em `referencia/telas/` continuam como estão: são o registro do contrato; as decisões acima valem sobre elas onde houver diferença, e `referencia/com-decisoes/` mostra as sete telas com elas aplicadas.
