@@ -285,6 +285,7 @@
     saida.replaceChildren(dado('h4', `${nomes[r.origem]} — ${r.tipo} — ${nomes[r.destino]}`),
       element('p', t('Situação: {s}', {s: t(SIT_RELACAO[r.situacao] || r.situacao)}), 'small'));
     if (r.descricao) saida.append(dado('p', r.descricao, 'small'));
+    const origem = Q.sugestoes?.nota('mapa', r.id); if (origem) saida.append(origem);
     // Suporte só da IA (componentes.md#suporte-so-da-ia): "✓ n evidências conferidas no original" fica para o que uma pessoa conferiu; o suporte que veio só da revisão
     // da IA vai na pílula da P20a ("IA · n evidências sustentadas"), sem a cor nem o sinal da conferência humana. Havendo as duas coisas, as duas pílulas.
     const evs = r.evidencias || [], conferidas = evs.filter(v => v.conferencia_humana?.estado === 'conferida_no_original').length;
@@ -573,6 +574,7 @@
       const li = element('li', undefined, `mapa-entidade ${e.tipo}`);
       li.append(dado('h4', e.nome), element('p', `${e.tipo === 'organizacao' ? t('Organização') : t('Pessoa')} · ${t({com_evidencia: 'Com evidência', evidencia_indisponivel: 'Evidência indisponível', sem_evidencia: 'Sem evidência'}[e.situacao] || e.situacao)}`, 'small'));
       if (e.identificadores?.length) li.append(dado('p', e.identificadores.map(i => `${i.tipo.toUpperCase()} ${i.valor_exibicao}`).join(' · '), 'small'));
+      const origem = e.sugestao ? null : Q.sugestoes?.nota('mapa', e.id); if (origem) li.append(origem);
       const ligacoes = mapa.relacoes.filter(r => r.origem === e.id || r.destino === e.id);
       const sub = element('ul', undefined, 'mapa-ligacoes');
       for (const r of ligacoes) {

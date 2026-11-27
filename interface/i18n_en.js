@@ -1343,6 +1343,10 @@ window.VLADO_I18N_EN = {
     "Escreva a justificativa da correção.": "Write the reason for the correction.",
     "Corrigir esta célula": "Correct this cell",
     "Correção salva. O valor anterior fica guardado.": "Correction saved. The previous value is kept.",
+    // Onda 4: origem do item
+    "Corrigido por": "Corrected by",
+    "Confirmado por": "Confirmed by",
+    "em {dia}, às {hora}, a partir de sugestão da IA": "on {dia}, at {hora}, from an AI suggestion",
     // Fase 06 — quadros de evidência (interface/quadros.js)
     "Hipóteses e acontecimentos registrados por pessoas a partir das evidências desta apuração. Cada evidência abre o original conferido; os quadros organizam e apontam lacunas, sem avaliar veracidade.": "Hypotheses and events recorded by people from this investigation’s evidence. Each piece of evidence opens the checked original; the boards organise and point out gaps, without judging truth.",
     "Hipóteses": "Hypotheses",

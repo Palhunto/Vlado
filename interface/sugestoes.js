@@ -15,12 +15,24 @@ window.Quadros.sugestoes = (() => {
   const pode = sug => !window.Sessao?.pode || window.Sessao.pode(CAPACIDADE[sug.tipo]);
 
   // Lista as sugestões de um quadro. Falha ou servidor sem a rota: o quadro abre como sempre, sem sugestões.
+  // Quem decidiu cada item que nasceu de sugestão (decisao.item_id das confirmadas e corrigidas), por quadro: o painel do item mostra "Confirmado por …" (componentes.md#sugestao-ia).
+  const origens = new Map();
   async function listar(casoId, quadro) {
+    origens.set(quadro, new Map());
     try {
-      const dados = await api('sugestoes-listar', {caso: casoId, quadro});
+      const dados = await api('sugestoes-listar', {caso: casoId, quadro, incluir_decididas: true});
       const todas = dados.sugestoes || [];
+      for (const s of todas) if (s.estado === 'confirmada' && s.decisao?.item_id) origens.get(quadro).set(s.decisao.item_id, s.decisao);
       return {sugestoes: todas, abertas: todas.filter(s => s.estado === 'aberta'), descartadas: todas.filter(s => s.estado === 'descartada'), erro: null};
     } catch (erro) { return {...vazio, erro}; }
+  }
+  // "Confirmado por Ana Lima em 27/11, às 10h05, a partir de sugestão da IA" (14 muted); "Corrigido por" quando a pessoa mudou campos ao confirmar. Sem decisão registrada, nada.
+  function nota(quadro, itemId) {
+    const d = origens.get(quadro)?.get(itemId);
+    if (!d) return null;
+    const p = element('p', undefined, 'small sugestao-origem');
+    p.append(`${t(d.acao === 'corrigir' ? 'Corrigido por' : 'Confirmado por')} `, dado('span', d.por || ''), ` ${t('em {dia}, às {hora}, a partir de sugestão da IA', {dia: dia(d.em_utc), hora: hora(d.em_utc)})}`);
+    return p;
   }
   const contagemTexto = n => !n ? '' : t(n === 1 ? ', {n} sugestão da IA' : ', {n} sugestões da IA', {n});
 
@@ -241,5 +253,5 @@ window.Quadros.sugestoes = (() => {
       alvo.focus?.();
     }};
   }
-  return {secao, fonteCurta, contexto, anunciar, listar, contagemTexto, painel, descartadas, proposta, rotuloAcessivel, vinculo, dataLegivel, precisaoDe, pode, requisicao, TIPO};
+  return {nota, secao, fonteCurta, contexto, anunciar, listar, contagemTexto, painel, descartadas, proposta, rotuloAcessivel, vinculo, dataLegivel, precisaoDe, pode, requisicao, TIPO};
 })();
