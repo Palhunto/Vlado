@@ -411,7 +411,8 @@ class Fluxo:
         if conferencia_briefing.aplica(self.instrucoes):
             question = self.run / '00_pergunta_original.md'
             checked = conferencia_briefing.conferir(content, data, self.evidence_refs,
-                                                    question.read_text(encoding='utf-8') if question.is_file() else '')
+                                                    question.read_text(encoding='utf-8') if question.is_file() else '',
+                                                    self._metadados_da_rodada())
             self.artifact('conferencia_briefing', json.dumps({'briefing_sha256': artifact['sha256'], **checked},
                                                              ensure_ascii=False, indent=2), 'json')
             if checked['recusas']:
@@ -423,6 +424,19 @@ class Fluxo:
             sugestoes_quadros.gravar(self.run, data, candidates, self.instrucoes.get('versao'))
         receipt = self.publish(data)
         self.data, self.receipt, self.briefing = data, receipt, content
+
+    def _metadados_da_rodada(self):
+        """What the briefing header may say about the round itself, read from its own record (N2): case, round,
+        corpus, revision and the creation date (UTC and Brasília, which can be the day before)."""
+        from datetime import datetime, timedelta, timezone
+        textos = [str(self.meta.get(k) or '') for k in ('caso', 'rodada', 'corpus_id')] + ['r3_sintese']
+        try:
+            criada = datetime.fromisoformat(ler_json(self.run / 'registro.json')['criada_em_utc'])
+        except (OSError, ValueError, KeyError, TypeError):
+            return textos
+        for dia in {criada.astimezone(timezone.utc).date(), criada.astimezone(timezone(timedelta(hours=-3))).date()}:
+            textos.append(dia.strftime('%d/%m/%Y'))
+        return textos
 
     def submit(self, stage, raw):
         if stage != self.stage or stage in self.accepted:
