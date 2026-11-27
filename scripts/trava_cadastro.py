@@ -30,7 +30,9 @@ de rodadas, a captura web (para conferir e publicar), a gestão de apurações e
   ``aguardar_livre`` dá às operações que já seguram a trava o prazo para terminar.
 
 Ordem das travas na Mesa: ``cadastro_lock`` (threads da Mesa) → ``Conversas.lock`` → esta.
-Dentro desta trava não se pega ``Conversas.lock``.
+Dentro desta trava não se pega ``Conversas.lock``. ``cadastro_lock`` é uma ``TravaDaMesa``: as escritas a pegam
+sozinhas (``with``), como sempre; as leituras puras da lista ``interface_pesquisa.LEITURAS_PURAS`` a pegam juntas
+(``leitura()``), na mesma posição da ordem, e só esperam uma escrita.
 """
 from __future__ import annotations
 
@@ -63,6 +65,73 @@ LIVRE = {'estado': 'livre', 'versao': 1}
 PREPARO = (('casos', re.compile(r'\.lote_[0-9a-f]{32}')), ('execucoes', re.compile(r'\.r_[0-9a-f]{32}')))
 
 log = logging.getLogger('vlado.trava_cadastro')
+
+
+class TravaDaMesa:
+    """``cadastro_lock`` da Mesa (threads de um processo): exclusiva para as escritas, compartilhada pelas leituras.
+
+    Antes, toda operação genérica, inclusive as leituras dos quadros, passava uma de cada vez: uma busca lenta num
+    caso grande segurava a trava e o mapa de outra redação esperava 83 s (Maestro, 27/11). Agora as leituras puras
+    (as que não gravam nada: ``interface_pesquisa.LEITURAS_PURAS``, com teste) correm juntas e só esperam a escrita
+    em curso; a escrita espera as leituras em curso terminarem e, enquanto espera, nenhuma leitura nova entra (a
+    escrita não fica esperando para sempre atrás de leituras que não param de chegar). Como ``threading.Lock``, não
+    é reentrante: a mesma thread não pede a trava de novo. ``locked()`` diz se há escrita segurando."""
+
+    def __init__(self):
+        self._condicao = threading.Condition(threading.Lock())
+        self._leitores = 0
+        self._escrevendo = False
+        self._escritas_esperando = 0
+
+    def acquire(self, blocking=True, timeout=-1):
+        prazo = None if timeout is None or timeout < 0 else time.monotonic() + timeout
+        with self._condicao:
+            self._escritas_esperando += 1
+            try:
+                while self._escrevendo or self._leitores:
+                    if not blocking:
+                        return False
+                    resta = None if prazo is None else prazo - time.monotonic()
+                    if resta is not None and resta <= 0:
+                        return False
+                    self._condicao.wait(resta)
+                self._escrevendo = True
+                return True
+            finally:
+                self._escritas_esperando -= 1
+                if not self._escrevendo:
+                    self._condicao.notify_all()  # readers held back by this waiting write may go
+
+    def release(self):
+        with self._condicao:
+            if not self._escrevendo:
+                raise RuntimeError('Trava da Mesa solta sem estar presa para escrita.')
+            self._escrevendo = False
+            self._condicao.notify_all()
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, *exc):
+        self.release()
+
+    def locked(self):
+        return self._escrevendo
+
+    @contextmanager
+    def leitura(self):
+        with self._condicao:
+            while self._escrevendo or self._escritas_esperando:
+                self._condicao.wait()
+            self._leitores += 1
+        try:
+            yield
+        finally:
+            with self._condicao:
+                self._leitores -= 1
+                if not self._leitores:
+                    self._condicao.notify_all()
 
 
 class TravaOcupada(ValueError):

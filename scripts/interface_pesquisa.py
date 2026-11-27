@@ -27,7 +27,7 @@ import time
 from urllib.parse import parse_qs, urlsplit
 import webbrowser
 
-from comum import ROOT, dentro, ler_json, sha256
+from comum import ROOT, dentro, ler_json, pedido, sha256
 from cadastrar_documentos import inventario, preparar_pdfs
 from ambiente import diagnostico
 import fontes_web
@@ -114,6 +114,13 @@ MENSAGEM_POR_IP = 'Muitas requisições ao mesmo tempo deste endereço. Aguarde 
 # Case data answered by ``executar`` (frozen analyses, intake, search index).
 CONSULTA_OPERACOES = ('analises', 'buscar', 'ler', 'cobertura', 'original', 'cadastrar', 'inventario', 'preparar-pdfs')
 # Answered by the extraction queue in do_POST, outside cadastro_lock (executar still serves direct calls).
+# Pure reads (Maestro, 27/11): they write nothing (testes/test_leituras_puras.py runs each one and compares the
+# whole data folder) and share cadastro_lock (trava_cadastro.TravaDaMesa), waiting only for a write in course; a
+# slow read of a large case no longer holds the Mesa of every newsroom. Any other operation keeps the lock alone.
+LEITURAS_PURAS = frozenset({
+    *rotas_evidencia.LEITURA, *rotas_tabelas.LEITURA, 'diligencias-listar',
+    'entrevistas-listar', 'entrevistas-detalhe', 'entrevistas-lacunas', 'redacao-listar',
+    'continuidade-resumo'})  # this one is served in rotas_gestao, with the same shared lock
 CADASTRO_NA_FILA = ('cadastrar', 'preparar-pdfs')
 ROTAS_GET_COM_PARAMETROS = ('/api/catalogo', '/api/fila', '/api/cota')  # each one calls the gate where it is served
 # Every POST operation behind a session; anything else is 404 before the body is parsed.
@@ -344,7 +351,7 @@ class Servidor(ThreadingHTTPServer):
         self.root = Path(root).resolve()
         self.token = secrets.token_urlsafe(32)
         self.ambiente = diagnostico()
-        self.cadastro_lock = threading.Lock()
+        self.cadastro_lock = trava_cadastro.TravaDaMesa()
         self.conversas = Conversas(self.root)
         # Originals opened per page session and frozen revision (memory only; a restart asks to reopen).
         self._originais = OrderedDict()
@@ -889,12 +896,19 @@ class Handler(RotasContas, RotasConversa, RotasGestao, RotasDownloads, RotasEsta
                          if self.server.com_contas else None)
                 abertos = (self.server.originais_abertos(self._chave_originais(principal, data))
                            if operation == 'achados-revisao-salvar' else None)
-                with self.server.cadastro_lock:
-                    result = executar(self.server.root, operation, data, conta, abertos, casos=principal['casos'],
-                                      restrito=concedido.restrito)
-                    if operation in rotas_downloads.ORIGINAIS_PASSAGEM:
-                        # Read where it was validated; the slow part (sending) runs after the lock.
-                        conteudo = self._ler_original(operation, data, result)
+                if operation in LEITURAS_PURAS:
+                    # Pure reads share the lock and wait only for a write in course (TravaDaMesa); each is one
+                    # request for the integrity checks (comum.pedido).
+                    with self.server.cadastro_lock.leitura(), pedido():
+                        result = executar(self.server.root, operation, data, conta, abertos,
+                                          casos=principal['casos'], restrito=concedido.restrito)
+                else:
+                    with self.server.cadastro_lock:
+                        result = executar(self.server.root, operation, data, conta, abertos, casos=principal['casos'],
+                                          restrito=concedido.restrito)
+                        if operation in rotas_downloads.ORIGINAIS_PASSAGEM:
+                            # Read where it was validated; the slow part (sending) runs after the lock.
+                            conteudo = self._ler_original(operation, data, result)
             if operation in rotas_downloads.ORIGINAIS_PASSAGEM:
                 self._enviar_original(operation, data, conteudo, principal)
             else:
