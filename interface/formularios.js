@@ -543,11 +543,13 @@ window.Quadros.formularios = (() => {
   const pedidosNaTela = {};   // reserva quando o navegador não guarda a sessão
   const pedidosCriados = () => { try { return {...JSON.parse(sessionStorage.getItem(PEDIDOS_CHAVE) || '{}'), ...pedidosNaTela}; } catch (_) { return {...pedidosNaTela}; } };
   const lembrarPedido = (chave, pedido) => { pedidosNaTela[chave] = pedido; try { sessionStorage.setItem(PEDIDOS_CHAVE, JSON.stringify({...JSON.parse(sessionStorage.getItem(PEDIDOS_CHAVE) || '{}'), [chave]: pedido})); } catch (_) { /* sem armazenamento: vale só nesta tela */ } };
-  function virarPedido({casoId, texto, hipoteseId = null, aoCriar = null}) {
+  // `hipoteseId` liga a diligência à lacuna registrada (hipoteses-atualizar); `origemId` é de onde a lacuna vem (a hipótese, mesmo na lacuna automática que não guarda vínculo;
+  // a comparação pendente) e entra na chave do pedido lembrado: o mesmo texto automático ('Nenhuma evidência de suporte conferida.') se repete em várias hipóteses.
+  function virarPedido({casoId, texto, hipoteseId = null, origemId = null, aoCriar = null}) {
     const raiz = element('div', undefined, 'lacuna-virar');
     const abrirB = botao(t('Virar pergunta ou pedido'), 'lacuna-virar-botao'); abrirB.setAttribute('aria-expanded', 'false');
     const estado = element('p', '', 'small lacuna-virar-estado'); estado.setAttribute('role', 'status');
-    const chave = [casoId, hipoteseId || '', texto].join('|');
+    const chave = [casoId, origemId || hipoteseId || '', texto].join('|');
     let criada = pedidosCriados()[chave] || null;       // {id, ligada}: o pedido que esta lacuna já gerou
     let rid = requisicao(), ridLigar = requisicao(), ultimoConteudo = '';   // estáveis entre cliques: o mesmo pedido, a mesma tentativa
     const jaVirou = () => !!criada && criada.ligada !== false;

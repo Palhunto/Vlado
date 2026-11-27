@@ -414,7 +414,7 @@ window.Quadros = (() => {
         li.append(lacuna.origem === 'automatica' ? element('p', t(lacuna.descricao)) : Q.dado('p', lacuna.descricao),
           element('p', lacuna.origem === 'automatica' ? t('Lacuna apontada pelo quadro') : t('Lacuna registrada por pessoa'), 'small'));
         if (lacuna.diligencia_id) li.append(element('p', t('Diligência ligada: {estado}', {estado: lacuna.diligencia_estado || t('sem estado')}), 'small'));
-        else { const virar = Q.formularios?.virarPedido({casoId, texto: lacuna.descricao, hipoteseId: lacuna.origem === 'automatica' ? null : h.id, aoCriar: () => Q.selecionar('hipoteses', true)}); if (virar) li.append(virar); }
+        else { const virar = Q.formularios?.virarPedido({casoId, texto: lacuna.descricao, hipoteseId: lacuna.origem === 'automatica' ? null : h.id, origemId: h.id, aoCriar: () => Q.selecionar('hipoteses', true)}); if (virar) li.append(virar); }
         lista.append(li);
       }
     } else for (const vinculo of itens) lista.append(Q.evidencia(casoId, vinculo));

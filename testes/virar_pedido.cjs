@@ -7,7 +7,9 @@ const assert = require('node:assert/strict');
 const {criarMesa, Evento, PILHA} = require('./dom_minimo.cjs');
 
 const HID = 'H' + '1'.repeat(32), GID = 'G' + '9'.repeat(32);
-const QUADRO = () => ({caso: 'alpha', total: 1, divergentes: [], aviso: '', hipoteses: [{id: HID, enunciado: 'A dispensa seguiu o rito legal.', situacao: 'em_aberto', condicao: 'pendencia', natureza: null,
+const H2 = 'H' + '2'.repeat(32);
+const QUADRO = (duas = false) => ({caso: 'alpha', total: 1, divergentes: [], aviso: '', hipoteses: [...(duas ? [{id: H2, enunciado: 'A segunda hipótese.', situacao: 'em_aberto', condicao: 'pendencia', natureza: null, situacao_sem_base: false, sustentam: [], contrariam: [], contexto: [], indisponiveis: [],
+  faltam: [{origem: 'automatica', descricao: 'Nenhuma evidência sustentada nos dois sentidos.', diligencia_id: null, diligencia_estado: null}]}] : []), {id: HID, enunciado: 'A dispensa seguiu o rito legal.', situacao: 'em_aberto', condicao: 'pendencia', natureza: null,
   situacao_sem_base: false, sustentam: [], contrariam: [], contexto: [], indisponiveis: [],
   faltam: [{origem: 'registrada', descricao: 'Parecer jurídico da dispensa.', diligencia_id: null, diligencia_estado: null},
     {origem: 'automatica', descricao: 'Nenhuma evidência sustentada nos dois sentidos.', diligencia_id: null, diligencia_estado: null},
@@ -15,12 +17,12 @@ const QUADRO = () => ({caso: 'alpha', total: 1, divergentes: [], aviso: '', hipo
 const DETALHE = () => ({id: HID, sha256: 'e'.repeat(64), estado: {enunciado: 'A dispensa seguiu o rito legal.', situacao: 'em_aberto', evidencias: [], lacunas: [{descricao: 'Parecer jurídico da dispensa.', diligencia_id: null},
   {descricao: 'Ata da comissão.', diligencia_id: 'G' + '8'.repeat(32)}]}, evidencias: []});
 
-function montar({permissao = true, modo = 'conta', falhaLigar = false, detalhe = DETALHE, falhasCriar = 0, falhasLigar = 0} = {}) {
+function montar({permissao = true, modo = 'conta', falhaLigar = false, detalhe = DETALHE, falhasCriar = 0, falhasLigar = 0, duas = false} = {}) {
   let criar = 0, ligar = 0;
   const chamadas = [];
   const m = criarMesa({scripts: [...PILHA, 'quadros.js', 'sugestoes.js', 'formularios.js', 'analise.js', 'indicador_salvamento.js'], desktop: true,
     api: (operacao, dados) => {
-      if (operacao === 'hipoteses-quadro') return QUADRO();
+      if (operacao === 'hipoteses-quadro') return QUADRO(duas);
       if (operacao === 'sugestoes-listar') return {sugestoes: []};
       if (operacao === 'hipoteses-detalhe') { chamadas.push([operacao, dados]); return detalhe(); }
       if (operacao === 'diligencias-criar') { chamadas.push([operacao, dados]); if (++criar <= falhasCriar) throw new Error('Sem resposta do servidor.'); return {caso: 'alpha', id: GID, diligencia: {estado: 'a_solicitar'}}; }
@@ -206,4 +208,25 @@ test('o mesmo conteúdo reenviado após uma falha leva o mesmo requisicao_id; ou
   await clicar(m2, por(lac2, 'button', 'Virar pedido'));
   const c2 = m2.gravadas().filter(c => c[0] === 'diligencias-criar');
   assert.notEqual(c2[0][1].requisicao_id, c2[1][1].requisicao_id, 'outro conteúdo é outra tentativa: ' + JSON.stringify(c2.map(c => [c[1].requisicao_id, c[1].destinatario])));
+});
+
+test('R1 da Coruja: a mesma frase automática em duas hipóteses: virar a de uma não deixa a da outra em "Ver pedido", e cada uma cria o seu pedido', async () => {
+  const m = montar({duas: true}); const painel = await abrir(m);
+  m.avaliar("let __n = 0; Object.defineProperty(globalThis, 'crypto', {value: {randomUUID: () => 'a1b2c3d4-' + String(++__n).padStart(4, '0') + '-4000-8000-000000000000'}, configurable: true});");
+  const automaticas = () => [...m.$('quadros-hipoteses').querySelectorAll('.quadro-hipotese')].map(h => [...h.querySelectorAll('.quadro-lacuna')].find(l => /Nenhuma evidência sustentada/.test(texto(l))));
+  let [daH2, daH1] = automaticas();          // a ordem do quadro: H2 primeiro, H1 depois
+  assert.equal(automaticas().length, 2);
+  await preencherEEnviar(m, daH1, 'pedido_lai');
+  assert.deepEqual(m.gravadas().map(c => c[0]), ['diligencias-criar']);
+  assert.ok(por(daH1, 'button', 'Ver pedido'), 'a lacuna virada está em Ver pedido');
+  [daH2, daH1] = automaticas();
+  assert.ok(por(daH2, 'button', 'Virar pergunta ou pedido'), 'a mesma frase em outra hipótese continua oferecendo o pedido');
+  assert.equal(por(daH2, 'button', 'Ver pedido'), undefined);
+  await preencherEEnviar(m, daH2, 'pedido_lai');
+  assert.deepEqual(m.gravadas().map(c => c[0]), ['diligencias-criar', 'diligencias-criar'], 'cada hipótese cria o seu pedido');
+  const rids = m.gravadas().map(c => c[1].requisicao_id);
+  assert.notEqual(rids[0], rids[1], 'tentativas distintas');
+  // recarregado, as duas seguem em Ver pedido, cada uma pelo seu
+  m.avaliar("window.Quadros.selecionar('hipoteses', true)"); await espera(m);
+  assert.deepEqual(automaticas().map(l => !!por(l, 'button', 'Ver pedido')), [true, true]);
 });

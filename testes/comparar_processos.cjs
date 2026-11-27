@@ -224,3 +224,21 @@ test('comparação pendente: "Virar pergunta ou pedido" cria a diligência com o
   const {vista: iguais} = await abrirProcessos(montar({resposta: {caso: 'alpha', estruturada: true, comparacoes: [IGUAIS()]}}));
   assert.ok(![...iguais.querySelectorAll('button')].some(b => texto(b) === 'Virar pergunta ou pedido'), 'comparação sem pendência não tem a ação');
 });
+
+test('R1 da Coruja: duas comparações pendentes com o mesmo texto: virar uma não deixa a outra em "Ver pedido"', async () => {
+  const outra = COMPARACAO({achado: {id: 'A009', versao: 1, destino: 'incluido', redacao: 'Outro achado.'}});
+  const m = montar({resposta: {caso: 'alpha', estruturada: true, comparacoes: [COMPARACAO(), outra]}}); m.avaliar("document.body.dataset.modo = 'conta';");
+  const {vista} = await abrirProcessos(m);
+  const virar = () => [...vista.querySelectorAll('button')].find(b => texto(b) === 'Virar pergunta ou pedido');
+  virar().click(); await espera(m);
+  const form = vista.querySelector('.lacuna-virar-form');
+  const sel = form.querySelector('select'); sel.value = 'pedido_informacao'; sel.dispatchEvent(new Evento('change', {bubbles: true}));
+  const campos = [...form.querySelectorAll('input[type=text]')];
+  for (const [c, v] of [[campos[0], 'Procuradoria'], [campos[1], 'Ana Lima']]) { c.value = v; c.dispatchEvent(new Evento('input', {bubbles: true})); }
+  [...form.querySelectorAll('button')].find(b => texto(b) === 'Virar pedido').click(); await espera(m);
+  assert.equal(m.salvos.length, 1);
+  assert.ok([...vista.querySelectorAll('button')].some(b => texto(b) === 'Ver pedido'), 'a primeira virou');
+  [...vista.querySelectorAll('button')].find(b => texto(b) === 'Próxima').click(); await espera(m);
+  assert.ok(virar(), 'a segunda comparação, com o mesmo texto, ainda oferece criar o pedido');
+  assert.ok(![...vista.querySelectorAll('button')].some(b => texto(b) === 'Ver pedido'));
+});
