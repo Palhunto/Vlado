@@ -61,7 +61,7 @@ test('nova tabela: colunas por tipo, linha com valores em notação brasileira e
   const m = montar(); await abrirAba(m);
   const painel = m.$('quadros-tabelas');
   assert.match(texto(painel), /Nenhuma tabela ainda/);
-  await clicar(m, por(painel, 'button', '+ Nova tabela'));
+  await clicar(m, por(painel, 'button', 'Criar a primeira tabela'));
   assert.equal(texto(painel.querySelector('.form-titulo')), 'Nova tabela');
   digitar(painel.querySelector('.form-campo input[type=text]'), 'Pagamentos 2025');
   digitar(painel.querySelector('.form-coluna input[type=text]'), 'Descrição');
@@ -99,7 +99,7 @@ test('nova tabela: colunas por tipo, linha com valores em notação brasileira e
 test('nova tabela: título e número inválido apontam o campo, e a data vai no formato do servidor', async () => {
   const m = montar(); await abrirAba(m);
   const painel = m.$('quadros-tabelas');
-  await clicar(m, por(painel, 'button', '+ Nova tabela'));
+  await clicar(m, por(painel, 'button', 'Criar a primeira tabela'));
   await clicar(m, por(painel, 'button', 'Salvar'));
   assert.match(texto(painel.querySelector('.form-erro-geral')), /Escreva o título da tabela\./);
   assert.equal(m.salvos.length, 0);
@@ -197,6 +197,7 @@ test('sem a capacidade de atualizar tabelas, nem "Nova tabela", nem "Editar", ne
   const painel = m.$('quadros-tabelas');
   assert.ok(!por(painel, 'button', 'Editar'));
   assert.ok(!por(painel, 'button', '+ Nova tabela'));
+  assert.ok(!por(painel, 'button', 'Criar a primeira tabela'));
   painel.querySelectorAll('td.tabela-celula')[0].dispatchEvent(new Evento('focus'));
   assert.ok(!por(painel.querySelector('#tabela-fonte'), 'button', 'Corrigir esta célula'));
 });
@@ -216,7 +217,7 @@ test('R1 da Coruja: número no formato brasileiro, o ponto é milhar e a vírgul
 test('R1 da Coruja: na célula, "1.500" vai como 1500 e "1.5" fica no campo com a mensagem, sem enviar', async () => {
   const m = montar(); await abrirAba(m);
   const painel = m.$('quadros-tabelas');
-  await clicar(m, por(painel, 'button', '+ Nova tabela'));
+  await clicar(m, por(painel, 'button', 'Criar a primeira tabela'));
   digitar(painel.querySelector('.form-campo input[type=text]'), 'Valores');
   digitar(painel.querySelector('.form-coluna input[type=text]'), 'Valor');
   escolher(painel.querySelector('.form-coluna select'), 'monetario'); await espera(m);
