@@ -74,8 +74,10 @@ window.Quadros = (() => {
     }
     item.append(dado('blockquote', ev.trecho || t('Fonte visual: consulte o original.')));
     const selos = element('p', undefined, 'quadro-selos small');
-    // The seal is the assessment of this link, also in the "contradicts" column: say so.
-    selos.append(element('span', t('Avaliação: {s}', {s: t(SUPORTE[vinculo.suporte] || vinculo.suporte).toLowerCase()}), `quadro-selo suporte-${vinculo.suporte}`),
+    // The seal is the assessment of this link, also in the "contradicts" column: say so. Quando o suporte vem só da revisão da IA (sugestão
+    // ainda não confirmada, ou `suporte_so_da_ia` do servidor), a marca é a pílula da P20a, "IA · sustentado", e nunca o selo da avaliação humana.
+    selos.append(vinculo.suporte_so_da_ia === true ? seloIA(vinculo.suporte)
+      : element('span', t('Avaliação: {s}', {s: t(SUPORTE[vinculo.suporte] || vinculo.suporte).toLowerCase()}), `quadro-selo suporte-${vinculo.suporte}`),
       element('span', t(NATUREZA[vinculo.natureza] || vinculo.natureza), 'quadro-selo'));
     item.append(selos);
     if (vinculo.justificativa) item.append(dado('p', vinculo.justificativa, 'quadro-justificativa'));
@@ -119,7 +121,7 @@ window.Quadros = (() => {
   function selecionar(id, forcar = false) {
     marcar(id);
     const r = abas.find(a => a.id === id), atual = caso();
-    if (r && (forcar || r.carregado !== atual)) { r.carregado = atual; r.carregar(r.painel, atual); }
+    if (r && (forcar || r.carregado !== atual)) { r.carregado = atual; return r.carregar(r.painel, atual); }
   }
   const aberta = () => !$('area-quadros').hidden;
   window.addEventListener('quadros-abrir', () => selecionar(ativa, true));
@@ -166,7 +168,222 @@ window.Quadros = (() => {
     caminho.setAttribute('d', CAMINHOS[nome] || CAMINHOS.documento); no.append(caminho);
     return no;
   }
-  return {t, dado, botao, estado, irPara, perguntar, evidencia, abrirOriginal, disponivel, registrarAba, selecionar, quadro, SUPORTE, NATUREZA, caso, icone, CAMINHOS};
+  // Moldura do quadro com o painel da direita (componentes.md#sugestao-ia e #formularios-quadros; #telas-aprovadas): o conteúdo do quadro fica à esquerda e o painel
+  // (sugestão da IA, formulário, seletor de evidência) abre numa coluna de 360 px à direita, para a pessoa continuar vendo o mapa ou a linha do tempo. Abaixo de 1024 px
+  // o painel é uma camada de tela cheia sobre o quadro (o quadro fica `inert` enquanto ela está aberta). Devolve {lateral, abrir, voltar, fechar}.
+  const celularLargo = () => !!window.matchMedia?.('(max-width:1023px)').matches;
+  function montarQuadro(painel, corpo) {
+    const grade = element('div', undefined, 'quadro-grade'), principal = element('div', undefined, 'quadro-principal');
+    principal.append(...corpo);
+    const lateral = element('aside', undefined, 'quadro-lateral'); lateral.hidden = true; lateral.setAttribute('aria-label', t('Painel do quadro'));
+    grade.append(principal, lateral); painel.replaceChildren(grade);
+    let pilha = [], gatilho = null;
+    const fechar = () => {
+      lateral.hidden = true; lateral.replaceChildren(); pilha = []; grade.classList.remove('tem-lateral'); principal.inert = false; principal.removeAttribute('inert');
+      if (gatilho && document.contains(gatilho)) gatilho.focus?.();
+      gatilho = null;
+    };
+    const mostrar = nos => {
+      const topo = element('div', undefined, 'quadro-lateral-topo');
+      const voltar = linkBotao('‹ ' + t('Voltar'), 'quadro-lateral-voltar');
+      voltar.addEventListener('click', () => api_.voltar());
+      topo.append(voltar);
+      lateral.replaceChildren(topo, ...nos); lateral.hidden = false; grade.classList.add('tem-lateral');
+      if (celularLargo()) principal.inert = true; else principal.inert = false;
+    };
+    const api_ = {
+      lateral,
+      // `empilhar`: guarda o que está aberto (a sugestão) para "Cancelar" voltar a ela intacta.
+      abrir(nos, {empilhar = false, origem = null} = {}) {
+        if (empilhar && !lateral.hidden) pilha.push([...lateral.childNodes].slice(1));
+        else { pilha = []; if (origem) gatilho = origem; }
+        mostrar(nos);
+        const alvo = lateral.querySelector('.sugestao-titulo, .form-titulo, .seletor-titulo'); if (alvo) { alvo.tabIndex = -1; alvo.focus?.(); alvo.scrollIntoView?.({block: 'nearest'}); }
+      },
+      voltar() { if (pilha.length) { mostrar(pilha.pop()); const alvo = lateral.querySelector('.sugestao-titulo'); alvo?.focus?.(); } else fechar(); },
+      fechar,
+    };
+    painel.__lateral = api_;
+    return api_;
+  }
+  // Botão com aparência de link (componentes.md#link): texto --theme-accent, 44 px de altura.
+  const linkBotao = (rotulo, classe = '') => botao(rotulo, `link-botao ${classe}`.trim());
+
+  // Seletor comum de evidência (P47, componentes.md#seletor-evidencia). Um componente só, para os quatro formulários dos quadros e,
+  // depois, para o painel da afirmação do caderno. Nunca procura fora da apuração aberta: quem o monta entrega `buscar`.
+  //   buscar({texto, origem, analise}) -> Promise<{analise_atual: {id, rotulo}, analises: [{id, rotulo, pergunta}], resultados: [Resultado]}>
+  //   Resultado: {chave, origem: 'ia'|'caderno', tipo, texto, localizador, conferencia: 'conferido'|'a_conferir',
+  //               suporte_ia, natureza, destino, ligada, preenchimento: {papel, suporte, natureza}}
+  //   opcoes: {rotuloVoltar, aoVoltar(), aoLigar(resultado), aoAbrirOriginal(resultado, gatilho, retorno), limite: {atingido, razao}, atraso}
+  const ORIGENS = [['tudo', 'Tudo'], ['ia', 'Achados da IA'], ['caderno', 'Caderno']];
+  function seletorEvidencia(opcoes) {
+    const {buscar} = opcoes, atraso = opcoes.atraso ?? 250;
+    const raiz = element('section', undefined, 'seletor-evidencia');
+    const titulo = element('h3', t('Ligar evidência'), 'seletor-titulo'); titulo.tabIndex = -1;
+    raiz.setAttribute('aria-label', t('Ligar evidência'));
+    const voltar = linkBotao(`‹ ${t(opcoes.rotuloVoltar || 'Voltar ao formulário')}`, 'seletor-voltar');
+    voltar.addEventListener('click', () => opcoes.aoVoltar?.());
+    const rotuloBusca = element('label', t('Buscar nos achados e no caderno'), 'seletor-rotulo');
+    const busca = element('input', undefined, 'seletor-busca'); busca.type = 'search'; busca.autocomplete = 'off'; busca.id = 'seletor-busca';
+    rotuloBusca.setAttribute('for', busca.id);
+    const origens = element('div', undefined, 'seletor-origens'); origens.setAttribute('role', 'group'); origens.setAttribute('aria-label', t('Origem'));
+    const pilulas = ORIGENS.map(([chave, rotulo]) => {
+      const b = botao(t(rotulo), 'seletor-pilula'); b.dataset.origem = chave; origens.append(b); return b;
+    });
+    const analise = element('p', '', 'small seletor-analise');
+    const avancado = element('details', undefined, 'seletor-avancado'); avancado.hidden = true;
+    const listaAnalises = element('ul', undefined, 'seletor-analises');
+    avancado.append(element('summary', t('Avançado')), listaAnalises);
+    const status = element('p', '', 'seletor-status'); status.setAttribute('role', 'status');
+    const lista = element('div', undefined, 'seletor-resultados');
+    raiz.append(voltar, titulo, rotuloBusca, busca, origens, analise, avancado, status, lista);
+
+    let origem = 'tudo', analiseEscolhida = null, sequencia = 0, adiar = null, aberto = null;
+    const consulta = () => ({texto: busca.value.trim(), origem, analise: analiseEscolhida});
+    // A partir do segundo caractere; com um só, a lista volta a ser a da análise sem busca.
+    const efetiva = () => { const c = consulta(); return {...c, texto: c.texto.length >= 2 ? c.texto : ''}; };
+
+    function cartao(r) {
+      const fechado = r.ligada || r.indisponivel;
+      const bloco = element(fechado ? 'div' : 'button', undefined, 'seletor-resultado');
+      if (!fechado) bloco.type = 'button';
+      bloco.dataset.chave = r.chave; bloco.dataset.origem = r.origem;
+      bloco.append(element('span', t(r.tipo || (r.origem === 'ia' ? 'Achado da IA' : 'Trecho do caderno')), 'seletor-tipo'),
+        dado('span', r.texto || '', 'seletor-texto'), dado('span', r.localizador || '', 'seletor-localizador'));
+      const situacao = element('span', undefined, 'seletor-estado');
+      situacao.append(element('span', r.conferencia === 'conferido' ? `✓ ${t('Conferido no original')}` : `○ ${t('A conferir')}`,
+        `seletor-conferencia ${r.conferencia === 'conferido' ? 'is-conferido' : 'is-a-conferir'}`));
+      if (r.origem === 'ia' && r.suporte_ia) situacao.append(seloIA(r.suporte_ia));
+      if (r.destino === 'retirado') situacao.append(element('span', t('retirado pela revisão'), 'seletor-retirado'));
+      else if (r.destino === 'fora_do_briefing') situacao.append(element('span', t('fora do briefing (sustentado)'), 'seletor-nota'));
+      bloco.append(situacao);
+      if (r.indisponivel) { bloco.classList.add('is-ligada', 'is-indisponivel'); bloco.append(element('span', t('A evidência não está mais disponível.'), 'seletor-nota')); return bloco; }
+      if (r.ligada) { bloco.classList.add('is-ligada'); bloco.append(element('span', t('Já ligada a este item'), 'seletor-nota')); return bloco; }
+      bloco.setAttribute('aria-expanded', 'false');
+      bloco.addEventListener('click', () => abrir(r, bloco));
+      return bloco;
+    }
+    // Resultado aberto: borda 2 px --theme-accent, com os campos do vínculo já preenchidos (P47), "Abrir o original" e "Ligar".
+    function abrir(r, bloco) {
+      if (aberto) { aberto.bloco.classList.remove('is-aberto'); aberto.bloco.setAttribute('aria-expanded', 'false'); aberto.detalhe.remove(); }
+      if (aberto?.bloco === bloco) { aberto = null; return; }
+      const detalhe = element('div', undefined, 'seletor-aberto');
+      const p = r.preenchimento || {};
+      const campos = element('dl', undefined, 'seletor-campos');
+      for (const [rotulo, valor] of [['Papel', p.papel && PAPEL[p.papel]], ['Suporte', p.suporte && SUPORTE[p.suporte]], ['Natureza', p.natureza && NATUREZA[p.natureza]]]) {
+        campos.append(element('dt', t(rotulo)), element('dd', valor ? t(valor) : t('A escolher')));
+      }
+      const acoes = element('div', undefined, 'seletor-acoes');
+      const original = botao(t('Abrir o original')), retorno = element('p', '', 'small'); retorno.setAttribute('role', 'status');
+      const semNatureza = !p.natureza;
+      let escolhaNatureza = null;
+      if (semNatureza) {
+        // Fonte do caderno: a natureza não tem preenchimento. A pessoa escolhe o que a fonte é; sem isso, "Ligar" não se habilita.
+        escolhaNatureza = element('select', undefined, 'seletor-natureza'); escolhaNatureza.id = 'seletor-natureza';
+        const vazioOp = element('option', t('Escolha a natureza')); vazioOp.value = ''; escolhaNatureza.append(vazioOp);
+        for (const [k, rot] of Object.entries(NATUREZA)) { const o = element('option', t(rot)); o.value = k; escolhaNatureza.append(o); }
+        const rotuloNat = element('label', t('Natureza'), 'seletor-rotulo'); rotuloNat.setAttribute('for', escolhaNatureza.id);
+        detalhe.append(rotuloNat, escolhaNatureza, element('p', t('Falta a natureza. Escolha o que a fonte é: declaração documental, alegação atribuída, inferência ou pendência.'), 'small seletor-nota'));
+      }
+      original.addEventListener('click', () => opcoes.aoAbrirOriginal?.(r, original, retorno));
+      const ligar = botao(t('Ligar'), 'seletor-ligar');
+      const lim = opcoes.limite?.();
+      if (lim?.atingido) { ligar.disabled = true; const razao = element('p', t(lim.razao), 'small seletor-nota'); razao.id = 'seletor-razao'; ligar.setAttribute('aria-describedby', razao.id); detalhe.append(razao); }
+      if (escolhaNatureza) {
+        if (!lim?.atingido) ligar.disabled = true;
+        escolhaNatureza.addEventListener('change', () => { r.preenchimento = {...r.preenchimento, natureza: escolhaNatureza.value}; ligar.disabled = !escolhaNatureza.value || !!lim?.atingido; });
+      }
+      ligar.addEventListener('click', () => opcoes.aoLigar?.(r));
+      acoes.append(original, ligar);
+      detalhe.prepend(campos); detalhe.append(acoes, retorno);
+      bloco.classList.add('is-aberto'); bloco.setAttribute('aria-expanded', 'true'); bloco.after(detalhe);
+      aberto = {bloco, detalhe};
+    }
+    function pintar(dados) {
+      aberto = null;
+      const a = dados.analise_atual;
+      analise.textContent = a ? t('Achados da análise mais recente ({quando})', {quando: a.rotulo}) : '';
+      listaAnalises.replaceChildren();
+      for (const x of dados.analises || []) {
+        const li = element('li'), b = botao(x.rotulo, 'link-botao'); b.setAttribute('aria-pressed', String((analiseEscolhida || a?.id) === x.id));
+        b.addEventListener('click', () => { analiseEscolhida = x.id; carregar(); });
+        li.append(b); if (x.pergunta) li.append(dado('span', ` — ${x.pergunta}`, 'small')); listaAnalises.append(li);
+      }
+      avancado.hidden = !(dados.analises?.length > 1);
+      const itens = dados.resultados || [];
+      status.textContent = '';
+      if (!itens.length) {
+        const c = efetiva();
+        if (c.texto) {
+          estado(lista, 'vazio', t('A busca não encontrou. Isso não prova que não esteja nos documentos.'), {titulo: t('Nada encontrado para “{texto}”.', {texto: c.texto}),
+            acao: {rotulo: t('Limpar a busca'), aoClicar: () => { busca.value = ''; carregar(); busca.focus(); }}});
+        } else {
+          estado(lista, 'vazio', t('Esta apuração ainda não tem achados nem trechos com fonte.'), {titulo: t('Nada para ligar ainda'), acao: perguntar()});
+        }
+        return;
+      }
+      lista.replaceChildren(...itens.map(cartao));
+      status.textContent = t(itens.length === 1 ? '{n} resultado' : '{n} resultados', {n: itens.length});
+    }
+    // Esqueleto só depois de 0,3 s: nada de piscar quando a resposta é rápida (W11, regra 2).
+    async function carregar() {
+      const minha = ++sequencia, espera = setTimeout(() => { if (minha === sequencia) estado(lista, 'carregando', t('Buscando…')); }, 300);
+      try { const dados = await buscar(efetiva()); if (minha === sequencia) pintar(dados); }
+      catch (erro) { if (minha === sequencia) estado(lista, 'erro', erro.message, {titulo: t('Não deu para buscar as evidências.')}); }
+      finally { clearTimeout(espera); }
+    }
+    busca.addEventListener('input', () => { clearTimeout(adiar); adiar = setTimeout(carregar, atraso); });
+    for (const b of pilulas) {
+      b.setAttribute('aria-pressed', String(b.dataset.origem === origem));
+      b.addEventListener('click', () => { origem = b.dataset.origem; for (const o of pilulas) o.setAttribute('aria-pressed', String(o === b)); carregar(); });
+    }
+    raiz.carregar = carregar;
+    raiz.foco = () => busca.focus();
+    carregar();
+    return raiz;
+  }
+  const PAPEL = {suporte: 'Suporte', contradicao: 'Contradição', contexto: 'Contexto'};
+
+  // dd/mm, hhHmm de uma data ISO: "26/11, 14h32" (a análise mais recente, no seletor).
+  function quando(iso) {
+    const d = new Date(iso); if (Number.isNaN(d.getTime())) return '';
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}, ${d.getHours()}h${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+  // A busca do seletor contra `evidencia-buscar` (CONTRATO_QUADROS_ONDA4.md, seção 4): só nesta apuração. `item` ({quadro, id}) marca o que já está ligado.
+  // Devolve a forma que seletorEvidencia entende; `bruto` guarda o resultado do servidor para montar o vínculo (P47: papel, suporte e natureza já preenchidos).
+  function buscaEvidencias(casoId, item = null) {
+    return async ({texto, origem, analise}) => {
+      const dados = await api('evidencia-buscar', {caso: casoId, texto, origem, rodada: analise || null, ...(item ? {item} : {}), limite: 50, deslocamento: 0});
+      const rotuloDe = a => quando(a.em_utc);
+      const resultados = (dados.resultados || []).map(r => {
+        const nome = r.documento?.nome || '', loc = r.localizador?.legivel || '';
+        return {chave: `${r.origem}:${JSON.stringify(r.vinculo_sugerido?.referencia || {})}:${r.achado?.id || ''}:${r.vinculo_sugerido?.papel || ''}`, origem: r.origem,
+          tipo: r.origem === 'ia' ? 'Achado da IA' : 'Trecho do caderno', texto: r.texto || r.trecho || '', localizador: `${nome ? nome + ', ' : ''}${loc}`,
+          conferencia: r.conferencia_humana?.estado === 'conferida_no_original' ? 'conferido' : 'a_conferir',
+          suporte_ia: r.revisao_ia?.suporte || null, natureza: r.revisao_ia?.natureza || null, destino: r.achado?.destino || null,
+          ligada: !!r.ja_ligado, indisponivel: r.estado === 'indisponivel', preenchimento: r.vinculo_sugerido || {}, bruto: r};
+      });
+      return {analise_atual: dados.analise ? {id: dados.analise.rodada, rotulo: rotuloDe(dados.analise)} : null,
+        analises: (dados.analises || []).map(a => ({id: a.rodada, rotulo: rotuloDe(a), pergunta: a.pergunta || ''})), resultados};
+    };
+  }
+
+  // Selo "IA · sugestão" (P45, componentes.md#sugestao-ia): a pílula do veredito da IA (P20a), sem fundo, borda tracejada e sem sinal.
+  function seloSugestao() {
+    const selo = element('span', undefined, 'selo-sugestao');
+    selo.append(element('span', t('IA · sugestão'), 'badge-origin'));
+    return selo;
+  }
+  // Veredito da revisão da IA na forma da P20a ("IA · sustentado"): borda tracejada, sem fundo, nunca a aparência da conferência humana.
+  const SUPORTE_IA = {nao_revisado: 'IA · não revisado', sustentado: 'IA · sustentado', parcial: 'IA · parcial',
+    nao_sustentado: 'IA · não sustentado', ilegivel: 'IA · ilegível'};
+  function seloIA(suporte, texto) {
+    const selo = element('span', undefined, `support-badge ai-support support-${suporte}`);
+    selo.title = t('Suporte documental avaliado pela IA');
+    selo.append(element('span', t(texto || SUPORTE_IA[suporte] || `IA · ${suporte}`), 'badge-origin'));
+    return selo;
+  }
+  return {t, dado, botao, estado, irPara, perguntar, evidencia, abrirOriginal, disponivel, registrarAba, selecionar, quadro, SUPORTE, NATUREZA, caso, icone, CAMINHOS, seloSugestao, seloIA, linkBotao, seletorEvidencia, buscaEvidencias, quando, montarQuadro};
 })();
 
 // Hypotheses: three columns per hypothesis; the declared situation is a person's, never the board's.
@@ -200,9 +417,15 @@ window.Quadros = (() => {
     const titulo = Q.dado('h3', h.enunciado); titulo.id = `hipotese-${h.id}`;
     cartao.setAttribute('aria-labelledby', titulo.id);
     const meta = element('p', undefined, 'small quadro-meta');
-    meta.append(element('span', t('Situação declarada: {situacao}', {situacao: t({em_aberto: 'Em aberto', sustentada: 'Sustentada', contrariada: 'Contrariada', inconclusiva: 'Inconclusiva', descartada: 'Descartada'}[h.situacao] || h.situacao)})),
-      element('span', h.condicao === 'com_evidencia' ? t('Com evidência conferida') : t('Pendente de evidência conferida'), `quadro-condicao condicao-${h.condicao}`));
+    // Suporte só da IA (componentes.md#suporte-so-da-ia): se toda a base da hipótese vem da revisão da IA, sem pessoa que mudasse ou conferisse, a condição não
+    // diz "conferida": vem na pílula da P20a ("Com evidência sustentada pela revisão da IA"). Com uma só base humana, vale a condição de sempre.
+    const base = [...(h.sustentam || []), ...(h.contrariam || [])].filter(v => v.suporte === 'sustentado' && ['declaracao_documental', 'alegacao_atribuida'].includes(v.natureza));
+    const soIA = h.condicao === 'com_evidencia' && base.length > 0 && base.every(v => v.suporte_so_da_ia === true);
+    const condicao = soIA ? element('span', t('Com evidência sustentada pela revisão da IA'), 'support-badge ai-support quadro-condicao condicao-so-ia')
+      : element('span', h.condicao === 'com_evidencia' ? t('Com evidência conferida') : t('Pendente de evidência conferida'), `quadro-condicao condicao-${h.condicao}`);
+    meta.append(element('span', t('Situação declarada: {situacao}', {situacao: t({em_aberto: 'Em aberto', sustentada: 'Sustentada', contrariada: 'Contrariada', inconclusiva: 'Inconclusiva', descartada: 'Descartada'}[h.situacao] || h.situacao)})), condicao);
     cartao.append(titulo, meta);
+    const editar = Q.formularios?.botaoEditar('hipotese', 'hipoteses', casoId, h.id, h.enunciado); if (editar) cartao.append(editar);
     if (h.situacao_sem_base) cartao.append(element('p', t('A situação declarada perdeu a evidência que a fundamentava. Confira antes de usar.'), 'notice'));
     const grade = element('div', undefined, 'quadro-colunas');
     for (const c of COLUNAS) grade.append(coluna(casoId, h, c));
@@ -225,12 +448,21 @@ window.Quadros = (() => {
   }
   Q.registrarAba({id: 'hipoteses', rotulo: t('Hipóteses'), carregar: Q.quadro('quadros_evidencia', async (painel, casoId, vigente) => {
     const dados = await api('hipoteses-quadro', {caso: casoId});
+    const S = Q.sugestoes ? await Q.sugestoes.listar(casoId, 'hipoteses') : {abertas: [], descartadas: []};
     if (!vigente()) return;
-    if (!dados.hipoteses?.length) { Q.estado(painel, 'vazio', t('Uma hipótese é uma afirmação que os documentos podem sustentar ou contrariar.'), {titulo: t('Nenhuma hipótese ainda'), acao: Q.perguntar()}); return; }
-    const corpo = [element('p', t(dados.aviso || ''), 'small quadro-aviso')];
-    for (const h of dados.hipoteses) corpo.push(hipotese(casoId, h));
+    if (!dados.hipoteses?.length && !S.abertas.length && !S.descartadas.length) { Q.estado(painel, 'vazio', t('Uma hipótese é uma afirmação que os documentos podem sustentar ou contrariar.'), {titulo: t('Nenhuma hipótese ainda'), acao: Q.perguntar()}); return; }
+    const novo = Q.formularios?.botaoNovo('hipotese', 'hipoteses', casoId);
+    const corpo = [...(novo ? [novo] : []), element('p', t(dados.aviso || ''), 'small quadro-aviso')];
+    // Sugestões da IA: grupo próprio entre a hipótese em aberto e as fechadas (componentes.md#sugestao-ia). Nunca entram na contagem de hipóteses.
+    const ctx = Q.sugestoes ? Q.sugestoes.contexto(casoId, 'hipoteses', Q.formularios?.podeCriar('hipoteses') ? {corrigir: sug => Q.formularios.abrirNoPainel({tipo: 'hipotese', abaId: 'hipoteses', casoId, sugestao: sug})} : {}) : null;
+    const grupo = Q.sugestoes?.secao(S.abertas, (sug, origem) => painel.__lateral.abrir([Q.sugestoes.painel(sug, ctx)], {origem}), 'hipotese-sugestoes');
+    const abertas = dados.hipoteses.filter(h => h.situacao === 'em_aberto'), fechadas = dados.hipoteses.filter(h => h.situacao !== 'em_aberto');
+    for (const h of abertas) corpo.push(hipotese(casoId, h));
+    if (grupo) corpo.push(grupo);
+    for (const h of fechadas) corpo.push(hipotese(casoId, h));
     if (dados.divergentes?.length) corpo.push(element('p', t('{n} registros com histórico divergente ficaram de fora.', {n: dados.divergentes.length}), 'notice'));
-    painel.replaceChildren(...corpo);
+    const descartadas = Q.sugestoes?.descartadas(S.descartadas, ctx); if (descartadas) corpo.push(descartadas);
+    Q.montarQuadro(painel, corpo);
   })});
 })();
 
@@ -276,19 +508,22 @@ window.Quadros = (() => {
     return campo;
   }
   // "Como ler": as duas marcas do marco, com o texto (nunca só a forma).
-  function comoLer() {
+  function comoLer(comSugestao = false) {
     const caixa = element('div', undefined, 'tempo-como-ler');
     caixa.append(element('p', t('Como ler'), 'eyebrow'));
     const lista = element('ul', undefined, 'tempo-como-ler-lista');
-    for (const [classe, texto] of [['exato', 'Data exata no documento'], ['parcial', 'Data parcial: só mês ou ano']]) {
+    const marcas = [['exato', 'Data exata no documento'], ['parcial', 'Data parcial: só mês ou ano']];
+    if (comSugestao) marcas.push(['sugestao', 'Sugestão da IA: marco e cartão tracejados']);
+    for (const [classe, texto] of marcas) {
       const item = element('li'); const marca = element('span', undefined, `tempo-marca ${classe}`); marca.setAttribute('aria-hidden', 'true');
       item.append(marca, element('span', t(texto))); lista.append(item);
     }
     caixa.append(lista);
     return caixa;
   }
-  function entrada(casoId, e) {
-    const li = element('li', undefined, 'tempo-evento');
+  function entrada(casoId, e, abrirSugestao) {
+    const li = element('li', undefined, `tempo-evento${e.sugestao ? ' is-sugestao' : ''}`);
+    if (e.sugestao) li.dataset.sugestao = e.sugestao.id;
     const exata = e.data.precisao === 'dia' && !e.data.aproximada;
     li.dataset.precisao = e.data.precisao; li.dataset.tipo = e.data.tipo;
     li.classList.add(exata ? 'marco-exato' : 'marco-parcial');
@@ -306,7 +541,20 @@ window.Quadros = (() => {
     // No celular a data e o qualificador entram no cartão, acima do acontecimento (a coluna da data some, com display:none); nos dois tamanhos só um deles está na árvore de acessibilidade, então a data é lida uma vez.
     const noCartao = element('p', undefined, 'tempo-data-cartao');
     noCartao.append(element('span', quandoCurto(e.data), 'tempo-data-cartao-dia'), element('span', qualificador, `tempo-qualificador${exata ? '' : ' is-parcial'}`));
-    texto.append(noCartao, Q.dado('h4', e.descricao), element('p', t(e.data.rotulo || e.data.tipo), 'small tempo-tipo'));
+    let titulo = Q.dado('h4', e.descricao);
+    if (e.sugestao) {
+      // Sugestão da IA: o título é o botão que abre o painel; o nome acessível começa pela origem e o selo visível fica fora da leitura (aria-hidden).
+      titulo = element('h4'); const abrir = Q.botao('', 'sugestao-abrir tempo-abrir'); abrir.dataset.sugestao = e.sugestao.id; abrir.setAttribute('aria-pressed', 'false');
+      abrir.setAttribute('aria-label', Q.sugestoes.rotuloAcessivel(e.sugestao)); abrir.append(Q.dado('span', e.descricao));
+      abrir.addEventListener('click', () => {
+        for (const o of document.querySelectorAll('.tempo-evento.is-ativa')) { o.classList.remove('is-ativa'); o.querySelector('.tempo-abrir')?.setAttribute('aria-pressed', 'false'); }
+        li.classList.add('is-ativa'); abrir.setAttribute('aria-pressed', 'true'); abrirSugestao(e.sugestao, abrir);
+      });
+      titulo.append(abrir);
+      const selo = Q.seloSugestao(); selo.setAttribute('aria-hidden', 'true'); texto.append(noCartao, selo);
+    } else texto.append(noCartao);
+    texto.append(titulo, element('p', t(e.data.rotulo || e.data.tipo), 'small tempo-tipo'));
+    const editar = e.sugestao ? null : Q.formularios?.botaoEditar('acontecimento', 'tempo', casoId, e.evento_id, e.descricao, () => ({tiposData: tipos})); if (editar) texto.append(editar);
     if (e.data.observacao) texto.append(Q.dado('p', e.data.observacao, 'small'));
     if (e.divergente) texto.append(element('p', t('Há datas divergentes do mesmo tipo neste evento. O quadro não escolhe uma: confira as fontes.'), 'notice'));
     if (e.retirado) { const aviso = element('p', `${t('Evento retirado:')} `, 'notice'); aviso.append(Q.dado('span', e.motivo_retirada)); texto.append(aviso); }
@@ -330,40 +578,69 @@ window.Quadros = (() => {
     return li;
   }
   // Agrupa por ano: cabeçalho com o ano e a contagem ("6 acontecimentos · 5 com documento"), e a lista do ano.
-  function porAno(casoId, entradas) {
+  function porAno(casoId, entradas, abrirSugestao) {
     const anos = new Map();
     for (const e of entradas) { const ano = anoDe(e.data); if (!anos.has(ano)) anos.set(ano, []); anos.get(ano).push(e); }
     return [...anos].map(([ano, lista]) => {
       const secao = element('section', undefined, 'tempo-ano'); secao.setAttribute('aria-labelledby', `tempo-ano-${ano}`);
       const cab = element('header', undefined, 'tempo-ano-cab');
       const titulo = element('h3', ano, 'tempo-ano-titulo'); titulo.id = `tempo-ano-${ano}`;
-      const com = lista.filter(e => e.fonte_da_data).length;
+      // A sugestão da IA nunca entra na contagem do ano (P45): ela ainda não é acontecimento do quadro.
+      const reais = lista.filter(e => !e.sugestao), com = reais.filter(e => e.fonte_da_data).length;
       cab.append(titulo, element('span', undefined, 'tempo-ano-filete'),
-        element('span', t(lista.length === 1 ? '1 acontecimento · {c} com documento' : '{n} acontecimentos · {c} com documento', {n: lista.length, c: com}), 'tempo-ano-conta'));
+        element('span', reais.length ? t(reais.length === 1 ? '1 acontecimento · {c} com documento' : '{n} acontecimentos · {c} com documento', {n: reais.length, c: com}) : t('Só sugestões da IA'), 'tempo-ano-conta'));
       const ol = element('ol', undefined, 'tempo-lista');
       ol.setAttribute('aria-label', t('Acontecimentos de {ano}', {ano}));
-      for (const e of lista) ol.append(entrada(casoId, e));
+      for (const e of lista) ol.append(entrada(casoId, e, abrirSugestao));
       secao.append(cab, ol);
       return secao;
     });
+  }
+  // Sugestão de acontecimento no formato da entrada (a data vem de campos.datas[0]); a fonte da data é a evidência indicada por `fonte`.
+  const chaveData = valor => { const [a, m = '01', d = '01'] = String(valor).split('-'); return `${a}-${m}-${d}`; };
+  function entradaDaSugestao(sug) {
+    const c = sug.campos, d = c.datas?.[0]; if (!d) return null;
+    return {evento_id: sug.id, descricao: c.descricao, sugestao: sug, divergente: false, retirado: false,
+      data: {tipo: d.tipo, valor: d.valor, precisao: Q.sugestoes.precisaoDe(d.valor), aproximada: !!d.aproximada, observacao: d.observacao || '', rotulo: tipos?.[d.tipo] || d.tipo},
+      fonte_da_data: Q.sugestoes.vinculo(sug, d.fonte || 0)};
+  }
+  // Cada sugestão ocupa o lugar que teria como item: na ordem das datas, depois dos itens que têm a mesma data.
+  function juntar(entradas, abertas) {
+    const lista = [...entradas];
+    for (const sug of abertas) {
+      const e = entradaDaSugestao(sug); if (!e || (escolhidos && !escolhidos.includes(e.data.tipo))) continue;
+      const k = chaveData(e.data.valor), pos = lista.findIndex(x => chaveData(x.data.valor) > k);
+      lista.splice(pos < 0 ? lista.length : pos, 0, e);
+    }
+    return lista;
   }
   const carregar = Q.quadro('quadros_evidencia', async (painel, casoId, vigente) => {
     const pedido = {caso: casoId};
     if (escolhidos) pedido.tipos = escolhidos;
     const dados = await api('linha-tempo-listar', pedido);
+    const S = Q.sugestoes ? await Q.sugestoes.listar(casoId, 'linha_tempo') : {abertas: [], descartadas: []};
     if (!vigente()) return;
     tipos = dados.tipos_data || tipos || {};
-    const corpo = [filtro(painel, casoId, carregar), comoLer(), element('p', t(dados.aviso || ''), 'small quadro-aviso')];
-    if (!dados.entradas?.length) corpo.push(escolhidos ? Q.estado(element('div'), 'vazio', t('Nenhum acontecimento tem os tipos de data escolhidos.'), {titulo: t('Nenhum acontecimento com esses tipos de data'), acao: {rotulo: t('Mostrar tudo'), aoClicar: () => { escolhidos = null; carregar(painel, casoId); }}})
+    const entradas = juntar(dados.entradas || [], S.abertas), reais = (dados.entradas || []).length;
+    const comTipos = () => ({tiposData: tipos});
+    const ctx = Q.sugestoes ? Q.sugestoes.contexto(casoId, 'tempo', Q.formularios?.podeCriar('linha-tempo') ? {corrigir: sug => Q.formularios.abrirNoPainel({tipo: 'acontecimento', abaId: 'tempo', casoId, sugestao: sug, ...comTipos()})} : {}) : null;
+    const novo = Q.formularios?.botaoNovo('acontecimento', 'tempo', casoId, comTipos);
+    const abrirSugestao = (sug, origem) => painel.__lateral.abrir([Q.sugestoes.painel(sug, ctx)], {origem});
+    const conta = element('p', undefined, 'small quadro-conta');
+    conta.append(t(reais === 1 ? '{n} acontecimento' : '{n} acontecimentos', {n: reais}));
+    if (S.abertas.length) conta.append(element('span', Q.sugestoes.contagemTexto(S.abertas.length), 'quadro-conta-sugestoes'));
+    const corpo = [...(novo ? [novo] : []), filtro(painel, casoId, carregar), comoLer(S.abertas.length > 0), element('p', t(dados.aviso || ''), 'small quadro-aviso'), conta];
+    if (!entradas.length) corpo.push(escolhidos ? Q.estado(element('div'), 'vazio', t('Nenhum acontecimento tem os tipos de data escolhidos.'), {titulo: t('Nenhum acontecimento com esses tipos de data'), acao: {rotulo: t('Mostrar tudo'), aoClicar: () => { escolhidos = null; carregar(painel, casoId); }}})
       : Q.estado(element('div'), 'vazio', t('A linha do tempo reúne os acontecimentos datados que os documentos registram.'), {titulo: t('Nenhum acontecimento com data ainda'), acao: Q.perguntar()}));
     else {
       const linha = element('div', undefined, 'tempo-linha');
-      linha.setAttribute('role', 'group'); linha.setAttribute('aria-label', t('Linha do tempo: {n} eventos', {n: dados.entradas.length}));
-      linha.append(...porAno(casoId, dados.entradas));
+      linha.setAttribute('role', 'group'); linha.setAttribute('aria-label', t('Linha do tempo: {n} eventos', {n: reais}));
+      linha.append(...porAno(casoId, entradas, abrirSugestao));
       corpo.push(linha);
     }
     if (dados.fontes_indisponiveis?.length) corpo.push(element('p', t('{n} fontes de data estão indisponíveis.', {n: dados.fontes_indisponiveis.length}), 'notice'));
-    painel.replaceChildren(...corpo);
+    const descartadas = Q.sugestoes?.descartadas(S.descartadas, ctx); if (descartadas) corpo.push(descartadas);
+    Q.montarQuadro(painel, corpo);
   });
   window.addEventListener('mesa-contexto-alterado', () => { tipos = null; escolhidos = null; });
   Q.registrarAba({id: 'tempo', rotulo: t('Linha do tempo'), carregar});
