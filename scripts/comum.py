@@ -28,19 +28,14 @@ PARTES = (
 # evidencia-buscar re-checked the frozen inputs of the round once per evidence: 10,872 checks, 13,176 hashes and
 # 65,892 path resolutions, 86 s on the Sinfra case (Maestro, 27/11). Inside a request: ``dentro`` resolves each
 # (root, relative) once, the modules keep their checks in ``memo`` (the round's inputs, the index, each evidence),
-# and ``sha256`` reuses a hash while the file keeps its identity (path, size, mtime_ns, ctime_ns, inode). Where
-# the hash is kept depends on the system (B1 of the Coruja on 7f05beb; the Maestro chose custody over 0.8 s):
-# - Linux (the server in production): kept between requests (``_HASHES``). Any write changes the ctime, also a
-#   write through mmap and a same-size change whose mtime is put back by hand, and the ctime cannot be set back;
-#   the next request hashes again and refuses what diverges.
-# - Windows (the local desk): kept only inside the request. On NTFS a write through mmap changes neither size,
-#   mtime, ctime (the creation time there) nor inode, and the mtime can be put back by hand, so the identity does
-#   not prove the content is the same: each request hashes each file again, once.
-# On both, a change in the middle of a request is seen by the next one. Outside a request (tests, command line,
-# the extraction worker) nothing is remembered.
-GUARDA_ENTRE_PEDIDOS = os.name != 'nt'
+# and ``sha256`` reuses a hash while the file keeps its identity (path, size, mtime_ns, ctime_ns, inode). The hash
+# is kept ONLY inside the request, on every system (P52 of the owner: conferir sempre): each request reads each
+# file again, once. The file's identity does not prove its content between requests: on NTFS a write through
+# mmap changes neither size, mtime, ctime nor inode (B1 of the Coruja on 7f05beb), and on Linux a second write
+# through mmap to the same page before writeback does not change the ctime (B2). A change in the middle of a
+# request is seen by the next one. Outside a request (tests, command line, the extraction worker) nothing is
+# remembered.
 _PEDIDO = contextvars.ContextVar('vlado_pedido', default=None)
-_HASHES: dict = {}  # between requests, only where GUARDA_ENTRE_PEDIDOS
 MAXIMO_HASHES = 20000
 # The racy-git rule: a file modified in the last FOLGA_HASH_NS could change again within the same mtime tick
 # without changing its identity, so its hash is not kept.
@@ -86,7 +81,7 @@ def sha256(path: Path) -> str:
     scope = _PEDIDO.get()
     if scope is None:
         return _hash_do_arquivo(path)
-    guardados = _HASHES if GUARDA_ENTRE_PEDIDOS else scope.setdefault('hashes', {})
+    guardados = scope.setdefault('hashes', {})  # this request only (P52)
     key = os.fspath(path)
     try:
         before = _identidade(os.stat(key))

@@ -4,8 +4,9 @@ Um evidencia-buscar refazia o hash de todas as entradas da rodada a cada evidên
 de um pedido (``comum.pedido``, aberto por ``rotas_evidencia.executar``), cada conferência é feita uma vez, e o hash
 de um arquivo é reaproveitado enquanto ele mantém a identidade (caminho, tamanho, mtime_ns, ctime_ns, inode). Aqui a
 garantia que não pode mudar: o arquivo alterado continua recusado no pedido seguinte, também quando a escrita é
-por mmap (B1 da Coruja sobre 7f05beb: no NTFS ela não muda tamanho, mtime, ctime nem inode). Por isso, no Windows o
-hash só é reaproveitado dentro do pedido; no Linux, entre pedidos. Dados sintéticos (``fixture_achados``).
+por mmap (B1 da Coruja sobre 7f05beb: no NTFS ela não muda tamanho, mtime, ctime nem inode; B2: no Linux, a segunda
+escrita por mmap na mesma página, antes do writeback, não muda o ctime). Por isso o hash só é reaproveitado dentro
+do pedido, nos dois sistemas (P52 do dono: conferir sempre). Dados sintéticos (``fixture_achados``).
 """
 import mmap
 import os
@@ -51,10 +52,6 @@ class ConferenciaPorPedidoTest(unittest.TestCase):
         with comum.pedido():
             return carregar(self.root, 'alpha', 'R001', 'r2')
 
-    def guardado(self, path):
-        """The hash kept between requests (only where comum.GUARDA_ENTRE_PEDIDOS)."""
-        return os.fspath(path.resolve()) in comum._HASHES
-
     def test_mesma_resposta_com_e_sem_o_pedido(self):
         dentro_do_pedido = self.buscar()
         self.assertTrue(dentro_do_pedido['resultados'])
@@ -74,16 +71,10 @@ class ConferenciaPorPedidoTest(unittest.TestCase):
         self.assertTrue(primeiro)
         self.assertEqual(len(primeiro), len(set(primeiro)))  # once per file in the first request
         segundo = chamadas[len(primeiro):]
-        if comum.GUARDA_ENTRE_PEDIDOS:
-            self.assertEqual(segundo, [])  # Linux: none in the second, the files kept their identity
-            self.assertTrue(self.guardado(self.fonte) and self.guardado(self.banco))
-        else:
-            self.assertEqual(sorted(segundo), sorted(primeiro))  # Windows: each file again, once per request
-            self.assertEqual(comum._HASHES, {})
+        self.assertEqual(sorted(segundo), sorted(primeiro))  # each file again, once per request (P52)
 
     def test_fonte_alterada_continua_recusada(self):
         self.buscar()
-        self.assertEqual(self.guardado(self.fonte), comum.GUARDA_ENTRE_PEDIDOS)
         with self.fonte.open('ab') as stream:  # another size
             stream.write(b' ')
         with self.assertRaisesRegex(ValueError, 'hash divergente'):
@@ -98,7 +89,7 @@ class ConferenciaPorPedidoTest(unittest.TestCase):
             self.carregar_num_pedido()
 
     def test_mtime_reposto_a_mao_continua_recusado(self):
-        # Linux: the ctime changes. Windows: the hash is not kept between requests.
+        # The hash is not kept between requests (P52).
         self.buscar()
         info = self.fonte.stat()
         conteudo = self.fonte.read_bytes()
@@ -109,7 +100,6 @@ class ConferenciaPorPedidoTest(unittest.TestCase):
 
     def test_banco_do_indice_alterado_continua_recusado(self):
         self.buscar()
-        self.assertEqual(self.guardado(self.banco), comum.GUARDA_ENTRE_PEDIDOS)
         with self.banco.open('ab') as stream:
             stream.write(b'\0')
         with self.assertRaisesRegex(ValueError, 'Hash do banco divergente'):
@@ -129,6 +119,36 @@ class ConferenciaPorPedidoTest(unittest.TestCase):
             self.carregar_num_pedido()
         self.assertEqual(self.buscar()['analises'], [])
 
+    def test_segunda_escrita_por_mmap_na_mesma_pagina_continua_recusada(self):
+        """B2 da Coruja (a sequência de sondas/linux_mmap.py): um pedido, uma escrita por mmap, outro pedido, uma
+        segunda escrita na mesma página com o mapa ainda aberto (antes do writeback, no Linux o ctime não muda), e o
+        pedido seguinte ainda recusa."""
+        self.buscar()
+        with self.fonte.open('r+b') as stream, mmap.mmap(stream.fileno(), 0) as mapa:
+            mapa[0] = mapa[0] ^ 1
+            mapa.flush()
+            with self.assertRaisesRegex(ValueError, 'hash divergente'):
+                self.carregar_num_pedido()
+            mapa[1] = mapa[1] ^ 1  # same page, no flush
+            with self.assertRaisesRegex(ValueError, 'hash divergente'):
+                self.carregar_num_pedido()
+            mapa[0] = mapa[0] ^ 1  # first byte back: the content still differs in the second one
+            with self.assertRaisesRegex(ValueError, 'hash divergente'):
+                self.carregar_num_pedido()
+            mapa[1] = mapa[1] ^ 1  # original content again, through the same map
+            mapa.flush()
+        self.carregar_num_pedido()  # identical bytes are accepted again
+
+    def test_nenhum_hash_fica_para_o_pedido_seguinte(self):
+        self.assertFalse(hasattr(comum, '_HASHES'))
+        chamadas = []
+        original = comum._hash_do_arquivo
+        with patch('comum._hash_do_arquivo', side_effect=lambda p: chamadas.append(1) or original(p)):
+            for _ in range(2):
+                with comum.pedido():
+                    comum.sha256(self.fonte)
+        self.assertEqual(len(chamadas), 2)
+
     def test_dentro_do_pedido_cada_arquivo_e_lido_uma_vez_tambem_no_windows(self):
         chamadas = []
         original = comum._hash_do_arquivo
@@ -145,14 +165,11 @@ class ConferenciaPorPedidoTest(unittest.TestCase):
             primeiro = comum.sha256(novo)
             novo.write_bytes(b'abd')  # same size, possibly the same mtime tick
             segundo = comum.sha256(novo)
-        self.assertFalse(self.guardado(novo))
         self.assertNotEqual(primeiro, segundo)
 
     def test_fora_do_pedido_nada_e_lembrado(self):
         self.assertIsNone(comum.memo('dentro'))
-        antes = dict(comum._HASHES)
-        comum.sha256(self.fonte)
-        self.assertEqual(comum._HASHES, antes)
+        self.assertIsNone(comum.memo('hashes'))
 
     def test_caminho_fora_continua_recusado_no_pedido(self):
         with comum.pedido():
