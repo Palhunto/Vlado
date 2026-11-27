@@ -88,7 +88,7 @@ test('topo, fundamento comum, os dois processos, "O que muda" e a conferência, 
   assert.match(texto(vista.querySelector('.processo-pe')), /A diferença de desfecho não prova irregularidade\./);
   assert.ok(vista.querySelector('.processo-comparacao-cartao').classList.contains('is-pendente'));
   assert.match(texto(vista.querySelector('.processo-pendente')), /! Comparação pendente: falta conferir que o fundamento e os desfechos são comparáveis\./);
-  assert.equal(vista.querySelectorAll('.notice, [role=alert], .sugestao-erro, .form-erro').length, 0, 'nada nas cores de erro, nem aviso');
+  assert.equal([...vista.querySelectorAll('.notice, [role=alert], .sugestao-erro, .form-erro')].filter(n => !n.hidden && !n.closest('[hidden]')).length, 0, 'nada nas cores de erro, nem aviso à vista');
 });
 
 test('mesmo arquivo: "= Mesmo arquivo nos dois processos (mesmo hash)" e Próxima/Anterior andam entre as comparações', async () => {
@@ -205,4 +205,22 @@ test('sem comparações (estruturada: false): estado vazio do Design; o servidor
   assert.match(texto(r.vista), /Não deu para abrir a comparação\./);
   r.modos[0].click(); await espera(erro);
   assert.equal(erro.$('quadros-comparador').querySelector('.comparar-docs').hidden, false);
+});
+
+test('comparação pendente: "Virar pergunta ou pedido" cria a diligência com o texto da comparação e diz de qual se trata', async () => {
+  const m = montar(); m.avaliar("document.body.dataset.modo = 'conta';"); const {vista} = await abrirProcessos(m);
+  const virar = [...vista.querySelectorAll('button')].find(b => texto(b) === 'Virar pergunta ou pedido');
+  assert.ok(virar, 'a comparação pendente tem a ação de lacuna');
+  virar.click(); await espera(m);
+  const form = vista.querySelector('.lacuna-virar-form');
+  const sel = form.querySelector('select'); sel.value = 'pedido_informacao'; sel.dispatchEvent(new Evento('change', {bubbles: true}));
+  const campos = [...form.querySelectorAll('input[type=text]')];
+  for (const [c, v] of [[campos[0], 'Procuradoria de Vila Serena'], [campos[1], 'Ana Lima']]) { c.value = v; c.dispatchEvent(new Evento('input', {bubbles: true})); }
+  [...form.querySelectorAll('button')].find(b => texto(b) === 'Virar pedido').click(); await espera(m);
+  assert.equal(m.salvos.length, 1);
+  assert.equal(m.salvos[0].operacao, 'diligencias-criar');
+  assert.match(m.salvos[0].dados.acao, /^Conferir se o fundamento e os desfechos são comparáveis: Parecer jurídico nº 12\/2025 · Procuradoria de Vila Serena \(Processo 2025\/118 · Contrato 041\/2025 e Processo 2025\/201 · Contrato 052\/2025\)$/);
+  assert.equal(m.salvos[0].dados.tipo, 'pedido_informacao');
+  const {vista: iguais} = await abrirProcessos(montar({resposta: {caso: 'alpha', estruturada: true, comparacoes: [IGUAIS()]}}));
+  assert.ok(![...iguais.querySelectorAll('button')].some(b => texto(b) === 'Virar pergunta ou pedido'), 'comparação sem pendência não tem a ação');
 });

@@ -518,6 +518,75 @@ window.Quadros.formularios = (() => {
     return raiz;
   }
 
+  // "Virar pergunta ou pedido" (componentes.md, ação de lacuna): o que falta vira uma pergunta à IA (abre Perguntar com o texto) ou uma diligência de contato
+  // (entrevista, pedido de informação ou pedido via LAI), criada por diligencias-criar com o texto como ação. Numa lacuna registrada de hipótese, a diligência fica
+  // ligada a ela (diligencia_id, por hipoteses-atualizar); a lacuna automática e a comparação pendente não têm onde guardar o vínculo, então só criam a diligência.
+  const CONTATOS = [['entrevista', 'Entrevista'], ['pedido_informacao', 'Pedido de informação'], ['pedido_lai', 'Pedido via LAI']];
+  const podeDiligencia = () => !window.Sessao?.pode || window.Sessao.pode('diligencias-criar');
+  function virarPedido({casoId, texto, hipoteseId = null, aoCriar = null}) {
+    const raiz = element('div', undefined, 'lacuna-virar');
+    const abrirB = botao(t('Virar pergunta ou pedido'), 'lacuna-virar-botao'); abrirB.setAttribute('aria-expanded', 'false');
+    const form = element('form', undefined, 'lacuna-virar-form'); form.hidden = true; form.noValidate = true;
+    const opcoes = [['ia', 'Pergunta à IA'], ...(podeDiligencia() ? CONTATOS : [])];
+    let destino = 'ia', destinatario = '', responsavel = '', prazo = '', autor = '', ocupado = false;
+    const tipo = campo('Virar em', selecao(opcoes, destino, v => { destino = v; mostrar(); }));
+    const dest = campo('Destinatário', texto1('', v => { destinatario = v; }, 200), {maximo: 200, ajuda: 'Quem recebe: pessoa, órgão ou empresa.'});
+    const resp = campo('Responsável pelo contato', texto1('', v => { responsavel = v; }, 120), {maximo: 120});
+    const dia = element('input'); dia.type = 'date'; dia.addEventListener('input', () => { prazo = dia.value; });
+    const prz = campo('Prazo (opcional)', dia);
+    const local = document.body?.dataset?.modo === 'local';
+    const nome = campo('Seu nome', texto1('', v => { autor = v; }, 120), {maximo: 120});
+    const geral = element('p', undefined, 'form-erro lacuna-virar-erro'); geral.setAttribute('role', 'alert'); geral.hidden = true;
+    const estado = element('p', '', 'small lacuna-virar-estado'); estado.setAttribute('role', 'status');
+    const pe = element('div', undefined, 'form-pe'), cancelar = botao(t('Cancelar')), enviar = botao(t('Virar pedido'));
+    pe.append(cancelar, enviar);
+    const contato = [dest, resp, prz, ...(local ? [nome] : [])];
+    function mostrar() { for (const c of contato) c.hidden = destino === 'ia'; enviar.textContent = t(destino === 'ia' ? 'Abrir em Perguntar' : 'Virar pedido'); }
+    form.append(tipo, ...contato, geral, pe); mostrar();
+    abrirB.addEventListener('click', () => { form.hidden = !form.hidden; abrirB.setAttribute('aria-expanded', String(!form.hidden)); if (!form.hidden) tipo.controle.focus(); });
+    cancelar.addEventListener('click', () => { form.hidden = true; abrirB.setAttribute('aria-expanded', 'false'); abrirB.focus(); });
+    form.addEventListener('submit', ev => ev.preventDefault());
+    enviar.addEventListener('click', async () => {
+      if (ocupado) return;
+      geral.hidden = true; for (const c of [dest, resp, nome]) c.erro('');
+      if (destino === 'ia') {
+        // a pergunta vai ao campo de Perguntar (o texto que já estava lá fica); a pessoa revisa e envia
+        const alvo = document.getElementById('codex-pergunta');
+        const previo = alvo?.value.trim() || '';
+        window.areaMesa?.ir('codex');
+        // Perguntar recarrega o rascunho da apuração ao abrir (e pode zerar o campo um instante depois): a pergunta é posta já e conferida de novo logo em seguida
+        const colocar = () => { if (alvo && !alvo.value.includes(texto)) { alvo.value = previo ? `${previo}\n\n${texto}` : texto; alvo.dispatchEvent(new Event('input', {bubbles: true})); } };
+        colocar(); alvo?.focus?.(); setTimeout(colocar, 400);
+        return;
+      }
+      let falha = null;
+      if (!destinatario.trim()) { dest.erro('Escreva o destinatário.'); falha ||= dest; }
+      if (!responsavel.trim()) { resp.erro('Escreva quem fica responsável.'); falha ||= resp; }
+      if (local && !autor.trim()) { nome.erro('Escreva o seu nome.'); falha ||= nome; }
+      if (falha) { falha.controle.focus(); return; }
+      ocupado = true; enviar.disabled = cancelar.disabled = true; enviar.textContent = t('Criando…'); form.setAttribute('aria-busy', 'true');
+      let criada = null;
+      try {
+        criada = await api('diligencias-criar', {caso: casoId, requisicao_id: requisicao(), autor: local ? autor.trim() : '', origem: null, acao: String(texto).slice(0, 1000),
+          responsavel: responsavel.trim(), prazo: prazo || null, tipo: destino, destinatario: destinatario.trim()});
+        if (hipoteseId) {
+          const detalhe = await api('hipoteses-detalhe', {caso: casoId, id: hipoteseId});
+          const lacunas = (detalhe.estado.lacunas || []).map(l => ({descricao: l.descricao, diligencia_id: l.diligencia_id || null}));
+          const i = lacunas.findIndex(l => l.descricao === texto && !l.diligencia_id);
+          if (i >= 0) { lacunas[i].diligencia_id = criada.id; await api('hipoteses-atualizar', {caso: casoId, id: hipoteseId, anterior_sha256: detalhe.sha256, requisicao_id: requisicao(), lacunas}); }
+        }
+        form.hidden = true; abrirB.setAttribute('aria-expanded', 'false'); estado.textContent = t('Pedido criado. Ele aparece em Pedidos e prazos.');
+        Q.sugestoes.anunciar(t('Pedido criado. Ele aparece em Pedidos e prazos.'));
+        await aoCriar?.();
+      } catch (erro) {
+        geral.textContent = criada ? `${t('O pedido foi criado, mas não ficou ligado a esta lacuna:')} ${erro.message}` : `${t('Não deu para criar o pedido:')} ${erro.message}`; geral.hidden = false;
+        if (criada) estado.textContent = '';
+      } finally { ocupado = false; enviar.disabled = cancelar.disabled = false; form.removeAttribute('aria-busy'); mostrar(); }
+    });
+    raiz.append(abrirB, form, estado);
+    return raiz;
+  }
+
   const QUADROS = {
     hipotese: {prefixo: 'hipoteses', operacaoDetalhe: 'hipoteses-detalhe', construir: formHipotese, detalhe: (c, id) => api('hipoteses-detalhe', {caso: c, id}), rotuloNovo: 'Nova hipótese', rotuloEditar: 'Editar hipótese', vazio: () => ({enunciado: '', situacao: 'em_aberto', lacunas: [], vinculos: []}),
       deDetalhe: d => ({enunciado: d.estado.enunciado, situacao: d.estado.situacao, lacunas: (d.estado.lacunas || []).map(l => ({valor: l.descricao, diligencia_id: l.diligencia_id})), vinculos: (d.evidencias || []).map(vinculoDeItem)}),
@@ -695,5 +764,5 @@ window.Quadros.formularios = (() => {
     }
     return {enunciado: '', situacao: 'em_aberto', lacunas: [], vinculos};
   }
-  return {abrir, abrirNoPainel, hipoteseDaComparacao, temAnalise, botaoNovo, botaoEditar, podeCriar, podeAtualizar, corrigirCelula, numeroDoTexto, QUADROS, campo, segmentado, cartaoVinculo, vinculoDeItem, vinculoDeResultado, vinculoDeSugestao, normalizaData, mostraData, confirmarApagar, algumaMarca, marca};
+  return {abrir, abrirNoPainel, hipoteseDaComparacao, virarPedido, temAnalise, botaoNovo, botaoEditar, podeCriar, podeAtualizar, corrigirCelula, numeroDoTexto, QUADROS, campo, segmentado, cartaoVinculo, vinculoDeItem, vinculoDeResultado, vinculoDeSugestao, normalizaData, mostraData, confirmarApagar, algumaMarca, marca};
 })();

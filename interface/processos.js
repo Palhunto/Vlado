@@ -97,6 +97,8 @@ window.Quadros.processos = (() => {
     if (c.pendente) {
       raiz.classList.add('is-pendente');
       const aviso = element('p', `! ${t('Comparação pendente: falta conferir que o fundamento e os desfechos são comparáveis.')}`, 'processo-pendente'); aviso.setAttribute('role', 'status'); raiz.append(aviso);
+      // ação de lacuna: a comparação pendente vira pergunta ou pedido (a diligência não guarda vínculo com a comparação; o texto diz de qual se trata)
+      const virar = Q.formularios?.virarPedido({casoId, texto: `${t('Conferir se o fundamento e os desfechos são comparáveis')}: ${c.chave?.identificador || ''}${c.chave?.emissor ? ` · ${c.chave.emissor}` : ''} (${A.processo} e ${B.processo})`}); if (virar) raiz.append(virar);
     }
     raiz.append(element('p', t('A diferença de desfecho não prova irregularidade.'), 'processo-pe'));
     // Ações.
