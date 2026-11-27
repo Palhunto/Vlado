@@ -1031,7 +1031,7 @@ Pranchas: `aprovacao/documentos/proposta-*`. Uma tela só para acervo, envio e b
 
 Três regras valem para a seção inteira:
 
-- **O que está sem pessoa nunca aparece como conferido** (P45). Sugestão da IA, veredito da IA e item confirmado sem conferência no original têm cada um a sua marca, e nenhuma delas usa a aparência da conferência humana ([selo](#selo)).
+- **O que está sem pessoa nunca aparece como conferido** (P45). Sugestão da IA, veredito da IA e item confirmado sem conferência no original têm cada um a sua marca, e nenhuma delas usa a aparência da conferência humana ([selo](#selo); [suporte só da IA](#suporte-so-da-ia)).
 - **Confirmar não é conferir.** Confirmar uma sugestão põe o item no quadro. Conferir no original continua sendo o que se faz no achado.
 - **A diferença não é acusação.** Divergência de data, de desfecho ou de versão aparece em cor neutra ou de aviso, nunca nas cores de erro (W07, regra 8; W11, regra 6).
 
@@ -1088,15 +1088,16 @@ Sugestão da IA não é "a confirmar". "A confirmar" é o que uma pessoa marcou 
 
 | Caso | Razão |
 |---|---|
-| Ligação com uma ponta que ainda é sugestão | "Confirme antes Carlos Prado, a outra ponta da ligação." No formulário de "Corrigir", a ponta pode ser trocada por uma entidade que já está no mapa |
+| Ligação com uma ponta que ainda é sugestão | "Confirme antes Carlos Prado, a outra ponta da ligação." Se essa ponta foi descartada: "Carlos Prado, a outra ponta, está em Descartadas. Restaure-o ou troque a ponta em Corrigir." No formulário de "Corrigir", a ponta pode ser trocada por uma entidade que já está no mapa |
 | A revisão da IA retirou o achado da evidência, ou ela foi substituída | "A revisão da IA retirou este achado. Corrija com outra evidência ou descarte." Na versão substituída: "Há uma versão mais nova deste achado. Corrija para ligar a nova versão." |
+| O veredito da revisão da IA é não sustentado ou ilegível | "A revisão da IA não sustentou esta evidência. Corrija com outra evidência ou descarte." Ilegível: "A revisão da IA não conseguiu ler esta evidência. Confira no original e corrija, ou descarte." O item não entra no quadro com um suporte que a legenda não descreve |
 | A evidência deixou de estar disponível (rodada apagada) | "A evidência não está mais disponível. Descarte ou corrija com outra." |
 | Sem permissão de editar o quadro (sem as capacidades de criar e atualizar do quadro na sessão: `hipoteses-criar` e `-atualizar`, `linha-tempo-criar` e `-atualizar`, `mapa-entidade-criar`, `mapa-relacao-criar` e os `-atualizar`) | as três ações ficam indisponíveis, com "Só repórter e editor mudam os quadros." A pessoa continua vendo as sugestões |
 
 | Estado | Aparência | Origem |
 |---|---|---|
 | Padrão | tabela dos sinais acima | derivado (P20a, P45) |
-| Selecionado | borda 2 px `--theme-accent` contínua e a sombra do selecionado, como no nó e no evento. O selo "IA · sugestão" e a transparência ficam: a seleção não pode apagar a origem | derivado |
+| Selecionado | borda 2 px **tracejada** `--theme-accent`, com a mesma sombra do nó e do evento selecionados. O tracejado, o selo "IA · sugestão" e a transparência ficam: a seleção nunca tira um dos três sinais (P20a). Na ligação selecionada, o traço passa a 4 px `--theme-accent` e mantém o tracejado 10 6 | derivado; B3 da Coruja sobre `b1528cb` |
 | Ao passar o mouse | a borda tracejada passa a `--theme-text`, e o fundo continua transparente | derivado |
 | Foco | anel de foco do lado de fora da borda tracejada | regra geral |
 | Ocupado | `aria-busy` no painel; o botão escolhido no gerúndio ("Confirmando…", "Descartando…"), os outros dois desabilitados até a resposta | derivado de W11, regra 2 |
@@ -1104,7 +1105,7 @@ Sugestão da IA não é "a confirmar". "A confirmar" é o que uma pessoa marcou 
 | Desabilitado | tabela acima | derivado |
 | Vazio | sem sugestões, nada aparece: sem grupo, sem contagem e sem "Descartadas" | derivado |
 
-**Para a Viga.** O formato do candidato ainda não está no `MESA.md`, e ele é versionado ali (P45). A tela precisa, por candidato: o tipo (`pessoa`, `organizacao`, `ligacao`, `acontecimento`, `hipotese`), os campos do item no formato do quadro, a referência da evidência publicada com o localizador, a análise de origem (caso, rodada, data), o veredito e a natureza da última revisão da IA, o destino do achado (`incluido`, `fora_do_briefing`, `pendencia`, `retirado`, `substituido`) e, na ligação, quais pontas ainda são sugestão. O estado da sugestão (aberta, confirmada, descartada) com quem decidiu e quando também precisa vir.
+**Para a Viga.** O formato do candidato ainda não está no `MESA.md`, e ele é versionado ali (P45). A tela precisa, por candidato: o tipo (`pessoa`, `organizacao`, `ligacao`, `acontecimento`, `hipotese`), os campos do item no formato do quadro, a referência da evidência publicada com o localizador, a análise de origem (caso, rodada, data), o veredito e a natureza da última revisão da IA, o destino do achado (`incluido`, `fora_do_briefing`, `pendencia`, `retirado`, `substituido`) e, na ligação, quais pontas ainda são sugestão. O estado da sugestão (aberta, confirmada, descartada) com quem decidiu e quando também precisa vir. O que o vínculo precisa guardar para a marca "alterado por pessoa" está em [registro do vínculo](#registro-vinculo).
 
 <a id="formularios-quadros"></a>
 
@@ -1158,6 +1159,7 @@ As regras do modelo (`scripts/evidencias.py`) aparecem antes do envio, sempre co
 **Preenchimento do vínculo (P47).** De onde vem a evidência decide como o cartão chega:
 
 - **Achado da IA:** papel, suporte e natureza da última revisão da IA, com a linha "Da revisão da IA" visível.
+- **Achado retirado** (destino `retirado`, também nas rodadas antigas em que a síntese retirou um achado sustentado, como os de Paranaíta que levaram à P48): papel e natureza da revisão, mas o suporte nasce **"Não revisado"**, com a linha "Da revisão da IA: IA · sustentado · retirado". O vínculo guarda o destino. Se uma pessoa escolher "Sustentado", o campo leva a marca "alterado por pessoa". Assim o veredito de um achado retirado não deixa, sozinho, a linha do mapa contínua nem "Sustentada" disponível na hipótese.
 - **Fonte do caderno** (trecho com fonte, anotação, achado do jornalista): suporte em "Não revisado" e natureza sem escolha. O erro no envio é "Falta a natureza. Escolha o que a fonte é: declaração documental, alegação atribuída, inferência ou pendência." Sem linha da IA.
 - **Vínculo antigo,** de antes desta marca: sem linha da IA e sem "alterado por pessoa". A tela não deduz nada que o registro não traz.
 
@@ -1174,8 +1176,8 @@ Fora do formulário, onde a evidência aparece (coluna da hipótese, painel da l
 | Caso | Texto |
 |---|---|
 | Análise sem revisão de suporte | "Esta análise não passou pela revisão de suporte. O vínculo começa em “não revisado”." |
-| Achado retirado pela revisão da IA | "A revisão da IA retirou este achado: «motivo». Ele pode continuar ligado, mas não sustenta o item." |
-| Versão substituída | "Há uma versão mais nova deste achado." e "Ligar a versão nova" ([link](#link)), que troca a referência e mantém o papel; o suporte volta ao da revisão da versão nova |
+| Achado retirado pela revisão da IA | "A revisão da IA retirou este achado: «motivo». Ele pode continuar ligado, com o suporte em “não revisado”: só sustenta o item se uma pessoa escolher." |
+| Versão substituída | "Há uma versão mais nova deste achado." e "Ligar a versão nova" ([link](#link)), que troca a referência e passa papel, suporte e natureza aos da revisão da versão nova (suporte "não revisado" se a versão nova foi retirada). Com "alterado por pessoa" no vínculo, passa antes pelo diálogo de [apagar revisão](#apagar-revisao) |
 | Evidência indisponível (rodada apagada) | "A evidência não está mais disponível. O vínculo fica no registro, mas não abre o original." |
 
 **Fora do briefing não é aviso.** O destino `fora_do_briefing` é um achado sustentado que a síntese deixou de fora. Ele vem como nota em 14 `--theme-muted`, abaixo da linha da IA: "Fora do briefing (sustentado): a revisão sustentou o achado, mas ele não entrou no briefing." O rótulo é o da P48.
@@ -1184,11 +1186,37 @@ Fora do formulário, onde a evidência aparece (coluna da hipótese, painel da l
 
 **Confirmação antes de apagar uma revisão humana.** Três ações desfazem o que uma pessoa decidiu e passam pelo [diálogo](#dialogo) destrutivo:
 
-- **Desligar** um vínculo com "alterado por pessoa";
+- **Desligar** um vínculo com "alterado por pessoa", ou um vínculo do caderno cujo suporte uma pessoa escolheu (qualquer um diferente de "Não revisado");
+- **"Ligar a versão nova"** num vínculo com "alterado por pessoa";
 - **"Voltar ao da IA"** num campo alterado;
 - **desmarcar "revisada"** no caderno (P14b.8).
 
-O diálogo tem a rubrica "APAGAR REVISÃO" e o título "Apagar a revisão de Ana Lima?" ("Apagar a sua revisão?" para a própria pessoa). O texto diz o que muda: "Ana Lima mudou o suporte de “sustentado” (da revisão da IA) para “parcial” em 26/11, às 16h10. O vínculo volta ao que a revisão da IA disse." A ação é "Apagar a revisão" e o foco inicial fica em "Cancelar". Desligar um vínculo sem revisão humana não pede confirmação.
+O diálogo tem a rubrica "APAGAR REVISÃO" e o título "Apagar a revisão de Ana Lima?" ("Apagar a sua revisão?" para a própria pessoa). O texto diz o que muda: "Ana Lima mudou o suporte de “sustentado” (da revisão da IA) para “parcial” em 26/11, às 16h10. O vínculo volta ao que a revisão da IA disse." A ação é "Apagar a revisão" e o foco inicial fica em "Cancelar". Dois casos mudam o texto e a ação:
+
+- **"Ligar a versão nova":** "O vínculo passa à versão nova do achado e volta ao que a revisão dela disse: papel, suporte e natureza. A mudança de Ana Lima (suporte “parcial”, em 26/11, às 16h10) deixa de valer." A ação é "Ligar a versão nova".
+- **Vínculo do caderno:** "Ana Lima escolheu o suporte “sustentado” em 26/11, às 16h10. Desligar apaga essa escolha; o trecho continua no caderno." A ação é "Desligar".
+
+Desligar um vínculo sem revisão humana (da IA sem a marca, ou do caderno ainda em "Não revisado") não pede confirmação.
+
+<a id="suporte-so-da-ia"></a>
+
+**Quando o suporte vem só da revisão da IA** (R2 da Coruja sobre `b1528cb`). O suporte é só da IA quando o vínculo mantém o valor da revisão, sem "alterado por pessoa", e ninguém conferiu o achado no original. Nesse caso, nada no quadro usa a aparência da conferência humana:
+
+- **Painel da ligação selecionada:** o selo "✓ 2 evidências conferidas no original" fica só para o que uma pessoa conferiu. O resto vem na pílula da P20a, "IA · 2 evidências sustentadas" (sem fundo, borda tracejada `--theme-muted`, sem sinal). Havendo as duas coisas, as duas pílulas lado a lado: "✓ 1 evidência conferida no original" e "IA · 1 sustentada".
+- **Hipótese:** "Com evidência conferida" fica para a evidência conferida por pessoa. Com suporte só da IA, a condição diz "Com evidência sustentada pela revisão da IA", na forma da P20a.
+- **Linha do tempo e cartão do vínculo:** a fonte leva o selo "IA · sustentado" no lugar do selo humano.
+
+<a id="registro-vinculo"></a>
+
+**Para a Viga: o registro do vínculo** (R1 e B2 da Coruja sobre `b1528cb`). Hoje o vínculo guarda só `referencia`, `papel`, `suporte`, `natureza` e `justificativa` (`scripts/evidencias.py`). A marca, "Voltar ao da IA", a linha "Da revisão da IA" e o texto dos diálogos pedem mais. O vínculo resolvido precisa trazer:
+
+- os valores da revisão da IA no momento de ligar (papel, suporte, natureza), com a análise e a versão do achado;
+- o destino do achado, para o servidor não contar um achado retirado como suporte sem a escolha de uma pessoa;
+- por campo mudado: quem mudou, quando e o valor anterior;
+- no vínculo do caderno: quem escolheu o suporte e quando;
+- se uma pessoa conferiu o achado no original, para separar o suporte só da IA.
+
+Sem esses campos, a tela não mostra a marca: ela não deduz nada que o registro não traz.
 
 <a id="seletor-evidencia"></a>
 
@@ -1205,7 +1233,7 @@ Um componente só, aberto por "+ Ligar evidência" nos quatro formulários e por
 | Origem | pílulas de 44 px ([filtro em pílula](#botao), `aria-pressed`): "Tudo", "Achados da IA", "Caderno" |
 | Análise | em 14 `--theme-muted`: "Achados da análise mais recente (26/11, 14h32)". "Avançado" é um `<details>` fechado com a lista das análises da apuração, por data e com a pergunta, para escolher outra. Só as desta apuração |
 | Resultado | botão de largura cheia, fundo `--theme-surface`, borda 1 px `--theme-line`, raio 8, preenchimento 12, intervalo 4: o tipo em 14/600 `--theme-muted`; o texto em serifa 16, até três linhas; o localizador em 14 `--theme-muted`; na linha de baixo, o estado. Intervalo de 8 entre resultados |
-| Estado do resultado | duas marcas que não se confundem: a conferência humana ([selo](#selo) "✓ Conferido no original" ou "○ A conferir"; W05, regra 3) e, no achado da IA, o veredito (selo da P20a). Destino retirado: "retirado pela revisão" em 14/600 `--theme-warning`; fora do briefing, a nota curta "fora do briefing (sustentado)" em 14 `--theme-muted` |
+| Estado do resultado | duas marcas que não se confundem: a conferência humana ([selo](#selo) "✓ Conferido no original" ou "○ A conferir"; W05, regra 3) e, no achado da IA, o veredito (selo da P20a). Destino retirado: "retirado pela revisão" em 14/600 `--theme-warning`, e o vínculo nasce com o suporte "Não revisado" ([preenchimento](#cartao-vinculo)); fora do briefing, a nota curta "fora do briefing (sustentado)" em 14 `--theme-muted` |
 | Resultado aberto | ao escolher, o resultado vira cartão aberto (borda 2 px `--theme-accent`) com os campos do vínculo já preenchidos (P47), "Abrir o original" (secundário) e "Ligar" (principal) |
 | Já ligado | o resultado aparece com "Já ligada a este item" em 14 `--theme-muted` e não abre |
 
@@ -1231,12 +1259,12 @@ Quando o acervo tem mais de um processo sobre a mesma matéria, a análise procu
 
 | Parte, 1440 | Medida e token |
 |---|---|
-| Topo | "Comparação entre processos" (título dentro dos quadros, serifa 22/600) e "2 comparações · 1 pendente" em 14 `--theme-muted`; "Anterior" e "Próxima" (secundários) à direita, como no Comparador |
-| Fundamento comum | cartão no bloco base, preenchimento 20: rubrica "FUNDAMENTO COMUM" (14/600 `--theme-muted`); o fundamento em serifa 18 ("Parecer jurídico nº 12/2025 da Procuradoria de Vila Serena"); a chave que liga os processos numa lista de definições em 14 (Identificador, Data, Emissor, Versão: rótulo em `--theme-muted`, valor em `--theme-text`); a identidade: "✓ O mesmo arquivo nos dois processos (mesmo hash)" em 14/600 `--theme-accent`, ou "○ Mesmo fundamento a conferir: versões ou trechos diferentes" em 14 `--theme-muted`, com "Comparar os dois trechos" ([link](#link)), que abre o modo Documentos com os dois lados escolhidos |
+| Topo | "Comparação entre processos" (título dentro dos quadros, serifa 22/600) e "2 comparações · 1 pendente" em 14 `--theme-muted` (pendente: veredito da revisão da IA diferente de sustentado, ou natureza ou destino do achado pendência); "Anterior" e "Próxima" (secundários) à direita, como no Comparador |
+| Fundamento comum | cartão no bloco base, preenchimento 20: rubrica "FUNDAMENTO COMUM" (14/600 `--theme-muted`); o fundamento em serifa 18 ("Parecer jurídico nº 12/2025 da Procuradoria de Vila Serena"); a chave que liga os processos numa lista de definições em 14 (Identificador, Data, Emissor, Versão: rótulo em `--theme-muted`, valor em `--theme-text`); a identidade: "= Mesmo arquivo nos dois processos (mesmo hash)" em 14/600 `--theme-text`, com o "=" `aria-hidden` (é a comparação de hash feita pela Mesa, nem conferência humana nem veredito da IA), ou "○ Mesmo fundamento a conferir: versões ou trechos diferentes" em 14 `--theme-muted`, com "Comparar os dois trechos" ([link](#link)), que abre o modo Documentos com os dois lados escolhidos |
 | Processo A e B | dois cartões lado a lado, como os lados do Comparador (intervalo 16, preenchimento 20, intervalo interno 12): "Processo A" e "Processo B" em 14/600 `--theme-muted`; o processo em 16/600 ("Processo 2025/118 · Contrato 041/2025 com a Construtora Alfa"); o trecho do fundamento em serifa 16, com o localizador e "abrir o original" em 14; a rubrica "DESFECHO" e o desfecho em serifa 16, com a fonte |
 | O que muda | tabela num cartão (o padrão das [tabelas](#quadros)): linhas Questão decidida, Fase, Desfecho; colunas Processo A, Processo B e Comparação. A comparação diz "igual" ou "diferente" em 14/600 `--theme-text`, precedida de "=" ou "≠" `aria-hidden`. A cor é neutra: diferença de desfecho não é aviso nem erro |
-| Conferência da comparação | rubrica "CONFERÊNCIA DA COMPARAÇÃO" e o veredito da revisão da IA (selo da P20a, "IA · sustentado" ou "IA · parcial"). Seis linhas com sinal e texto, intervalo de 8: mesma versão, mesma data, mesmo emissor, mesmo trecho, mesma questão decidida, mesma fase. Cada uma com "✓" em `--theme-accent` ("✓ Mesmo emissor"), "○" em `--theme-muted` ("○ Fase a conferir") ou "✕" em `--theme-muted` com o que difere ("✕ Fases diferentes: recurso e primeira instância"). O "✕" aqui não é erro, porque diz só que a comparação não se sustenta |
-| Pendência | se alguma linha não tiver "✓", o cartão inteiro da comparação vira item a resolver (borda 1 px tracejada `--theme-warning`, fundo `--theme-warning-bg`), com "! Comparação pendente: falta conferir que o fundamento e os desfechos são comparáveis." em 16/600 `--theme-warning` e a [ação de lacuna](#telas-aprovadas) "Virar pergunta ou pedido" |
+| Conferência da comparação | rubrica "CONFERÊNCIA DA COMPARAÇÃO" e o veredito da revisão da IA (selo da P20a, "IA · sustentado" ou "IA · parcial"). Seis linhas, intervalo de 8: mesma versão, mesma data, mesmo emissor, mesmo trecho, mesma questão decidida, mesma fase. São resultado da revisão da IA e vêm na forma da P20a, sem sinal e sem a cor da conferência humana: "IA · mesmo emissor" (texto `--theme-text`, borda tracejada `--theme-muted`), "IA · fase a conferir" (texto e borda `--theme-warning`) e "IA · fases diferentes: recurso e primeira instância" (texto `--theme-text`, borda tracejada `--theme-muted`). A diferença é dita, mas não é erro: mostra só que a comparação não se sustenta |
+| Pendência | se alguma linha não disser "mesmo" (e, dentro da exceção abaixo, se a comparação for pendente pela regra do topo), o cartão inteiro da comparação vira item a resolver (borda 1 px tracejada `--theme-warning`, fundo `--theme-warning-bg`), com "! Comparação pendente: falta conferir que o fundamento e os desfechos são comparáveis." em 16/600 `--theme-warning` e a [ação de lacuna](#telas-aprovadas) "Virar pergunta ou pedido" |
 | Frase do pé | "A diferença de desfecho não prova irregularidade." em 16, como a frase do Comparador (W07, regra 8) |
 | Ações | "Abrir o achado para conferir" (principal), que leva a Conferir achado: a comparação é um achado da análise e se confere lá (W07, regra 5). "Criar hipótese com esta comparação" (secundário) abre o formulário de hipótese com o enunciado em branco, a situação "em aberto" e as evidências dos dois lados ligadas, com o preenchimento da P47 |
 
