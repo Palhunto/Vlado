@@ -1371,6 +1371,12 @@ window.VLADO_I18N_EN = {
     "Autor": "Author",
     "Seu nome, como aparece no registro.": "Your name, as it appears in the record.",
     "Escreva o seu nome em Autor para salvar.": "Write your name in Author to save.",
+    // Onda 4: virar pedido (B1)
+    "Ver pedido": "View request",
+    "Ligar à lacuna": "Link to the gap",
+    "Esta lacuna mudou, já foi ligada a um pedido ou foi apagada desde que o quadro abriu. Atualize o quadro e tente de novo; nenhum pedido foi criado.": "This gap changed, was already linked to a request, or was deleted since the board opened. Refresh the board and try again; no request was created.",
+    "O pedido foi criado, mas a lacuna mudou ou já estava ligada a outro pedido; ele continua em Pedidos e prazos.": "The request was created, but the gap changed or was already linked to another request; it remains in Requests and deadlines.",
+    "Clique em Ligar à lacuna para tentar de novo; o pedido não será criado outra vez.": "Click Link to the gap to try again; the request will not be created twice.",
     // Fase 06 — quadros de evidência (interface/quadros.js)
     "Hipóteses e acontecimentos registrados por pessoas a partir das evidências desta apuração. Cada evidência abre o original conferido; os quadros organizam e apontam lacunas, sem avaliar veracidade.": "Hypotheses and events recorded by people from this investigation’s evidence. Each piece of evidence opens the checked original; the boards organise and point out gaps, without judging truth.",
     "Hipóteses": "Hypotheses",

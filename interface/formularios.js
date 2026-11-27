@@ -537,12 +537,24 @@ window.Quadros.formularios = (() => {
   // ligada a ela (diligencia_id, por hipoteses-atualizar); a lacuna automática e a comparação pendente não têm onde guardar o vínculo, então só criam a diligência.
   const CONTATOS = [['entrevista', 'Entrevista'], ['pedido_informacao', 'Pedido de informação'], ['pedido_lai', 'Pedido via LAI']];
   const podeDiligencia = () => !window.Sessao?.pode || window.Sessao.pode('diligencias-criar');
+  // Uma lacuna gera um pedido: o que já virou diligência neste navegador fica lembrado (caso, hipótese e texto da lacuna), para o botão virar "Ver pedido" também depois de o
+  // quadro recarregar (a lacuna automática e a comparação pendente não guardam vínculo no servidor). `ligada: false` é o pedido criado cujo vínculo com a lacuna ainda não saiu.
+  const PEDIDOS_CHAVE = 'vlado:pedidos-criados';
+  const pedidosNaTela = {};   // reserva quando o navegador não guarda a sessão
+  const pedidosCriados = () => { try { return {...JSON.parse(sessionStorage.getItem(PEDIDOS_CHAVE) || '{}'), ...pedidosNaTela}; } catch (_) { return {...pedidosNaTela}; } };
+  const lembrarPedido = (chave, pedido) => { pedidosNaTela[chave] = pedido; try { sessionStorage.setItem(PEDIDOS_CHAVE, JSON.stringify({...JSON.parse(sessionStorage.getItem(PEDIDOS_CHAVE) || '{}'), [chave]: pedido})); } catch (_) { /* sem armazenamento: vale só nesta tela */ } };
   function virarPedido({casoId, texto, hipoteseId = null, aoCriar = null}) {
     const raiz = element('div', undefined, 'lacuna-virar');
     const abrirB = botao(t('Virar pergunta ou pedido'), 'lacuna-virar-botao'); abrirB.setAttribute('aria-expanded', 'false');
     const estado = element('p', '', 'small lacuna-virar-estado'); estado.setAttribute('role', 'status');
+    const chave = [casoId, hipoteseId || '', texto].join('|');
+    let criada = pedidosCriados()[chave] || null;       // {id, ligada}: o pedido que esta lacuna já gerou
+    let rid = requisicao(), ridLigar = requisicao(), ultimoConteudo = '';   // estáveis entre cliques: o mesmo pedido, a mesma tentativa
+    const jaVirou = () => !!criada && criada.ligada !== false;
+    const verPedido = () => { abrirB.textContent = t('Ver pedido'); abrirB.setAttribute('aria-expanded', 'false'); abrirB.removeAttribute('aria-expanded'); if (form) form.hidden = true; };
     // o formulário só existe depois de aberto: nenhum campo escondido (nem o Autor) fica na tela antes disso
     let form = null;
+    if (jaVirou()) abrirB.textContent = t('Ver pedido');
     function montarForm() {
     form = element('form', undefined, 'lacuna-virar-form'); form.hidden = true; form.noValidate = true;
     const opcoes = [['ia', 'Pergunta à IA'], ...(podeDiligencia() ? CONTATOS : [])];
@@ -557,7 +569,7 @@ window.Quadros.formularios = (() => {
     const pe = element('div', undefined, 'form-pe'), cancelar = botao(t('Cancelar')), enviar = botao(t('Virar pedido'));
     pe.append(cancelar, enviar);
     const contato = [dest, resp, prz, ...(nome ? [nome] : [])];
-    function mostrar() { for (const c of contato) c.hidden = destino === 'ia'; enviar.textContent = t(destino === 'ia' ? 'Abrir em Perguntar' : 'Virar pedido'); }
+    function mostrar() { for (const c of contato) c.hidden = destino === 'ia' || !!criada; enviar.textContent = t(destino === 'ia' ? 'Abrir em Perguntar' : criada ? 'Ligar à lacuna' : 'Virar pedido'); }
     form.append(tipo, ...contato, geral, pe); mostrar();
     cancelar.addEventListener('click', () => { form.hidden = true; abrirB.setAttribute('aria-expanded', 'false'); abrirB.focus(); });
     form.addEventListener('submit', ev => ev.preventDefault());
@@ -575,32 +587,58 @@ window.Quadros.formularios = (() => {
         return;
       }
       let falha = null;
-      if (!destinatario.trim()) { dest.erro('Escreva o destinatário.'); falha ||= dest; }
-      if (!responsavel.trim()) { resp.erro('Escreva quem fica responsável.'); falha ||= resp; }
+      if (!criada) {
+        if (!destinatario.trim()) { dest.erro('Escreva o destinatário.'); falha ||= dest; }
+        if (!responsavel.trim()) { resp.erro('Escreva quem fica responsável.'); falha ||= resp; }
+      }
       if (nome && !nome.autor()) { nome.erro('Escreva o seu nome.'); falha ||= nome; }
       if (falha) { falha.controle.focus(); return; }
       ocupado = true; enviar.disabled = cancelar.disabled = true; enviar.textContent = t('Criando…'); form.setAttribute('aria-busy', 'true');
-      let criada = null;
+      // a lacuna registrada: confere no servidor que ela ainda existe, sem vínculo, ANTES de criar o pedido (ela pode ter mudado, sido ligada ou apagada desde que o quadro abriu)
+      const acharLacuna = detalhe => (detalhe.estado.lacunas || []).findIndex(l => l.descricao === texto && !l.diligencia_id);
       try {
-        criada = await api('diligencias-criar', {caso: casoId, requisicao_id: requisicao(), ...comAutor(nome), origem: null, acao: String(texto).slice(0, 1000),
-          responsavel: responsavel.trim(), prazo: prazo || null, tipo: destino, destinatario: destinatario.trim()});
-        if (hipoteseId) {
+        if (hipoteseId && !criada) {
+          const antes = await api('hipoteses-detalhe', {caso: casoId, id: hipoteseId});
+          if (acharLacuna(antes) < 0) {
+            geral.textContent = t('Esta lacuna mudou, já foi ligada a um pedido ou foi apagada desde que o quadro abriu. Atualize o quadro e tente de novo; nenhum pedido foi criado.'); geral.hidden = false;
+            return;
+          }
+        }
+        if (!criada) {
+          // outro conteúdo é outra tentativa; o mesmo conteúdo reenviado é a mesma (o servidor devolve o pedido já criado, sem duplicar)
+          const conteudo = JSON.stringify([destino, destinatario.trim(), responsavel.trim(), prazo, nome?.autor() || '']);
+          if (conteudo !== ultimoConteudo) { rid = requisicao(); ultimoConteudo = conteudo; }
+          const feita = await api('diligencias-criar', {caso: casoId, requisicao_id: rid, ...comAutor(nome), origem: null, acao: String(texto).slice(0, 1000),
+            responsavel: responsavel.trim(), prazo: prazo || null, tipo: destino, destinatario: destinatario.trim()});
+          criada = {id: feita.id, ligada: !hipoteseId}; lembrarPedido(chave, criada);
+        }
+        if (hipoteseId && criada.ligada === false) {
           const detalhe = await api('hipoteses-detalhe', {caso: casoId, id: hipoteseId});
           const lacunas = (detalhe.estado.lacunas || []).map(l => ({descricao: l.descricao, diligencia_id: l.diligencia_id || null}));
-          const i = lacunas.findIndex(l => l.descricao === texto && !l.diligencia_id);
-          if (i >= 0) { lacunas[i].diligencia_id = criada.id; await api('hipoteses-atualizar', {caso: casoId, id: hipoteseId, anterior_sha256: detalhe.sha256, requisicao_id: requisicao(), ...comAutor(nome), lacunas}); }
+          const i = acharLacuna(detalhe);
+          if (i < 0) {
+            // o pedido existe; a lacuna é que mudou ou já foi ligada: nada a repetir, e o botão passa a levar ao pedido
+            criada = {id: criada.id, ligada: true}; lembrarPedido(chave, criada);
+            geral.textContent = t('O pedido foi criado, mas a lacuna mudou ou já estava ligada a outro pedido; ele continua em Pedidos e prazos.'); geral.hidden = false;
+            verPedido(); mostrar();
+            return;
+          }
+          lacunas[i].diligencia_id = criada.id;
+          await api('hipoteses-atualizar', {caso: casoId, id: hipoteseId, anterior_sha256: detalhe.sha256, requisicao_id: ridLigar, ...comAutor(nome), lacunas});
+          criada = {id: criada.id, ligada: true}; lembrarPedido(chave, criada);
         }
         if (nome) Q.autoria.lembrar(nome.autor());
-        form.hidden = true; abrirB.setAttribute('aria-expanded', 'false'); estado.textContent = t('Pedido criado. Ele aparece em Pedidos e prazos.');
+        form.hidden = true; estado.textContent = t('Pedido criado. Ele aparece em Pedidos e prazos.'); verPedido();
         Q.sugestoes.anunciar(t('Pedido criado. Ele aparece em Pedidos e prazos.'));
         await aoCriar?.();
       } catch (erro) {
-        geral.textContent = criada ? `${t('O pedido foi criado, mas não ficou ligado a esta lacuna:')} ${erro.message}` : `${t('Não deu para criar o pedido:')} ${erro.message}`; geral.hidden = false;
+        geral.textContent = criada ? `${t('O pedido foi criado, mas não ficou ligado a esta lacuna:')} ${erro.message} ${t('Clique em Ligar à lacuna para tentar de novo; o pedido não será criado outra vez.')}` : `${t('Não deu para criar o pedido:')} ${erro.message}`; geral.hidden = false;
         if (criada) estado.textContent = '';
       } finally { ocupado = false; enviar.disabled = cancelar.disabled = false; form.removeAttribute('aria-busy'); mostrar(); }
     });
     }
     abrirB.addEventListener('click', () => {
+      if (jaVirou()) { window.areaMesa?.ir('diligencias'); return; }     // uma lacuna gera um pedido: depois de criado, o botão leva a ele
       if (!form) { montarForm(); raiz.insertBefore(form, estado); form.hidden = false; abrirB.setAttribute('aria-expanded', 'true'); form.querySelector('select')?.focus(); return; }
       form.hidden = !form.hidden; abrirB.setAttribute('aria-expanded', String(!form.hidden)); if (!form.hidden) form.querySelector('select')?.focus();
     });
