@@ -55,6 +55,8 @@ window.Quadros = (() => {
       const blob = ref.tipo === 'ia'
         ? await api('achados-original', {caso: casoId, rodada: ref.rodada, revisao: ref.revisao, evidencia_id: ref.evidencia_id}, true)
         : await api('caderno-original', {caso: casoId, registro_id: ref.registro_id, sha256: ref.sha256, fonte_indice: ref.fonte}, true);
+      // o original pedido numa apuração não abre por cima de outra: se a pessoa trocou enquanto o servidor respondia, a resposta é descartada
+      const atual = window.contextoCaso?.(); if (atual && atual !== casoId) return;
       const loc = ev.localizador || vinculo.localizador || {};
       await window.abrirOriginal(blob, ev.documento?.nome || 'original', loc.pagina_pdf || 1, ev.trecho || '');
     } catch (erro) { retorno.textContent = erro.message; }
