@@ -166,7 +166,144 @@ window.Quadros = (() => {
     caminho.setAttribute('d', CAMINHOS[nome] || CAMINHOS.documento); no.append(caminho);
     return no;
   }
-  return {t, dado, botao, estado, irPara, perguntar, evidencia, abrirOriginal, disponivel, registrarAba, selecionar, quadro, SUPORTE, NATUREZA, caso, icone, CAMINHOS};
+  // Botão com aparência de link (componentes.md#link): texto --theme-accent, 44 px de altura.
+  const linkBotao = (rotulo, classe = '') => botao(rotulo, `link-botao ${classe}`.trim());
+
+  // Seletor comum de evidência (P47, componentes.md#seletor-evidencia). Um componente só, para os quatro formulários dos quadros e,
+  // depois, para o painel da afirmação do caderno. Nunca procura fora da apuração aberta: quem o monta entrega `buscar`.
+  //   buscar({texto, origem, analise}) -> Promise<{analise_atual: {id, rotulo}, analises: [{id, rotulo, pergunta}], resultados: [Resultado]}>
+  //   Resultado: {chave, origem: 'ia'|'caderno', tipo, texto, localizador, conferencia: 'conferido'|'a_conferir',
+  //               suporte_ia, natureza, destino, ligada, preenchimento: {papel, suporte, natureza}}
+  //   opcoes: {rotuloVoltar, aoVoltar(), aoLigar(resultado), aoAbrirOriginal(resultado, gatilho, retorno), limite: {atingido, razao}, atraso}
+  const ORIGENS = [['tudo', 'Tudo'], ['ia', 'Achados da IA'], ['caderno', 'Caderno']];
+  function seletorEvidencia(opcoes) {
+    const {buscar} = opcoes, atraso = opcoes.atraso ?? 250;
+    const raiz = element('section', undefined, 'seletor-evidencia');
+    const titulo = element('h3', t('Ligar evidência'), 'seletor-titulo'); titulo.tabIndex = -1;
+    raiz.setAttribute('aria-label', t('Ligar evidência'));
+    const voltar = linkBotao(`‹ ${t(opcoes.rotuloVoltar || 'Voltar ao formulário')}`, 'seletor-voltar');
+    voltar.addEventListener('click', () => opcoes.aoVoltar?.());
+    const rotuloBusca = element('label', t('Buscar nos achados e no caderno'), 'seletor-rotulo');
+    const busca = element('input', undefined, 'seletor-busca'); busca.type = 'search'; busca.autocomplete = 'off'; busca.id = 'seletor-busca';
+    rotuloBusca.setAttribute('for', busca.id);
+    const origens = element('div', undefined, 'seletor-origens'); origens.setAttribute('role', 'group'); origens.setAttribute('aria-label', t('Origem'));
+    const pilulas = ORIGENS.map(([chave, rotulo]) => {
+      const b = botao(t(rotulo), 'seletor-pilula'); b.dataset.origem = chave; origens.append(b); return b;
+    });
+    const analise = element('p', '', 'small seletor-analise');
+    const avancado = element('details', undefined, 'seletor-avancado'); avancado.hidden = true;
+    const listaAnalises = element('ul', undefined, 'seletor-analises');
+    avancado.append(element('summary', t('Avançado')), listaAnalises);
+    const status = element('p', '', 'seletor-status'); status.setAttribute('role', 'status');
+    const lista = element('div', undefined, 'seletor-resultados');
+    raiz.append(voltar, titulo, rotuloBusca, busca, origens, analise, avancado, status, lista);
+
+    let origem = 'tudo', analiseEscolhida = null, sequencia = 0, adiar = null, aberto = null;
+    const consulta = () => ({texto: busca.value.trim(), origem, analise: analiseEscolhida});
+    // A partir do segundo caractere; com um só, a lista volta a ser a da análise sem busca.
+    const efetiva = () => { const c = consulta(); return {...c, texto: c.texto.length >= 2 ? c.texto : ''}; };
+
+    function cartao(r) {
+      const bloco = element(r.ligada ? 'div' : 'button', undefined, 'seletor-resultado');
+      if (!r.ligada) bloco.type = 'button';
+      bloco.dataset.chave = r.chave; bloco.dataset.origem = r.origem;
+      bloco.append(element('span', t(r.tipo || (r.origem === 'ia' ? 'Achado da IA' : 'Trecho do caderno')), 'seletor-tipo'),
+        dado('span', r.texto || '', 'seletor-texto'), dado('span', r.localizador || '', 'seletor-localizador'));
+      const situacao = element('span', undefined, 'seletor-estado');
+      situacao.append(element('span', r.conferencia === 'conferido' ? `✓ ${t('Conferido no original')}` : `○ ${t('A conferir')}`,
+        `seletor-conferencia ${r.conferencia === 'conferido' ? 'is-conferido' : 'is-a-conferir'}`));
+      if (r.origem === 'ia' && r.suporte_ia) situacao.append(seloIA(r.suporte_ia));
+      if (r.destino === 'retirado') situacao.append(element('span', t('retirado pela revisão'), 'seletor-retirado'));
+      else if (r.destino === 'fora_do_briefing') situacao.append(element('span', t('fora do briefing (sustentado)'), 'seletor-nota'));
+      bloco.append(situacao);
+      if (r.ligada) { bloco.classList.add('is-ligada'); bloco.append(element('span', t('Já ligada a este item'), 'seletor-nota')); return bloco; }
+      bloco.setAttribute('aria-expanded', 'false');
+      bloco.addEventListener('click', () => abrir(r, bloco));
+      return bloco;
+    }
+    // Resultado aberto: borda 2 px --theme-accent, com os campos do vínculo já preenchidos (P47), "Abrir o original" e "Ligar".
+    function abrir(r, bloco) {
+      if (aberto) { aberto.bloco.classList.remove('is-aberto'); aberto.bloco.setAttribute('aria-expanded', 'false'); aberto.detalhe.remove(); }
+      if (aberto?.bloco === bloco) { aberto = null; return; }
+      const detalhe = element('div', undefined, 'seletor-aberto');
+      const p = r.preenchimento || {};
+      const campos = element('dl', undefined, 'seletor-campos');
+      for (const [rotulo, valor] of [['Papel', p.papel && PAPEL[p.papel]], ['Suporte', p.suporte && SUPORTE[p.suporte]], ['Natureza', p.natureza && NATUREZA[p.natureza]]]) {
+        campos.append(element('dt', t(rotulo)), element('dd', valor ? t(valor) : t('A escolher')));
+      }
+      const acoes = element('div', undefined, 'seletor-acoes');
+      const original = botao(t('Abrir o original')), retorno = element('p', '', 'small'); retorno.setAttribute('role', 'status');
+      original.addEventListener('click', () => opcoes.aoAbrirOriginal?.(r, original, retorno));
+      const ligar = botao(t('Ligar'), 'seletor-ligar');
+      const lim = opcoes.limite?.();
+      if (lim?.atingido) { ligar.disabled = true; const razao = element('p', t(lim.razao), 'small seletor-nota'); razao.id = 'seletor-razao'; ligar.setAttribute('aria-describedby', razao.id); detalhe.append(razao); }
+      ligar.addEventListener('click', () => opcoes.aoLigar?.(r));
+      acoes.append(original, ligar);
+      detalhe.prepend(campos); detalhe.append(acoes, retorno);
+      bloco.classList.add('is-aberto'); bloco.setAttribute('aria-expanded', 'true'); bloco.after(detalhe);
+      aberto = {bloco, detalhe};
+    }
+    function pintar(dados) {
+      aberto = null;
+      const a = dados.analise_atual;
+      analise.textContent = a ? t('Achados da análise mais recente ({quando})', {quando: a.rotulo}) : '';
+      listaAnalises.replaceChildren();
+      for (const x of dados.analises || []) {
+        const li = element('li'), b = botao(x.rotulo, 'link-botao'); b.setAttribute('aria-pressed', String((analiseEscolhida || a?.id) === x.id));
+        b.addEventListener('click', () => { analiseEscolhida = x.id; carregar(); });
+        li.append(b); if (x.pergunta) li.append(dado('span', ` — ${x.pergunta}`, 'small')); listaAnalises.append(li);
+      }
+      avancado.hidden = !(dados.analises?.length > 1);
+      const itens = dados.resultados || [];
+      status.textContent = '';
+      if (!itens.length) {
+        const c = efetiva();
+        if (c.texto) {
+          estado(lista, 'vazio', t('A busca não encontrou. Isso não prova que não esteja nos documentos.'), {titulo: t('Nada encontrado para “{texto}”.', {texto: c.texto}),
+            acao: {rotulo: t('Limpar a busca'), aoClicar: () => { busca.value = ''; carregar(); busca.focus(); }}});
+        } else {
+          estado(lista, 'vazio', t('Esta apuração ainda não tem achados nem trechos com fonte.'), {titulo: t('Nada para ligar ainda'), acao: perguntar()});
+        }
+        return;
+      }
+      lista.replaceChildren(...itens.map(cartao));
+      status.textContent = t(itens.length === 1 ? '{n} resultado' : '{n} resultados', {n: itens.length});
+    }
+    // Esqueleto só depois de 0,3 s: nada de piscar quando a resposta é rápida (W11, regra 2).
+    async function carregar() {
+      const minha = ++sequencia, espera = setTimeout(() => { if (minha === sequencia) estado(lista, 'carregando', t('Buscando…')); }, 300);
+      try { const dados = await buscar(efetiva()); if (minha === sequencia) pintar(dados); }
+      catch (erro) { if (minha === sequencia) estado(lista, 'erro', erro.message, {titulo: t('Não deu para buscar as evidências.')}); }
+      finally { clearTimeout(espera); }
+    }
+    busca.addEventListener('input', () => { clearTimeout(adiar); adiar = setTimeout(carregar, atraso); });
+    for (const b of pilulas) {
+      b.setAttribute('aria-pressed', String(b.dataset.origem === origem));
+      b.addEventListener('click', () => { origem = b.dataset.origem; for (const o of pilulas) o.setAttribute('aria-pressed', String(o === b)); carregar(); });
+    }
+    raiz.carregar = carregar;
+    raiz.foco = () => busca.focus();
+    carregar();
+    return raiz;
+  }
+  const PAPEL = {suporte: 'Suporte', contradicao: 'Contradição', contexto: 'Contexto'};
+
+  // Selo "IA · sugestão" (P45, componentes.md#sugestao-ia): a pílula do veredito da IA (P20a), sem fundo, borda tracejada e sem sinal.
+  function seloSugestao() {
+    const selo = element('span', undefined, 'selo-sugestao');
+    selo.append(element('span', t('IA · sugestão'), 'badge-origin'));
+    return selo;
+  }
+  // Veredito da revisão da IA na forma da P20a ("IA · sustentado"): borda tracejada, sem fundo, nunca a aparência da conferência humana.
+  const SUPORTE_IA = {nao_revisado: 'IA · não revisado', sustentado: 'IA · sustentado', parcial: 'IA · parcial',
+    nao_sustentado: 'IA · não sustentado', ilegivel: 'IA · ilegível'};
+  function seloIA(suporte, texto) {
+    const selo = element('span', undefined, `support-badge ai-support support-${suporte}`);
+    selo.title = t('Suporte documental avaliado pela IA');
+    selo.append(element('span', t(texto || SUPORTE_IA[suporte] || `IA · ${suporte}`), 'badge-origin'));
+    return selo;
+  }
+  return {t, dado, botao, estado, irPara, perguntar, evidencia, abrirOriginal, disponivel, registrarAba, selecionar, quadro, SUPORTE, NATUREZA, caso, icone, CAMINHOS, seloSugestao, seloIA, linkBotao, seletorEvidencia};
 })();
 
 // Hypotheses: three columns per hypothesis; the declared situation is a person's, never the board's.

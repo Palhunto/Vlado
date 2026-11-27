@@ -1047,6 +1047,13 @@ window.VLADO_I18N_EN = {
     "Carregando a página do PDF…": "Loading the PDF page…",
     "Não foi possível desenhar esta página. Use Baixar original.": "Could not draw this page. Use Download original.",
     "Se a página não aparecer neste aparelho, use Baixar original.": "If the page does not show on this device, use Download original.",
+    // Quadros, Onda 4 (sugestões da IA e seletor de evidência)
+    "IA · sugestão": "AI · suggestion",
+    "IA · não revisado": "AI · not reviewed",
+    "IA · sustentado": "AI · supported",
+    "IA · parcial": "AI · partial",
+    "IA · não sustentado": "AI · not supported",
+    "IA · ilegível": "AI · unreadable",
     // Fase 06 — quadros de evidência (interface/quadros.js)
     "Hipóteses e acontecimentos registrados por pessoas a partir das evidências desta apuração. Cada evidência abre o original conferido; os quadros organizam e apontam lacunas, sem avaliar veracidade.": "Hypotheses and events recorded by people from this investigation’s evidence. Each piece of evidence opens the checked original; the boards organise and point out gaps, without judging truth.",
     "Hipóteses": "Hypotheses",
