@@ -23,6 +23,7 @@ from indice_sqlite import ID_DOCUMENTO, ID_GERACAO, _entradas, caminho_rodada
 from registros_achados import NATUREZAS, SCHEMA, SUPORTES, carregar, conferir_evidencia
 import caderno
 import lixeira
+import vinculo_ia
 
 ESQUEMA = 1
 _ACHADOS = ler_json(SCHEMA)['properties']
@@ -35,6 +36,8 @@ CAMPOS_REF = {'ia': {'tipo', 'caso_id', 'rodada', 'revisao', 'registros_sha256',
               'humana': {'tipo', 'caso_id', 'registro_id', 'sha256', 'fonte'}}
 CAMPOS_VINCULO = {'referencia', 'papel', 'suporte', 'natureza', 'justificativa'}
 CAMPOS_SALVOS = CAMPOS_VINCULO | {'documento_id', 'original_sha256', 'localizador'}
+# Onda 4 (#registro-vinculo): optional, computed by the server, never accepted from the client (vinculo_ia).
+CAMPOS_REGISTRO = {'revisao_ia', 'alteracoes'}
 CAMPOS_LOCALIZADOR = {'tipo', 'pagina_pdf', 'linha_inicio', 'linha_fim', 'descricao', 'legivel'}
 # Naturezas que um documento pode estabelecer por si; inferência e pendência não sustentam fato.
 NATUREZAS_DOCUMENTAIS = ('declaracao_documental', 'alegacao_atribuida')
@@ -211,7 +214,7 @@ def _localizador(loc):
 
 def validar_vinculo_salvo(item):
     """Confere a forma preservada de um vínculo, sem abrir fontes."""
-    if not isinstance(item, dict) or set(item) != CAMPOS_SALVOS:
+    if not _forma_salva(item):
         raise ValueError('Vínculo de evidência preservado é inválido.')
     referencia(item['referencia'])
     _regras(item['papel'], item['suporte'], item['natureza'])
@@ -220,6 +223,11 @@ def validar_vinculo_salvo(item):
         raise ValueError('Vínculo de evidência preservado é inválido.')
     texto(item['justificativa'], 'Justificativa do vínculo', 2000)
     _localizador(item['localizador'])
+    vinculo_ia.validar(item)
+
+
+def _forma_salva(item):
+    return isinstance(item, dict) and CAMPOS_SALVOS <= set(item) <= CAMPOS_SALVOS | CAMPOS_REGISTRO
 
 
 def _assinatura(evidence):
@@ -237,12 +245,14 @@ def vinculos(root, case, items, *, minimo=0, papeis=PAPEIS, cache=None, preserva
     ``preservar_indisponiveis``, um vínculo salvo cuja fonte deixou de resolver é mantido
     como está (uso: retirar um registro cuja fonte foi apagada).
     """
-    if not isinstance(items, list) or not minimo <= len(items) <= MAXIMO_VINCULOS:
+    if isinstance(items, list) and len(items) > MAXIMO_VINCULOS:
+        raise ValueError(f'Limite de {MAXIMO_VINCULOS} evidências por item: desligue uma antes de ligar outra.')
+    if not isinstance(items, list) or not minimo <= len(items):
         raise ValueError(f'Vincule de {minimo} a {MAXIMO_VINCULOS} evidências.')
     cache = {} if cache is None else cache
     result, seen, signatures = [], set(), set()
     for item in items:
-        saved = isinstance(item, dict) and set(item) == CAMPOS_SALVOS
+        saved = _forma_salva(item)
         if saved:
             validar_vinculo_salvo(item)
         elif (not isinstance(item, dict) or set(item) - CAMPOS_VINCULO
@@ -285,9 +295,11 @@ def conferir_vinculos(root, case, items, cache=None):
             evidence = resolver(root, case, item['referencia'], cache)
             if evidence['documento']['original_sha256'] != item['original_sha256']:
                 raise ValueError('O original da evidência mudou desde o vínculo.')
-            result.append({**item, 'estado': 'conferida', 'evidencia': evidence})
+            result.append({**item, **vinculo_ia.leitura(root, case, item, cache), 'estado': 'conferida',
+                           'evidencia': evidence})
         except ValueError as exc:
-            result.append({**item, 'estado': 'indisponivel', 'erro': str(exc), 'evidencia': None})
+            result.append({**item, **vinculo_ia.leitura(root, case, item, cache), 'estado': 'indisponivel',
+                           'erro': str(exc), 'evidencia': None})
     return result
 
 
@@ -487,6 +499,9 @@ class Colecao:
             if self.validar:
                 self.validar(state)
             now = datetime.now(timezone.utc).isoformat()
+            if self.nome in vinculo_ia.COLECOES and isinstance(state.get('evidencias'), list):
+                vinculo_ia.registrar(root, case, state['evidencias'],
+                                     current['estado'].get('evidencias', []) if current else [], who, now, chave)
             state.update(origem_autoria=who['origem_autoria'], atualizado_em_utc=now)
             event = {'esquema': ESQUEMA, 'caso_id': case, 'colecao': self.nome, 'id': identifier,
                      'sequencia': len(current['historico']) + 1 if current else 1,

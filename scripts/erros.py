@@ -85,6 +85,13 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('achados_mudaram', r'^O conjunto de achados referenciado mudou de identidade'),
     ('evidencia_fora_da_revisao', r'^Evidência não pertence a esta revisão'),
     ('documento_sem_original', r'^Documento sem original congelado nesta rodada'),
+    # Onda 4: links of the boards (evidencias, vinculo_ia) and the common evidence picker (seletor_evidencia).
+    ('vinculo_contexto_com_suporte', r'^Evidência de contexto não recebe avaliação de suporte'),
+    ('vinculo_pendencia_sustentada', r'^Pendência não pode ser sustentada'),
+    ('vinculos_demais', r'^Limite de (?P<maximo>\d+) evidências por item'),
+    ('busca_curta', r'^A busca precisa de ao menos 2 caracteres'),
+    ('item_selecionado_invalido', r'^Item selecionado inválido para o seletor de evidência'),
+    ('rodada_sem_achados', r'^(Rodada sem achados publicados nesta apuração|Selecione uma rodada da apuração para buscar)'),
     ('documento_sem_texto', r'^(?P<documento>[A-Za-z0-9][A-Za-z0-9_-]{0,63}) não tem texto utilizável nesta rodada'),
     # Investigation tables (tabelas_apuracao via rotas_tabelas): cells, corrections and calculations.
     ('tabela_coluna_invalida', r'^Coluna inválida'),

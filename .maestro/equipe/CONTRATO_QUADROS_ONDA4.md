@@ -156,7 +156,7 @@ Em toda leitura que já resolve vínculos (`*-detalhe`, `hipoteses-quadro`, `lin
 | achado da IA em análise sem revisão de suporte | o do vínculo | `nao_revisado` | a da versão |
 | papel `contexto` | `contexto` | `nao_revisado` | a da versão |
 | natureza `pendencia` com suporte `sustentado` (o validador da revisão não deixa, mas a regra fica) | o do vínculo | `nao_revisado` | `pendencia` |
-| fonte do caderno | escolha da pessoa | `nao_revisado` | sem preenchimento (a tela exige; o servidor mantém o padrão de hoje, `pendencia`, para não quebrar cliente antigo) |
+| fonte do caderno | `suporte` (a pessoa muda) | `nao_revisado` | sem preenchimento (a tela exige; o servidor mantém o padrão de hoje, `pendencia`, para não quebrar cliente antigo) |
 
 Mudar o suporte de um achado retirado para `sustentado` é escolha da pessoa e fica em `alteracoes`; só então conta como base da hipótese e da linha contínua do mapa.
 
@@ -195,13 +195,14 @@ Pedido:
   {"origem": "caderno", "tipo_fonte": "trecho", "texto": "Anotação de Ana Lima sobre o termo aditivo",
    "trecho": "…", "documento": {"documento_id": "D004", "nome": "termo_aditivo_1.pdf"},
    "localizador": {"legivel": "D004 · página PDF 2", "…": "…"}, "achado": null, "revisao_ia": null,
-   "conferencia_humana": null, "conferencia_textual": "trecho_localizado_no_texto_autorizado",
+   "conferencia_humana": null, "conferencia_textual": "literal_localizado",
    "vinculo_sugerido": {"referencia": {"tipo": "humana", "…": "…"}, "papel": "suporte", "suporte": "nao_revisado",
                         "natureza": null, "justificativa": ""},
    "ja_ligado": false}]}
 ```
 
 - Resultado da IA: um por par (evidência, achado) na revisão mais recente da rodada escolhida; a referência aponta essa revisão. No caderno: um por fonte de registro (`trecho`, `achado`, `cruzamento`), com `conferencia_humana: null` (o caderno não tem marca "Conferida no original"; a tela mostra "A conferir") e a `conferencia_textual` da fonte num campo à parte, só informativo. Na IA, `conferencia_textual` não vem.
+- Cada resultado traz `estado` (`conferida` ou `indisponivel`, com `erro`), como em `conferir_vinculos`; o indisponível não é ligável.
 - `vinculo_sugerido` é o preenchimento da seção 3.3. No caderno, `natureza` vem `null` e `justificativa` vazia: a pessoa preenche.
 - Só a apuração aberta: `rodada` de outro caso ou na lixeira é recusada; nada fora de `casos/<caso>` e `execucoes/<caso>`.
 
@@ -245,12 +246,13 @@ Cada conferência é `mesmo`, `diferente` ou `a_conferir`. Os E-IDs têm de ser 
 | `quadro_sugestao_invalido` | `quadro` fora de `mapa`, `linha_tempo`, `hipoteses` | listar |
 | `busca_curta` | `texto` com 1 caractere | evidencia-buscar |
 | `item_selecionado_invalido` | `item` com quadro ou id inválido, ou que não existe | evidencia-buscar |
+| `rodada_sem_achados` | `rodada` pedida sem achados publicados nesta apuração (ou malformada) | evidencia-buscar |
 | `vinculo_contexto_com_suporte` | papel `contexto` com suporte diferente de `nao_revisado` (hoje sem código) | todo `*-criar`/`*-atualizar` |
 | `vinculo_pendencia_sustentada` | natureza `pendencia` com suporte `sustentado` (hoje sem código) | idem |
 | `vinculos_demais` | mais de 100 evidências no item (`parametros.maximo`: 100) | idem |
 | `candidatos_invalidos` | a lista `candidatos` da síntese malformada (é para o modelo; a tela não vê) | síntese |
 
-A referência inválida continua `referencia_evidencia_invalida`, e os que já existem (`evidencia_ausente`, `evidencia_original_mudou`, `registro_mudou`, `tentativa_reutilizada`, `quadro_em_uso`…) não mudam. Cada código novo precisa da linha em inglês no `interface/i18n_en.js`: mando as mensagens em português no commit e peço ao Lume a linha no mesmo commit (ou ele põe na tela antes).
+A referência inválida continua `referencia_evidencia_invalida`, e os que já existem (`evidencia_ausente`, `evidencia_original_mudou`, `registro_mudou`, `tentativa_reutilizada`, `quadro_em_uso`…) não mudam. Cada código novo entra com a linha em inglês no `interface/i18n_en.js` no mesmo commit do servidor (senão `testes/erros_en.cjs` fica vermelho); o Lume revisa o texto depois do merge.
 
 ## 7. Opcionais na leitura
 

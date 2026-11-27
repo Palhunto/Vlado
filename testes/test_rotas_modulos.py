@@ -57,15 +57,17 @@ OPERACOES = {
     'redacao-nova-versao', 'redacao-revisar', 'redacao-vincular', 'restaurar', 'sessao-sair',
     'tabelas-atualizar', 'tabelas-calcular', 'tabelas-corrigir', 'tabelas-criar', 'tabelas-detalhe',
     'tabelas-exportar', 'tabelas-historico-celula', 'tabelas-listar',
+    'evidencia-buscar',  # Onda 4: the common evidence picker (CONTRATO_QUADROS_ONDA4, section 4)
 }
 
 
 class RotasModulosTest(unittest.TestCase):
-    def test_lista_branca_tem_as_138_operacoes(self):
+    def test_lista_branca_tem_as_139_operacoes(self):
         # The 114 of before without the six `contas-*`, withdrawn with the invitation by e-mail (P30), plus the four
-        # `caso-*` (contrato de contas, 5.6), fourteen `conta-*` (5.4) and twelve `equipe-*` (5.5).
-        self.assertEqual(len(OPERACOES), 138)
-        self.assertEqual(len(interface_pesquisa.OPERACOES_API), 138, 'operação repetida na lista branca')
+        # `caso-*` (contrato de contas, 5.6), fourteen `conta-*` (5.4) and twelve `equipe-*` (5.5), plus
+        # `evidencia-buscar` (Onda 4).
+        self.assertEqual(len(OPERACOES), 139)
+        self.assertEqual(len(interface_pesquisa.OPERACOES_API), 139, 'operação repetida na lista branca')
         self.assertFalse([o for o in interface_pesquisa.OPERACOES_API if o.startswith('contas-')])
         self.assertEqual(set(interface_pesquisa.OPERACOES_API), OPERACOES)
 
