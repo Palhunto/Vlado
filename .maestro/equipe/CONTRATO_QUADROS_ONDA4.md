@@ -16,7 +16,7 @@ Exemplos com dados sintéticos (Vila Serena, Construtora Alfa, Marta Reis, Carlo
 
 - **Rodadas e itens antigos abrem como sempre.** Todo campo novo é opcional na leitura (seção 7). Rodada sem candidatos devolve lista vazia; vínculo salvo antes desta onda volta sem `revisao_ia` e sem `alteracoes` (a tela não deduz nada).
 - **Erros** seguem o padrão de sempre: HTTP 400 com `erro` (português), `codigo` e, quando houver, `parametros`. Os códigos novos estão na seção 6. Permissão continua no portão: sem a capacidade, a resposta é a de hoje (`operacao_proibida`, 403); não há `sem_permissao` à parte.
-- **Capacidades.** Leituras novas (`sugestoes-listar`, `evidencia-buscar`, `comparar-processos`, `mapa-entidade-detalhe`) ficam na linha `L`/LEITURA dos quadros; as ações (`sugestoes-confirmar`, `-corrigir`, `-descartar`, `-restaurar`) na linha `E`/MESA, a mesma de `hipoteses-criar` e dos outros `*-criar`/`*-atualizar`. Linhas novas em `autorizacao.py` e `rotas_evidencia.py` dependem do aval da Tranca (o Maestro repassa).
+- **Capacidades.** Leituras novas (`sugestoes-listar`, `evidencia-buscar`, `comparar-processos`) ficam na linha `L`/LEITURA dos quadros; as ações (`sugestoes-confirmar`, `-corrigir`, `-descartar`, `-restaurar`) e `mapa-entidade-detalhe` (que devolve o CPF e o CNPJ sem máscara: R2 da Coruja sobre `ef88880`) na linha `E`/MESA, a mesma de `hipoteses-criar` e dos outros `*-criar`/`*-atualizar`: leitor e convidado não a alcançam. Linhas em `autorizacao.py` e `rotas_evidencia.py` com o aval do Maestro.
 - **Idempotência.** Toda ação leva `requisicao_id` (32 hex), como nos quadros: repetir com o mesmo id e o mesmo conteúdo devolve o mesmo resultado; com outro conteúdo, `tentativa_reutilizada`.
 
 ## 1. Formato do candidato (MESA.md e prompt 05)
@@ -94,13 +94,13 @@ Pedido: `{"caso": "vila-serena", "quadro": "mapa" | "linha_tempo" | "hipoteses",
 | `campos` | o item no formato do `*-criar` do quadro, pronto para enviar (sem `caso` e `requisicao_id`). Pessoa e organização: `{tipo, nome, variantes, identificadores: [], evidencias}`; ligação: `{origem, destino, tipo, descricao, evidencias}` (ponta ainda não confirmada vem `null`); acontecimento: `{descricao, datas, evidencias, retirado: false, motivo_retirada: ""}`; hipótese: `{enunciado, situacao: "em_aberto", lacunas: [], evidencias}`. Os vínculos vêm preenchidos pela P47 (seção 3.3), com o `achado_id` do candidato (N1): reenvie como vêm. |
 | `pontas` | só na ligação: por ponta, a sugestão de origem, o estado dela, o item confirmado (P-ID) e o nome. |
 | `evidencias` | cada evidência resolvida como em `conferir_vinculos` (`estado` `conferida` ou `indisponivel`, com `erro`), mais `revisao_ia` e `conferencia_humana` (seção 3.2). |
-| `achado` | o achado de origem na revisão da sugestão; `versao_atual` é a última versão do achado na rodada (maior que `versao` quando foi substituída). |
+| `achado` | `id`, `versao` e `redacao` da análise que sugeriu; `suporte_ia`, `destino` e `motivo_destino` da **revisão mais nova da rodada** (B1 da Coruja sobre `ef88880`: um achado retirado depois mostra `retirado` e bloqueia "Confirmar"); `versao_atual` é a última versão do achado na rodada (maior que `versao` quando foi substituída). As referências de `campos.evidencias` e `evidencias` apontam a revisão mais nova, e o preenchimento P47 sai dela. |
 | `analise` | a análise de origem: caso, rodada, revisão, hash, data e a pergunta (até 300 caracteres). |
 | `estado` | `aberta`, `confirmada`, `descartada`. |
 | `decisao` | `null` ou `{acao: "confirmar"|"corrigir"|"descartar"|"restaurar", por, conta_id, em_utc, item_id, quadro, alterados: ["nome", "variantes", …]}` (`alterados` só no corrigir: os campos do item que a pessoa mudou em relação à sugestão). |
 | `descartada_antes` | `null` ou `{sugestao_id, rodada, por, em_utc}`: outra sugestão com o mesmo tipo, os mesmos campos (nome normalizado) e a mesma evidência (documento, hash do original, localizador e trecho) foi descartada; esta nasce `descartada`, sem decisão própria. |
-| `bloqueio` | `null` ou o código que impede "Confirmar" agora (seção 6, os seis primeiros). "Corrigir" e "Descartar" não têm bloqueio além da permissão. |
-| `avisos` | lista de `analise_sem_revisao`, `achado_retirado`, `versao_substituida`, `evidencia_indisponivel` (texto da tela em #avisos-vinculo). `fora_do_briefing` não é aviso: vem em `achado.destino`. |
+| `bloqueio` | `null` ou o código que impede "Confirmar" agora (seção 6, os seis primeiros). "Corrigir" e "Descartar" não têm bloqueio além da permissão. `historico_divergente` quando o histórico das decisões desta sugestão está divergente: aí as quatro ações são recusadas com esse código, e só esta sugestão fica travada (R1). |
+| `avisos` | lista de `analise_sem_revisao`, `achado_retirado`, `versao_substituida`, `evidencia_indisponivel`, `decisao_divergente` (texto da tela em #avisos-vinculo). `fora_do_briefing` não é aviso: vem em `achado.destino`. |
 
 `contagem` nunca entra na contagem de itens do quadro.
 
@@ -117,9 +117,9 @@ Todas: `{"caso", "id": "S…", "requisicao_id", "autor"?}` (o `autor` só no mod
 
 Confirmada não volta: confirmar ou corrigir de novo responde `sugestao_ja_decidida`; descartar uma confirmada também. O item criado depois se edita no quadro, como qualquer item.
 
-### 2.3 `POST /api/mapa-entidade-detalhe` (leitura; pedido do Lume)
+### 2.3 `POST /api/mapa-entidade-detalhe` (pedido do Lume)
 
-`{"caso", "id": "P…"}` → o registro como `hipoteses-detalhe`: `{caso, colecao, id, sha256, estado, historico, divergente, evidencias}`, com `estado.identificadores` sem máscara (o valor salvo, para o formulário "Editar entidade" reenviar) e `evidencias` resolvidas como na seção 3.2. O `mapa-ver` continua mascarando CPF e CNPJ. Recusas: `registro_inexistente`, `registro_invalido`, `quadro_campos_invalidos`. Linha L/LEITURA, resolvedor `caso`.
+`{"caso", "id": "P…"}` → o registro como `hipoteses-detalhe`: `{caso, colecao, id, sha256, estado, historico, divergente, evidencias}`, com `estado.identificadores` sem máscara (o valor salvo, para o formulário "Editar entidade" reenviar) e `evidencias` resolvidas como na seção 3.2. O `mapa-ver` continua mascarando CPF e CNPJ. Recusas: `registro_inexistente`, `registro_invalido`, `quadro_campos_invalidos`. Linha E/MESA (quem edita o mapa), resolvedor `caso`: quem só lê não recebe o valor sem máscara.
 
 ## 3. Registro do vínculo (aditivo em `scripts/evidencias.py`)
 
@@ -148,11 +148,12 @@ Em toda leitura que já resolve vínculos (`*-detalhe`, `hipoteses-quadro`, `lin
 |---|---|
 | `revisao_ia` | o guardado (seção 3.1) ou `null` (vínculo antigo ou do caderno). |
 | `alteracoes` | o guardado ou `{}`. |
+| `preenchimento_ia` | `null` (vínculo antigo ou do caderno) ou `{papel, suporte, natureza, destino}`: o preenchimento P47 da `revisao_ia` guardada (seção 3.3; retirado já vem `nao_revisado`). É o valor que "Voltar ao da IA" envia, nunca o `anterior` da marca nem o `revisao_ia` cru. |
 | `conferencia_humana` | `null` ou `{estado, por, em_utc}` da marca humana do achado dessa evidência na rodada (`conferida_no_original`, `precisa_de_ajuste`, `sem_suporte_suficiente`, `pendente`). |
 | (rodada na lixeira) | `conferencia_humana`, `destino_atual` e `versao_nova` vêm `null` e `suporte_so_da_ia` `false`: a rodada na lixeira não alimenta nada (R1). O `revisao_ia` guardado continua vindo. |
 | `suporte_so_da_ia` | `true` quando há `revisao_ia`, o suporte é o dela, não há `alteracoes.suporte` e `conferencia_humana.estado` não é `conferida_no_original`. |
 | `destino_atual` | destino do achado na revisão mais recente da rodada (pode diferir do guardado). |
-| `versao_nova` | `null` ou `{referencia, achado_id, versao, revisao_ia}` quando há versão mais nova do achado na rodada: é o que "Ligar a versão nova" envia. |
+| `versao_nova` | `null` ou `{referencia, achado_id, versao, revisao_ia, preenchimento}` quando há versão mais nova do achado na rodada. "Ligar a versão nova" envia `referencia`, `achado_id` e os campos de `preenchimento` (já com a regra da P47: a versão nova retirada vem `nao_revisado`, com o `destino` junto). |
 
 ### 3.3 Preenchimento P47 (o mesmo no seletor, nas sugestões e no cálculo de `alteracoes`)
 
@@ -169,7 +170,7 @@ Mudar o suporte de um achado retirado para `sustentado` é escolha da pessoa e f
 
 ### 3.4 Operações sobre o vínculo
 
-Não há rota nova: "Voltar ao da IA" (enviar o valor de `revisao_ia` no campo), "Ligar a versão nova" (trocar a `referencia` pela de `versao_nova`, com os valores de `versao_nova.revisao_ia`) e "Desligar" (tirar o vínculo da lista) são o `*-atualizar` do quadro, como hoje. A confirmação antes de apagar revisão humana é da tela; o servidor não recusa nenhuma dessas três por haver revisão humana.
+Não há rota nova: "Voltar ao da IA" (enviar no campo o valor de `preenchimento_ia`), "Ligar a versão nova" (trocar a `referencia` pela de `versao_nova`, com `achado_id` e os campos de `versao_nova.preenchimento`) e "Desligar" (tirar o vínculo da lista) são o `*-atualizar` do quadro, como hoje. O servidor compara cada campo com o preenchimento P47 da revisão do vínculo: o valor igual ao preenchimento nunca é registrado como mudança da pessoa (B1 da Coruja sobre os formulários, `3c1b363`); qualquer outro é. A confirmação antes de apagar revisão humana é da tela; o servidor não recusa nenhuma dessas três por haver revisão humana.
 
 ## 4. Seletor comum de evidência
 
@@ -209,14 +210,14 @@ Pedido:
    "ja_ligado": false}]}
 ```
 
-- Resultado da IA: um por par (evidência, achado) na revisão mais recente da rodada escolhida; a referência aponta essa revisão. Uma E-ID ligada a dois achados vem em dois resultados, cada um com a revisão do seu achado e o `achado_id` em `vinculo_sugerido`. No caderno: um por fonte de registro (`trecho`, `achado`, `cruzamento`), com `conferencia_humana: null` (o caderno não tem marca "Conferida no original"; a tela mostra "A conferir") e a `conferencia_textual` da fonte num campo à parte, só informativo. Na IA, `conferencia_textual` não vem.
+- Resultado da IA: um por vínculo publicado (evidência, achado, papel) na revisão mais recente da rodada escolhida; a mesma E-ID em dois papéis do mesmo achado vem em dois resultados, cada um com a revisão do seu papel (R2 da Coruja sobre `446bfc6`); a referência aponta essa revisão. Uma E-ID ligada a dois achados vem em dois resultados, cada um com a revisão do seu achado e o `achado_id` em `vinculo_sugerido`. No caderno: um por fonte de registro (`trecho`, `achado`, `cruzamento`), com `conferencia_humana: null` (o caderno não tem marca "Conferida no original"; a tela mostra "A conferir") e a `conferencia_textual` da fonte num campo à parte, só informativo. Na IA, `conferencia_textual` não vem.
 - Cada resultado traz `estado` (`conferida` ou `indisponivel`, com `erro`), como em `conferir_vinculos`; o indisponível não é ligável.
 - `vinculo_sugerido` é o preenchimento da seção 3.3. No caderno, `natureza` vem `null` e `justificativa` vazia: a pessoa preenche.
 - Só a apuração aberta: `rodada` de outro caso ou na lixeira é recusada; nada fora de `casos/<caso>` e `execucoes/<caso>`.
 
 ## 5. Comparação entre processos
 
-**Caminho escolhido: os campos estruturados entram neste passo**, numa entrega depois das sugestões e do seletor (seção 8). Até lá vale a exceção declarada da especificação (fundamento, dois lados e veredito da IA, sem "O que muda").
+**Caminho escolhido: os campos estruturados entram neste passo** (entrega 4). Rodada sem eles continua com a exceção declarada da especificação (fundamento, dois lados e veredito da IA, sem "O que muda"). O arquivo `saidas/achados/comparacoes/<revisao>.json` é gravado antes de publicar a revisão, com o hash que a publicação terá, como os candidatos. Recusas de uma comparação (ficam em `recusados`): `achado_inexistente`, `evidencia_fora_do_achado`, `lados_iguais`, `campos_invalidos`, `campo_invalido`, `conferencias_invalidas`; a lista malformada recusa a revisão (`comparacoes_invalidas`).
 
 Formato no `MESA.md` (bloco `formato:revisao`, chave opcional `comparacoes`, só a partir de `VERSAO_MESA` 1.3.0), porque as seis conferências são resultado da revisão:
 
@@ -262,6 +263,8 @@ Cada conferência é `mesmo`, `diferente` ou `a_conferir`. Os E-IDs têm de ser 
 | `vinculo_pendencia_sustentada` | natureza `pendencia` com suporte `sustentado` (hoje sem código) | idem |
 | `vinculos_demais` | mais de 100 evidências no item (`parametros.maximo`: 100) | idem |
 | `candidatos_invalidos` | a lista `candidatos` da síntese malformada (é para o modelo; a tela não vê) | síntese |
+| `comparacoes_invalidas` | a lista `comparacoes` da revisão malformada (para o modelo) | revisão |
+| `historico_divergente` (já existia) | decisão divergente da sugestão (R1 da Coruja sobre `ef88880`) | ações das sugestões |
 
 A referência inválida continua `referencia_evidencia_invalida`, e os que já existem (`evidencia_ausente`, `evidencia_original_mudou`, `registro_mudou`, `tentativa_reutilizada`, `quadro_em_uso`…) não mudam. Cada código novo entra com a linha em inglês no `interface/i18n_en.js` no mesmo commit do servidor (senão `testes/erros_en.cjs` fica vermelho); o Lume revisa o texto depois do merge.
 

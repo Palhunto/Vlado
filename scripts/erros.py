@@ -94,6 +94,7 @@ PADROES: tuple[tuple[str, str], ...] = (
     ('evidencia_sem_achado', r'^E[0-9]{3,} não está ligada a nenhum achado'),
     # P45: the AI's suggestions for the boards (sugestoes_quadros via rotas_evidencia).
     ('candidatos_invalidos', r'^Candidatos para os quadros'),
+    ('comparacoes_invalidas', r'^Comparações entre processos'),
     ('sugestao_inexistente', r'^Sugestão não encontrada nesta apuração'),
     ('sugestao_ja_decidida', r'^Esta sugestão já foi decidida'),
     ('quadro_sugestao_invalido', r'^Quadro de sugestões inválido'),

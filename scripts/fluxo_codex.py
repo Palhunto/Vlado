@@ -14,6 +14,7 @@ import conferencia_briefing
 import indice_achados
 import instrucoes_mesa
 import sugestoes_quadros
+import comparacao_processos
 import continuidade as evolucao
 
 ETAPAS = ('inventario', 'plano', 'busca', 'geracao_inicial', 'revisao', 'sintese')
@@ -292,6 +293,11 @@ class Fluxo:
 
     def review(self, payload):
         data, ref_map = deepcopy(self.data), dict(self.evidence_refs)
+        # L9 (MESA.md 1.3.0 on): structured comparisons between processes; a malformed list refuses the review,
+        # a single invalid comparison is refused on its own (comparacao_processos.gravar, before publishing).
+        comparisons = payload.get('comparacoes')
+        if comparisons is not None:
+            comparacao_processos.estrutura(comparisons)
         reviews = payload.get('revisoes')
         claims = {c['id']: c for c in data['achados']}
         if (not isinstance(reviews, list) or len(reviews) != len(claims)
@@ -335,6 +341,8 @@ class Fluxo:
         self.add_artifact(data, 'revisao_assistida', 'revisao', payload['texto'] + '\n\n' + json.dumps(data['revisoes_assistidas'], ensure_ascii=False, indent=2), event)
         self.add_artifact(data, 'achados_revisados', 'achados_revisados', json.dumps(data['achados'], ensure_ascii=False, indent=2), event)
         data['procedencia'].append(event)
+        if comparisons is not None:  # before publishing (N2 of the Coruja on c06ea1e)
+            comparacao_processos.gravar(self.run, data, comparisons, self.instrucoes.get('versao'))
         receipt = self.publish(data)
         self.data, self.receipt, self.evidence_refs = data, receipt, ref_map
 
@@ -443,9 +451,10 @@ class Fluxo:
                 payload = json.loads(raw)
                 if not isinstance(payload, dict):
                     raise ValueError('Entrega estruturada deve ser objeto JSON.')
-                allowed = {'geracao_inicial': {'texto', 'achados'}, 'revisao': {'texto', 'revisoes'},
-                           'sintese': {'texto', 'destinos'} | ({'candidatos'} if sugestoes_quadros.aplica(self.instrucoes)
-                                                              else set())}[stage]
+                extra = sugestoes_quadros.aplica(self.instrucoes)
+                allowed = {'geracao_inicial': {'texto', 'achados'},
+                           'revisao': {'texto', 'revisoes'} | ({'comparacoes'} if extra else set()),
+                           'sintese': {'texto', 'destinos'} | ({'candidatos'} if extra else set())}[stage]
                 if payload.keys() - allowed:
                     raise ValueError('Campos não autorizados na entrega estruturada: ' + ', '.join(sorted(payload.keys() - allowed)))
                 content = texto(payload.get('texto'), 'Texto da etapa')

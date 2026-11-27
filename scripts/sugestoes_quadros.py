@@ -48,7 +48,9 @@ CAMPOS_DATA = {'tipo', 'valor', 'aproximada', 'fonte', 'observacao'}
 ACOES = ('confirmar', 'corrigir', 'descartar', 'restaurar')
 PASTA = 'candidatos'
 # CPF (000.000.000-00) or CNPJ (00.000.000/0000-00), with or without punctuation, anywhere in the candidate's text.
-DOCUMENTO_PESSOAL = re.compile(r'(?<!\d)(\d{3}\.?\d{3}\.?\d{3}-?\d{2}|\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2})(?!\d)')
+_SEP = r'[\s.\-\u2010-\u2015/]{0,3}'  # spaces, dots, hyphens and dashes, slash, between the groups (R3)
+DOCUMENTO_PESSOAL = re.compile(rf'(?<!\d)(\d{{3}}{_SEP}\d{{3}}{_SEP}\d{{3}}{_SEP}\d{{2}}'
+                               rf'|\d{{2}}{_SEP}\d{{3}}{_SEP}\d{{3}}{_SEP}\d{{4}}{_SEP}\d{{2}})(?![\d])')
 
 
 class Recusa(ValueError):
@@ -254,19 +256,41 @@ def _normalizar_decisao(_root, _case, data, atual, _identificador):
 DECISOES = ev.Colecao('sugestoes', 'K', CAMPOS_DECISAO, _normalizar_decisao, _regras_decisao, 'sugestões')
 
 
+def _sugestao_do_registro(root, case, identifier):
+    """The suggestion a diverging decision record is about, read from any of its event files (no trust beyond
+    the id), or None when nothing in it can be read."""
+    folder = dentro(DECISOES.pasta(root, case), identifier)
+    for path in sorted(folder.glob('*.json')) if folder.is_dir() else []:
+        try:
+            sid = ler_json(dentro(folder, path.name)).get('estado', {}).get('sugestao_id')
+        except (OSError, ValueError, AttributeError):
+            continue
+        if isinstance(sid, str) and re.fullmatch(ID, sid):
+            return sid
+    return None
+
+
 def _decisoes(root, case):
-    """{sugestao_id: [decision, ...]} in the order they were made."""
-    grouped = {}
+    """``({sugestao_id: [decision, ...]}, {sugestao_id with a diverging decision})``, in the order they were made.
+
+    A diverging record blocks only its own suggestion (R1 of the Coruja on ef88880); a record so damaged that no
+    suggestion can be read from it still stops everything, because it could hide a confirmation."""
+    grouped, broken = {}, set()
     for record in DECISOES.listar(root, case):
         if record['divergente']:
-            raise ValueError('Histórico das decisões sobre sugestões divergente; nenhuma decisão foi aplicada.')
+            sid = _sugestao_do_registro(root, case, record['id'])
+            if sid is None:
+                raise ValueError('Histórico do registro divergente nas decisões sobre sugestões (registro ilegível); '
+                                 'nenhuma decisão foi aplicada.')
+            broken.add(sid)
+            continue
         first = record['historico'][0]
         grouped.setdefault(record['estado']['sugestao_id'], []).append(
             {**record['estado'], 'id': record['id'], 'por': first['autor'], 'conta_id': first.get('conta_id'),
              'em_utc': first['em_utc']})
     for items in grouped.values():
         items.sort(key=lambda d: (d['em_utc'], d['id']))
-    return grouped
+    return grouped, broken
 
 
 # --- suggestions ---------------------------------------------------------------------------------------------------
@@ -356,23 +380,24 @@ ESTADO_DA_ACAO = {'confirmar': 'confirmada', 'corrigir': 'confirmada', 'descarta
 def _todas(root, case, cache=None):
     """{id: suggestion} of the case (contract, section 2.1), with the decisions applied, newest round first."""
     cache = {} if cache is None else cache
-    decisions = _decisoes(root, case)
+    decisions, broken = _decisoes(root, case)
     built, order = {}, []
     for analise, data, accepted in _registros(root, case, cache):
         by_key = {c['chave']: c for c in accepted}
         ids = {c['chave']: identidade(case, analise['rodada'], analise['registros_sha256'], c['chave']) for c in accepted}
-        latest = vinculo_ia.ultima_revisao(root, case, analise['rodada'], cache)
-        newest = vinculo_ia._dados(root, case, analise['rodada'], latest, cache)[0] if latest else data
+        # B1 of the Coruja on ef88880: what a later revision says (withdrawn, not supported) is what counts.
+        latest = vinculo_ia.ultima_revisao(root, case, analise['rodada'], cache) or analise['revisao']
+        newest, newest_manifest = vinculo_ia._dados(root, case, analise['rodada'], latest, cache)
         for cand in accepted:
             sid = ids[cand['chave']]
             claim = next(c for c in data['achados'] if c['id'] == cand['achado_id'])
             version = claim['versoes'][-1]
-            key = (claim['id'], version['versao'])
-            reviews = [r for r in data['revisoes_assistidas'] if (r['achado_id'], r['versao']) == key]
-            fates = [d for d in data['destinos'] if (d['achado_id'], d['versao']) == key]
             current_claim = next((c for c in newest['achados'] if c['id'] == claim['id']), claim)
-            refs = [{'tipo': 'ia', 'caso_id': case, 'rodada': analise['rodada'], 'revisao': analise['revisao'],
-                     'registros_sha256': analise['registros_sha256'], 'evidencia_id': e} for e in cand['evidencias']]
+            key = (claim['id'], current_claim['versoes'][-1]['versao'])
+            reviews = [r for r in newest['revisoes_assistidas'] if (r['achado_id'], r['versao']) == key]
+            fates = [d for d in newest['destinos'] if (d['achado_id'], d['versao']) == key]
+            refs = [{'tipo': 'ia', 'caso_id': case, 'rodada': analise['rodada'], 'revisao': latest,
+                     'registros_sha256': newest_manifest['registros_sha256'], 'evidencia_id': e} for e in cand['evidencias']]
             evidencias = [_evidencia(root, case, ref, cand['achado_id'], cache) for ref in refs]
             links = []
             for ref, resolved in zip(refs, evidencias):
@@ -394,7 +419,8 @@ def _todas(root, case, cache=None):
                           'decisao': ({k: last[k] for k in ('acao', 'por', 'conta_id', 'em_utc', 'item_id', 'quadro',
                                                             'alterados')} if last else None),
                           'descartada_antes': None,
-                          '_cand': cand, '_links': links, '_ids': ids, '_com_revisao': bool(data['revisoes_assistidas']),
+                          '_cand': cand, '_links': links, '_ids': ids, '_com_revisao': bool(newest['revisoes_assistidas']),
+                          '_divergente': sid in broken,
                           '_assinatura': json.dumps([cand['tipo'], _chave_item(cand, by_key), _assinatura(data, cand)],
                                                     ensure_ascii=False)}
             order.append(sid)
@@ -447,7 +473,8 @@ def _completar(built, item):
     avisos = [name for name, on in (('analise_sem_revisao', not item['_com_revisao']),
                                     ('achado_retirado', achado['destino'] == 'retirado'),
                                     ('versao_substituida', substituida),
-                                    ('evidencia_indisponivel', any(e['estado'] != 'conferida' for e in item['evidencias'])))
+                                    ('evidencia_indisponivel', any(e['estado'] != 'conferida' for e in item['evidencias'])),
+                                    ('decisao_divergente', item['_divergente']))
               if on]
     item['avisos'] = avisos
     block = None
@@ -463,7 +490,7 @@ def _completar(built, item):
         elif item['pontas']:
             states = [item['pontas'][s]['estado'] for s in ('origem', 'destino')]
             block = 'ponta_descartada' if 'descartada' in states else 'ponta_ainda_sugestao' if 'aberta' in states else None
-    item['bloqueio'] = block
+    item['bloqueio'] = 'historico_divergente' if item['_divergente'] else block
 
 
 def publico(item):
@@ -542,7 +569,9 @@ def decidir(root, data, acao, conta=None):
         item = _todas(root, case).get(sid)
         if item is None:
             raise ValueError('Sugestão não encontrada nesta apuração.')
-        done = next((d for d in _decisoes(root, case).get(sid, []) if d['id'] == 'K' + rid), None)
+        if item['_divergente']:
+            raise ValueError('Histórico do registro divergente nas decisões desta sugestão; nenhuma decisão foi aplicada.')
+        done = next((d for d in _decisoes(root, case)[0].get(sid, []) if d['id'] == 'K' + rid), None)
         if done is not None and done['acao'] != acao:
             raise ValueError('Esta tentativa já foi usada com outro conteúdo. Atualize o registro.')
         if done is None:

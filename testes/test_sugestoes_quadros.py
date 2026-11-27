@@ -20,7 +20,7 @@ import evidencias as ev
 import hipoteses
 import linha_tempo
 import mapa_relacoes as mapa
-from registros_achados import carregar
+from registros_achados import carregar, publicar
 import rotas_evidencia
 import sugestoes_quadros as sq
 
@@ -202,20 +202,17 @@ class SugestoesQuadrosTest(unittest.TestCase):
     # --- bloqueios ---------------------------------------------------------------------------------
 
     def com_revisao(self, **mudar):
-        """Lists with the r2 data seen as if the review or the synthesis had said otherwise."""
-        real = sq._registros
+        """Lists with the newest revision (r2) seen as if its review or synthesis had said otherwise."""
+        real = sq.vinculo_ia._dados
 
-        def alterado(root, case, cache):
-            rounds = []
-            for analise, data, accepted in real(root, case, cache):
-                data = deepcopy(data)
-                for review in data['revisoes_assistidas']:
-                    review['suporte'] = mudar.get('suporte', review['suporte'])
-                for fate in data['destinos']:
-                    fate['destino'] = mudar.get('destino', fate['destino'])
-                rounds.append((analise, data, accepted))
-            return rounds
-        return patch.object(sq, '_registros', alterado)
+        def alterado(root, case, rodada, revisao, cache):
+            data, manifest = deepcopy(real(root, case, rodada, revisao, {}))
+            for review in data['revisoes_assistidas']:
+                review['suporte'] = mudar.get('suporte', review['suporte'])
+            for fate in data['destinos']:
+                fate['destino'] = mudar.get('destino', fate['destino'])
+            return data, manifest
+        return patch.object(sq.vinculo_ia, '_dados', alterado)
 
     def test_confirmar_fica_indisponivel_com_a_razao_de_cada_caso(self):
         for mudar, code in (({'destino': 'retirado'}, 'achado_retirado'), ({'suporte': 'nao_sustentado'}, 'nao_sustentado'),
@@ -237,8 +234,11 @@ class SugestoesQuadrosTest(unittest.TestCase):
         self.gravar('r1', CANDIDATOS[:1])  # A001 v1, before the review: v2 came after it
         old = self.por_chave('mapa', 'C1', 'r1')
         self.assertEqual((old['achado']['versao'], old['achado']['versao_atual'], old['bloqueio']), (1, 2, 'versao_substituida'))
-        self.assertIn('analise_sem_revisao', old['avisos'])
-        self.assertEqual(old['campos']['evidencias'][0]['suporte'], 'nao_revisado')
+        # The fill and the verdict come from the newest revision of the round (B1 of the Coruja on ef88880).
+        self.assertNotIn('analise_sem_revisao', old['avisos'])
+        link = old['campos']['evidencias'][0]
+        self.assertEqual((link['referencia']['revisao'], link['suporte']), ('r2', 'sustentado'))
+        self.assertEqual(old['analise']['revisao'], 'r1')
         new = self.por_chave('mapa', 'C1')
         self.acao('descartar', new)
         old = self.por_chave('mapa', 'C1', 'r1')
@@ -315,6 +315,71 @@ class SugestoesQuadrosTest(unittest.TestCase):
         self.assertEqual(self.codigo(lambda: self.op('mapa-entidade-detalhe', id='P' + 'e' * 32))[0], 'registro_inexistente')
         self.assertEqual(self.codigo(lambda: self.op('mapa-entidade-detalhe', id=made['id'], extra=1))[0],
                          'quadro_campos_invalidos')
+
+
+    # --- ressalvas da Coruja sobre ef88880 --------------------------------------------------------
+
+    def retirar_a001_numa_r3(self):
+        """r3 over r2: the review takes A001 v2 down (não sustentado, retirar) and the synthesis withdraws it."""
+        data, manifest = carregar(self.root, 'alpha', 'R001', 'r2')
+        r3 = self.env.sucessora(data, {'manifesto': manifest}, 'r3')
+        r3['revisoes_assistidas'].append({'achado_id': 'A001', 'versao': 2, 'suporte': 'nao_sustentado',
+                                          'motivo': 'Releitura sintética.', 'fontes_reabertas': ['E001'],
+                                          'limitacoes': 'Revisão pela IA.', 'acao': 'retirar'})
+        r3['destinos'].append({'achado_id': 'A001', 'versao': 2, 'destino': 'retirado', 'motivo': 'Não sustentado.',
+                               'briefing': None, 'revisao_suporte': None})
+        r3['procedencia'].append({'etapa': 'sintese', 'artefatos': [], 'ferramentas': ['fixture'], 'modelo_informado_ou_observado': None})
+        self.env.relatorio(r3, 'saidas/08c_insuficiencia.md', 'insuficiencia', 'Sem achados com suporte.', -1)
+        return publicar(self.root, 'alpha', 'R001', r3)['manifesto']['registros_sha256']
+
+    def test_revisao_seguinte_que_retira_o_achado_vale_para_a_sugestao(self):
+        r3 = self.retirar_a001_numa_r3()
+        pessoa = self.listar('mapa')['sugestoes'][0]
+        self.assertEqual((pessoa['achado']['destino'], pessoa['achado']['suporte_ia'], pessoa['bloqueio']),
+                         ('retirado', 'nao_sustentado', 'achado_retirado'))
+        self.assertIn('achado_retirado', pessoa['avisos'])
+        link = pessoa['campos']['evidencias'][0]
+        self.assertEqual((link['referencia']['revisao'], link['referencia']['registros_sha256'], link['suporte']),
+                         ('r3', r3, 'nao_revisado'))
+        self.assertEqual(pessoa['evidencias'][0]['revisao_ia']['destino'], 'retirado')
+        self.assertEqual(pessoa['analise']['revisao'], 'r2')  # the analysis that suggested it does not change
+        self.assertEqual(self.codigo(lambda: self.acao('confirmar', pessoa))[0], 'achado_retirado')
+        made = self.acao('corrigir', pessoa, campos=deepcopy(pessoa['campos']))['item']
+        saved = made['estado']['evidencias'][0]
+        self.assertEqual((saved['suporte'], saved['revisao_ia']['destino'], 'alteracoes' in saved), ('nao_revisado', 'retirado', False))
+
+    def test_decisao_divergente_trava_so_a_propria_sugestao(self):
+        pessoa, org, _ = self.listar('mapa')['sugestoes']
+        self.acao('descartar', pessoa)
+        record = sq.DECISOES.listar(self.root, 'alpha')[0]
+        folder = sq.DECISOES.pasta(self.root, 'alpha') / record['id']
+        event = next(folder.glob('*.json'))
+        content = sq.ler_json(event)
+        content['estado']['alterados'] = ['adulterado']
+        event.write_bytes((sq.json.dumps(content, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
+        found = {s['id']: s for s in self.listar('mapa', incluir_decididas=True)['sugestoes']}
+        self.assertEqual((found[pessoa['id']]['bloqueio'], 'decisao_divergente' in found[pessoa['id']]['avisos']),
+                         ('historico_divergente', True))
+        self.assertEqual(self.codigo(lambda: self.acao('restaurar', found[pessoa['id']]))[0], 'historico_divergente')
+        self.assertEqual(found[org['id']]['bloqueio'], None)
+        self.assertEqual(self.acao('confirmar', found[org['id']])['sugestao']['estado'], 'confirmada')
+        # A record with nothing readable could hide a confirmation: then nothing is decided.
+        event.write_bytes(b'{')
+        self.assertEqual(self.codigo(lambda: self.listar('mapa'))[0], 'historico_divergente')
+
+    def test_mapa_entidade_detalhe_so_para_quem_edita_o_mapa(self):
+        import autorizacao
+        for papel, alcanca in (('dono', True), ('editor', True), ('reporter', True), ('leitor', False), ('convidado', False)):
+            caps = autorizacao.capacidades(None, 'local-contas', {'papel': papel})
+            self.assertEqual('mapa-entidade-detalhe' in caps, alcanca, papel)
+            self.assertEqual('mapa-entidade-detalhe' in caps, 'mapa-entidade-atualizar' in caps, papel)
+
+    def test_cpf_e_cnpj_com_espacos_ou_tracos_tambem_sao_recusados(self):
+        data, _ = carregar(self.root, 'alpha', 'R001', 'r2')
+        for texto in ('Marta Reis 123 456 789 09', 'Marta Reis 123.456.789 – 09', 'Alfa 12 345 678 / 0001 - 90',
+                      'Marta Reis 123456789\u00a009'):
+            recusados = sq.conferir([{**CANDIDATOS[0], 'campos': {'nome': texto}}], data)[1]
+            self.assertEqual([r['codigo'] for r in recusados], ['dado_pessoal'], texto)
 
 
 if __name__ == '__main__':

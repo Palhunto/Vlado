@@ -103,6 +103,9 @@ Reabra com ler ou imagem, nesta etapa, todas as fontes vinculadas às afirmaçõ
 - Antes de manter uma pendência, procure o mesmo dado em outras peças do corpus (notas, quadros, anexos) e diga onde procurou. Classifique cada divergência pela materialidade: muda a conclusão, muda o valor final ou é só grafia.
 - Numa comparação entre processos, confira que o documento ou fundamento é de fato o mesmo (versão, data, emissor e trecho) e que os desfechos são comparáveis (mesma questão decidida, mesma fase); sem isso, a comparação fica como pendência.
 - Pista nova fora dos achados iniciais entra como limitação, não como fato novo na síntese. Não invente leitura nem aprovação humana.
+- Em comparacoes (opcional; até 20), registre cada comparação entre processos conferida nesta revisão:
+  {"achado_id":"A004","chave":{"identificador":"...","data":"...","emissor":"...","versao":"..."},"lados":[{"processo":"...","fundamento":"E007","questao":"...","fase":"...","desfecho":"...","desfecho_evidencia":"E008"},{...o outro processo...}],"conferencias":{"versao":"mesmo|diferente|a_conferir","data":"...","emissor":"...","trecho":"...","questao":"...","fase":"..."}}
+  Os dois lados citam evidências do achado (fundamento obrigatório; desfecho_evidencia ou null), uma por processo. Cada conferência diz se o item é o mesmo nos dois lados, diferente ou ainda a conferir; o que não for "mesmo" deixa a comparação pendente. A diferença de desfecho não prova irregularidade.
 <!-- /mesa -->
 
 <!-- mesa:formato:sintese -->

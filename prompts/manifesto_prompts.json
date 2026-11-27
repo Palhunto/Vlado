@@ -19,7 +19,7 @@
     },
     {
       "arquivo": "prompts/04_REVISAR_SUPORTE.md",
-      "sha256": "47efb82080b602070252a833799a0c4eae0624eab06510728fff4b945fa86cfc"
+      "sha256": "d54dd93207ce66b5b115e548f657fd28a6925464f298928da24fc09cb99367f8"
     },
     {
       "arquivo": "prompts/05_SINTETIZAR.md",
@@ -32,11 +32,11 @@
   ],
   "fluxo_completo": {
     "arquivo": "prompts/FLUXO_COMPLETO.md",
-    "sha256": "991ea161e99d09641da9f10f08541f1e742c8c255f70acf2e864be8c98d7e5aa"
+    "sha256": "b817e3c48ad4597876e602762c7e3d83b88fba3fd906d41d0a95864d883b49f9"
   },
   "mesa": {
     "arquivo": "prompts/MESA.md",
     "versao": "1.3.0",
-    "sha256": "943b44cbeab00148d8786dbfc924e3df8850324c4e6c07c19278903a5c08049d"
+    "sha256": "c4349f1c718110642f999f7b0e0689d89f9d91dce5ef99a076d0d276fdea34bb"
   }
 }

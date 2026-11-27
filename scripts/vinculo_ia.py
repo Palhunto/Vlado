@@ -73,11 +73,13 @@ def achados_da_evidencia(data, evidencia_id):
     return sorted({v['achado_id'] for v in data['vinculos'] if v['evidencia_id'] == evidencia_id})
 
 
-def _valores(data, manifest, rodada, evidencia_id, achado_id=None):
+def _valores(data, manifest, rodada, evidencia_id, achado_id=None, papel=None):
     """What the published revision says about this E-ID in one finding: its newest version that links it.
 
     ``achado_id`` chooses the finding; without it, the E-ID must be in a single finding (else ValueError, so the
-    values of one finding never pass as another's). None when the E-ID links no finding."""
+    values of one finding never pass as another's). None when the E-ID links no finding. When the E-ID links the
+    finding in more than one role, ``papel`` picks that role's link (R2 of the Coruja on 446bfc6); without it, or
+    with a role the finding does not give it, the first in ``PAPEIS`` order."""
     owners = achados_da_evidencia(data, evidencia_id)
     if achado_id is not None:
         if achado_id not in owners:
@@ -90,7 +92,9 @@ def _valores(data, manifest, rodada, evidencia_id, achado_id=None):
     else:
         achado_id = owners[0]
     links = [v for v in data['vinculos'] if v['evidencia_id'] == evidencia_id and v['achado_id'] == achado_id]
-    link = max(links, key=lambda v: v['versao'])
+    roles = {v['papel'] for v in links}
+    role = papel if papel in roles else next(r for r in PAPEIS if r in roles)
+    link = max((v for v in links if v['papel'] == role), key=lambda v: v['versao'])
     claim = next(c for c in data['achados'] if c['id'] == link['achado_id'])
     version = next(v for v in claim['versoes'] if v['versao'] == link['versao'])
     reviews = [r for r in data['revisoes_assistidas'] if (r['achado_id'], r['versao']) == (claim['id'], link['versao'])]
@@ -102,19 +106,19 @@ def _valores(data, manifest, rodada, evidencia_id, achado_id=None):
             '_ultima_versao': claim['versoes'][-1]['versao'], '_justificativa': link['justificativa']}
 
 
-def revisao_ia(root, case, ref, cache, achado_id=None):
+def revisao_ia(root, case, ref, cache, achado_id=None, papel=None):
     """``revisao_ia`` of a reference to the findings, in the chosen finding (None for the notebook or when the
     E-ID links no finding; ValueError when it links several and none was chosen)."""
     if ref.get('tipo') != 'ia':
         return None
     data, manifest = _dados(root, case, ref['rodada'], ref['revisao'], cache)
-    values = _valores(data, manifest, ref['rodada'], ref['evidencia_id'], achado_id)
+    values = _valores(data, manifest, ref['rodada'], ref['evidencia_id'], achado_id, papel)
     return {k: values[k] for k in CAMPOS_REVISAO} if values else None
 
 
-def justificativa_ia(root, case, ref, cache, achado_id=None):
+def justificativa_ia(root, case, ref, cache, achado_id=None, papel=None):
     data, manifest = _dados(root, case, ref['rodada'], ref['revisao'], cache)
-    values = _valores(data, manifest, ref['rodada'], ref['evidencia_id'], achado_id)
+    values = _valores(data, manifest, ref['rodada'], ref['evidencia_id'], achado_id, papel)
     return values['_justificativa'] if values else ''
 
 
@@ -130,15 +134,17 @@ def escolha(item):
 
 
 def preenchimento(revisao):
-    """P47: papel, suporte and natureza a new link starts with. ``revisao`` None = notebook source: role
-    "suporte" (the person may change it), support "not reviewed" and no nature (the person picks it)."""
+    """P47: papel, suporte and natureza a new link starts with, and the finding's destino. ``revisao`` None =
+    notebook source: role "suporte" (the person may change it), support "not reviewed" and no nature (the person
+    picks it). This is the value "Voltar ao da IA" and "Ligar a versão nova" send back, and the one that carries
+    no mark of a person (never the raw ``revisao_ia``: a withdrawn finding's "sustentado" is not the fill)."""
     if revisao is None:
-        return {'papel': 'suporte', 'suporte': 'nao_revisado', 'natureza': None}
+        return {'papel': 'suporte', 'suporte': 'nao_revisado', 'natureza': None, 'destino': None}
     suporte = revisao['suporte']
     if (revisao['destino'] == 'retirado' or revisao['papel'] == 'contexto'
             or revisao['natureza'] == 'pendencia' and suporte == 'sustentado'):
         suporte = 'nao_revisado'
-    return {'papel': revisao['papel'], 'suporte': suporte, 'natureza': revisao['natureza']}
+    return {'papel': revisao['papel'], 'suporte': suporte, 'natureza': revisao['natureza'], 'destino': revisao['destino']}
 
 
 def validar(item):
@@ -209,7 +215,7 @@ def registrar(root, case, novos, antigos, quem, agora, chave, escolhas=None, cac
             review = kept
         else:
             old = None  # another finding chosen for the same evidence: a new link, compared with its own review
-            review = revisao_ia(root, case, link['referencia'], cache, chosen)
+            review = revisao_ia(root, case, link['referencia'], cache, chosen, link['papel'])
             if review is None and link['referencia']['tipo'] == 'ia':
                 raise ValueError(f'{link["referencia"]["evidencia_id"]} não está ligada a nenhum achado desta revisão, '
                                  'então não tem revisão da IA; ligue uma evidência de um achado.')
@@ -249,14 +255,14 @@ def _marca_humana(root, case, rodada, achado_id, versao, cache):
     return {'estado': last['estado'], 'por': last.get('responsavel'), 'em_utc': last['em_utc']}
 
 
-def atual(root, case, ref, cache, achado_id=None):
+def atual(root, case, ref, cache, achado_id=None, papel=None):
     """What the newest revision of the round says about the E-ID in the finding: ``(values, referencia)`` or
     ``(None, None)``."""
     latest = ultima_revisao(root, case, ref['rodada'], cache)
     if latest is None:
         return None, None
     data, manifest = _dados(root, case, ref['rodada'], latest, cache)
-    values = _valores(data, manifest, ref['rodada'], ref['evidencia_id'], achado_id)
+    values = _valores(data, manifest, ref['rodada'], ref['evidencia_id'], achado_id, papel)
     if values is None:
         return None, None
     return values, {**ref, 'revisao': latest, 'registros_sha256': manifest['registros_sha256']}
@@ -266,21 +272,22 @@ def leitura(root, case, item, cache):
     """Read-time fields of a link: the saved record plus what is computed now (see the module docstring)."""
     review = item.get('revisao_ia')
     changes = item.get('alteracoes') or {}
-    out = {'revisao_ia': review, 'alteracoes': changes, 'conferencia_humana': None, 'destino_atual': None,
-           'versao_nova': None, 'suporte_so_da_ia': False}
+    out = {'revisao_ia': review, 'alteracoes': changes, 'preenchimento_ia': preenchimento(review) if review else None,
+           'conferencia_humana': None, 'destino_atual': None, 'versao_nova': None, 'suporte_so_da_ia': False}
     ref = item.get('referencia') or {}
     if ref.get('tipo') != 'ia' or lixeira.excluido(root, case, rodada=ref['rodada']):
         return out  # a round in the trash feeds nothing (R1 of the Coruja)
     try:
-        own = review or revisao_ia(root, case, ref, cache)
-        values, newest = atual(root, case, ref, cache, own['achado_id'] if own else None)
+        own = review or revisao_ia(root, case, ref, cache, None, item.get('papel'))
+        values, newest = atual(root, case, ref, cache, own['achado_id'] if own else None, own['papel'] if own else None)
         if own is not None:
             out['conferencia_humana'] = _marca_humana(root, case, ref['rodada'], own['achado_id'], own['versao'], cache)
         if values is not None:
             out['destino_atual'] = values['destino']
             if own is not None and values['versao'] > own['versao']:
+                new_review = {k: values[k] for k in CAMPOS_REVISAO}
                 out['versao_nova'] = {'referencia': newest, 'achado_id': values['achado_id'], 'versao': values['versao'],
-                                      'revisao_ia': {k: values[k] for k in CAMPOS_REVISAO}}
+                                      'revisao_ia': new_review, 'preenchimento': preenchimento(new_review)}
     except (ValueError, OSError, KeyError, TypeError):
         return out  # the source is unavailable: conferir_vinculos already says so
     conferida = (out['conferencia_humana'] or {}).get('estado') == 'conferida_no_original'

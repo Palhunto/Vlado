@@ -1998,6 +1998,7 @@ window.VLADO_I18N_EN = {
     vinculo_achado_invalido: "The chosen finding is not linked to this evidence. Choose it again in the picker.",
     evidencia_sem_achado: "This evidence is not linked to any finding, so it has no AI review. Link evidence from a finding.",
     candidatos_invalidos: "The AI’s suggestions for the boards came malformed; the analysis corrects them.",
+    comparacoes_invalidas: "The comparisons between processes came malformed; the analysis corrects them.",
     sugestao_inexistente: "Suggestion not found in this investigation. Reload the board.",
     sugestao_ja_decidida: "This suggestion was already decided. Reload the board.",
     quadro_sugestao_invalido: "Invalid board for suggestions.",

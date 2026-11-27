@@ -14,6 +14,7 @@ O contrato publicado para a equipe está em ``.maestro/equipe/CONTRATO_EVIDENCIA
 from __future__ import annotations
 
 from contextlib import contextmanager
+import contextvars
 from copy import deepcopy
 from datetime import datetime, timezone
 import re
@@ -43,6 +44,9 @@ CAMPOS_LOCALIZADOR = {'tipo', 'pagina_pdf', 'linha_inicio', 'linha_fim', 'descri
 NATUREZAS_DOCUMENTAIS = ('declaracao_documental', 'alegacao_atribuida')
 HASH = caderno.HASH
 MAXIMO_VINCULOS = 100
+# Onda 4 (B1; R1 of the Coruja on 446bfc6): the finding each input link chose, by (reference key, role), for
+# Colecao.salvar only. It never rides inside the link, so nested links (the story claims) stay as they were.
+_ESCOLHAS = contextvars.ContextVar('escolhas_de_achado', default=None)
 
 
 def texto(value, field, maximum, *, vazio=False):
@@ -272,7 +276,7 @@ def vinculos(root, case, items, *, minimo=0, papeis=PAPEIS, cache=None, preserva
             resolved = resolver(root, case, ref, cache)
         except ValueError:
             if saved and preservar_indisponiveis:
-                result.append(deepcopy(item) if chosen is None else {**deepcopy(item), '_achado_id': chosen})
+                result.append(deepcopy(item))
                 continue
             raise
         document = resolved['documento']
@@ -285,7 +289,10 @@ def vinculos(root, case, items, *, minimo=0, papeis=PAPEIS, cache=None, preserva
         result.append({'referencia': ref, 'papel': item['papel'], 'suporte': support, 'natureza': nature,
                        'justificativa': texto(item['justificativa'], 'Justificativa do vínculo', 2000),
                        'documento_id': document['documento_id'], 'original_sha256': document['original_sha256'],
-                       'localizador': dict(resolved['localizador']), **({'_achado_id': chosen} if chosen else {})})
+                       'localizador': dict(resolved['localizador'])})
+        choices = _ESCOLHAS.get()
+        if chosen is not None and choices is not None:
+            choices[key] = chosen
     return result
 
 
@@ -496,10 +503,15 @@ class Colecao:
             if operation == 'atualizar' and data.get('anterior_sha256') != current['sha256']:
                 raise ValueError('O registro mudou. Atualize antes de salvar; seu formulário foi preservado.')
             editable = {k: deepcopy(data[k]) for k in self.campos if k in data}
-            state = self.normalizar(root, case, editable, deepcopy(current['estado']) if current else None, identifier)
-            # The finding chosen per link (vinculo_ia.escolha) rides along from vinculos() and never reaches the state.
-            chosen = [link.pop('_achado_id', None) for link in state.get('evidencias', [])
-                      if isinstance(link, dict)] if isinstance(state.get('evidencias'), list) else []
+            token = _ESCOLHAS.set({})
+            try:
+                state = self.normalizar(root, case, editable, deepcopy(current['estado']) if current else None, identifier)
+                choices = _ESCOLHAS.get()
+            finally:
+                _ESCOLHAS.reset(token)
+            links = state.get('evidencias') if isinstance(state.get('evidencias'), list) else []
+            chosen = [choices.get(identidade(link)) if isinstance(link, dict) and 'referencia' in link else None
+                      for link in links]
             if set(state) != self.campos:
                 raise ValueError('Estado do registro incompleto.')
             if self.validar:
