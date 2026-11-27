@@ -263,3 +263,14 @@ for (const [codigo, razao] of BLOQUEIOS) {
     assert.ok(!m.chamadas.some(c => c.operacao === 'sugestoes-confirmar'), 'nada é enviado');
   });
 }
+
+test('a9264ac: histórico divergente trava as quatro ações desta sugestão, com a razão, e o aviso decisao_divergente aparece', async () => {
+  const m = montar({sugestoes: [{...PESSOA(), bloqueio: 'historico_divergente', avisos: ['decisao_divergente']}]}); await abrirAba(m, 'mapa');
+  m.$('quadros-mapa').querySelector('.mapa-no.is-sugestao').dispatchEvent(new Evento('click', {bubbles: true}));
+  const p = m.$('quadros-mapa').querySelector('.sugestao-painel');
+  const botoes = [...p.querySelectorAll('.sugestao-acoes button')];
+  assert.ok(botoes.length > 0 && botoes.every(b => b.disabled === true), 'Confirmar e Descartar travados');
+  assert.match(texto(m.doc.getElementById(botoes[0].getAttribute('aria-describedby'))), /O histórico das decisões desta sugestão está divergente\. As ações ficam indisponíveis/);
+  assert.match(texto(p.querySelector('.notice')), /O histórico das decisões desta sugestão está divergente: o registro precisa ser conferido antes de decidir\./);
+  assert.doesNotMatch(p.querySelector('.notice').className, /danger/, 'aviso, não erro');
+});

@@ -16,6 +16,7 @@ window.Quadros.formularios = (() => {
   const rotulo = (lista, chave) => (lista.find(([k]) => k === chave) || [])[1] || chave || '';
   let contador = 0; const novoId = prefixo => `${prefixo}-${++contador}`;
   const podeCriar = quadro => !window.Sessao?.pode || window.Sessao.pode(`${quadro}-criar`) || window.Sessao.pode(`${quadro}-atualizar`);
+  const podeAtualizar = quadro => !window.Sessao?.pode || window.Sessao.pode(`${quadro}-atualizar`);
   const requisicao = () => Q.sugestoes.requisicao();
   const diaHora = iso => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : t('{dia}, às {hora}', {dia: `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`, hora: `${d.getHours()}h${String(d.getMinutes()).padStart(2, '0')}`}); };
 
@@ -484,7 +485,7 @@ window.Quadros.formularios = (() => {
     b.addEventListener('click', () => abrirNoPainel({tipo, abaId, casoId, gatilho: b, ...extra()})); return b;
   };
   const botaoEditar = (tipo, abaId, casoId, itemId, nomeItem, extra = () => ({})) => {
-    const def = QUADROS[tipo]; if (!podeCriar(def.prefixo)) return null;
+    const def = QUADROS[tipo]; if (!podeAtualizar(def.prefixo)) return null;
     const b = botao(t('Editar'), 'quadro-editar'); b.setAttribute('aria-label', `${t('Editar')}: ${nomeItem}`);
     b.addEventListener('click', () => abrirNoPainel({tipo, abaId, casoId, itemId, gatilho: b, ...extra()})); return b;
   };

@@ -357,7 +357,7 @@ window.Quadros = (() => {
       const rotuloDe = a => quando(a.em_utc);
       const resultados = (dados.resultados || []).map(r => {
         const nome = r.documento?.nome || '', loc = r.localizador?.legivel || '';
-        return {chave: `${r.origem}:${JSON.stringify(r.vinculo_sugerido?.referencia || {})}:${r.achado?.id || ''}`, origem: r.origem,
+        return {chave: `${r.origem}:${JSON.stringify(r.vinculo_sugerido?.referencia || {})}:${r.achado?.id || ''}:${r.vinculo_sugerido?.papel || ''}`, origem: r.origem,
           tipo: r.origem === 'ia' ? 'Achado da IA' : 'Trecho do caderno', texto: r.texto || r.trecho || '', localizador: `${nome ? nome + ', ' : ''}${loc}`,
           conferencia: r.conferencia_humana?.estado === 'conferida_no_original' ? 'conferido' : 'a_conferir',
           suporte_ia: r.revisao_ia?.suporte || null, natureza: r.revisao_ia?.natureza || null, destino: r.achado?.destino || null,

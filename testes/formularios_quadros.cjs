@@ -426,3 +426,20 @@ test('B1 da Coruja: "Ligar a versão nova" usa o preenchimento da versão nova c
   assert.equal(JSON.stringify(ev.referencia), JSON.stringify(referencia(5))); assert.equal(ev.achado_id, 'A003');
   assert.equal(ev.suporte, 'nao_revisado'); assert.equal(ev.papel, 'suporte'); assert.equal(ev.natureza, 'declaracao_documental');
 });
+
+test('a9264ac: sem a capacidade de atualizar o mapa, o Editar da entidade não aparece (o detalhe sem máscara é só de quem edita)', async () => {
+  const m = montar(); m.avaliar('window.Sessao = {pode: op => op !== "mapa-entidade-atualizar", pronta: Promise.resolve()};');
+  await abrirAba(m, 'mapa');
+  const painel = m.$('quadros-mapa');
+  assert.equal(painel.querySelectorAll('.quadro-editar').length, 0, 'nenhum Editar de entidade');
+  assert.ok(por(painel, 'button', '+ Nova entidade'), 'criar continua, pela capacidade de criar');
+});
+
+test('a9264ac: o seletor distingue o mesmo achado e a mesma evidência em papéis diferentes (uma chave por evidência, achado e papel)', async () => {
+  const contra = {...RESULTADO, vinculo_sugerido: {...RESULTADO.vinculo_sugerido, papel: 'contradicao'}};
+  const m = montar({busca: [RESULTADO, contra]}); await abrirAba(m, 'hipoteses');
+  m.avaliar(`window.Quadros.buscaEvidencias('alpha')({texto: '', origem: 'tudo', analise: null}).then(r => { window.__c = JSON.stringify(r.resultados.map(x => x.chave)); })`);
+  await espera(m);
+  const chaves = JSON.parse(m.janela.__c);
+  assert.equal(chaves.length, 2); assert.notEqual(chaves[0], chaves[1]);
+});

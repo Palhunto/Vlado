@@ -1288,6 +1288,9 @@ window.VLADO_I18N_EN = {
     "papel": "role",
     "natureza": "nature",
     "Ligar a versão nova trocou as mudanças desta edição ainda não salvas ({campos}) pelo que a revisão da nova versão disse.": "Linking the new version replaced the changes from this edit that were not yet saved ({campos}) with what the new version’s review said.",
+    // Quadros, Onda 4 (a9264ac)
+    "O histórico das decisões desta sugestão está divergente. As ações ficam indisponíveis para ela até o registro ser conferido.": "The decision history of this suggestion is inconsistent. The actions stay unavailable for it until the record is checked.",
+    "O histórico das decisões desta sugestão está divergente: o registro precisa ser conferido antes de decidir.": "The decision history of this suggestion is inconsistent: the record needs to be checked before deciding.",
     // Fase 06 — quadros de evidência (interface/quadros.js)
     "Hipóteses e acontecimentos registrados por pessoas a partir das evidências desta apuração. Cada evidência abre o original conferido; os quadros organizam e apontam lacunas, sem avaliar veracidade.": "Hypotheses and events recorded by people from this investigation’s evidence. Each piece of evidence opens the checked original; the boards organise and point out gaps, without judging truth.",
     "Hipóteses": "Hypotheses",
