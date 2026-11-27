@@ -15,7 +15,7 @@ const RESULTADO = {origem: 'ia', tipo_fonte: 'achado_ia', texto: 'Marta Reis é 
 const TIPOS = {assinatura: 'Data de assinatura', fato: 'Data do fato (ocorrência)'};
 const vinculoSalvo = (extra = {}) => ({referencia: referencia(3), papel: 'suporte', suporte: 'sustentado', natureza: 'declaracao_documental', justificativa: 'Já ligada.', documento_id: 'D002', estado: 'conferida',
   evidencia: {documento: {documento_id: 'D002', nome: 'contrato_social_alfa.pdf'}, trecho: 'Marta Reis, sócia-administradora…', localizador: {legivel: 'D002 · p. 1', pagina_pdf: 1}}, localizador: {legivel: 'D002 · p. 1'},
-  revisao_ia: IA(), alteracoes: {}, conferencia_humana: null, ...extra});
+  revisao_ia: IA(), preenchimento_ia: {papel: 'suporte', suporte: 'sustentado', natureza: 'declaracao_documental', destino: 'incluido'}, alteracoes: {}, conferencia_humana: null, ...extra});
 const HIP = id => ({id, enunciado: 'A dispensa seguiu o rito legal.', situacao: 'em_aberto', condicao: 'pendencia', natureza: null, situacao_sem_base: false, sustentam: [], contrariam: [], faltam: [], contexto: [], indisponiveis: []});
 
 function montar({permissao = true, sugestoes = [], detalhe = {}, busca = [RESULTADO], entradas = []} = {}) {
@@ -365,4 +365,64 @@ test('Editar entidade: abre com o registro sem máscara (mapa-entidade-detalhe),
   assert.equal(operacao, 'mapa-entidade-atualizar'); assert.equal(dados.id, MARTA); assert.equal(dados.anterior_sha256, sha);
   assert.equal(dados.nome, 'Marta Reis Lima');
   assert.equal(dados.identificadores[0].valor, '12345678909'); assert.equal(dados.identificadores[0].fonte, 0);
+});
+
+test('R2: "Ligar a versão nova" avisa, em uma linha de status, que trocou as mudanças desta edição ainda não salvas', async () => {
+  const id = 'H' + '1'.repeat(32);
+  const nova = {referencia: referencia(5), achado_id: 'A002', versao: 2, revisao_ia: IA({versao: 2, suporte: 'sustentado'}), preenchimento: {papel: 'suporte', suporte: 'sustentado', natureza: 'declaracao_documental', destino: 'incluido'}};
+  const detalhe = {'hipoteses-detalhe': {id, sha256: 'c'.repeat(64), estado: {enunciado: 'H', situacao: 'em_aberto', lacunas: []}, evidencias: [vinculoSalvo({versao_nova: nova})]}};
+  const m = montar({detalhe}); await abrirAba(m, 'hipoteses');
+  const painel = m.$('quadros-hipoteses');
+  await clicar(m, por(painel, '.quadro-editar', 'Editar'));
+  const suporte = () => painel.querySelector('.vinculo-cartao select');
+  suporte().value = 'parcial'; suporte().dispatchEvent(new Evento('change', {bubbles: true})); await espera(m);
+  assert.match(texto(painel.querySelector('.vinculo-cartao')), /alterado por você/);
+  await clicar(m, por(painel, '.vinculo-versao-nova', 'Ligar a versão nova'));
+  const aviso = painel.querySelector('.vinculo-cartao .vinculo-aviso[role=status]');
+  assert.ok([...painel.querySelectorAll('.vinculo-cartao .vinculo-aviso')].some(a => /Ligar a versão nova trocou as mudanças desta edição ainda não salvas \(suporte\)/.test(texto(a))), 'linha de status do R2');
+  assert.ok(!/alterado por/i.test(texto(painel.querySelector('.vinculo-cartao'))), 'o valor volta ao da revisão da versão nova');
+});
+
+test('B1 da Coruja: "Voltar ao da IA" manda o preenchimento da P47, nunca o valor anterior da marca, e o diálogo mostra o valor da IA', async () => {
+  const id = 'H' + '1'.repeat(32);
+  const alt = {suporte: {anterior: 'parcial', valor: 'nao_sustentado', por: 'Ana Lima', em_utc: '2026-11-26T19:10:00+00:00'}};
+  const detalhe = {'hipoteses-detalhe': {id, sha256: 'c'.repeat(64), estado: {enunciado: 'H', situacao: 'em_aberto', lacunas: []}, evidencias: [vinculoSalvo({alteracoes: alt, suporte: 'nao_sustentado'})]}};
+  const m = montar({detalhe}); await abrirAba(m, 'hipoteses');
+  const painel = m.$('quadros-hipoteses'), pedidos = [];
+  m.janela.Dialogo.confirmar = async o => { pedidos.push(o); return true; };
+  await clicar(m, por(painel, '.quadro-editar', 'Editar'));
+  await clicar(m, [...painel.querySelectorAll('.vinculo-voltar')].find(b => /suporte/.test(b.getAttribute('aria-label'))));
+  assert.match(pedidos[0].texto, /Ana Lima mudou o suporte de “sustentado” \(da revisão da IA\) para “não sustentado” em/);
+  assert.doesNotMatch(pedidos[0].texto, /“parcial”/, 'o valor anterior da marca não é o da IA');
+  assert.equal(painel.querySelector('.vinculo-cartao select').value, 'sustentado');
+  await clicar(m, por(painel, 'button', 'Salvar'));
+  assert.equal(m.salvos[0].dados.evidencias[0].suporte, 'sustentado');
+});
+
+test('B1 da Coruja: "Voltar ao da IA" só aparece com o preenchimento que o servidor entrega (vínculo antigo: sem a ação)', async () => {
+  const id = 'H' + '1'.repeat(32);
+  const alt = {suporte: {anterior: 'sustentado', valor: 'parcial', por: 'Ana Lima', em_utc: '2026-11-26T19:10:00+00:00'}};
+  const detalhe = {'hipoteses-detalhe': {id, sha256: 'c'.repeat(64), estado: {enunciado: 'H', situacao: 'em_aberto', lacunas: []}, evidencias: [vinculoSalvo({alteracoes: alt, suporte: 'parcial', preenchimento_ia: null, revisao_ia: null})]}};
+  const m = montar({detalhe}); await abrirAba(m, 'hipoteses');
+  const painel = m.$('quadros-hipoteses');
+  await clicar(m, por(painel, '.quadro-editar', 'Editar'));
+  assert.match(texto(painel.querySelector('.vinculo-cartao')), /alterado por Ana Lima/);
+  assert.equal(painel.querySelector('.vinculo-voltar'), null, 'a tela não deduz o valor da IA');
+});
+
+test('B1 da Coruja: "Ligar a versão nova" usa o preenchimento da versão nova como vem (retirada: não revisado, nunca o sustentado cru da revisão)', async () => {
+  const id = 'H' + '1'.repeat(32);
+  const nova = {referencia: referencia(5), achado_id: 'A003', versao: 2, revisao_ia: IA({versao: 2, suporte: 'sustentado', destino: 'retirado'}),
+    preenchimento: {papel: 'suporte', suporte: 'nao_revisado', natureza: 'declaracao_documental', destino: 'retirado'}};
+  const detalhe = {'hipoteses-detalhe': {id, sha256: 'c'.repeat(64), estado: {enunciado: 'H', situacao: 'em_aberto', lacunas: []}, evidencias: [vinculoSalvo({versao_nova: nova})]}};
+  const m = montar({detalhe}); await abrirAba(m, 'hipoteses');
+  const painel = m.$('quadros-hipoteses');
+  await clicar(m, por(painel, '.quadro-editar', 'Editar'));
+  await clicar(m, por(painel, '.vinculo-versao-nova', 'Ligar a versão nova'));
+  assert.equal(painel.querySelector('.vinculo-cartao select').value, 'nao_revisado');
+  assert.match(texto(painel.querySelector('.vinculo-cartao')), /retirado/);
+  await clicar(m, por(painel, 'button', 'Salvar'));
+  const ev = m.salvos[0].dados.evidencias[0];
+  assert.equal(JSON.stringify(ev.referencia), JSON.stringify(referencia(5))); assert.equal(ev.achado_id, 'A003');
+  assert.equal(ev.suporte, 'nao_revisado'); assert.equal(ev.papel, 'suporte'); assert.equal(ev.natureza, 'declaracao_documental');
 });

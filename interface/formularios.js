@@ -84,7 +84,7 @@ window.Quadros.formularios = (() => {
     return {referencia: item.referencia, achado_id: item.achado_id || ia?.achado_id || null, papel: item.papel, suporte: item.suporte, natureza: item.natureza, justificativa: item.justificativa || '',
       inicial: {papel: item.papel, suporte: item.suporte, natureza: item.natureza},
       vista: {indisponivel: item.estado === 'indisponivel' || !ev, erro: item.erro, nome: ev?.documento?.nome || item.documento_id || '', legivel: loc.legivel || '', trecho: ev?.trecho || '',
-        origem: item.referencia?.tipo === 'ia' ? 'ia' : 'caderno', ia, alteracoes: item.alteracoes || {}, conferencia: item.conferencia_humana || null, versaoNova: item.versao_nova || null,
+        origem: item.referencia?.tipo === 'ia' ? 'ia' : 'caderno', ia, preenchimentoIA: item.preenchimento_ia || null, alteracoes: item.alteracoes || {}, conferencia: item.conferencia_humana || null, versaoNova: item.versao_nova || null,
         destinoAtual: item.destino_atual || ia?.destino || null, original: {referencia: item.referencia, evidencia: ev, localizador: loc}}};
   }
   function vinculoDeResultado(r) {
@@ -92,12 +92,13 @@ window.Quadros.formularios = (() => {
     return {referencia: sug.referencia, achado_id: sug.achado_id || b.achado?.id || null, papel: sug.papel || 'suporte', suporte: sug.suporte || 'nao_revisado', natureza: sug.natureza || '', justificativa: sug.justificativa || '',
       inicial: {papel: sug.papel || 'suporte', suporte: sug.suporte || 'nao_revisado', natureza: sug.natureza || ''},
       vista: {indisponivel: r.indisponivel, erro: '', nome: b.documento?.nome || '', legivel: b.localizador?.legivel || '', trecho: b.trecho || b.texto || '', origem: b.origem, ia, alteracoes: {},
+        preenchimentoIA: b.origem === 'ia' && ia ? {papel: sug.papel, suporte: sug.suporte, natureza: sug.natureza, destino: ia.destino || b.achado?.destino || null} : null,
         conferencia: b.conferencia_humana || null, versaoNova: null, destinoAtual: b.achado?.destino || ia?.destino || null,
         original: {referencia: sug.referencia, evidencia: {documento: b.documento, trecho: b.trecho, localizador: b.localizador}, localizador: b.localizador}}};
   }
   function vinculoDeSugestao(sug, i) {
     const salvo = sug.campos?.evidencias?.[i] || {}, ev = sug.evidencias?.[i] || {};
-    return vinculoDeItem({...salvo, estado: ev.estado, erro: ev.erro, evidencia: ev.estado === 'indisponivel' ? null : {documento: ev.documento, trecho: ev.trecho, localizador: ev.localizador}, localizador: ev.localizador,
+    return vinculoDeItem({...salvo, preenchimento_ia: ev.revisao_ia ? {papel: salvo.papel, suporte: salvo.suporte, natureza: salvo.natureza, destino: sug.achado?.destino || null} : null, estado: ev.estado, erro: ev.erro, evidencia: ev.estado === 'indisponivel' ? null : {documento: ev.documento, trecho: ev.trecho, localizador: ev.localizador}, localizador: ev.localizador,
       revisao_ia: ev.revisao_ia ? {...ev.revisao_ia, achado_id: sug.achado?.id} : null, conferencia_humana: ev.conferencia_humana, destino_atual: sug.achado?.destino});
   }
   const camposDoVinculo = v => ({referencia: v.referencia, ...(v.achado_id ? {achado_id: v.achado_id} : {}), papel: v.papel, suporte: v.suporte, natureza: v.natureza, justificativa: v.justificativa});
@@ -121,7 +122,7 @@ window.Quadros.formularios = (() => {
     if (v.vista.origem === 'caderno') texto = t('{por} escolheu o suporte “{valor}” em {quando}. Desligar apaga essa escolha; o trecho continua no caderno.', {por, valor: t(rotulo(SUPORTES, v.suporte)).toLowerCase(), quando});
     else if (versaoNova) texto = t('O vínculo passa à versão nova do achado e volta ao que a revisão dela disse: papel, suporte e natureza. A mudança de {por} (“{valor}”, em {quando}) deixa de valer.', {por, valor: t(rotulo(SUPORTES, alt?.[1]?.valor || v.suporte)).toLowerCase(), quando});
     else texto = t('{por} mudou {campo} de “{de}” (da revisão da IA) para “{para}” em {quando}. O vínculo volta ao que a revisão da IA disse.',
-      {por, campo: t(nomeCampo[alt?.[0]] || 'o valor'), de: t(rotulo(SUPORTES.concat(NATUREZAS, PAPEIS), alt?.[1]?.anterior)).toLowerCase(), para: t(rotulo(SUPORTES.concat(NATUREZAS, PAPEIS), alt?.[1]?.valor)).toLowerCase(), quando});
+      {por, campo: t(nomeCampo[alt?.[0]] || 'o valor'), de: t(rotulo(SUPORTES.concat(NATUREZAS, PAPEIS), v.vista.preenchimentoIA?.[alt?.[0]])).toLowerCase(), para: t(rotulo(SUPORTES.concat(NATUREZAS, PAPEIS), alt?.[1]?.valor)).toLowerCase(), quando});
     const propria = por === t('você'), acao = versaoNova ? 'Ligar a versão nova' : v.vista.origem === 'caderno' ? 'Desligar' : 'Apagar a revisão';
     return window.Dialogo.confirmar({variante: 'destrutivo', rubrica: t('Apagar revisão'), titulo: propria ? t('Apagar a sua revisão?') : t('Apagar a revisão de {por}?', {por}), texto, acao: t(acao), cancelar: t('Cancelar')});
   }
@@ -135,16 +136,21 @@ window.Quadros.formularios = (() => {
     raiz.append(cabeca);
     // Avisos do vínculo: em linha, nunca nas cores de erro.
     const aviso = texto => { const p = element('p', undefined, 'notice vinculo-aviso'); p.setAttribute('role', 'status'); p.append(typeof texto === 'string' ? element('span', texto) : texto); return p; };
+    if (v.vista.avisoTroca) raiz.append(aviso(v.vista.avisoTroca));
     if (v.vista.indisponivel) raiz.append(aviso(t('A evidência não está mais disponível. O vínculo fica no registro, mas não abre o original.')));
     else if (v.vista.origem === 'ia' && !v.vista.ia) raiz.append(aviso(t('Esta análise não passou pela revisão de suporte. O vínculo começa em “não revisado”.')));
     if (v.vista.destinoAtual === 'retirado' && v.vista.origem === 'ia') raiz.append(aviso(t('A revisão da IA retirou este achado. Ele pode continuar ligado, com o suporte em “não revisado”: só sustenta o item se uma pessoa escolher.')));
-    if (v.vista.versaoNova) {
+    if (v.vista.versaoNova?.preenchimento) {
       const p = aviso(t('Há uma versão mais nova deste achado.')); const ligar = linkBotao(t('Ligar a versão nova'), 'vinculo-versao-nova');
       ligar.addEventListener('click', async () => {
         if (comRevisaoHumana(v) && !await confirmarApagar(v, {versaoNova: true})) return;
-        const n = v.vista.versaoNova, ia = n.revisao_ia || {};
-        v.referencia = n.referencia; v.achado_id = n.achado_id || ia.achado_id || v.achado_id; v.papel = ia.papel || v.papel; v.suporte = ia.suporte || 'nao_revisado'; v.natureza = ia.natureza || v.natureza;
-        v.inicial = {papel: v.papel, suporte: v.suporte, natureza: v.natureza}; v.vista.alteracoes = {}; v.vista.versaoNova = null; v.vista.ia = ia; ctx.mudou(); ctx.redesenhar();
+        // R2 da Coruja: as mudanças desta edição ainda não salvas (papel, suporte, natureza) são trocadas pelo que a revisão da versão nova disse; a tela avisa.
+        const vivas = ['papel', 'suporte', 'natureza'].filter(c => { const m = marca(v, c); return m && !m.salva; }).map(c => t({papel: 'papel', suporte: 'suporte', natureza: 'natureza'}[c]));
+        v.vista.avisoTroca = vivas.length ? t('Ligar a versão nova trocou as mudanças desta edição ainda não salvas ({campos}) pelo que a revisão da nova versão disse.', {campos: vivas.join(', ')}) : '';
+        const n = v.vista.versaoNova, p = n.preenchimento;
+        v.referencia = n.referencia; v.achado_id = n.achado_id || v.achado_id; v.papel = p.papel; v.suporte = p.suporte; v.natureza = p.natureza;
+        v.inicial = {papel: v.papel, suporte: v.suporte, natureza: v.natureza}; v.vista.alteracoes = {}; v.vista.versaoNova = null; v.vista.ia = n.revisao_ia || null;
+        v.vista.preenchimentoIA = p; v.vista.destinoAtual = p.destino || v.vista.destinoAtual; ctx.mudou(); ctx.redesenhar();
       });
       p.append(' ', ligar); raiz.append(p);
     }
@@ -168,13 +174,17 @@ window.Quadros.formularios = (() => {
     for (const [nome, caixa, rot] of [['papel', campoPapel, 'Papel'], ['suporte', campoSup, 'Suporte'], ['natureza', campoNat, 'Natureza']]) {
       const m = marca(v, nome); if (!m) continue;
       const sinal = sinalAlterado(m.por === t('você') ? t('alterado por você') : t('alterado por {por}', {por: m.por}));
-      const voltar = linkBotao(t('Voltar ao da IA'), 'vinculo-voltar'); voltar.setAttribute('aria-label', `${t('Voltar ao da IA')}: ${t(rot).toLowerCase()}`);
-      voltar.addEventListener('click', async () => {
-        if (m.salva && !await confirmarApagar(v)) return;
-        v[nome] = m.salva ? (m.anterior ?? v.inicial[nome]) : v.inicial[nome]; if (m.salva) { delete v.vista.alteracoes[nome]; v.inicial[nome] = v[nome]; }
-        ctx.mudou(); ctx.redesenhar();
-      });
-      caixa.append(sinal, voltar);
+      const alvoIA = v.vista.preenchimentoIA?.[nome];
+      caixa.append(sinal);
+      if (v.vista.origem === 'ia' && alvoIA) {
+        const voltar = linkBotao(t('Voltar ao da IA'), 'vinculo-voltar'); voltar.setAttribute('aria-label', `${t('Voltar ao da IA')}: ${t(rot).toLowerCase()}`);
+        voltar.addEventListener('click', async () => {
+          if (m.salva && !await confirmarApagar(v)) return;
+          v[nome] = alvoIA; if (m.salva) delete v.vista.alteracoes[nome]; v.inicial[nome] = alvoIA;
+          ctx.mudou(); ctx.redesenhar();
+        });
+        caixa.append(voltar);
+      }
     }
     const just = campo('Justificativa', area(v.justificativa, valor => { v.justificativa = valor; ctx.mudou(); }, 2), {maximo: 2000});
     raiz.append(campoPapel, campoSup, campoNat);
@@ -487,7 +497,8 @@ window.Quadros.formularios = (() => {
       const chave = JSON.stringify(ev.referencia); if (vistos.has(chave)) continue; vistos.add(chave);
       const ia = ev.revisao_ia ? {...ev.revisao_ia, achado_id: c.achado?.id} : null, retirado = (ia?.destino || c.achado?.destino) === 'retirado';
       vinculos.push(vinculoDeItem({referencia: ev.referencia, papel: 'suporte', suporte: !ia || retirado ? 'nao_revisado' : ia.suporte, natureza: ia?.natureza || '', justificativa: '', estado: ev.estado,
-        evidencia: {documento: ev.documento, trecho: ev.trecho, localizador: ev.localizador}, localizador: ev.localizador, revisao_ia: ia, conferencia_humana: ev.conferencia_humana, destino_atual: c.achado?.destino}));
+        evidencia: {documento: ev.documento, trecho: ev.trecho, localizador: ev.localizador}, localizador: ev.localizador, revisao_ia: ia, conferencia_humana: ev.conferencia_humana, destino_atual: c.achado?.destino,
+        preenchimento_ia: ia ? {papel: 'suporte', suporte: retirado ? 'nao_revisado' : ia.suporte, natureza: ia.natureza || '', destino: ia.destino || c.achado?.destino || null} : null}));
     }
     return {enunciado: '', situacao: 'em_aberto', lacunas: [], vinculos};
   }

@@ -1284,6 +1284,10 @@ window.VLADO_I18N_EN = {
     "Motivo (obrigatório)": "Reason (required)",
     "Não deu para retirar:": "Could not withdraw:",
     "Retirado. O item fica no registro, com o motivo.": "Withdrawn. The item stays in the record, with the reason.",
+    // Quadros, Onda 4 (R2 da Coruja)
+    "papel": "role",
+    "natureza": "nature",
+    "Ligar a versão nova trocou as mudanças desta edição ainda não salvas ({campos}) pelo que a revisão da nova versão disse.": "Linking the new version replaced the changes from this edit that were not yet saved ({campos}) with what the new version’s review said.",
     // Fase 06 — quadros de evidência (interface/quadros.js)
     "Hipóteses e acontecimentos registrados por pessoas a partir das evidências desta apuração. Cada evidência abre o original conferido; os quadros organizam e apontam lacunas, sem avaliar veracidade.": "Hypotheses and events recorded by people from this investigation’s evidence. Each piece of evidence opens the checked original; the boards organise and point out gaps, without judging truth.",
     "Hipóteses": "Hypotheses",
