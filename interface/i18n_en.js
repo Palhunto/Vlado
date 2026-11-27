@@ -2238,6 +2238,7 @@ window.VLADO_I18N_EN = {
     vinculo_contexto_com_suporte: "Context evidence does not get a support assessment.",
     vinculo_pendencia_sustentada: "A pending item can never be supported; set the type of statement.",
     vinculos_demais: "This item already has {maximo} pieces of evidence, the limit. Unlink one before linking another.",
+    vinculo_sem_justificativa: "Evidence {posicao} ({evidencia}) has no justification. Write why it links to the item, up to 2,000 characters.",
     vinculo_achado_ambiguo: "This evidence supports more than one finding. Choose the finding when linking it.",
     vinculo_achado_invalido: "The chosen finding is not linked to this evidence. Choose it again in the picker.",
     evidencia_sem_achado: "This evidence is not linked to any finding, so it has no AI review. Link evidence from a finding.",

@@ -66,6 +66,15 @@ class ComparacaoProcessosTest(unittest.TestCase):
                          ('contradicao', 'contradicao'))
         self.assertEqual((b['desfecho_evidencia']['revisao_ia']['papel'], b['desfecho_evidencia']['preenchimento']['suporte']),
                          ('contexto', 'nao_revisado'))
+        # The AI's justification per evidence, so "Criar hipótese" saves without the person retyping it.
+        self.assertEqual({a['fundamento']['justificativa_ia'], b['fundamento']['justificativa_ia']}, {'Relação sintética atribuída.'})
+        import hipoteses
+        links = [{'referencia': side['fundamento']['referencia'], 'achado_id': side['fundamento']['achado_id'],
+                  'justificativa': side['fundamento']['justificativa_ia'],
+                  **{k: side['fundamento']['preenchimento'][k] for k in ('papel', 'suporte', 'natureza')}} for side in (a, b)]
+        made = hipoteses.salvar(self.root, {'caso': 'alpha', 'requisicao_id': 'f' * 32, 'autor': 'Ana Lima',
+                                            'enunciado': 'O mesmo parecer teve desfechos diferentes.', 'evidencias': links})
+        self.assertTrue(all('alteracoes' not in x for x in made['estado']['evidencias']))
 
     def test_conferencia_que_nao_e_mesmo_deixa_pendente(self):
         self.gravar([{**COMPARACAO, 'conferencias': {**MESMO, 'fase': 'diferente'}},

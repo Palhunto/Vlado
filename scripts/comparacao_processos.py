@@ -113,7 +113,9 @@ def _resolvida(root, case, ref, achado_id, cache):
     except ValueError:
         review = None
     fill = vinculo_ia.preenchimento_atual(root, case, ref, review, cache)
-    common = {'achado_id': achado_id, 'revisao_ia': review, 'preenchimento': fill}
+    common = {'achado_id': achado_id, 'revisao_ia': review, 'preenchimento': fill,
+              # The review's justification, for the form to fill the card (R1 of the Coruja on the real server).
+              'justificativa_ia': vinculo_ia.justificativa_ia(root, case, ref, cache, achado_id) if review else ''}
     try:
         resolved = ev.resolver(root, case, ref, cache)
     except ValueError as exc:

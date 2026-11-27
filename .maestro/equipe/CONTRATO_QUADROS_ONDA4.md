@@ -237,7 +237,7 @@ Cada conferência é `mesmo`, `diferente` ou `a_conferir`. Os E-IDs têm de ser 
 `POST /api/comparar-processos` `{"caso", "rodada": null | "R…"}` →
 `{"caso", "analise": {…como na seção 4}, "estruturada": true, "comparacoes": [{"achado": {…}, "chave": {…}, "lados": [{"processo", "fundamento": <evidência resolvida>, "questao", "fase", "desfecho", "desfecho_evidencia": <evidência resolvida>}], "conferencias": {…}, "mesmo_arquivo": true|false, "pendente": true|false, "revisao_ia": {…}}]}`.
 
-Cada evidência resolvida (`fundamento`, `desfecho_evidencia`) traz também `achado_id`, `revisao_ia` e `preenchimento` (P47, como na seção 3.2): "Criar hipótese com esta comparação" liga com esses valores e o `achado_id`, nunca com papel ou suporte fixos (N2 da Coruja sobre os formulários). `mesmo_arquivo` é a comparação dos hashes dos originais dos dois fundamentos (feita pela Mesa). `pendente` segue a regra do topo da especificação (veredito diferente de sustentado, natureza ou destino pendência, ou alguma conferência diferente de `mesmo`). Em rodada sem os campos, `estruturada: false` e `comparacoes: []`; a tela não reconstrói do texto.
+Cada evidência resolvida (`fundamento`, `desfecho_evidencia`) traz também `achado_id`, `revisao_ia`, `preenchimento` (P47, como na seção 3.2) e `justificativa_ia` (a justificativa do vínculo publicado, para o cartão chegar preenchido; vazia quando não há revisão): "Criar hipótese com esta comparação" liga com esses valores e o `achado_id`, nunca com papel ou suporte fixos (N2 da Coruja sobre os formulários). `mesmo_arquivo` é a comparação dos hashes dos originais dos dois fundamentos (feita pela Mesa). `pendente` segue a regra do topo da especificação (veredito diferente de sustentado, natureza ou destino pendência, ou alguma conferência diferente de `mesmo`). Em rodada sem os campos, `estruturada: false` e `comparacoes: []`; a tela não reconstrói do texto.
 
 ## 6. Códigos de recusa novos
 
@@ -259,6 +259,7 @@ Cada evidência resolvida (`fundamento`, `desfecho_evidencia`) traz também `ach
 | `vinculo_achado_ambiguo` | E-ID ligada a mais de um achado, sem `achado_id` no vínculo de entrada | todo `*-criar`/`*-atualizar` dos quatro quadros, `sugestoes-corrigir` |
 | `vinculo_achado_invalido` | `achado_id` malformado, em fonte do caderno, ou de um achado que não tem a E-ID | idem |
 | `evidencia_sem_achado` | E-ID publicada sem vínculo com nenhum achado | idem |
+| `vinculo_sem_justificativa` | justificativa vazia ou longa demais num vínculo; `parametros.posicao` (1 a 100, a ordem no pedido) e `parametros.evidencia` (o E-ID, ou o registro do caderno) dizem qual cartão | todo `*-criar`/`*-atualizar`, `sugestoes-corrigir` |
 | `vinculo_contexto_com_suporte` | papel `contexto` com suporte diferente de `nao_revisado` (hoje sem código) | todo `*-criar`/`*-atualizar` |
 | `vinculo_pendencia_sustentada` | natureza `pendencia` com suporte `sustentado` (hoje sem código) | idem |
 | `vinculos_demais` | mais de 100 evidências no item (`parametros.maximo`: 100) | idem |
