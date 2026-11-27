@@ -54,3 +54,11 @@ espera do sinal "salvo" por observador e três execuções seguidas OK). `qa_hom
 Os demais `qa_*` (`qa_apuracao`, `qa_caderno`, `qa_codex`, `qa_desktop`, `qa_mobile`, `qa_lixeira` e outros) **não foram
 verificados** nesta rodada; não afirmamos que passam. `qa_lixeira` espera `#gerenciar-caso` visível e é anterior ao contexto
 persistente do cabeçalho.
+
+## Salvar um quadro pela tela (esta SIM é da suíte rápida)
+
+`test_quadros_salvar_navegador.py` + `qa_quadros_salvar.cjs` abrem a apuração `alpha` num Chromium contra o servidor de verdade, nos modos `local` e `piloto`,
+e salvam pela tela uma hipótese, um acontecimento, duas entidades, uma ligação e uma tabela, mais confirmar e descartar uma sugestão da IA, sem montar corpo
+à mão. Depois conferem no registro que a autoria é a certa (local: o nome do campo Autor, declarado; piloto: o nome da conta, autenticado). Existe porque
+os testes de rota sempre mandam o `autor` e o 400 de autor do `--modo local` (desde 3c1b363) passou despercebido. Roda como os demais `*_navegador.py`: pulado
+sem Node e Playwright, reprovado com `VLADO_EXIGIR_PLAYWRIGHT=1`. O campo Autor é achado pelo rótulo (`getByLabel(/^Autor/)`): se a tela mudar o rótulo, ajuste `autor()` em `qa_quadros_salvar.cjs`.

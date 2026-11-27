@@ -15,13 +15,18 @@ const BUSCA = {caso: 'alfa', analise: {rodada: 'R001', em_utc: '2026-11-26T17:32
   {origem: 'caderno', tipo_fonte: 'trecho', texto: 'Anotação sobre o valor.', trecho: 'Valor 12 confirmado.', documento: {documento_id: 'D001', nome: 'nota.txt'}, localizador: {legivel: 'D001 · linha 3'},
    achado: null, revisao_ia: null, conferencia_humana: null, estado: 'conferida', vinculo_sugerido: {referencia: HUMANA, papel: 'suporte', suporte: 'nao_revisado', natureza: null, justificativa: ''}, ja_ligado: false}]};
 
-function montar({vincularFalha = null} = {}) {
-  const m = criarMesa({scripts: [...PILHA, 'quadros.js', 'sugestoes.js', 'redacao.js'], desktop: true,
+function montar({vincularFalha = null, modo = 'conta'} = {}) {
+  const m = criarMesa({modo, scripts: [...PILHA, 'quadros.js', 'sugestoes.js', 'formularios.js', 'redacao.js'], desktop: true,
     api: (op, dados) => {
       if (op === 'redacao-listar') return {caso: 'alfa', textos: [{id: VISAO.id, titulo: VISAO.titulo, versao: 1, resumo: VISAO.resumo}], divergentes: []};
       if (op === 'redacao-conferir') return structuredClone(VISAO);
       if (op === 'evidencia-buscar') return structuredClone(BUSCA);
-      if (op === 'redacao-vincular') { if (vincularFalha) throw new Error(vincularFalha); return structuredClone(VISAO); }
+      if (op === 'redacao-vincular') {
+        if (vincularFalha) throw new Error(vincularFalha);
+        // o servidor real, sem conta: o nome de quem liga é obrigatório
+        if (modo === 'local' && !(typeof dados.autor === 'string' && dados.autor.trim() && dados.autor.length <= 120)) throw new Error('Autor: informe texto válido, até 120 caracteres.');
+        return structuredClone(VISAO);
+      }
       return {};
     },
     preparar: janela => {
@@ -85,4 +90,23 @@ test('ligar recusado pelo servidor: volta à afirmação com o erro', async () =
   por(painel, '.seletor-aberto button', 'Ligar').click(); await espera(m);
   assert.ok(painel.querySelector('.redacao-painel'));
   assert.match(texto(painel), /Não deu para ligar: O registro mudou\. Atualize antes de salvar\./);
+});
+
+test('modo local: ligar outra evidência pede o Autor (o servidor recusa sem ele) e envia o nome digitado', async () => {
+  const {Evento} = require('./dom_minimo.cjs');
+  const m = montar({modo: 'local'}); const painel = await abrirAfirmacao(m);
+  const campo = [...painel.querySelectorAll('.form-campo')].find(c => /^Autor/.test(texto(c)))?.querySelector('input');
+  assert.ok(campo, 'campo Autor no painel da afirmação');
+  por(painel, 'button', '+ Ligar outra evidência').click(); await espera(m);
+  assert.ok(!painel.querySelector('.seletor-evidencia'), 'sem o nome o seletor não abre');
+  assert.match(texto(painel), /Escreva o seu nome\./);
+  campo.value = 'Ana Lima'; campo.dispatchEvent(new Evento('input', {bubbles: true}));
+  por(painel, 'button', '+ Ligar outra evidência').click(); await espera(m);
+  painel.querySelector('.seletor-resultado').click(); await espera(m);
+  const sel = painel.querySelector('.seletor-natureza'); sel.value = 'alegacao_atribuida'; sel.dispatchEvent(new Evento('change', {bubbles: true}));
+  por(painel, '.seletor-aberto button', 'Ligar').click(); await espera(m);
+  const chamada = m.chamadas.find(c => c.operacao === 'redacao-vincular');
+  assert.ok(chamada, 'redacao-vincular enviada'); assert.equal(chamada.dados.autor, 'Ana Lima');
+  assert.ok(painel.querySelector('.redacao-painel'));
+  assert.doesNotMatch(texto(painel), /Não deu para ligar/);
 });

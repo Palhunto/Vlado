@@ -78,6 +78,17 @@ window.Quadros.formularios = (() => {
     return raiz;
   }
 
+  // Campo "Autor" do modo local: obrigatório, até 120 caracteres, começa pelo último nome usado. Fora do modo local não existe (devolve null) e vale a conta.
+  function campoAutor(inicial = null) {
+    if (!Q.autoria.local()) return null;
+    const c = campo('Autor', texto1(inicial ?? Q.autoria.lembrado(), () => c.erro('')), {maximo: 120, ajuda: 'Seu nome, como aparece no registro.'});
+    c.controle.maxLength = 120;
+    c.autor = () => c.controle.value.trim();
+    c.conferir = () => { if (c.autor()) return true; c.erro('Escreva o seu nome.'); c.controle.focus(); return false; };
+    return c;
+  }
+  const comAutor = c => (c ? {autor: c.autor()} : {});
+
   // ---------- Vínculos ----------
   // Forma comum do vínculo no formulário: o que se envia (referencia, achado_id, papel, suporte, natureza, justificativa) e o que só se mostra (vista).
   function vinculoDeItem(item) {
@@ -489,6 +500,7 @@ window.Quadros.formularios = (() => {
       .map(([i, ev]) => [i, `${ev.evidencia?.documento?.nome ? ev.evidencia.documento.nome + ', ' : ''}${ev.localizador?.legivel || ev.evidencia?.localizador?.legivel || ''}`.trim() || t('a evidência')]);
     const fonte = campo('Fonte da célula', selecao(opcoes, fonteTexto, v => { fonteTexto = v; }, 'Sem fonte (○ a conferir)'));
     const just = campo('Justificativa', area('', v => { justificativa = v; if (v.trim()) just.erro(''); }, 2), {maximo: 2000, ajuda: 'Obrigatória ao mudar um valor ou uma fonte que já existiam. O valor anterior fica guardado.'});
+    const autorC = campoAutor();
     const erroGeral = element('p', undefined, 'form-erro form-erro-geral'); erroGeral.setAttribute('role', 'alert'); erroGeral.hidden = true;
     const pe = element('div', undefined, 'form-pe'), cancelar = botao(t('Cancelar')), salvar = botao(t('Salvar correção'));
     pe.append(cancelar, salvar);
@@ -497,6 +509,7 @@ window.Quadros.formularios = (() => {
     salvar.addEventListener('click', async () => {
       if (ocupado) return;
       erroGeral.hidden = true; valor.erro(''); just.erro('');
+      if (autorC && !autorC.conferir()) return;
       let novo;
       if (coluna.tipo === 'data') { novo = normalizaData(texto) || null; if (novo && !/^\d{4}(-\d{2}(-\d{2})?)?$/.test(novo)) { valor.erro('Use ano, mês e ano ou dia completo: 2025, 03/2025 ou 03/03/2025.'); valor.controle.focus(); return; } }
       else if (numerica) { const n = numeroDoTexto(texto); if (n.erro) { valor.erro(n.erro); valor.controle.focus(); return; } novo = n.valor ?? null; }
@@ -507,14 +520,131 @@ window.Quadros.formularios = (() => {
       if (((antes !== null && novo !== antes) || (fonteAntes !== null && novaFonte !== fonteAntes)) && !justificativa.trim()) { just.erro('Escreva a justificativa da correção.'); just.controle.focus(); return; }
       ocupado = true; salvar.textContent = t('Salvando…'); salvar.disabled = cancelar.disabled = true; raiz.setAttribute('aria-busy', 'true');
       try {
-        await api('tabelas-corrigir', {caso: casoId, requisicao_id: requisicao(), id: tabela.id, anterior_sha256: tabela.sha256, correcoes: [{linha, coluna: coluna.id, valor: novo, fonte: novaFonte, justificativa: justificativa.trim()}]});
+        await api('tabelas-corrigir', {caso: casoId, requisicao_id: requisicao(), id: tabela.id, anterior_sha256: tabela.sha256, correcoes: [{linha, coluna: coluna.id, valor: novo, fonte: novaFonte, justificativa: justificativa.trim()}], ...comAutor(autorC)});
+        if (autorC) Q.autoria.lembrar(autorC.autor());
         await aoSalvar?.();
       } catch (falha) {
         ocupado = false; salvar.textContent = t('Salvar correção'); salvar.disabled = cancelar.disabled = false; raiz.removeAttribute('aria-busy');
         erroGeral.textContent = `${t('Não deu para salvar:')} ${falha.message}`; erroGeral.hidden = false;
       }
     });
-    raiz.append(h, valor, fonte, just, erroGeral, pe);
+    raiz.append(h, valor, fonte, just, ...(autorC ? [autorC] : []), erroGeral, pe);
+    return raiz;
+  }
+
+  // "Virar pergunta ou pedido" (componentes.md, ação de lacuna): o que falta vira uma pergunta à IA (abre Perguntar com o texto) ou uma diligência de contato
+  // (entrevista, pedido de informação ou pedido via LAI), criada por diligencias-criar com o texto como ação. Numa lacuna registrada de hipótese, a diligência fica
+  // ligada a ela (diligencia_id, por hipoteses-atualizar); a lacuna automática e a comparação pendente não têm onde guardar o vínculo, então só criam a diligência.
+  const CONTATOS = [['entrevista', 'Entrevista'], ['pedido_informacao', 'Pedido de informação'], ['pedido_lai', 'Pedido via LAI']];
+  const podeDiligencia = () => !window.Sessao?.pode || window.Sessao.pode('diligencias-criar');
+  // Uma lacuna gera um pedido: o que já virou diligência neste navegador fica lembrado (caso, hipótese e texto da lacuna), para o botão virar "Ver pedido" também depois de o
+  // quadro recarregar (a lacuna automática e a comparação pendente não guardam vínculo no servidor). `ligada: false` é o pedido criado cujo vínculo com a lacuna ainda não saiu.
+  const PEDIDOS_CHAVE = 'vlado:pedidos-criados';
+  const pedidosNaTela = {};   // reserva quando o navegador não guarda a sessão
+  const pedidosCriados = () => { try { return {...JSON.parse(sessionStorage.getItem(PEDIDOS_CHAVE) || '{}'), ...pedidosNaTela}; } catch (_) { return {...pedidosNaTela}; } };
+  const lembrarPedido = (chave, pedido) => { pedidosNaTela[chave] = pedido; try { sessionStorage.setItem(PEDIDOS_CHAVE, JSON.stringify({...JSON.parse(sessionStorage.getItem(PEDIDOS_CHAVE) || '{}'), [chave]: pedido})); } catch (_) { /* sem armazenamento: vale só nesta tela */ } };
+  // `hipoteseId` liga a diligência à lacuna registrada (hipoteses-atualizar); `origemId` é de onde a lacuna vem (a hipótese, mesmo na lacuna automática que não guarda vínculo;
+  // a comparação pendente) e entra na chave do pedido lembrado: o mesmo texto automático ('Nenhuma evidência de suporte conferida.') se repete em várias hipóteses.
+  function virarPedido({casoId, texto, hipoteseId = null, origemId = null, aoCriar = null}) {
+    const raiz = element('div', undefined, 'lacuna-virar');
+    const abrirB = botao(t('Virar pergunta ou pedido'), 'lacuna-virar-botao'); abrirB.setAttribute('aria-expanded', 'false');
+    const estado = element('p', '', 'small lacuna-virar-estado'); estado.setAttribute('role', 'status');
+    const chave = [casoId, origemId || hipoteseId || '', texto].join('|');
+    let criada = pedidosCriados()[chave] || null;       // {id, ligada}: o pedido que esta lacuna já gerou
+    let rid = requisicao(), ridLigar = requisicao(), ultimoConteudo = '';   // estáveis entre cliques: o mesmo pedido, a mesma tentativa
+    const jaVirou = () => !!criada && criada.ligada !== false;
+    const verPedido = () => { abrirB.textContent = t('Ver pedido'); abrirB.setAttribute('aria-expanded', 'false'); abrirB.removeAttribute('aria-expanded'); if (form) form.hidden = true; };
+    // o formulário só existe depois de aberto: nenhum campo escondido (nem o Autor) fica na tela antes disso
+    let form = null;
+    if (jaVirou()) abrirB.textContent = t('Ver pedido');
+    function montarForm() {
+    form = element('form', undefined, 'lacuna-virar-form'); form.hidden = true; form.noValidate = true;
+    const opcoes = [['ia', 'Pergunta à IA'], ...(podeDiligencia() ? CONTATOS : [])];
+    let destino = 'ia', destinatario = '', responsavel = '', prazo = '', ocupado = false;
+    const tipo = campo('Virar em', selecao(opcoes, destino, v => { destino = v; mostrar(); }));
+    const dest = campo('Destinatário', texto1('', v => { destinatario = v; }, 200), {maximo: 200, ajuda: 'Quem recebe: pessoa, órgão ou empresa.'});
+    const resp = campo('Responsável pelo contato', texto1('', v => { responsavel = v; }, 120), {maximo: 120});
+    const dia = element('input'); dia.type = 'date'; dia.addEventListener('input', () => { prazo = dia.value; });
+    const prz = campo('Prazo (opcional)', dia);
+    const nome = campoAutor();
+    const geral = element('p', undefined, 'form-erro lacuna-virar-erro'); geral.setAttribute('role', 'alert'); geral.hidden = true;
+    const pe = element('div', undefined, 'form-pe'), cancelar = botao(t('Cancelar')), enviar = botao(t('Virar pedido'));
+    pe.append(cancelar, enviar);
+    const contato = [dest, resp, prz, ...(nome ? [nome] : [])];
+    function mostrar() { for (const c of contato) c.hidden = destino === 'ia' || !!criada; enviar.textContent = t(destino === 'ia' ? 'Abrir em Perguntar' : criada ? 'Ligar à lacuna' : 'Virar pedido'); }
+    form.append(tipo, ...contato, geral, pe); mostrar();
+    cancelar.addEventListener('click', () => { form.hidden = true; abrirB.setAttribute('aria-expanded', 'false'); abrirB.focus(); });
+    form.addEventListener('submit', ev => ev.preventDefault());
+    enviar.addEventListener('click', async () => {
+      if (ocupado) return;
+      geral.hidden = true; for (const c of [dest, resp, nome].filter(Boolean)) c.erro('');
+      if (destino === 'ia') {
+        // a pergunta vai ao campo de Perguntar (o texto que já estava lá fica); a pessoa revisa e envia
+        const alvo = document.getElementById('codex-pergunta');
+        const previo = alvo?.value.trim() || '';
+        window.areaMesa?.ir('codex');
+        // Perguntar recarrega o rascunho da apuração ao abrir (e pode zerar o campo um instante depois): a pergunta é posta já e conferida de novo logo em seguida
+        const colocar = () => { if (alvo && !alvo.value.includes(texto)) { alvo.value = previo ? `${previo}\n\n${texto}` : texto; alvo.dispatchEvent(new Event('input', {bubbles: true})); } };
+        colocar(); alvo?.focus?.(); setTimeout(colocar, 400);
+        return;
+      }
+      let falha = null;
+      if (!criada) {
+        if (!destinatario.trim()) { dest.erro('Escreva o destinatário.'); falha ||= dest; }
+        if (!responsavel.trim()) { resp.erro('Escreva quem fica responsável.'); falha ||= resp; }
+      }
+      if (nome && !nome.autor()) { nome.erro('Escreva o seu nome.'); falha ||= nome; }
+      if (falha) { falha.controle.focus(); return; }
+      ocupado = true; enviar.disabled = cancelar.disabled = true; enviar.textContent = t('Criando…'); form.setAttribute('aria-busy', 'true');
+      // a lacuna registrada: confere no servidor que ela ainda existe, sem vínculo, ANTES de criar o pedido (ela pode ter mudado, sido ligada ou apagada desde que o quadro abriu)
+      const acharLacuna = detalhe => (detalhe.estado.lacunas || []).findIndex(l => l.descricao === texto && !l.diligencia_id);
+      try {
+        if (hipoteseId && !criada) {
+          const antes = await api('hipoteses-detalhe', {caso: casoId, id: hipoteseId});
+          if (acharLacuna(antes) < 0) {
+            geral.textContent = t('Esta lacuna mudou, já foi ligada a um pedido ou foi apagada desde que o quadro abriu. Atualize o quadro e tente de novo; nenhum pedido foi criado.'); geral.hidden = false;
+            return;
+          }
+        }
+        if (!criada) {
+          // outro conteúdo é outra tentativa; o mesmo conteúdo reenviado é a mesma (o servidor devolve o pedido já criado, sem duplicar)
+          const conteudo = JSON.stringify([destino, destinatario.trim(), responsavel.trim(), prazo, nome?.autor() || '']);
+          if (conteudo !== ultimoConteudo) { rid = requisicao(); ultimoConteudo = conteudo; }
+          const feita = await api('diligencias-criar', {caso: casoId, requisicao_id: rid, ...comAutor(nome), origem: null, acao: String(texto).slice(0, 1000),
+            responsavel: responsavel.trim(), prazo: prazo || null, tipo: destino, destinatario: destinatario.trim()});
+          criada = {id: feita.id, ligada: !hipoteseId}; lembrarPedido(chave, criada);
+        }
+        if (hipoteseId && criada.ligada === false) {
+          const detalhe = await api('hipoteses-detalhe', {caso: casoId, id: hipoteseId});
+          const lacunas = (detalhe.estado.lacunas || []).map(l => ({descricao: l.descricao, diligencia_id: l.diligencia_id || null}));
+          const i = acharLacuna(detalhe);
+          if (i < 0) {
+            // o pedido existe; a lacuna é que mudou ou já foi ligada: nada a repetir, e o botão passa a levar ao pedido
+            criada = {id: criada.id, ligada: true}; lembrarPedido(chave, criada);
+            geral.textContent = t('O pedido foi criado, mas a lacuna mudou ou já estava ligada a outro pedido; ele continua em Pedidos e prazos.'); geral.hidden = false;
+            verPedido(); mostrar();
+            return;
+          }
+          lacunas[i].diligencia_id = criada.id;
+          await api('hipoteses-atualizar', {caso: casoId, id: hipoteseId, anterior_sha256: detalhe.sha256, requisicao_id: ridLigar, ...comAutor(nome), lacunas});
+          criada = {id: criada.id, ligada: true}; lembrarPedido(chave, criada);
+        }
+        if (nome) Q.autoria.lembrar(nome.autor());
+        form.hidden = true; estado.textContent = t('Pedido criado. Ele aparece em Pedidos e prazos.'); verPedido();
+        Q.sugestoes.anunciar(t('Pedido criado. Ele aparece em Pedidos e prazos.'));
+        await aoCriar?.();
+      } catch (erro) {
+        geral.textContent = criada ? `${t('O pedido foi criado, mas não ficou ligado a esta lacuna:')} ${erro.message} ${t('Clique em Ligar à lacuna para tentar de novo; o pedido não será criado outra vez.')}` : `${t('Não deu para criar o pedido:')} ${erro.message}`; geral.hidden = false;
+        if (criada) estado.textContent = '';
+      } finally { ocupado = false; enviar.disabled = cancelar.disabled = false; form.removeAttribute('aria-busy'); mostrar(); }
+    });
+    }
+    abrirB.addEventListener('click', () => {
+      if (jaVirou()) { window.areaMesa?.ir('diligencias'); return; }     // uma lacuna gera um pedido: depois de criado, o botão leva a ele
+      if (!form) { montarForm(); raiz.insertBefore(form, estado); form.hidden = false; abrirB.setAttribute('aria-expanded', 'true'); form.querySelector('select')?.focus(); return; }
+      form.hidden = !form.hidden; abrirB.setAttribute('aria-expanded', String(!form.hidden)); if (!form.hidden) form.querySelector('select')?.focus();
+    });
+    raiz.append(abrirB, estado);
     return raiz;
   }
 
@@ -546,7 +676,7 @@ window.Quadros.formularios = (() => {
     const def = QUADROS[opcoes.tipo], {casoId, host, item = null, sugestao = null} = opcoes;
     const estado = item ? def.deDetalhe(item) : sugestao ? def.deSugestao(sugestao) : (opcoes.inicial || def.vazio());
     const inicial = JSON.stringify(serializar(estado));
-    let sujo = false, ocupado = false, seletor = null, corpoAtual = null;
+    let sujo = false, ocupado = false, seletor = null, corpoAtual = null, autorDigitado = null;
     const titulo = sugestao ? t('Corrigir sugestão da IA') : t(item ? def.rotuloEditar : def.rotuloNovo);
     const mudou = () => { sujo = JSON.stringify(serializar(estado)) !== inicial; };
     // O estado guarda objetos (vínculos); o instantâneo só compara o que a pessoa vê.
@@ -574,12 +704,14 @@ window.Quadros.formularios = (() => {
       const voltar = linkBotao('‹ ' + t('Voltar'), 'form-voltar'); voltar.addEventListener('click', () => cancelar());
       const h = element('h3', titulo, 'form-titulo'); h.id = 'form-quadro-titulo'; h.tabIndex = -1;
       const erroGeral = element('p', undefined, 'form-erro form-erro-geral'); erroGeral.setAttribute('role', 'alert'); erroGeral.hidden = true;
+      // modo local: o nome de quem grava (obrigatório); o que foi digitado sobrevive aos redesenhos do formulário
+      const autorC = campoAutor(autorDigitado); if (autorC) autorC.controle.addEventListener('input', () => { autorDigitado = autorC.controle.value; });
       const pe = element('div', undefined, 'form-pe');
       const cancelarB = botao(t('Cancelar')), salvar = botao(t('Salvar'));
-      if (item && def.retirada) { const retirar = botao(t('Retirar…'), 'form-retirar'); retirar.addEventListener('click', () => pedirRetirada(raiz, pe, retirar)); pe.append(retirar); }
+      if (item && def.retirada) { const retirar = botao(t('Retirar…'), 'form-retirar'); retirar.addEventListener('click', () => pedirRetirada(raiz, pe, retirar, autorC)); pe.append(retirar); }
       pe.append(cancelarB, salvar);
       cancelarB.addEventListener('click', () => cancelar());
-      raiz.append(voltar, h, ...corpo.nos, secaoEvidencias({...ctx, abrirSeletor: ctx.abrirSeletor, removerVinculo: ctx.removerVinculo}), erroGeral, pe);
+      raiz.append(voltar, h, ...corpo.nos, secaoEvidencias({...ctx, abrirSeletor: ctx.abrirSeletor, removerVinculo: ctx.removerVinculo}), ...(autorC ? [autorC] : []), erroGeral, pe);
       raiz.addEventListener('submit', ev => ev.preventDefault());
       salvar.addEventListener('click', async () => {
         if (ocupado) return;
@@ -596,13 +728,15 @@ window.Quadros.formularios = (() => {
           semJustificativa.vista.campos?.justificativa.erro('Escreva a justificativa.'); semJustificativa.vista.campos?.justificativa.controle.focus(); return;
         }
         if (falha) { erroGeral.textContent = t(falha); erroGeral.hidden = false; raiz.querySelector('[aria-invalid="true"]')?.focus(); return; }
+        if (autorC && !autorC.conferir()) { erroGeral.textContent = t('Escreva o seu nome em Autor para salvar.'); erroGeral.hidden = false; return; }
         ocupado = true; salvar.textContent = t('Salvando…'); salvar.disabled = cancelarB.disabled = true; raiz.setAttribute('aria-busy', 'true');
         try {
           const campos = corpo.coletar();
           let resposta;
-          if (sugestao) resposta = await api('sugestoes-corrigir', {caso: casoId, id: sugestao.id, requisicao_id: requisicao(), campos});
-          else if (item) resposta = await api(`${def.prefixo}-atualizar`, {caso: casoId, id: item.id, anterior_sha256: item.sha256, requisicao_id: requisicao(), ...campos});
-          else resposta = await api(`${def.prefixo}-criar`, {caso: casoId, requisicao_id: requisicao(), ...campos});
+          if (sugestao) resposta = await api('sugestoes-corrigir', {caso: casoId, id: sugestao.id, requisicao_id: requisicao(), ...comAutor(autorC), campos});
+          else if (item) resposta = await api(`${def.prefixo}-atualizar`, {caso: casoId, id: item.id, anterior_sha256: item.sha256, requisicao_id: requisicao(), ...comAutor(autorC), ...campos});
+          else resposta = await api(`${def.prefixo}-criar`, {caso: casoId, requisicao_id: requisicao(), ...comAutor(autorC), ...campos});
+          if (autorC) Q.autoria.lembrar(autorC.autor());
           sujo = false; await opcoes.aoSalvar?.(resposta);
         } catch (falhaServidor) {
           ocupado = false; salvar.textContent = t('Salvar'); salvar.disabled = cancelarB.disabled = false; raiz.removeAttribute('aria-busy');
@@ -618,7 +752,7 @@ window.Quadros.formularios = (() => {
       host.replaceChildren(raiz);
     }
     // Retirar (componentes.md#formularios-quadros, "Retirar"): o item sai da vista e fica no registro, com o motivo, que é obrigatório. A ação só se habilita com o motivo.
-    function pedirRetirada(raiz, pe, gatilho) {
+    function pedirRetirada(raiz, pe, gatilho, autorC = null) {
       raiz.querySelector('.form-retirada')?.remove();
       const bloco = element('section', undefined, 'form-retirada'); bloco.setAttribute('role', 'group');
       const nome = def.retirada.nome(item.estado), h = element('h4'); h.append(t('Retirar “'), dado('span', nome), t('” {de}?', {de: t(def.retirada.de)})); h.id = novoId('retirar'); bloco.setAttribute('aria-labelledby', h.id);
@@ -629,9 +763,11 @@ window.Quadros.formularios = (() => {
       cancelarR.addEventListener('click', () => { bloco.remove(); gatilho.focus?.(); });
       confirmar.addEventListener('click', async () => {
         const texto = motivo.controle.value.trim(); if (!texto) return;
+        if (autorC && !autorC.conferir()) { erro.textContent = t('Escreva o seu nome em Autor para salvar.'); erro.hidden = false; return; }
         ocupadoRet = true; confirmar.disabled = cancelarR.disabled = true; confirmar.textContent = t('Retirando…'); erro.hidden = true;
         try {
-          const resposta = await api(`${def.prefixo}-atualizar`, {caso: casoId, id: item.id, anterior_sha256: item.sha256, requisicao_id: requisicao(), retirado: true, motivo_retirada: texto});
+          const resposta = await api(`${def.prefixo}-atualizar`, {caso: casoId, id: item.id, anterior_sha256: item.sha256, requisicao_id: requisicao(), retirado: true, motivo_retirada: texto, ...comAutor(autorC)});
+          if (autorC) Q.autoria.lembrar(autorC.autor());
           sujo = false; await opcoes.aoSalvar?.(resposta, {retirado: true});
         } catch (falha) { ocupadoRet = false; confirmar.textContent = t('Retirar'); cancelarR.disabled = false; confirmar.disabled = false; erro.textContent = `${t('Não deu para retirar:')} ${falha.message}`; erro.hidden = false; }
       });
@@ -695,5 +831,5 @@ window.Quadros.formularios = (() => {
     }
     return {enunciado: '', situacao: 'em_aberto', lacunas: [], vinculos};
   }
-  return {abrir, abrirNoPainel, hipoteseDaComparacao, temAnalise, botaoNovo, botaoEditar, podeCriar, podeAtualizar, corrigirCelula, numeroDoTexto, QUADROS, campo, segmentado, cartaoVinculo, vinculoDeItem, vinculoDeResultado, vinculoDeSugestao, normalizaData, mostraData, confirmarApagar, algumaMarca, marca};
+  return {campoAutor, abrir, abrirNoPainel, hipoteseDaComparacao, virarPedido, temAnalise, botaoNovo, botaoEditar, podeCriar, podeAtualizar, corrigirCelula, numeroDoTexto, QUADROS, campo, segmentado, cartaoVinculo, vinculoDeItem, vinculoDeResultado, vinculoDeSugestao, normalizaData, mostraData, confirmarApagar, algumaMarca, marca};
 })();

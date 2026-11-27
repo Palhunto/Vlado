@@ -526,6 +526,11 @@ button[aria-disabled="true"]{cursor:progress}
 .form-linha-nova>legend{padding:0 var(--espaco-1)}
 .form-celula{display:flex;flex-direction:column;gap:var(--espaco-3);margin-top:var(--espaco-3)}
 .tabela-corrigir{align-self:flex-start;margin-top:var(--espaco-2)}
+/* Ação de lacuna: botão de contorno nas cores de aviso (componentes.md, ação de lacuna). */
+.lacuna-virar{display:flex;flex-direction:column;gap:var(--espaco-2);margin-top:var(--espaco-2)}
+.lacuna-virar-botao{align-self:flex-start;min-height:44px;padding:0 var(--espaco-3);background:var(--theme-surface);color:var(--theme-warning);border:1px solid var(--theme-warning);border-radius:var(--raio-controle)}
+.lacuna-virar-form{display:flex;flex-direction:column;gap:var(--espaco-3);padding:var(--espaco-3);border:1px solid var(--theme-line);border-radius:var(--raio-cartao)}
+.lacuna-virar-form[hidden],.lacuna-virar-form .form-campo[hidden]{display:none}
 .form-mais,.form-ligar{align-self:flex-start;min-height:44px}
 .link-botao:disabled{color:var(--theme-disabled-text);text-decoration:none;cursor:default}
 .form-pe{position:sticky;bottom:0;z-index:1;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--espaco-2);padding:var(--espaco-3) 0;background:var(--theme-surface);border-top:1px solid var(--theme-line)}

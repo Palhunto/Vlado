@@ -25,7 +25,7 @@ const TABELA = () => ({caso: 'alpha', id: ID, sha256: SHA, versao: {sequencia: 1
 
 function montar({permissao = true, tabelas = [], detalhe = TABELA()} = {}) {
   const salvos = [];
-  const m = criarMesa({scripts: [...PILHA, 'quadros.js', 'sugestoes.js', 'formularios.js', 'analise.js', 'indicador_salvamento.js'], desktop: true,
+  const m = criarMesa({modo: 'conta', scripts: [...PILHA, 'quadros.js', 'sugestoes.js', 'formularios.js', 'analise.js', 'indicador_salvamento.js'], desktop: true,
     api: (operacao, dados) => {
       if (operacao === 'tabelas-listar') return {caso: 'alpha', total: tabelas.length, divergentes: [], aviso: '', tabelas: tabelas.map(id => ({id, titulo: detalhe.titulo, total_linhas: detalhe.linhas.length}))};
       if (operacao === 'tabelas-detalhe') return detalhe;

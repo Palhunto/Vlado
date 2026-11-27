@@ -20,7 +20,7 @@ const HIP = id => ({id, enunciado: 'A dispensa seguiu o rito legal.', situacao: 
 
 function montar({permissao = true, sugestoes = [], detalhe = {}, busca = [RESULTADO], entradas = []} = {}) {
   const salvos = [];
-  const m = criarMesa({scripts: [...PILHA, 'quadros.js', 'sugestoes.js', 'formularios.js', 'analise.js', 'indicador_salvamento.js'], desktop: true,
+  const m = criarMesa({modo: 'conta', scripts: [...PILHA, 'quadros.js', 'sugestoes.js', 'formularios.js', 'analise.js', 'indicador_salvamento.js'], desktop: true,
     catalogo: [{id: 'alpha', titulo: 'Alfa', rodadas: [{id: 'R002', geracoes: ['g1']}]}],
     api: (operacao, dados) => {
       if (operacao === 'hipoteses-quadro') return {caso: 'alpha', total: 1, divergentes: [], aviso: '', hipoteses: [HIP('H' + '1'.repeat(32))]};
