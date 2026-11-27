@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 VERSAO_PROMPTS = '1.5.0'
 # prompts/MESA.md: the Mesa's own instruction (T3). Each round chooses it by its frozen manifest
 # (scripts/instrucoes_mesa.py); the chat agent keeps FLUXO_COMPLETO.md, assembled from PARTES only.
-VERSAO_MESA = '1.2.0'
+VERSAO_MESA = '1.3.0'
 PARTES = (
     '00_REGRAS.md', '01_DESCREVER_CORPUS.md', '02_PLANEJAR.md',
     '03_BUSCAR_E_CRUZAR.md', '04_REVISAR_SUPORTE.md',

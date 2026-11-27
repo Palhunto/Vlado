@@ -21,7 +21,7 @@ Exemplos com dados sintéticos (Vila Serena, Construtora Alfa, Marta Reis, Carlo
 
 ## 1. Formato do candidato (MESA.md e prompt 05)
 
-A IA entrega os candidatos na síntese, numa chave opcional `candidatos` ao lado de `texto` e `destinos`. A chave só é aceita em rodadas congeladas com `VERSAO_MESA` 1.3.0 ou depois (nas outras, continua "Campos não autorizados"). No agente de chat (prompt 05), o mesmo conteúdo vai em `saidas/achados/candidatos_quadros.json`.
+A IA entrega os candidatos na síntese, numa chave opcional `candidatos` ao lado de `texto` e `destinos`. A chave só é aceita em rodadas congeladas com `VERSAO_MESA` 1.3.0 ou depois (nas outras, continua "Campos não autorizados"). No agente de chat (prompt 05), o mesmo conteúdo vai em `saidas/achados/candidatos/r3_sintese.json`.
 
 ```json
 {"candidatos": [
@@ -50,7 +50,7 @@ A IA entrega os candidatos na síntese, numa chave opcional `candidatos` ao lado
 
 Sem identificadores (CPF, CNPJ) no candidato: dado pessoal fica para a pessoa digitar em "Corrigir". A IA nunca preenche situação de hipótese nem decisão de homônimo.
 
-**Validação no servidor** (`scripts/sugestoes_quadros.py`, sem modelo). A lista malformada (não é lista, mais de 40, chave repetida) recusa a síntese, e o modelo corrige na tentativa seguinte. Um candidato com referência inválida (achado ou E-ID fora da rodada, E-ID que não é do achado, ponta que não existe, campo fora do limite) é **recusado sozinho**: não vira sugestão e fica registrado com o código em `recusados`; o briefing não cai por causa dele. Os aceitos e os recusados vão para `saidas/achados/candidatos_quadros.json` da rodada (imutável, preso por `registros_sha256` à revisão `r3_sintese`). A leitura confere tudo de novo, também nos arquivos do agente de chat.
+**Validação no servidor** (`scripts/sugestoes_quadros.py`, sem modelo). A lista malformada (não é lista, mais de 40, chave repetida) recusa a síntese, e o modelo corrige na tentativa seguinte. Um candidato com referência inválida (achado ou E-ID fora da rodada, E-ID que não é do achado, ponta que não existe, campo fora do limite) é **recusado sozinho**: não vira sugestão e fica registrado com o código em `recusados`; o briefing não cai por causa dele. Os aceitos e os recusados vão para `saidas/achados/candidatos/r3_sintese.json` da rodada (imutável, preso por `registros_sha256` à revisão `r3_sintese`). A leitura confere tudo de novo, também nos arquivos do agente de chat.
 
 ## 2. Sugestões
 
@@ -256,12 +256,12 @@ A referência inválida continua `referencia_evidencia_invalida`, e os que já e
 
 ## 7. Opcionais na leitura
 
-Tudo o que é novo: `revisao_ia`, `alteracoes`, `conferencia_humana`, `suporte_so_da_ia`, `destino_atual` e `versao_nova` nos vínculos; nas sugestões, `pontas` (só ligação), `decisao`, `descartada_antes`, `bloqueio` e `avisos` podem vir `null`/vazios; `comparar-processos` com `estruturada: false`. Rodada sem `candidatos_quadros.json` devolve `sugestoes: []` e `contagem` zerada. Nenhum campo antigo muda de nome, de tipo ou de sentido.
+Tudo o que é novo: `revisao_ia`, `alteracoes`, `conferencia_humana`, `suporte_so_da_ia`, `destino_atual` e `versao_nova` nos vínculos; nas sugestões, `pontas` (só ligação), `decisao`, `descartada_antes`, `bloqueio` e `avisos` podem vir `null`/vazios; `comparar-processos` com `estruturada: false`. Rodada sem `saidas/achados/candidatos/` devolve `sugestoes: []` e `contagem` zerada. Nenhum campo antigo muda de nome, de tipo ou de sentido.
 
 ## 8. Ordem de entrega (branch `lancamento/plataforma-o2`)
 
 1. Vínculo (seção 3) e `evidencia-buscar` (seção 4), com os três códigos de regra do modelo.
-2. Candidatos no `MESA.md` e no prompt 05, validação na síntese e `candidatos_quadros.json` (seção 1), `VERSAO_MESA` 1.3.0.
+2. Candidatos no `MESA.md` e no prompt 05, validação na síntese e `saidas/achados/candidatos/r3_sintese.json` (seção 1), `VERSAO_MESA` 1.3.0.
 3. `sugestoes-listar` e as quatro ações (seção 2), mapa e linha do tempo primeiro, hipóteses no mesmo commit.
 4. Comparação entre processos (seção 5).
 5. À parte: R1 e N2 da L5 (conferência do briefing), com a correção da Coruja.

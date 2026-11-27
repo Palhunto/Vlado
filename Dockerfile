@@ -134,6 +134,7 @@ COPY scripts/acesso.py \
      scripts/seletor_evidencia.py \
      scripts/segundo_fator.py \
      scripts/semear_ambiente.py \
+     scripts/sugestoes_quadros.py \
      scripts/tabelas_apuracao.py \
      scripts/tetos_extracao.py \
      scripts/trabalhador_extracao.py \

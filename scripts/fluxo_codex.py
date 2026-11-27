@@ -13,6 +13,7 @@ from registros_achados import (publicar, carregar, validar, COM_BRIEFING, TITULO
 import conferencia_briefing
 import indice_achados
 import instrucoes_mesa
+import sugestoes_quadros
 import continuidade as evolucao
 
 ETAPAS = ('inventario', 'plano', 'busca', 'geracao_inicial', 'revisao', 'sintese')
@@ -342,6 +343,11 @@ class Fluxo:
         data.update(revisao='r3_sintese', anterior={'revisao': self.data['revisao'],
                     'registros_sha256': self.receipt['manifesto']['registros_sha256']})
         claims = {c['id']: c for c in data['achados']}
+        # P45 (MESA.md 1.3.0 on): candidates for the boards. A malformed list refuses the synthesis; a single
+        # candidate without a valid reference is refused on its own after publication (sugestoes_quadros.gravar).
+        candidates = payload.get('candidatos')
+        if candidates is not None:
+            sugestoes_quadros.estrutura(candidates)
         decisions = payload.get('destinos')
         if (not isinstance(decisions, list) or len(decisions) != len(claims)
                 or {d.get('achado_id') for d in decisions} != set(claims)):
@@ -406,6 +412,8 @@ class Fluxo:
             raise ValueError('Sem achados incluídos, declare explicitamente a insuficiência do suporte.')
         data['procedencia'].append(event)
         receipt = self.publish(data)
+        if candidates is not None:
+            sugestoes_quadros.gravar(self.run, data, receipt['manifesto'], candidates, self.instrucoes.get('versao'))
         self.data, self.receipt, self.briefing = data, receipt, content
 
     def submit(self, stage, raw):
@@ -436,7 +444,8 @@ class Fluxo:
                 if not isinstance(payload, dict):
                     raise ValueError('Entrega estruturada deve ser objeto JSON.')
                 allowed = {'geracao_inicial': {'texto', 'achados'}, 'revisao': {'texto', 'revisoes'},
-                           'sintese': {'texto', 'destinos'}}[stage]
+                           'sintese': {'texto', 'destinos'} | ({'candidatos'} if sugestoes_quadros.aplica(self.instrucoes)
+                                                              else set())}[stage]
                 if payload.keys() - allowed:
                     raise ValueError('Campos não autorizados na entrega estruturada: ' + ', '.join(sorted(payload.keys() - allowed)))
                 content = texto(payload.get('texto'), 'Texto da etapa')
