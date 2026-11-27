@@ -22,3 +22,5 @@ test_portao_contraste
 test_contraste_wcag_navegador
 # Caminho inteiro da Mesa ao quadro (Onda 4, passo 0a): duas Mesas reais em porta local, provedor simulado, sem rede; cerca de 60 s.
 test_mesa_ao_quadro
+# Caminho inteiro da Mesa ao quadro nos dois modos de instrução (Viga, T3/P48): modo mesa e modo legado, servidor real e provedor simulado, sem rede; cerca de 55 s.
+test_mesa_ao_quadro_modos
