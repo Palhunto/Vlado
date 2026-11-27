@@ -19,11 +19,11 @@
     },
     {
       "arquivo": "prompts/04_REVISAR_SUPORTE.md",
-      "sha256": "47efb82080b602070252a833799a0c4eae0624eab06510728fff4b945fa86cfc"
+      "sha256": "d54dd93207ce66b5b115e548f657fd28a6925464f298928da24fc09cb99367f8"
     },
     {
       "arquivo": "prompts/05_SINTETIZAR.md",
-      "sha256": "01b08e77bdc0ca61afb5a8555ea01cb3262b7d82cea51c1e205f1154a4bc0d1e"
+      "sha256": "626f0d6b5f0452bf3cb309cd984427501dab8a0124aa4656355e73347ea46f53"
     },
     {
       "arquivo": "prompts/06_INCORPORAR_REVISAO_HUMANA.md",
@@ -32,11 +32,11 @@
   ],
   "fluxo_completo": {
     "arquivo": "prompts/FLUXO_COMPLETO.md",
-    "sha256": "593c45ab582c5dac65cd5528cb0ec208581cc5c91e4778970acca68924f5e029"
+    "sha256": "b817e3c48ad4597876e602762c7e3d83b88fba3fd906d41d0a95864d883b49f9"
   },
   "mesa": {
     "arquivo": "prompts/MESA.md",
-    "versao": "1.2.0",
-    "sha256": "437f220dcf638e6df27879b41f03a7df05cf7f6fb4a2645288f400db7d598a37"
+    "versao": "1.3.0",
+    "sha256": "c4349f1c718110642f999f7b0e0689d89f9d91dce5ef99a076d0d276fdea34bb"
   }
 }

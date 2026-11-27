@@ -134,7 +134,9 @@ class TravessiaTest(cenario.DuasRedacoes):
         causas = {'outra redação': 'beta', 'sem participação': 'gama', 'sem posse': 'orfa', 'id malformado': '../beta',
                   'id que não é texto': 123, 'id vazio': '', 'sem id': None}
         for operacao in ('analises', 'apuracao-notas', 'original', 'achados-revisao-salvar', 'caso-participantes',
-                         'rascunhos-listar', 'codex-listar', 'codex-perguntar'):
+                         'rascunhos-listar', 'codex-listar', 'codex-perguntar', 'evidencia-buscar',
+                         'sugestoes-listar', 'sugestoes-descartar', 'mapa-entidade-detalhe',
+                         'comparar-processos'):
             for causa, caso in causas.items():
                 with self.subTest(operacao=operacao, causa=causa):
                     resposta = self.post('editor', operacao, {'caso': caso, 'pergunta': 'x'} if operacao == 'codex-perguntar'
@@ -180,6 +182,18 @@ class TravessiaTest(cenario.DuasRedacoes):
         status, _, bruto = self.post('dono', 'comparar-documentos', {'caso': 'alpha', 'rodada': 'R001', 'documento_a': 'D001',
                                                                      'documento_b': 'D001'})
         self.sem_sentinela(bruto)
+
+    def test_item_de_quadro_de_outra_redacao_no_seletor_de_evidencia_responde_como_inexistente(self):
+        criado = self.post('dono_b', 'hipoteses-criar', {'caso': 'beta', 'requisicao_id': uuid.uuid4().hex,
+                                                         'enunciado': 'Hipótese sintética da Beta Sentinela.'})
+        self.assertEqual(criado[0], 200, criado[2][:200])
+        de_beta = criado[1]['id']
+        self.igual_ao_inexistente('dono', 'evidencia-buscar', {'caso': 'alpha', 'item': {'quadro': 'hipoteses', 'id': de_beta}},
+                                  {'caso': 'alpha', 'item': {'quadro': 'hipoteses', 'id': 'H' + 'e' * 32}})
+        status, _, bruto = self.post('dono', 'evidencia-buscar', {'caso': 'alpha', 'texto': 'Sentinela'})
+        self.assertEqual(status, 200, bruto[:200])
+        self.sem_sentinela(bruto)
+        self.assertNotIn(de_beta, bruto.decode('utf-8'))
 
     def test_conta_de_outra_redacao_responde_como_conta_inexistente_na_equipe(self):
         de_beta, nao_existe = self.ids['reporter_b'], '0123456789abcdef'
