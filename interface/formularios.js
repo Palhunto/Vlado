@@ -353,6 +353,160 @@ window.Quadros.formularios = (() => {
       }};
   }
 
+  // Tabela (componentes.md#formularios-quadros, "Tabela"): título, descrição, colunas e linhas novas, cada célula com valor e fonte (uma evidência de suporte ligada).
+  // A tabela só acrescenta: colunas já registradas só mudam de nome, linhas já registradas voltam como estão (corrigir uma célula é no painel "Célula selecionada").
+  const TIPOS_COLUNA = [['texto', 'Texto'], ['data', 'Data'], ['monetario', 'Monetário'], ['numero', 'Número']];
+  const MAX_COLUNAS = 30, MAX_LINHAS = 500, MAX_CELULAS = 5000;
+  const semAcento = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  function idDaColuna(nome, usados) {
+    let base = semAcento(nome).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 36) || 'coluna';
+    if (!/^[a-z]/.test(base)) base = `c_${base}`;
+    let id = base, n = 2; while (usados.has(id)) id = `${base.slice(0, 36)}_${n++}`;
+    return id;
+  }
+  // Número como a pessoa escreve ("8.750.000,50") vira o texto do servidor ("8750000.50"); inválido devolve null.
+  function numeroDoTexto(texto) {
+    let v = String(texto || '').trim().replace(/\s/g, '');
+    if (!v) return {vazio: true};
+    if (v.includes(',')) v = v.replace(/\./g, '').replace(',', '.');
+    return /^-?\d{1,30}(\.\d{1,12})?$/.test(v) ? {valor: v} : null;
+  }
+  const rotuloColuna = c => { const g = [c.moeda, c.unidade].filter(Boolean).join(' '); return g ? `${c.nome} (${g})` : c.nome; };
+  function formTabela(ctx) {
+    const e = ctx.estado, nos = [];
+    const titulo = campo('Título da tabela', texto1(e.titulo, v => { e.titulo = v; ctx.mudou(); }, 300), {maximo: 300});
+    const descricao = campo('Descrição', area(e.descricao, v => { e.descricao = v; ctx.mudou(); }, 2), {maximo: 2000});
+    const fontes = e.vinculos.filter(v => v.papel === 'suporte');
+    const nomeFonte = v => `${v.vista.nome ? v.vista.nome + ', ' : ''}${v.vista.legivel}`.trim() || t('a evidência');
+    // Colunas
+    const colunas = element('div', undefined, 'form-colunas'); colunas.append(element('p', t('Colunas'), 'form-rotulo'));
+    const camposColuna = [];
+    e.colunas.forEach((c, i) => {
+      const bloco = element('div', undefined, 'form-coluna');
+      const nome = campo('Nome da coluna', texto1(c.nome, v => { c.nome = v; ctx.mudou(); }, 120), {maximo: 120});
+      const partes = [nome];
+      let moeda = null, unidade = null;
+      if (c.fixa) partes.push(element('p', [t(rotulo(TIPOS_COLUNA, c.tipo)), ...[c.moeda, c.unidade].filter(Boolean)].join(' · ') + ' · ' + t('já registrada: só o nome muda'), 'small form-ajuda'));
+      else {
+        partes.push(campo('Tipo', selecao(TIPOS_COLUNA, c.tipo, v => { c.tipo = v; if (v === 'monetario' && !c.moeda) c.moeda = 'BRL'; if (v === 'texto' || v === 'data') c.unidade = ''; ctx.mudou(); ctx.redesenhar(); })));
+        if (c.tipo === 'monetario') { moeda = campo('Moeda', texto1(c.moeda, v => { c.moeda = v.toUpperCase(); ctx.mudou(); }, 3), {ajuda: 'Código de três letras: BRL, USD, EUR'}); partes.push(moeda); }
+        if (c.tipo === 'monetario' || c.tipo === 'numero') {
+          unidade = campo(c.tipo === 'numero' ? 'Unidade' : 'Escala (opcional)', texto1(c.unidade, v => { c.unidade = v; ctx.mudou(); }, 30), {maximo: 30, ajuda: c.tipo === 'numero' ? 'kg, km, %, pessoas…' : 'mil, milhões, como a fonte declara'});
+          partes.push(unidade);
+        }
+        const remover = linkBotao(t('Remover'), 'form-remover'); remover.setAttribute('aria-label', `${t('Remover')}: ${c.nome || t('Nome da coluna')}`);
+        remover.addEventListener('click', () => { e.colunas.splice(i, 1); for (const l of e.linhas) delete l.celulas[c.chave]; ctx.mudou(); ctx.redesenhar(); });
+        partes.push(remover);
+      }
+      bloco.append(...partes); colunas.append(bloco); camposColuna.push({c, nome, moeda, unidade});
+    });
+    const maisColuna = linkBotao('+ ' + t('Coluna'), 'form-mais'); maisColuna.disabled = e.colunas.length >= MAX_COLUNAS;
+    maisColuna.addEventListener('click', () => { e.colunas.push({id: null, chave: novoId('coluna'), nome: '', tipo: 'texto', moeda: '', unidade: '', fixa: false}); ctx.mudou(); ctx.redesenhar(); });
+    colunas.append(maisColuna);
+    // Linhas: as já registradas só contam; as novas têm uma célula por coluna, com valor e fonte.
+    const linhas = element('div', undefined, 'form-linhas'); linhas.append(element('p', t('Linhas'), 'form-rotulo'));
+    const registradas = e.linhas.filter(l => l.fixa).length;
+    if (registradas) linhas.append(element('p', t(registradas === 1 ? '{n} linha já registrada. Para corrigir uma célula, escolha-a na tabela: o painel “Célula selecionada” guarda o valor anterior e a justificativa.' : '{n} linhas já registradas. Para corrigir uma célula, escolha-a na tabela: o painel “Célula selecionada” guarda o valor anterior e a justificativa.', {n: registradas}), 'small form-ajuda'));
+    const camposCelula = [];
+    e.linhas.forEach((l, i) => {
+      if (l.fixa) return;
+      const bloco = element('fieldset', undefined, 'form-linha-nova'); bloco.append(element('legend', t('Linha nova {n}', {n: i + 1}), 'form-rotulo'));
+      for (const c of e.colunas) {
+        const cel = l.celulas[c.chave] ||= {texto: '', fonteVinculo: null};
+        const dica = c.tipo === 'data' ? 'Ano, mês e ano ou dia completo: 2025, 03/2025 ou 03/03/2025' : c.tipo === 'texto' ? '' : 'Com vírgula decimal, como no documento: 8.750.000,00';
+        const valor = campo(rotuloColuna(c) || 'Valor', texto1(cel.texto, v => { cel.texto = v; ctx.mudou(); }, c.tipo === 'texto' ? 2000 : 0), {ajuda: dica, maximo: c.tipo === 'texto' ? 2000 : 0});
+        if (c.tipo === 'monetario' || c.tipo === 'numero') valor.controle.setAttribute('inputmode', 'decimal');
+        const opcoes = fontes.map(v => [String(e.vinculos.indexOf(v)), nomeFonte(v)]);
+        const fonte = campo(`${t('Fonte da célula')}: ${rotuloColuna(c) || t('Valor')}`, selecao(opcoes, cel.fonteVinculo && fontes.includes(cel.fonteVinculo) ? String(e.vinculos.indexOf(cel.fonteVinculo)) : '', v => { cel.fonteVinculo = v === '' ? null : e.vinculos[Number(v)]; ctx.mudou(); }, 'Sem fonte (○ a conferir)'));
+        bloco.append(valor, fonte); camposCelula.push({l, c, cel, valor, fonte});
+      }
+      const remover = linkBotao(t('Remover'), 'form-remover'); remover.setAttribute('aria-label', `${t('Remover')}: ${t('Linha nova {n}', {n: i + 1})}`);
+      remover.addEventListener('click', () => { e.linhas.splice(i, 1); ctx.mudou(); ctx.redesenhar(); });
+      bloco.append(remover); linhas.append(bloco);
+    });
+    const maisLinha = linkBotao('+ ' + t('Adicionar linha'), 'form-mais'); maisLinha.disabled = !e.colunas.length || e.linhas.length >= MAX_LINHAS || (e.linhas.length + 1) * e.colunas.length > MAX_CELULAS;
+    maisLinha.addEventListener('click', () => { e.linhas.push({id: null, fixa: false, celulas: {}}); ctx.mudou(); ctx.redesenhar(); });
+    linhas.append(maisLinha);
+    const nota = element('p', t('Célula sem fonte nasce “○ a conferir”. A tabela só acrescenta: linhas e colunas já registradas não se apagam.'), 'small form-ajuda');
+    nos.push(titulo, descricao, colunas, linhas, nota);
+    const indice = v => v ? e.vinculos.indexOf(v) : null;
+    return {nos, coletar: () => {
+      const usados = new Set(e.colunas.filter(c => c.fixa).map(c => c.id));
+      for (const c of e.colunas) if (!c.fixa) { c.id = idDaColuna(c.nome, usados); usados.add(c.id); }
+      const antigas = e.colunas.filter(c => c.fixa);
+      const valorNovo = (c, cel) => c.tipo === 'data' ? (normalizaData(cel.texto) || null) : c.tipo === 'texto' ? (cel.texto.trim() || null) : (numeroDoTexto(cel.texto)?.valor ?? null);
+      return {titulo: e.titulo.trim(), descricao: e.descricao.trim(),
+        colunas: e.colunas.map(c => c.fixa ? {id: c.id, nome: c.nome.trim(), tipo: c.tipo, moeda: c.moeda || null, unidade: c.unidade || null}
+          : {id: c.id, nome: c.nome.trim(), tipo: c.tipo, moeda: c.tipo === 'monetario' ? (c.moeda || '').trim() || null : null, unidade: (c.tipo === 'numero' || c.tipo === 'monetario') ? ((c.unidade || '').trim() || null) : null}),
+        linhas: e.linhas.map(l => l.fixa
+          ? {id: l.id, celulas: Object.fromEntries(antigas.map(c => [c.id, {valor: l.celulas[c.chave].valor, fonte: indice(l.celulas[c.chave].fonteVinculo), estado: l.celulas[c.chave].estado}]))}
+          : {celulas: Object.fromEntries(e.colunas.map(c => { const cel = l.celulas[c.chave] || {texto: '', fonteVinculo: null}; return [c.id, {valor: valorNovo(c, cel), fonte: indice(cel.fonteVinculo)}]; }))}),
+        evidencias: e.vinculos.map(camposDoVinculo)};
+    }, validar: () => {
+      const falhas = [];
+      titulo.erro(e.titulo.trim() ? '' : 'Escreva o título da tabela.'); if (!e.titulo.trim()) falhas.push('Escreva o título da tabela.');
+      if (!e.colunas.length) falhas.push('Registre ao menos uma coluna.');
+      for (const {c, nome, moeda, unidade} of camposColuna) {
+        nome.erro(c.nome.trim() ? '' : 'Escreva o nome da coluna.'); if (!c.nome.trim()) falhas.push('Escreva o nome da coluna.');
+        if (moeda) { const ok = /^[A-Z]{3}$/.test((c.moeda || '').trim()); moeda.erro(ok ? '' : 'A moeda leva três letras maiúsculas: BRL, USD, EUR.'); if (!ok) falhas.push('Moeda inválida.'); }
+        if (unidade && c.tipo === 'numero') { const ok = !!(c.unidade || '').trim(); unidade.erro(ok ? '' : 'Número exige a unidade: kg, km, %, pessoas…'); if (!ok) falhas.push('Falta a unidade.'); }
+      }
+      for (const {c, cel, valor} of camposCelula) {
+        let msg = '';
+        if (c.tipo === 'data') msg = !cel.texto.trim() || /^\d{4}(-\d{2}(-\d{2})?)?$/.test(normalizaData(cel.texto)) ? '' : 'Use ano, mês e ano ou dia completo: 2025, 03/2025 ou 03/03/2025.';
+        else if (c.tipo !== 'texto') msg = numeroDoTexto(cel.texto) ? '' : 'Escreva só o número, com vírgula decimal: 8.750.000,00.';
+        valor.erro(msg); if (msg) falhas.push(msg);
+      }
+      // uma célula só tem como fonte uma evidência de suporte ligada a esta tabela
+      for (const l of e.linhas) for (const c of e.colunas) { const f = l.celulas[c.chave]?.fonteVinculo; if (f && (!e.vinculos.includes(f) || f.papel !== 'suporte')) falhas.push('Uma célula usa como fonte uma evidência que não é de suporte. Troque o papel da evidência ou a fonte da célula.'); }
+      if (e.linhas.length * e.colunas.length > MAX_CELULAS) falhas.push('Tabela grande demais: até 500 linhas e 5.000 células.');
+      return falhas[0] || '';
+    }, vinculoEmUso: v => e.linhas.some(l => Object.values(l.celulas).some(cel => cel.fonteVinculo === v))};
+  }
+
+  // Corrigir uma célula (componentes.md#formularios-quadros, "Tabela"; P15.3): novo valor e/ou nova fonte, com justificativa obrigatória quando muda o que já existia;
+  // o servidor guarda o valor anterior (tabelas-corrigir). Vive no painel "Célula selecionada", não no formulário da tabela.
+  function corrigirCelula({tabela, linha, coluna, celula, casoId, aoSalvar, aoCancelar}) {
+    const raiz = element('form', undefined, 'form-celula'); raiz.noValidate = true;
+    const h = element('h4', t('Corrigir a célula'), 'form-titulo'); h.tabIndex = -1;
+    const numerica = ['numero', 'monetario'].includes(coluna.tipo);
+    const atual = celula.valor === null || celula.valor === undefined ? '' : coluna.tipo === 'data' ? mostraData(celula.valor) : numerica ? String(celula.valor).replace('.', ',') : String(celula.valor);
+    let texto = atual, fonteTexto = celula.fonte === null || celula.fonte === undefined ? '' : String(celula.fonte), justificativa = '', ocupado = false;
+    const valor = campo(t('Novo valor: {coluna}', {coluna: rotuloColuna(coluna)}), texto1(texto, v => { texto = v; }, coluna.tipo === 'texto' ? 2000 : 0), {ajuda: coluna.tipo === 'data' ? 'Ano, mês e ano ou dia completo: 2025, 03/2025 ou 03/03/2025' : numerica ? 'Com vírgula decimal, como no documento: 8.750.000,00' : '', maximo: coluna.tipo === 'texto' ? 2000 : 0});
+    if (numerica) valor.controle.setAttribute('inputmode', 'decimal');
+    const opcoes = (tabela.evidencias || []).map((ev, i) => [String(i), ev]).filter(([i, ev]) => i === fonteTexto || (ev.papel === 'suporte' && ev.estado === 'conferida'))
+      .map(([i, ev]) => [i, `${ev.evidencia?.documento?.nome ? ev.evidencia.documento.nome + ', ' : ''}${ev.localizador?.legivel || ev.evidencia?.localizador?.legivel || ''}`.trim() || t('a evidência')]);
+    const fonte = campo('Fonte da célula', selecao(opcoes, fonteTexto, v => { fonteTexto = v; }, 'Sem fonte (○ a conferir)'));
+    const just = campo('Justificativa', area('', v => { justificativa = v; if (v.trim()) just.erro(''); }, 2), {maximo: 2000, ajuda: 'Obrigatória ao mudar um valor ou uma fonte que já existiam. O valor anterior fica guardado.'});
+    const erroGeral = element('p', undefined, 'form-erro form-erro-geral'); erroGeral.setAttribute('role', 'alert'); erroGeral.hidden = true;
+    const pe = element('div', undefined, 'form-pe'), cancelar = botao(t('Cancelar')), salvar = botao(t('Salvar correção'));
+    pe.append(cancelar, salvar);
+    cancelar.addEventListener('click', () => { if (!ocupado) aoCancelar?.(); });
+    raiz.addEventListener('submit', ev => ev.preventDefault());
+    salvar.addEventListener('click', async () => {
+      if (ocupado) return;
+      erroGeral.hidden = true; valor.erro(''); just.erro('');
+      let novo;
+      if (coluna.tipo === 'data') { novo = normalizaData(texto) || null; if (novo && !/^\d{4}(-\d{2}(-\d{2})?)?$/.test(novo)) { valor.erro('Use ano, mês e ano ou dia completo: 2025, 03/2025 ou 03/03/2025.'); valor.controle.focus(); return; } }
+      else if (numerica) { const n = numeroDoTexto(texto); if (!n) { valor.erro('Escreva só o número, com vírgula decimal: 8.750.000,00.'); valor.controle.focus(); return; } novo = n.valor ?? null; }
+      else novo = texto.trim() || null;
+      const novaFonte = fonteTexto === '' ? null : Number(fonteTexto), antes = celula.valor ?? null, fonteAntes = celula.fonte ?? null;
+      if (novo === antes && novaFonte === fonteAntes) { erroGeral.textContent = t('Mude o valor ou a fonte para corrigir a célula.'); erroGeral.hidden = false; valor.controle.focus(); return; }
+      // mudar o que já existia é correção e pede justificativa; preencher o que faltava, não
+      if (((antes !== null && novo !== antes) || (fonteAntes !== null && novaFonte !== fonteAntes)) && !justificativa.trim()) { just.erro('Escreva a justificativa da correção.'); just.controle.focus(); return; }
+      ocupado = true; salvar.textContent = t('Salvando…'); salvar.disabled = cancelar.disabled = true; raiz.setAttribute('aria-busy', 'true');
+      try {
+        await api('tabelas-corrigir', {caso: casoId, requisicao_id: requisicao(), id: tabela.id, anterior_sha256: tabela.sha256, correcoes: [{linha, coluna: coluna.id, valor: novo, fonte: novaFonte, justificativa: justificativa.trim()}]});
+        await aoSalvar?.();
+      } catch (falha) {
+        ocupado = false; salvar.textContent = t('Salvar correção'); salvar.disabled = cancelar.disabled = false; raiz.removeAttribute('aria-busy');
+        erroGeral.textContent = `${t('Não deu para salvar:')} ${falha.message}`; erroGeral.hidden = false;
+      }
+    });
+    raiz.append(h, valor, fonte, just, erroGeral, pe);
+    return raiz;
+  }
+
   const QUADROS = {
     hipotese: {prefixo: 'hipoteses', operacaoDetalhe: 'hipoteses-detalhe', construir: formHipotese, detalhe: (c, id) => api('hipoteses-detalhe', {caso: c, id}), rotuloNovo: 'Nova hipótese', rotuloEditar: 'Editar hipótese', vazio: () => ({enunciado: '', situacao: 'em_aberto', lacunas: [], vinculos: []}),
       deDetalhe: d => ({enunciado: d.estado.enunciado, situacao: d.estado.situacao, lacunas: (d.estado.lacunas || []).map(l => ({valor: l.descricao, diligencia_id: l.diligencia_id})), vinculos: (d.evidencias || []).map(vinculoDeItem)}),
@@ -368,6 +522,11 @@ window.Quadros.formularios = (() => {
     ligacao: {prefixo: 'mapa-relacao', operacaoDetalhe: 'mapa-relacao-detalhe', construir: formLigacao, detalhe: async (c, id) => { const m = await api('mapa-ver', {caso: c}); const r = m.relacoes.find(x => x.id === id); if (!r) throw new Error(t('A ligação não existe mais.')); return {id: r.id, sha256: r.sha256, estado: r, evidencias: r.evidencias}; }, rotuloNovo: 'Nova ligação', rotuloEditar: 'Editar ligação', retirada: {de: 'do mapa', nome: e => e.tipo}, vazio: () => ({origem: '', destino: '', tipo: '', descricao: '', vinculos: []}),
       deDetalhe: d => ({origem: d.estado.origem, destino: d.estado.destino, tipo: d.estado.tipo, descricao: d.estado.descricao || '', vinculos: (d.evidencias || []).map(vinculoDeItem)}),
       deSugestao: s => ({origem: s.campos.origem || '', destino: s.campos.destino || '', tipo: s.campos.tipo, descricao: s.campos.descricao || '', vinculos: (s.evidencias || []).map((_, i) => vinculoDeSugestao(s, i))})},
+    tabela: {prefixo: 'tabelas', operacaoDetalhe: 'tabelas-detalhe', construir: formTabela, detalhe: async (c, id) => { const d = await api('tabelas-detalhe', {caso: c, id}); return {...d, estado: {titulo: d.titulo, descricao: d.descricao, colunas: d.colunas, linhas: d.linhas}}; }, rotuloNovo: 'Nova tabela', rotuloEditar: 'Editar tabela', retirada: {de: 'das tabelas', nome: e => e.titulo},
+      vazio: () => ({titulo: '', descricao: '', colunas: [{id: null, chave: novoId('coluna'), nome: '', tipo: 'texto', moeda: '', unidade: '', fixa: false}], linhas: [], vinculos: []}),
+      deDetalhe: d => { const vinculos = (d.evidencias || []).map(vinculoDeItem); return {titulo: d.titulo, descricao: d.descricao || '', vinculos,
+        colunas: d.colunas.map(c => ({id: c.id, chave: c.id, nome: c.nome, tipo: c.tipo, moeda: c.moeda || '', unidade: c.unidade || '', fixa: true})),
+        linhas: d.linhas.map(l => ({id: l.id, fixa: true, celulas: Object.fromEntries(Object.entries(l.celulas).map(([k, x]) => [k, {valor: x.valor, estado: x.estado, fonteVinculo: x.fonte === null || x.fonte === undefined ? null : vinculos[x.fonte] || null}]))}))}; }},
   };
 
   // Abre o formulário no `host`. `item` (detalhe do servidor, com estado, sha256 e evidencias) edita; `sugestao` corrige uma sugestão da IA; sem os dois, cria.
@@ -376,17 +535,17 @@ window.Quadros.formularios = (() => {
     const def = QUADROS[opcoes.tipo], {casoId, host, item = null, sugestao = null} = opcoes;
     const estado = item ? def.deDetalhe(item) : sugestao ? def.deSugestao(sugestao) : (opcoes.inicial || def.vazio());
     const inicial = JSON.stringify(serializar(estado));
-    let sujo = false, ocupado = false, seletor = null;
+    let sujo = false, ocupado = false, seletor = null, corpoAtual = null;
     const titulo = sugestao ? t('Corrigir sugestão da IA') : t(item ? def.rotuloEditar : def.rotuloNovo);
     const mudou = () => { sujo = JSON.stringify(serializar(estado)) !== inicial; };
     // O estado guarda objetos (vínculos); o instantâneo só compara o que a pessoa vê.
     function serializar(x) { return JSON.parse(JSON.stringify(x, (k, v) => (k === 'vista' || k === 'fonteVinculo' ? undefined : v))); }
     const ctx = {estado, casoId, mudou, entidades: opcoes.entidades, tiposData: opcoes.tiposData, edicao: !!item};
-    ctx.removerVinculo = v => { const i = estado.vinculos.indexOf(v); if (i >= 0) estado.vinculos.splice(i, 1); for (const d of estado.datas || []) if (d.fonteVinculo === v) d.fonteVinculo = null; for (const d of estado.identificadores || []) if (d.fonteVinculo === v) d.fonteVinculo = null; mudou(); desenhar(); host.querySelector('.form-ligar')?.focus(); };
+    ctx.removerVinculo = v => { if (corpoAtual?.vinculoEmUso?.(v)) { const g = host.querySelector('.form-erro-geral'); if (g) { g.textContent = t('Esta evidência é a fonte de uma célula. Troque a fonte da célula antes de desligá-la.'); g.hidden = false; } return; } const i = estado.vinculos.indexOf(v); if (i >= 0) estado.vinculos.splice(i, 1); for (const d of estado.datas || []) if (d.fonteVinculo === v) d.fonteVinculo = null; for (const d of estado.identificadores || []) if (d.fonteVinculo === v) d.fonteVinculo = null; mudou(); desenhar(); host.querySelector('.form-ligar')?.focus(); };
     ctx.redesenhar = () => desenhar();
     ctx.abrirSeletor = () => {
       const lim = () => ({atingido: estado.vinculos.length >= MAX_VINCULOS, razao: 'Este item já tem 100 evidências, o limite.'});
-      const itemRef = item ? {quadro: {hipotese: 'hipoteses', acontecimento: 'linha_tempo', entidade: 'entidades', ligacao: 'relacoes'}[opcoes.tipo], id: item.id} : null;
+      const quadroDoItem = {hipotese: 'hipoteses', acontecimento: 'linha_tempo', entidade: 'entidades', ligacao: 'relacoes'}[opcoes.tipo], itemRef = item && quadroDoItem ? {quadro: quadroDoItem, id: item.id} : null;
       seletor = Q.seletorEvidencia({buscar: Q.buscaEvidencias(casoId, itemRef), limite: lim, rotuloVoltar: 'Voltar ao formulário', aoVoltar: () => { seletor = null; desenhar(); host.querySelector('.form-ligar')?.focus(); },
         aoAbrirOriginal: (r, gatilho, retorno) => Q.abrirOriginal(casoId, vinculoDeResultado(r).vista.original, gatilho, retorno),
         aoLigar: r => {
@@ -399,7 +558,7 @@ window.Quadros.formularios = (() => {
       host.replaceChildren(seletor); seletor.foco();
     };
     function desenhar() {
-      const corpo = def.construir(ctx);
+      const corpo = corpoAtual = def.construir(ctx);
       const raiz = element('form', undefined, 'form-quadro'); raiz.noValidate = true; raiz.setAttribute('aria-labelledby', 'form-quadro-titulo');
       const voltar = linkBotao('‹ ' + t('Voltar'), 'form-voltar'); voltar.addEventListener('click', () => cancelar());
       const h = element('h3', titulo, 'form-titulo'); h.id = 'form-quadro-titulo'; h.tabIndex = -1;
@@ -492,7 +651,7 @@ window.Quadros.formularios = (() => {
     if (L) L.abrir([host], {empilhar: !!sugestao, origem: gatilho}); else painel.replaceChildren(host);
     const voltar = async () => { if (L) L.voltar(); else { await Q.selecionar(abaId, true); (gatilho && document.contains(gatilho) ? gatilho : painel.querySelector('h3,h4'))?.focus?.(); } };
     return abrir({tipo, casoId, host, item, sugestao, entidades, tiposData, inicial, aoCancelar: voltar,
-      aoSalvar: async (_, extra = {}) => { await Q.selecionar(abaId, true); Q.sugestoes.anunciar(t(extra.retirado ? 'Retirado. O item fica no registro, com o motivo.' : sugestao ? 'Sugestão corrigida e confirmada.' : item ? 'Alterações salvas.' : 'Salvo.')); painel.querySelector('h3,h4')?.focus?.(); }});
+      aoSalvar: async (resposta, extra = {}) => { if (tipo === 'tabela') Q.tabelaEscolhida = itemId || resposta?.id || null; await Q.selecionar(abaId, true); Q.sugestoes.anunciar(t(extra.retirado ? 'Retirado. O item fica no registro, com o motivo.' : sugestao ? 'Sugestão corrigida e confirmada.' : item ? 'Alterações salvas.' : 'Salvo.')); painel.querySelector('h3,h4')?.focus?.(); }});
   }
   // "+ Nova ..." no topo do quadro e "Editar" em cada item só para quem pode mudar o quadro (o servidor continua sendo a barreira).
   const botaoNovo = (tipo, abaId, casoId, extra = () => ({})) => {
@@ -520,5 +679,5 @@ window.Quadros.formularios = (() => {
     }
     return {enunciado: '', situacao: 'em_aberto', lacunas: [], vinculos};
   }
-  return {abrir, abrirNoPainel, hipoteseDaComparacao, botaoNovo, botaoEditar, podeCriar, QUADROS, campo, segmentado, cartaoVinculo, vinculoDeItem, vinculoDeResultado, vinculoDeSugestao, normalizaData, mostraData, confirmarApagar, algumaMarca, marca};
+  return {abrir, abrirNoPainel, hipoteseDaComparacao, botaoNovo, botaoEditar, podeCriar, podeAtualizar, corrigirCelula, numeroDoTexto, QUADROS, campo, segmentado, cartaoVinculo, vinculoDeItem, vinculoDeResultado, vinculoDeSugestao, normalizaData, mostraData, confirmarApagar, algumaMarca, marca};
 })();
