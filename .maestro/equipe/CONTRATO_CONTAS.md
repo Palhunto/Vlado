@@ -441,7 +441,7 @@ Resolvedor `caso` em todas.
 
 | Operação | Tipo | D | E | R | L | C |
 |---|---|---|---|---|---|---|
-| `hipoteses-listar`, `hipoteses-detalhe`, `hipoteses-quadro`, `linha-tempo-listar`, `linha-tempo-detalhe`, `comparar-evidencias`, `comparar-documentos`, `mapa-ver`, `mapa-homonimos`, `tabelas-listar`, `tabelas-detalhe`, `tabelas-historico-celula`, `tabelas-calcular` | L | sim | sim | sim | sim | — |
+| `hipoteses-listar`, `hipoteses-detalhe`, `hipoteses-quadro`, `linha-tempo-listar`, `linha-tempo-detalhe`, `comparar-evidencias`, `comparar-documentos`, `mapa-ver`, `mapa-homonimos`, `tabelas-listar`, `tabelas-detalhe`, `tabelas-historico-celula`, `tabelas-calcular`, `evidencia-buscar` | L | sim | sim | sim | sim | — |
 | `tabelas-exportar` | B | sim | sim | sim | sim | — |
 | `hipoteses-criar`, `hipoteses-atualizar`, `linha-tempo-criar`, `linha-tempo-atualizar`, `mapa-entidade-criar`, `mapa-entidade-atualizar`, `mapa-relacao-criar`, `mapa-relacao-atualizar`, `tabelas-criar`, `tabelas-atualizar`, `tabelas-corrigir` | E | sim | sim | sim | — | — |
 

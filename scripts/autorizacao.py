@@ -158,7 +158,7 @@ _linhas(MATRIZ, 'caso', 'E', MESA, 'apuracao-salvar apuracao-adicionar apuracao-
 # 5.11 Quadros de evidência e tabelas.
 _linhas(MATRIZ, 'caso', 'L', LEITURA, 'hipoteses-listar hipoteses-detalhe hipoteses-quadro linha-tempo-listar '
                                       'linha-tempo-detalhe comparar-evidencias comparar-documentos mapa-ver mapa-homonimos '
-                                      'tabelas-listar tabelas-detalhe tabelas-historico-celula tabelas-calcular')
+                                      'tabelas-listar tabelas-detalhe tabelas-historico-celula tabelas-calcular evidencia-buscar')
 _linhas(MATRIZ, 'caso', 'B', LEITURA, 'tabelas-exportar')
 _linhas(MATRIZ, 'caso', 'E', MESA, 'hipoteses-criar hipoteses-atualizar linha-tempo-criar linha-tempo-atualizar '
                                    'mapa-entidade-criar mapa-entidade-atualizar mapa-relacao-criar mapa-relacao-atualizar '

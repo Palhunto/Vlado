@@ -107,7 +107,7 @@ Reabra com ler ou imagem, nesta etapa, todas as fontes vinculadas às afirmaçõ
 
 <!-- mesa:formato:sintese -->
 Em guardar, texto é uma STRING JSON:
-{"texto":"briefing no idioma da pergunta","destinos":[{"achado_id":"A001","destino":"incluido|fora_do_briefing|pendencia|retirado","motivo":"..."}]}
+{"texto":"briefing no idioma da pergunta","destinos":[{"achado_id":"A001","destino":"incluido|fora_do_briefing|pendencia|retirado","motivo":"..."}],"candidatos":[]}
 - Um destino para cada achado, pela última revisão:
   - incluido: última revisão sustentado, e a redação aparece no texto principal do briefing com [A001@vN] (a versão atual real) e [fonte:REFERENCIA] da evidência de suporte;
   - fora_do_briefing: última revisão sustentado, mas a redação não coube no texto principal; aparece na lista final, sem a marca [A001@vN];
@@ -124,6 +124,13 @@ Em guardar, texto é uma STRING JSON:
 - Depois do texto principal, quando houver achado fora_do_briefing, uma seção "Outros achados sustentados" (em inglês, "Other supported findings"), fora da conta das 600 palavras, com uma linha por achado: o ID e a versão por extenso (A008 v1), a afirmação em uma frase e o [fonte:REFERENCIA] do suporte.
 - Antes de publicar, o backend confere o briefing contra os achados, sem modelo. Toda frase com número, data, valor ou quantificador forte ("todos", "tudo", "integralmente", "sempre") leva, na própria frase ou no mesmo parágrafo, a marca [A001@vN] do achado ou o [fonte:REFERENCIA] da evidência dele. O número tem de estar na redação ou nos trechos do achado; um valor recalculado aparece com a conta por extenso (operandos = resultado). Se o achado registra alcance parcial, o briefing conserva a ressalva. Número sempre precisa de achado, em qualquer seção e também numa frase negativa ("não houve licitação para o contrato de R$ 5 milhões" afirma o valor); na seção "Lacunas e diligências", cite a lei pelo nome (Lei de Acesso à Informação), sem número. Só o quantificador forte fica livre nas frases que declaram o que falta (não localizado, não se aplica, pendência) e na seção "Lacunas e diligências".
 - Não acrescente fatos novos. Se nada for sustentado, os destinos são pendencia ou retirado, e o texto declara a insuficiência.
+- Em candidatos (opcional; até 40), sugira itens para os quadros da apuração, cada um preso a evidências publicadas de um achado (os E-IDs de evidencias_publicadas nos dados das etapas anteriores):
+  {"chave":"C1","tipo":"pessoa|organizacao|ligacao|acontecimento|hipotese","achado_id":"A001","evidencias":["E001"],"campos":{...}}
+  - pessoa e organizacao: {"nome":"...","variantes":["..."]};
+  - ligacao: {"de":"C1","para":"C2","tipo":"sócia","descricao":"..."}, em que as pontas são chaves de pessoa ou organização desta lista;
+  - acontecimento: {"descricao":"...","datas":[{"tipo":"assinatura","valor":"2025-03-03","aproximada":false,"fonte":0,"observacao":""}]}; valor AAAA, AAAA-MM ou AAAA-MM-DD, na precisão que o documento traz; fonte é a posição da evidência em evidencias; tipo de data: fato, emissao_documento, assinatura, publicacao, registro, vigencia_inicio, vigencia_fim, pagamento, recebimento ou declarada_por_fonte;
+  - hipotese: {"enunciado":"..."}, escrito como afirmação que os documentos possam sustentar ou contrariar.
+  Cada evidência indicada tem de estar ligada ao achado; ligação e acontecimento precisam de uma evidência de papel suporte. Sugira só o que o achado e o trecho mostram. Não ponha CPF, CNPJ nem outro dado pessoal, nem a situação da hipótese ou decisão sobre homônimo. O backend descarta o candidato sem referência válida. Um candidato é sugestão, não conferência: uma pessoa confirma, corrige ou descarta na tela.
 <!-- /mesa -->
 
 ## Notas para quem mantém

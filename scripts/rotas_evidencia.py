@@ -17,11 +17,12 @@ import hipoteses
 import linha_tempo
 import lixeira
 import mapa_relacoes
+import seletor_evidencia
 
 LEITURA = ('hipoteses-listar', 'hipoteses-detalhe', 'hipoteses-quadro',
            'linha-tempo-listar', 'linha-tempo-detalhe',
            'comparar-evidencias', 'comparar-documentos',
-           'mapa-ver', 'mapa-homonimos')
+           'mapa-ver', 'mapa-homonimos', 'evidencia-buscar')
 # Pedidos que gravam um evento com vínculos de evidência: o servidor aceita corpo de até 128 KB.
 SALVAR = ('hipoteses-criar', 'hipoteses-atualizar', 'linha-tempo-criar', 'linha-tempo-atualizar',
           'mapa-entidade-criar', 'mapa-entidade-atualizar', 'mapa-relacao-criar', 'mapa-relacao-atualizar')
@@ -34,7 +35,8 @@ _CAMPOS = {'hipoteses-listar': {'caso'}, 'hipoteses-detalhe': {'caso', 'id'}, 'h
            'linha-tempo-listar': {'caso', 'tipos', 'incluir_retirados'}, 'linha-tempo-detalhe': {'caso', 'id'},
            'comparar-evidencias': {'caso', 'a', 'b'},
            'comparar-documentos': {'caso', 'rodada', 'documento_a', 'documento_b', 'contexto'},
-           'mapa-ver': {'caso', 'incluir_retirados'}, 'mapa-homonimos': {'caso'}}
+           'mapa-ver': {'caso', 'incluir_retirados'}, 'mapa-homonimos': {'caso'},
+           'evidencia-buscar': seletor_evidencia.CAMPOS}
 
 
 def _caso(root, case, casos):
@@ -90,6 +92,8 @@ def executar(root, operation, data, conta=None, casos=None):
         if not all(isinstance(d, str) and re.fullmatch(ID_DOCUMENTO, d) for d in docs):
             raise ValueError('Escolha dois documentos da rodada para comparar.')
         return comparador.comparar_documentos(root, case, run, *docs, contexto=data.get('contexto', 2))
+    if operation == 'evidencia-buscar':
+        return seletor_evidencia.buscar(root, case, data)
     if operation == 'mapa-ver':
         return mapa_relacoes.mapa(root, case, incluir_retirados=_sim_nao(data, 'incluir_retirados'))
     return {'caso': case, 'homonimos': mapa_relacoes.homonimos(root, case)}
