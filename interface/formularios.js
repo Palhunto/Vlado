@@ -187,7 +187,9 @@ window.Quadros.formularios = (() => {
         caixa.append(voltar);
       }
     }
-    const just = campo('Justificativa', area(v.justificativa, valor => { v.justificativa = valor; ctx.mudou(); }, 2), {maximo: 2000});
+    const just = campo('Justificativa', area(v.justificativa, valor => { v.justificativa = valor; if (valor.trim()) just.erro(''); ctx.mudou(); }, 2), {maximo: 2000});
+    // o envio confere cada cartão e aponta o que falta (campo com erro e foco), em vez de deixar o servidor recusar sem dizer qual
+    v.vista.campos = {justificativa: just, natureza: campoNat};
     raiz.append(campoPapel, campoSup, campoNat);
     if (v.vista.ia) {
       const linhaIA = element('p', undefined, 'small vinculo-ia'); linhaIA.append(t('Da revisão da IA:') + ' ', Q.seloIA(v.vista.ia.suporte), ' ', element('span', t(rotulo(NATUREZAS, v.vista.ia.natureza)).toLowerCase()));
@@ -413,8 +415,16 @@ window.Quadros.formularios = (() => {
         if (ocupado) return;
         erroGeral.hidden = true;
         const falha = corpo.validar();
-        const semNatureza = estado.vinculos.find(v => !v.natureza);
-        if (!falha && semNatureza) { erroGeral.textContent = t('Falta a natureza. Escolha o que a fonte é: declaração documental, alegação atribuída, inferência ou pendência.'); erroGeral.hidden = false; return; }
+        const onde = v => `${v.vista.nome ? v.vista.nome + ', ' : ''}${v.vista.legivel}`.trim() || t('a evidência');
+        const semNatureza = estado.vinculos.find(v => !v.natureza), semJustificativa = estado.vinculos.find(v => !String(v.justificativa || '').trim());
+        if (!falha && semNatureza) {
+          erroGeral.textContent = `${t('Falta a natureza. Escolha o que a fonte é: declaração documental, alegação atribuída, inferência ou pendência.')} (${onde(semNatureza)})`; erroGeral.hidden = false;
+          semNatureza.vista.campos?.natureza.erro('Escolha a natureza.'); semNatureza.vista.campos?.natureza.controle.focus(); return;
+        }
+        if (!falha && semJustificativa) {
+          erroGeral.textContent = t('Falta a justificativa de {onde}. Escreva por que esta evidência entra neste item.', {onde: onde(semJustificativa)}); erroGeral.hidden = false;
+          semJustificativa.vista.campos?.justificativa.erro('Escreva a justificativa.'); semJustificativa.vista.campos?.justificativa.controle.focus(); return;
+        }
         if (falha) { erroGeral.textContent = t(falha); erroGeral.hidden = false; raiz.querySelector('[aria-invalid="true"]')?.focus(); return; }
         ocupado = true; salvar.textContent = t('Salvando…'); salvar.disabled = cancelarB.disabled = true; raiz.setAttribute('aria-busy', 'true');
         try {
@@ -498,7 +508,7 @@ window.Quadros.formularios = (() => {
       const chave = JSON.stringify(ev.referencia); if (vistos.has(chave)) continue; vistos.add(chave);
       const p = ev.preenchimento || null, achadoId = ev.achado_id || c.achado?.id || null, ia = ev.revisao_ia ? {...ev.revisao_ia, achado_id: achadoId} : null;
       // sem preenchimento (servidor antigo) o vínculo nasce "não revisado" e a pessoa preenche; com ele, vale o valor do servidor, e "Voltar ao da IA" também.
-      vinculos.push(vinculoDeItem({referencia: ev.referencia, achado_id: achadoId, papel: p?.papel || 'suporte', suporte: p?.suporte || 'nao_revisado', natureza: p?.natureza || '', justificativa: '', estado: ev.estado,
+      vinculos.push(vinculoDeItem({referencia: ev.referencia, achado_id: achadoId, papel: p?.papel || 'suporte', suporte: p?.suporte || 'nao_revisado', natureza: p?.natureza || '', justificativa: ev.justificativa_ia || '', estado: ev.estado,
         evidencia: {documento: ev.documento, trecho: ev.trecho, localizador: ev.localizador}, localizador: ev.localizador, revisao_ia: ia, conferencia_humana: ev.conferencia_humana, destino_atual: p?.destino || c.achado?.destino,
         preenchimento_ia: p}));
     }
