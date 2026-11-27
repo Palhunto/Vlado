@@ -382,5 +382,55 @@ class SugestoesQuadrosTest(unittest.TestCase):
             self.assertEqual([r['codigo'] for r in recusados], ['dado_pessoal'], texto)
 
 
+    # --- exportar meus dados -------------------------------------------------------------------------
+
+    def test_exportar_meus_dados_traz_so_as_decisoes_da_propria_conta(self):
+        ana, carlos = {'id': 'a' * 16, 'nome': 'Ana Lima'}, {'id': 'c' * 16, 'nome': 'Carlos Prado'}
+        pessoa, org, _ = self.listar('mapa')['sugestoes']
+        decide = lambda acao, sug, conta: rotas_evidencia.executar(
+            self.root, f'sugestoes-{acao}', {'caso': 'alpha', 'id': sug['id'], 'requisicao_id': uuid.uuid4().hex}, conta)
+        made = decide('confirmar', pessoa, ana)['item']
+        decide('descartar', org, carlos)
+        decide('restaurar', org, ana)
+        self.acao('descartar', self.listar('hipoteses')['sugestoes'][0])  # declared author, no account
+        itens = sq.itens_da_conta(self.root, ana['id'], ['alpha'])
+        self.assertEqual([(i['tipo'], i['caso'], i['id']) for i in itens],
+                         [('sugestao_confirmar', 'alpha', f'mapa/{pessoa["id"]}/{made["id"]}'),
+                          ('sugestao_restaurar', 'alpha', f'mapa/{org["id"]}')])
+        self.assertTrue(all(set(i) == {'tipo', 'caso', 'criado_em', 'id'} and i['criado_em'] for i in itens))
+        self.assertNotIn('Marta Reis', sq.json.dumps(itens, ensure_ascii=False))
+        self.assertEqual([i['tipo'] for i in sq.itens_da_conta(self.root, carlos['id'], ['alpha'])], ['sugestao_descartar'])
+        self.assertEqual(sq.itens_da_conta(self.root, ana['id'], []), [])  # only in the cases received
+        import rotas_contas
+        self.assertIn('sugestoes_quadros', rotas_contas.MODULOS_DE_ITENS)
+
+
+    def test_voltar_ao_da_ia_depois_que_uma_revisao_retirou_o_achado(self):
+        # R1 of the Coruja on the forms: the fill follows the newest revision of the round.
+        r2 = carregar(self.root, 'alpha', 'R001', 'r2')[1]['registros_sha256']
+        ref = {'tipo': 'ia', 'caso_id': 'alpha', 'rodada': 'R001', 'revisao': 'r2', 'registros_sha256': r2, 'evidencia_id': 'E001'}
+        link = {'referencia': ref, 'papel': 'suporte', 'suporte': 'sustentado', 'natureza': 'alegacao_atribuida',
+                'justificativa': 'Vínculo sintético.', 'achado_id': 'A001'}
+        item = hipoteses.salvar(self.root, {'caso': 'alpha', 'requisicao_id': uuid.uuid4().hex, 'autor': 'Ana Lima',
+                                            'enunciado': 'A Construtora Alfa declarou valor 12.', 'evidencias': [link]})
+        self.assertNotIn('alteracoes', item['estado']['evidencias'][0])
+        self.retirar_a001_numa_r3()
+        read = ev.conferir_vinculos(self.root, 'alpha', item['estado']['evidencias'])[0]
+        self.assertEqual((read['destino_atual'], read['preenchimento_ia']['suporte'], read['preenchimento_ia']['destino']),
+                         ('retirado', 'nao_revisado', 'retirado'))
+        self.assertEqual(read['revisao_ia']['suporte'], 'sustentado')  # what was saved does not change
+        back = hipoteses.salvar(self.root, {'caso': 'alpha', 'requisicao_id': uuid.uuid4().hex, 'autor': 'Carlos Prado',
+                                            'id': item['id'], 'anterior_sha256': item['sha256'],
+                                            'evidencias': [{**link, 'suporte': read['preenchimento_ia']['suporte']}]},
+                                'atualizar')
+        self.assertNotIn('alteracoes', back['estado']['evidencias'][0])
+        # Choosing "sustentado" now, over the withdrawn finding, is the person's choice and is marked.
+        again = hipoteses.salvar(self.root, {'caso': 'alpha', 'requisicao_id': uuid.uuid4().hex, 'autor': 'Carlos Prado',
+                                             'id': item['id'], 'anterior_sha256': back['sha256'],
+                                             'evidencias': [link]}, 'atualizar')
+        mark = again['estado']['evidencias'][0]['alteracoes']['suporte']
+        self.assertEqual((mark['anterior'], mark['valor'], mark['por']), ('nao_revisado', 'sustentado', 'Carlos Prado'))
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -59,6 +59,13 @@ class ComparacaoProcessosTest(unittest.TestCase):
         self.assertEqual(item['chave']['emissor'], 'Procuradoria de Vila Serena')
         self.assertEqual((item['conferencias'], item['mesmo_arquivo'], item['pendente']), (MESMO, True, False))
         self.assertEqual(item['revisao_ia']['achado_id'], 'A001')
+        # N2 of the Coruja on the forms: each evidence carries its review and the P47 fill, with the finding.
+        self.assertEqual((a['fundamento']['achado_id'], a['fundamento']['revisao_ia']['papel'], a['fundamento']['preenchimento']['suporte']),
+                         ('A001', 'suporte', 'sustentado'))
+        self.assertEqual((b['fundamento']['revisao_ia']['papel'], b['fundamento']['preenchimento']['papel']),
+                         ('contradicao', 'contradicao'))
+        self.assertEqual((b['desfecho_evidencia']['revisao_ia']['papel'], b['desfecho_evidencia']['preenchimento']['suporte']),
+                         ('contexto', 'nao_revisado'))
 
     def test_conferencia_que_nao_e_mesmo_deixa_pendente(self):
         self.gravar([{**COMPARACAO, 'conferencias': {**MESMO, 'fase': 'diferente'}},
@@ -144,6 +151,7 @@ class ComparacoesNoLegadoTest(ComparacoesNaRevisaoTest):
         self.terminal()
 
     test_lista_malformada_recusa_a_sintese_e_a_mesma_etapa_aceita_a_correcao = None
+
 
 
 if __name__ == '__main__':

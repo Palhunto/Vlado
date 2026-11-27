@@ -173,7 +173,7 @@ def conta_propria(root, operation, data, principal, ip=None, origem=None, marca=
 # `registro_acesso.acessos_da_conta(root, conta)`. A part that is missing (its function does not exist yet) or cannot
 # be read leaves its code in `incompleto`, and the rest of the file still leaves.
 MODULOS_DE_ITENS = ('apuracao', 'caderno', 'revisao_humana', 'conferencia_redacao', 'codex_apuracao', 'diligencias',
-                    'evidencias')
+                    'evidencias', 'sugestoes_quadros')
 _CAMPOS_DO_ITEM = ('tipo', 'caso', 'criado_em', 'id')
 MAX_ITENS_CRIADOS = 20000
 
