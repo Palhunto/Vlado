@@ -208,6 +208,14 @@ window.Quadros = (() => {
     painel.__lateral = api_;
     return api_;
   }
+  // Autor no modo local (o padrão de diligencias.js): sem conta, o servidor exige o nome de quem grava (até 120 caracteres) em toda gravação dos quadros, das tabelas
+  // e das decisões sobre sugestões; com conta, vale a conta e a tela não tem o campo. A Mesa lembra o último nome usado neste navegador.
+  const AUTOR_CHAVE = 'vlado:autor-dos-quadros';
+  const autoria = {
+    local: () => document.body?.dataset?.modo === 'local',
+    lembrado() { try { return localStorage.getItem(AUTOR_CHAVE) || ''; } catch (_) { return ''; } },
+    lembrar(nome) { try { if (nome) localStorage.setItem(AUTOR_CHAVE, nome); } catch (_) { /* sem armazenamento: o nome só vale nesta tela */ } },
+  };
   // Botão com aparência de link (componentes.md#link): texto --theme-accent, 44 px de altura.
   const linkBotao = (rotulo, classe = '') => botao(rotulo, `link-botao ${classe}`.trim());
 
@@ -385,7 +393,7 @@ window.Quadros = (() => {
     selo.append(element('span', t(texto || SUPORTE_IA[suporte] || `IA · ${suporte}`), 'badge-origin'));
     return selo;
   }
-  return {t, dado, botao, estado, irPara, perguntar, evidencia, abrirOriginal, disponivel, registrarAba, selecionar, quadro, SUPORTE, NATUREZA, caso, icone, CAMINHOS, seloSugestao, seloIA, linkBotao, seletorEvidencia, buscaEvidencias, quando, montarQuadro};
+  return {autoria, t, dado, botao, estado, irPara, perguntar, evidencia, abrirOriginal, disponivel, registrarAba, selecionar, quadro, SUPORTE, NATUREZA, caso, icone, CAMINHOS, seloSugestao, seloIA, linkBotao, seletorEvidencia, buscaEvidencias, quando, montarQuadro};
 })();
 
 // Hypotheses: three columns per hypothesis; the declared situation is a person's, never the board's.

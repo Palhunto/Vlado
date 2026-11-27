@@ -1367,6 +1367,10 @@ window.VLADO_I18N_EN = {
     "O pedido foi criado, mas não ficou ligado a esta lacuna:": "The request was created, but it was not linked to this gap:",
     "Não deu para criar o pedido:": "Could not create the request:",
     "Conferir se o fundamento e os desfechos são comparáveis": "Check whether the basis and the outcomes are comparable",
+    // Onda 4: autor no modo local
+    "Autor": "Author",
+    "Seu nome, como aparece no registro.": "Your name, as it appears in the record.",
+    "Escreva o seu nome em Autor para salvar.": "Write your name in Author to save.",
     // Fase 06 — quadros de evidência (interface/quadros.js)
     "Hipóteses e acontecimentos registrados por pessoas a partir das evidências desta apuração. Cada evidência abre o original conferido; os quadros organizam e apontam lacunas, sem avaliar veracidade.": "Hypotheses and events recorded by people from this investigation’s evidence. Each piece of evidence opens the checked original; the boards organise and point out gaps, without judging truth.",
     "Hipóteses": "Hypotheses",

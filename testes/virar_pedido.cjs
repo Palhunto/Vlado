@@ -71,7 +71,7 @@ test('entrevista: pede destinatário e responsável antes de enviar, cria a dili
   assert.equal(m.chamadas.length, 2, JSON.stringify(m.chamadas) + texto(lacuna));
   const [[op1, criar], [op2, ligar]] = m.chamadas;
   assert.equal(op1, 'diligencias-criar');
-  assert.deepEqual({...criar, requisicao_id: 'x'}, {caso: 'alpha', requisicao_id: 'x', autor: '', origem: null, acao: 'Parecer jurídico da dispensa.', responsavel: 'Ana Lima', prazo: '2026-12-15', tipo: 'entrevista', destinatario: 'Comissão de licitação'});
+  assert.deepEqual({...criar, requisicao_id: 'x'}, {caso: 'alpha', requisicao_id: 'x', origem: null, acao: 'Parecer jurídico da dispensa.', responsavel: 'Ana Lima', prazo: '2026-12-15', tipo: 'entrevista', destinatario: 'Comissão de licitação'});
   assert.match(criar.requisicao_id, /^[0-9a-f]{32}$/);
   assert.equal(op2, 'hipoteses-atualizar');
   assert.deepEqual({...ligar, requisicao_id: 'x'}, {caso: 'alpha', id: HID, anterior_sha256: 'e'.repeat(64), requisicao_id: 'x',

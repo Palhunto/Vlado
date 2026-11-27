@@ -145,6 +145,8 @@ window.Quadros.sugestoes = (() => {
     raiz.append(...avisos(sug));
     const permitido = pode(sug), bloqueio = permitido ? razaoBloqueio(sug) : '';
     const erro = element('p', undefined, 'sugestao-erro'); erro.setAttribute('role', 'alert'); erro.hidden = true;
+    // modo local: confirmar, corrigir e descartar levam o nome de quem decide (o servidor o guarda na decisão, e "Confirmado por" o mostra)
+    const autorC = Q.formularios?.campoAutor?.() || null;
     const acoes = element('div', undefined, 'sugestao-acoes');
     const confirmar = botao(t('Confirmar'), ''), descartar = botao(t('Descartar')), corrigir = ctx.corrigir ? botao(t('Corrigir')) : null;
     const todos = [confirmar, corrigir, descartar].filter(Boolean);
@@ -155,18 +157,20 @@ window.Quadros.sugestoes = (() => {
       const nota = element('p', razao, 'small sugestao-razao'); nota.id = `sugestao-razao-${sug.id}`;
       if (!permitido || travada) for (const b of todos) { b.disabled = true; b.setAttribute('aria-describedby', nota.id); }
       else { confirmar.disabled = true; confirmar.setAttribute('aria-describedby', nota.id); }
-      raiz.append(erro, nota, acoes);
-    } else raiz.append(erro, acoes);
+      raiz.append(erro, nota, ...(autorC ? [autorC] : []), acoes);
+    } else raiz.append(erro, ...(autorC ? [autorC] : []), acoes);
     raiz.append(element('p', t('Confirmar põe a sugestão no quadro. A conferência no original continua no achado.'), 'small sugestao-pe'));
 
     // Ocupado: o botão escolhido no gerúndio, os outros desabilitados até a resposta (W11, regra 2). O erro fica no painel e a sugestão continua aberta.
     async function executar(botaoAtivo, rotuloOcupado, operacao, aoConcluir) {
+      if (autorC && !autorC.conferir()) return;
       const rotulo = botaoAtivo.textContent;
       raiz.setAttribute('aria-busy', 'true'); erro.hidden = true; erro.textContent = '';
       for (const b of todos) b.disabled = true;
       botaoAtivo.textContent = rotuloOcupado;
       try {
-        const resposta = await api(operacao, {caso: ctx.casoId, id: sug.id, requisicao_id: requisicao()});
+        const resposta = await api(operacao, {caso: ctx.casoId, id: sug.id, requisicao_id: requisicao(), ...(autorC ? {autor: autorC.autor()} : {})});
+        if (autorC) Q.autoria.lembrar(autorC.autor());
         await aoConcluir(resposta);
       } catch (falha) {
         raiz.removeAttribute('aria-busy'); botaoAtivo.textContent = rotulo;
@@ -183,7 +187,7 @@ window.Quadros.sugestoes = (() => {
       await ctx.recarregar({item: null, proxima: sug.id});
       ctx.anunciar(t('Sugestão descartada. Ela fica em Descartadas, com Restaurar.'));
     }));
-    if (corrigir) corrigir.addEventListener('click', () => ctx.corrigir(sug));
+    if (corrigir) corrigir.addEventListener('click', () => { if (autorC?.autor()) Q.autoria.lembrar(autorC.autor()); ctx.corrigir(sug); });
     return raiz;
   }
 
@@ -192,6 +196,10 @@ window.Quadros.sugestoes = (() => {
     if (!lista.length) return null;
     const caixa = element('details', undefined, 'sugestoes-descartadas');
     caixa.append(element('summary', t('Descartadas ({n})', {n: lista.length})));
+    // o campo Autor (modo local) nasce quando a lista é aberta: fechada, nada escondido fica na tela
+    let autorC = null;
+    caixa.addEventListener('toggle', () => { if (caixa.open && !autorC) { autorC = Q.formularios?.campoAutor?.() || null; if (autorC) summaryAntes(autorC); } });
+    const summaryAntes = c => caixa.querySelector('summary')?.after(c);
     const ul = element('ul', undefined, 'quadro-lista');
     for (const sug of lista) {
       const li = element('li', undefined, 'sugestao-descartada'); li.dataset.sugestao = sug.id;
@@ -202,9 +210,11 @@ window.Quadros.sugestoes = (() => {
       if (window.Sessao?.pode && !pode(sug)) restaurar.disabled = true;
       const erro = element('p', undefined, 'small sugestao-erro'); erro.setAttribute('role', 'alert'); erro.hidden = true;
       restaurar.addEventListener('click', async () => {
+        if (autorC && !autorC.conferir()) return;
         restaurar.disabled = true; restaurar.textContent = t('Restaurando…'); erro.hidden = true;
         try {
-          await api('sugestoes-restaurar', {caso: ctx.casoId, id: sug.id, requisicao_id: requisicao()});
+          await api('sugestoes-restaurar', {caso: ctx.casoId, id: sug.id, requisicao_id: requisicao(), ...(autorC ? {autor: autorC.autor()} : {})});
+          if (autorC) Q.autoria.lembrar(autorC.autor());
           await ctx.recarregar({item: null, proxima: sug.id});
           ctx.anunciar(t('Sugestão restaurada. Ela voltou a ser uma sugestão, não um item.'));
         } catch (falha) { restaurar.disabled = false; restaurar.textContent = t('Restaurar'); erro.textContent = `${t('Não deu para restaurar:')} ${falha.message}`; erro.hidden = false; }

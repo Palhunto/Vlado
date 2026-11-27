@@ -20,7 +20,7 @@ const IGUAIS = () => COMPARACAO({achado: {id: 'A005', versao: 1, destino: 'inclu
 
 function montar({resposta = {caso: 'alpha', estruturada: true, comparacoes: [COMPARACAO(), IGUAIS()]}, permissao = true, falha = null, recusaCriar = null} = {}) {
   const salvos = [];
-  const m = criarMesa({scripts: [...PILHA, 'quadros.js', 'sugestoes.js', 'formularios.js', 'processos.js', 'analise.js', 'indicador_salvamento.js'], desktop: true,
+  const m = criarMesa({modo: 'conta', scripts: [...PILHA, 'quadros.js', 'sugestoes.js', 'formularios.js', 'processos.js', 'analise.js', 'indicador_salvamento.js'], desktop: true,
     catalogo: [{id: 'alpha', titulo: 'Alfa', rodadas: [{id: 'R001', geracoes: ['g1']}]}],
     api: (operacao, dados) => {
       if (operacao.endsWith('-criar')) {
