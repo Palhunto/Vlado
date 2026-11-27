@@ -123,7 +123,9 @@ def _resultado(root, case, entry, ligadas, cache):
         resolved, error = ev.resolver(root, case, entry['referencia'], cache), None
     except ValueError as exc:  # the source stopped resolving: listed as unavailable, never as linkable
         resolved, error = None, str(exc)
-    review = vinculo_ia.revisao_ia(root, case, entry['referencia'], cache) if entry['origem'] == 'ia' else None
+    # B1 of the Coruja: the values come from this result's finding, never from another finding with the same E-ID.
+    review = (vinculo_ia.revisao_ia(root, case, entry['referencia'], cache, entry['achado']['id'])
+              if entry['origem'] == 'ia' else None)
     fill = vinculo_ia.preenchimento(review)
     human = None
     if review is not None:
@@ -136,7 +138,8 @@ def _resultado(root, case, entry, ligadas, cache):
               'localizador': resolved['localizador'] if resolved else None, 'achado': entry['achado'], 'revisao_ia': review,
               'conferencia_humana': human,
               'vinculo_sugerido': {'referencia': entry['referencia'], 'papel': fill['papel'], 'suporte': fill['suporte'],
-                                   'natureza': fill['natureza'], 'justificativa': entry['justificativa']},
+                                   'natureza': fill['natureza'], 'justificativa': entry['justificativa'],
+                                   **({'achado_id': entry['achado']['id']} if entry['origem'] == 'ia' else {})},
               'ja_ligado': ev.chave(entry['referencia']) in ligadas}
     if entry['origem'] == 'caderno':
         result['conferencia_textual'] = entry['conferencia_textual']

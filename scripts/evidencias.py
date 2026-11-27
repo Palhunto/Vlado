@@ -252,6 +252,9 @@ def vinculos(root, case, items, *, minimo=0, papeis=PAPEIS, cache=None, preserva
     cache = {} if cache is None else cache
     result, seen, signatures = [], set(), set()
     for item in items:
+        chosen = vinculo_ia.escolha(item)  # Onda 4 (B1): the finding chosen for an E-ID in several findings
+        if isinstance(item, dict) and 'achado_id' in item:
+            item = {k: v for k, v in item.items() if k != 'achado_id'}
         saved = _forma_salva(item)
         if saved:
             validar_vinculo_salvo(item)
@@ -269,7 +272,7 @@ def vinculos(root, case, items, *, minimo=0, papeis=PAPEIS, cache=None, preserva
             resolved = resolver(root, case, ref, cache)
         except ValueError:
             if saved and preservar_indisponiveis:
-                result.append(deepcopy(item))
+                result.append(deepcopy(item) if chosen is None else {**deepcopy(item), '_achado_id': chosen})
                 continue
             raise
         document = resolved['documento']
@@ -282,7 +285,7 @@ def vinculos(root, case, items, *, minimo=0, papeis=PAPEIS, cache=None, preserva
         result.append({'referencia': ref, 'papel': item['papel'], 'suporte': support, 'natureza': nature,
                        'justificativa': texto(item['justificativa'], 'Justificativa do vínculo', 2000),
                        'documento_id': document['documento_id'], 'original_sha256': document['original_sha256'],
-                       'localizador': dict(resolved['localizador'])})
+                       'localizador': dict(resolved['localizador']), **({'_achado_id': chosen} if chosen else {})})
     return result
 
 
@@ -494,6 +497,9 @@ class Colecao:
                 raise ValueError('O registro mudou. Atualize antes de salvar; seu formulário foi preservado.')
             editable = {k: deepcopy(data[k]) for k in self.campos if k in data}
             state = self.normalizar(root, case, editable, deepcopy(current['estado']) if current else None, identifier)
+            # The finding chosen per link (vinculo_ia.escolha) rides along from vinculos() and never reaches the state.
+            chosen = [link.pop('_achado_id', None) for link in state.get('evidencias', [])
+                      if isinstance(link, dict)] if isinstance(state.get('evidencias'), list) else []
             if set(state) != self.campos:
                 raise ValueError('Estado do registro incompleto.')
             if self.validar:
@@ -501,7 +507,7 @@ class Colecao:
             now = datetime.now(timezone.utc).isoformat()
             if self.nome in vinculo_ia.COLECOES and isinstance(state.get('evidencias'), list):
                 vinculo_ia.registrar(root, case, state['evidencias'],
-                                     current['estado'].get('evidencias', []) if current else [], who, now, chave)
+                                     current['estado'].get('evidencias', []) if current else [], who, now, chave, chosen)
             state.update(origem_autoria=who['origem_autoria'], atualizado_em_utc=now)
             event = {'esquema': ESQUEMA, 'caso_id': case, 'colecao': self.nome, 'id': identifier,
                      'sequencia': len(current['historico']) + 1 if current else 1,

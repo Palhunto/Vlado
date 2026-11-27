@@ -14,6 +14,7 @@ import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from fixture_achados import Ambiente
+from registros_achados import carregar, publicar
 import caderno
 import erros
 import evidencias as ev
@@ -244,6 +245,114 @@ class VinculoIaTest(unittest.TestCase):
         found = rotas_evidencia.executar(self.root, 'evidencia-buscar', {'caso': 'beta'})
         self.assertEqual((found['analise'], found['analises'], found['resultados'], found['total']), (None, [], [], 0))
         self.assertEqual(seletor_evidencia.ORIGENS, ('tudo', 'ia', 'caderno'))
+
+
+def publicar_r3_com_e_id_compartilhada(env):
+    """r3 over r2: A003 (retirado, não sustentado) also links E001, the support of A001 (incluído), and E004 has no
+    link at all. The findings validator lets both through (B1 and R3 of the Coruja on adffc2e)."""
+    data, manifest = carregar(env.root, 'alpha', 'R001', 'r2')
+    r3 = env.sucessora(data, {'manifesto': manifest}, 'r3')
+    r3['achados'].append({'id': 'A003', 'subquestao': 'Outra leitura?', 'versoes': [
+        {'versao': 1, 'redacao': 'A fonte declara valor 12 como pago.', 'natureza': 'declaracao_documental',
+         'limitacoes': 'Sintético.'}]})
+    r3['vinculos'].append({'achado_id': 'A003', 'versao': 1, 'evidencia_id': 'E001', 'papel': 'suporte',
+                           'justificativa': 'Mesma linha, outra afirmação.'})
+    r3['revisoes_assistidas'].append({'achado_id': 'A003', 'versao': 1, 'suporte': 'nao_sustentado',
+                                      'motivo': 'Pagamento não consta.', 'fontes_reabertas': ['E001'],
+                                      'limitacoes': 'Revisão pela IA.', 'acao': 'retirar'})
+    r3['destinos'].append({'achado_id': 'A003', 'versao': 1, 'destino': 'retirado', 'motivo': 'Não sustentado.',
+                           'briefing': None, 'revisao_suporte': None})
+    orphan = deepcopy(r3['evidencias'][0]); orphan['id'] = 'E004'; r3['evidencias'].append(orphan)
+    r3['procedencia'].append({'etapa': 'busca', 'artefatos': [], 'ferramentas': ['fixture'], 'modelo_informado_ou_observado': None})
+    env.relatorio(r3, 'saidas/04b_evidencias.md', 'evidencias', 'E004 · fonte sintética.', -1)
+    env.relatorio(r3, 'saidas/05b_cruzamentos.md', 'cruzamentos', 'A003@v1 · redação sintética.', -1)
+    r3['procedencia'].append({'etapa': 'sintese', 'artefatos': [], 'ferramentas': ['fixture'], 'modelo_informado_ou_observado': None})
+    env.relatorio(r3, 'saidas/08b_briefing.md', 'briefing', 'Briefing sintético da terceira revisão.', -1)
+    return publicar(env.root, 'alpha', 'R001', r3)['manifesto']['registros_sha256']
+
+
+class EvidenciaEmDoisAchadosTest(unittest.TestCase):
+    """B1, R1, R2 e R3 da Coruja sobre adffc2e."""
+
+    setUp_base = VinculoIaTest.setUp
+    link, hipotese = VinculoIaTest.link, VinculoIaTest.hipotese
+
+    def setUp(self):
+        self.setUp_base()
+        self.r3 = publicar_r3_com_e_id_compartilhada(self.env)
+
+    def ref(self, eid='E001'):
+        return {'tipo': 'ia', 'caso_id': 'alpha', 'rodada': 'R001', 'revisao': 'r3', 'registros_sha256': self.r3,
+                'evidencia_id': eid}
+
+    def codigo(self, links):
+        with self.assertRaises(ValueError) as caught:
+            self.hipotese(links)
+        return erros.codigo_de(str(caught.exception))[0]
+
+    def test_seletor_da_a_cada_achado_os_valores_dele(self):
+        found = rotas_evidencia.executar(self.root, 'evidencia-buscar', {'caso': 'alpha', 'origem': 'ia'})
+        self.assertEqual(found['analise']['revisao'], 'r3')
+        e001 = {r['achado']['id']: r for r in found['resultados'] if r['vinculo_sugerido']['referencia']['evidencia_id'] == 'E001'}
+        self.assertEqual(set(e001), {'A001', 'A003'})
+        retirado = e001['A003']
+        self.assertEqual((retirado['revisao_ia']['achado_id'], retirado['revisao_ia']['suporte'], retirado['revisao_ia']['destino']),
+                         ('A003', 'nao_sustentado', 'retirado'))
+        self.assertEqual((retirado['vinculo_sugerido']['suporte'], retirado['vinculo_sugerido']['achado_id']),
+                         ('nao_revisado', 'A003'))
+        incluido = e001['A001']
+        self.assertEqual((incluido['revisao_ia']['achado_id'], incluido['revisao_ia']['suporte'], incluido['vinculo_sugerido']['suporte']),
+                         ('A001', 'sustentado', 'sustentado'))
+        # What the picker suggests is saved as is, with the chosen finding's review and no mark.
+        item = self.hipotese([retirado['vinculo_sugerido']])
+        saved = item['estado']['evidencias'][0]
+        self.assertEqual((saved['revisao_ia']['achado_id'], saved['revisao_ia']['destino']), ('A003', 'retirado'))
+        self.assertNotIn('alteracoes', saved)
+        self.assertNotIn('achado_id', saved)
+
+    def test_ligar_e_id_de_dois_achados_pede_a_escolha(self):
+        self.assertEqual(self.codigo([self.link(self.ref())]), 'vinculo_achado_ambiguo')
+        self.assertEqual(self.codigo([{**self.link(self.ref()), 'achado_id': 'A002'}]), 'vinculo_achado_invalido')
+        self.assertEqual(self.codigo([{**self.link(self.ref()), 'achado_id': 'X1'}]), 'vinculo_achado_invalido')
+        self.assertEqual(self.codigo([{**self.link(self.humana()), 'achado_id': 'A001'}]), 'vinculo_achado_invalido')
+        # Choosing A003 with the support the person picks: marked against A003's review, never A001's.
+        item = self.hipotese([{**self.link(self.ref()), 'achado_id': 'A003'}])
+        saved = item['estado']['evidencias'][0]
+        self.assertEqual(saved['revisao_ia']['achado_id'], 'A003')
+        self.assertEqual((saved['alteracoes']['suporte']['anterior'], saved['alteracoes']['suporte']['valor']),
+                         ('nao_revisado', 'sustentado'))
+        # Resent in the saved form (no choice needed: the link keeps its review), and re-chosen as A001.
+        again = VinculoIaTest.atualizar(self, item, deepcopy(item['estado']['evidencias']))
+        self.assertEqual(again['estado']['evidencias'][0]['revisao_ia']['achado_id'], 'A003')
+        other = VinculoIaTest.atualizar(self, again, [{**deepcopy(again['estado']['evidencias'][0]), 'achado_id': 'A001'}])
+        relinked = other['estado']['evidencias'][0]
+        self.assertEqual((relinked['revisao_ia']['achado_id'], 'alteracoes' in relinked), ('A001', False))
+
+    def test_e_id_sem_achado_e_recusada_ao_ligar(self):
+        self.assertEqual(self.codigo([self.link(self.ref('E004'))]), 'evidencia_sem_achado')
+
+    def test_rodada_na_lixeira_nao_alimenta_a_leitura(self):
+        item = self.hipotese([{**self.link(self.ia('E001', 'r1'), papel='suporte', suporte='nao_revisado'), 'achado_id': 'A001'}])
+        link = ev.conferir_vinculos(self.root, 'alpha', item['estado']['evidencias'])[0]
+        self.assertIsNotNone(link['versao_nova'])
+        with patch.object(vinculo_ia.lixeira, 'excluido', return_value=True):
+            link = ev.conferir_vinculos(self.root, 'alpha', item['estado']['evidencias'])[0]
+        self.assertEqual((link['estado'], link['destino_atual'], link['versao_nova'], link['conferencia_humana'],
+                          link['suporte_so_da_ia']), ('indisponivel', None, None, None, False))
+        self.assertEqual(link['revisao_ia']['achado_id'], 'A001')  # what was saved still comes back
+
+    def test_busca_valida_cada_revisao_uma_vez_so(self):
+        calls = []
+        real = vinculo_ia.carregar
+
+        def counted(*args, **kwargs):
+            calls.append(args[1:4])
+            return real(*args, **kwargs)
+        with patch.object(vinculo_ia, 'carregar', counted), patch.object(ev, 'carregar', counted):
+            rotas_evidencia.executar(self.root, 'evidencia-buscar', {'caso': 'alpha'})
+        self.assertEqual(calls, [('alpha', 'R001', 'r3')])
+
+    ia, humana = VinculoIaTest.ia, VinculoIaTest.humana
 
 
 if __name__ == '__main__':

@@ -133,6 +133,8 @@ Confirmada não volta: confirmar ou corrigir de novo responde `sugestao_ja_decid
 - `revisao_ia`: só em referência `ia`, calculado pelo servidor ao ligar (nunca aceito do cliente): o vínculo do achado publicado com essa E-ID (a versão mais nova que a tem), o suporte da última revisão assistida dessa versão (`nao_revisado` sem revisão), a natureza da versão e o destino dessa versão na revisão (`null` em revisão sem síntese).
 - `alteracoes`: por campo (`papel`, `suporte`, `natureza`), a última mudança feita por pessoa: valor anterior, valor novo, quem e quando. Calculado pelo servidor a cada salvamento, comparando o enviado com o valor de antes (no vínculo novo, com o preenchimento P47 da seção 3.3). Voltar ao valor da IA apaga a marca do campo. No vínculo do caderno, `alteracoes.suporte` é "quem escolheu o suporte e quando" (anterior `nao_revisado`).
 - O cliente nunca envia `revisao_ia` nem `alteracoes`: vêm de volta no detalhe. Um vínculo salvo é reenviado como hoje (forma salva, com os campos novos, se tiver) ou na forma de entrada.
+- **`achado_id` no vínculo de entrada** (B1 da Coruja sobre `adffc2e`): a mesma E-ID pode estar ligada a mais de um achado publicado. O vínculo de entrada leva `achado_id` opcional (só em referência `ia`), e os valores da revisão vêm sempre desse achado. Sem `achado_id` e com a E-ID em mais de um achado, a gravação é recusada (`vinculo_achado_ambiguo`); com um achado que não tem a E-ID, `vinculo_achado_invalido`. O `achado_id` não é guardado como campo à parte: fica em `revisao_ia.achado_id`. A forma salva reenviada não precisa dele (o vínculo guarda a revisão de quando foi ligado); mandar outro `achado_id` para o mesmo vínculo liga de novo, com a revisão do achado escolhido. O seletor e as sugestões já mandam o `achado_id` em `vinculo_sugerido` e em `campos.evidencias`: basta reenviar como vem.
+- **E-ID sem achado** (R3): uma evidência dos achados que não está ligada a nenhum achado não tem revisão da IA e é recusada ao ligar nos quadros (`evidencia_sem_achado`).
 
 ### 3.2 Campos novos no vínculo resolvido (leitura, calculados agora)
 
@@ -143,6 +145,7 @@ Em toda leitura que já resolve vínculos (`*-detalhe`, `hipoteses-quadro`, `lin
 | `revisao_ia` | o guardado (seção 3.1) ou `null` (vínculo antigo ou do caderno). |
 | `alteracoes` | o guardado ou `{}`. |
 | `conferencia_humana` | `null` ou `{estado, por, em_utc}` da marca humana do achado dessa evidência na rodada (`conferida_no_original`, `precisa_de_ajuste`, `sem_suporte_suficiente`, `pendente`). |
+| (rodada na lixeira) | `conferencia_humana`, `destino_atual` e `versao_nova` vêm `null` e `suporte_so_da_ia` `false`: a rodada na lixeira não alimenta nada (R1). O `revisao_ia` guardado continua vindo. |
 | `suporte_so_da_ia` | `true` quando há `revisao_ia`, o suporte é o dela, não há `alteracoes.suporte` e `conferencia_humana.estado` não é `conferida_no_original`. |
 | `destino_atual` | destino do achado na revisão mais recente da rodada (pode diferir do guardado). |
 | `versao_nova` | `null` ou `{referencia, achado_id, versao, revisao_ia}` quando há versão mais nova do achado na rodada: é o que "Ligar a versão nova" envia. |
@@ -190,7 +193,8 @@ Pedido:
    "achado": {"id": "A002", "versao": 1, "destino": "incluido"},
    "revisao_ia": {"…": "seção 3.1"}, "conferencia_humana": {"estado": "conferida_no_original", "por": "Ana Lima", "em_utc": "…"},
    "vinculo_sugerido": {"referencia": {"tipo": "ia", "…": "…"}, "papel": "suporte", "suporte": "sustentado",
-                        "natureza": "declaracao_documental", "justificativa": "O contrato social lista…"},
+                        "natureza": "declaracao_documental", "justificativa": "O contrato social lista…",
+                        "achado_id": "A002"},
    "ja_ligado": false},
   {"origem": "caderno", "tipo_fonte": "trecho", "texto": "Anotação de Ana Lima sobre o termo aditivo",
    "trecho": "…", "documento": {"documento_id": "D004", "nome": "termo_aditivo_1.pdf"},
@@ -201,7 +205,7 @@ Pedido:
    "ja_ligado": false}]}
 ```
 
-- Resultado da IA: um por par (evidência, achado) na revisão mais recente da rodada escolhida; a referência aponta essa revisão. No caderno: um por fonte de registro (`trecho`, `achado`, `cruzamento`), com `conferencia_humana: null` (o caderno não tem marca "Conferida no original"; a tela mostra "A conferir") e a `conferencia_textual` da fonte num campo à parte, só informativo. Na IA, `conferencia_textual` não vem.
+- Resultado da IA: um por par (evidência, achado) na revisão mais recente da rodada escolhida; a referência aponta essa revisão. Uma E-ID ligada a dois achados vem em dois resultados, cada um com a revisão do seu achado e o `achado_id` em `vinculo_sugerido`. No caderno: um por fonte de registro (`trecho`, `achado`, `cruzamento`), com `conferencia_humana: null` (o caderno não tem marca "Conferida no original"; a tela mostra "A conferir") e a `conferencia_textual` da fonte num campo à parte, só informativo. Na IA, `conferencia_textual` não vem.
 - Cada resultado traz `estado` (`conferida` ou `indisponivel`, com `erro`), como em `conferir_vinculos`; o indisponível não é ligável.
 - `vinculo_sugerido` é o preenchimento da seção 3.3. No caderno, `natureza` vem `null` e `justificativa` vazia: a pessoa preenche.
 - Só a apuração aberta: `rodada` de outro caso ou na lixeira é recusada; nada fora de `casos/<caso>` e `execucoes/<caso>`.
@@ -247,6 +251,9 @@ Cada conferência é `mesmo`, `diferente` ou `a_conferir`. Os E-IDs têm de ser 
 | `busca_curta` | `texto` com 1 caractere | evidencia-buscar |
 | `item_selecionado_invalido` | `item` com quadro ou id inválido, ou que não existe | evidencia-buscar |
 | `rodada_sem_achados` | `rodada` pedida sem achados publicados nesta apuração (ou malformada) | evidencia-buscar |
+| `vinculo_achado_ambiguo` | E-ID ligada a mais de um achado, sem `achado_id` no vínculo de entrada | todo `*-criar`/`*-atualizar` dos quatro quadros, `sugestoes-corrigir` |
+| `vinculo_achado_invalido` | `achado_id` malformado, em fonte do caderno, ou de um achado que não tem a E-ID | idem |
+| `evidencia_sem_achado` | E-ID publicada sem vínculo com nenhum achado | idem |
 | `vinculo_contexto_com_suporte` | papel `contexto` com suporte diferente de `nao_revisado` (hoje sem código) | todo `*-criar`/`*-atualizar` |
 | `vinculo_pendencia_sustentada` | natureza `pendencia` com suporte `sustentado` (hoje sem código) | idem |
 | `vinculos_demais` | mais de 100 evidências no item (`parametros.maximo`: 100) | idem |
