@@ -65,11 +65,31 @@
     dados.alteracoes.forEach((alt, i) => caixa.append(alteracao(alt, i, nomes)));
     return caixa;
   }
+  // Modo do Comparador (componentes.md#comparar-processos): "Documentos | Processos". Documentos é o comparador de sempre; Processos é a vista da comparação entre processos.
+  function comModos(casoId, docs) {
+    if (!Q.processos) return [docs];
+    const proc = element('div', undefined, 'comparar-procs'); proc.hidden = true;
+    const grupo = element('div', undefined, 'form-segmentado comparar-modos'); grupo.setAttribute('role', 'group'); grupo.setAttribute('aria-label', t('Comparar'));
+    const bd = botao(t('Documentos'), 'form-segmento'), bp = botao(t('Processos'), 'form-segmento'); grupo.append(bd, bp);
+    let carregado = false;
+    const mostrar = async modo => {
+      bd.setAttribute('aria-pressed', String(modo === 'documentos')); bp.setAttribute('aria-pressed', String(modo === 'processos'));
+      docs.hidden = modo !== 'documentos'; proc.hidden = modo !== 'processos';
+      if (modo === 'processos' && !carregado) {
+        carregado = true;
+        proc.replaceChildren(await Q.processos.montar(casoId, {aoComparar: () => mostrar('documentos'),
+          criarHipotese: c => Q.formularios?.abrirNoPainel({tipo: 'hipotese', abaId: 'comparador', casoId, inicial: Q.formularios.hipoteseDaComparacao(c)})}));
+      }
+    };
+    bd.addEventListener('click', () => mostrar('documentos')); bp.addEventListener('click', () => mostrar('processos'));
+    bd.setAttribute('aria-pressed', 'true'); bp.setAttribute('aria-pressed', 'false');
+    return [grupo, docs, proc];
+  }
   Q.registrarAba({id: 'comparador', rotulo: t('Comparador'), carregar: Q.quadro('quadros_evidencia', async (painel, casoId, vigente) => {
     const inventario = await api('inventario', {caso: casoId});
     if (!vigente()) return;
     const rodadas = (typeof cases !== 'undefined' ? cases : []).find(c => c.id === casoId)?.rodadas || [];
-    if (!rodadas.length) { Q.estado(painel, 'vazio', t('Esta apuração ainda não tem análise com documentos preservados para comparar.'), {titulo: t('Nada para comparar ainda'), acao: Q.perguntar()}); return; }
+    if (!rodadas.length) { const vazio = element('div'); Q.estado(vazio, 'vazio', t('Esta apuração ainda não tem análise com documentos preservados para comparar.'), {titulo: t('Nada para comparar ainda'), acao: Q.perguntar()}); painel.replaceChildren(...comModos(casoId, vazio)); return; }
     const form = element('form', undefined, 'comparar-form');
     const rodada = element('select'); rodada.id = 'comparar-rodada';
     rodada.replaceChildren(...rodadas.map(r => new Option(t('Análise {id}', {id: r.id}), r.id))); rodada.value = rodadas.at(-1).id;
@@ -92,7 +112,8 @@
       } catch (erro) { Q.estado(saida, 'erro', erro.message); }
       finally { enviar.disabled = false; }
     });
-    painel.replaceChildren(element('p', t('Compara o texto extraído de dois documentos da mesma análise. As diferenças aparecem com o contexto de cada lado; confira valores e tabelas no original.'), 'small'), form, saida);
+    const docs = element('div', undefined, 'comparar-docs'); docs.append(element('p', t('Compara o texto extraído de dois documentos da mesma análise. As diferenças aparecem com o contexto de cada lado; confira valores e tabelas no original.'), 'small'), form, saida);
+    painel.replaceChildren(...comModos(casoId, docs));
   })});
 
   // ---------- Verifiable tables: a source per cell, corrected cells, calculation panel ----------
@@ -242,9 +263,21 @@
     saida.replaceChildren(dado('h4', `${nomes[r.origem]} — ${r.tipo} — ${nomes[r.destino]}`),
       element('p', t('Situação: {s}', {s: t(SIT_RELACAO[r.situacao] || r.situacao)}), 'small'));
     if (r.descricao) saida.append(dado('p', r.descricao, 'small'));
+    // Suporte só da IA (componentes.md#suporte-so-da-ia): "✓ n evidências conferidas no original" fica para o que uma pessoa conferiu; o suporte que veio só da revisão
+    // da IA vai na pílula da P20a ("IA · n evidências sustentadas"), sem a cor nem o sinal da conferência humana. Havendo as duas coisas, as duas pílulas.
+    const evs = r.evidencias || [], conferidas = evs.filter(v => v.conferencia_humana?.estado === 'conferida_no_original').length;
+    const soIA = evs.filter(v => v.suporte_so_da_ia === true && v.suporte === 'sustentado').length;
+    if (conferidas || soIA) {
+      const selos = element('p', undefined, 'mapa-selos small');
+      if (conferidas) selos.append(element('span', `✓ ${t(conferidas === 1 ? '{n} evidência conferida no original' : '{n} evidências conferidas no original', {n: conferidas})}`, 'human-review-badge human-conferida_no_original'));
+      if (soIA) selos.append(element('span', t(soIA === 1 ? 'IA · {n} sustentada' : 'IA · {n} evidências sustentadas', {n: soIA}), 'support-badge ai-support'));
+      saida.append(selos);
+    }
     const lista = element('ul', undefined, 'quadro-lista');
-    for (const v of r.evidencias || []) lista.append(Q.evidencia(casoId, v));
+    for (const v of evs) lista.append(Q.evidencia(casoId, v));
     saida.append(lista);
+    const editar = r.sugestao ? null : Q.formularios?.botaoEditar('ligacao', 'mapa', casoId, r.id, `${nomes[r.origem]} — ${r.tipo}`, () => ({entidades: Object.entries(nomes).filter(([id]) => id[0] === 'P').map(([id, nome]) => ({id, nome}))}));
+    if (editar) saida.append(editar);
   }
   // Ícone do tipo de relação, pelo texto livre do tipo (sócio, parentesco, cargo, pagamento, contrato); o rótulo sempre leva o texto também.
   const semAcento = texto => String(texto || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -529,7 +562,9 @@
         item.append(ver); sub.append(item);
       }
       if (!ligacoes.length) sub.append(element('li', t('Sem ligações registradas.'), 'small'));
-      li.append(sub); lista.append(li);
+      li.append(sub);
+      const editar = Q.formularios?.botaoEditar('entidade', 'mapa', casoId, e.id, e.nome); if (editar) li.append(editar);
+      lista.append(li);
     }
     return lista;
   }
@@ -574,7 +609,8 @@
     saida.append(element('p', t('Escolha uma ligação para ver as evidências.'), 'small'));
     // Nomes das pontas de uma sugestão de ligação: o item confirmado ou a outra sugestão, nunca um id.
     for (const sug of S.abertas) if (sug.tipo === 'ligacao') for (const ponta of ['origem', 'destino']) if (sug.pontas?.[ponta]) sug.pontas[ponta].nome ||= nomes[sug.campos[ponta]] || '';
-    const ctx = Q.sugestoes ? Q.sugestoes.contexto(casoId, 'mapa') : null;
+    const reais = () => ({entidades: mapa.entidades.map(e => ({id: e.id, nome: e.nome}))});
+    const ctx = Q.sugestoes ? Q.sugestoes.contexto(casoId, 'mapa', Q.formularios ? {corrigir: sug => Q.formularios.abrirNoPainel({tipo: sug.tipo === 'ligacao' ? 'ligacao' : 'entidade', abaId: 'mapa', casoId, sugestao: sug, ...reais()})} : {}) : null;
     const abrirSugestao = (sug, origem) => { saida.replaceChildren(Q.sugestoes.painel(sug, ctx)); saida.querySelector('.sugestao-titulo')?.setAttribute('tabindex', '-1'); saida.querySelector('.sugestao-titulo')?.focus(); };
     const layout = element('div', undefined, 'mapa-layout');
     const visual = element('div', undefined, 'mapa-visual');
@@ -594,7 +630,9 @@
     const np = mapa.entidades.length, nr = mapa.relacoes.length;
     conta.append(`${t(np === 1 ? '{n} pessoa ou organização' : '{n} pessoas e organizações', {n: np})} · ${t(nr === 1 ? '{n} ligação' : '{n} ligações', {n: nr})}`);
     if (S.abertas.length) conta.append(element('span', Q.sugestoes.contagemTexto(S.abertas.length), 'quadro-conta-sugestoes'));
-    const corpo = [element('p', t(mapa.aviso || ''), 'small quadro-aviso'), conta, layout, saida];
+    const novos = ['entidade', 'ligacao'].map(tp => Q.formularios?.botaoNovo(tp, 'mapa', casoId, reais)).filter(Boolean);
+    const corpo = [...(novos.length ? [element('div', undefined, 'quadro-acoes')] : []), element('p', t(mapa.aviso || ''), 'small quadro-aviso'), conta, layout, saida];
+    if (novos.length) corpo[0].append(...novos);
     const descartadas = Q.sugestoes?.descartadas(S.descartadas, ctx);
     if (descartadas) corpo.push(descartadas);
     painel.replaceChildren(...corpo);
