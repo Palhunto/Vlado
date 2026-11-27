@@ -65,11 +65,31 @@
     dados.alteracoes.forEach((alt, i) => caixa.append(alteracao(alt, i, nomes)));
     return caixa;
   }
+  // Modo do Comparador (componentes.md#comparar-processos): "Documentos | Processos". Documentos é o comparador de sempre; Processos é a vista da comparação entre processos.
+  function comModos(casoId, docs) {
+    if (!Q.processos) return [docs];
+    const proc = element('div', undefined, 'comparar-procs'); proc.hidden = true;
+    const grupo = element('div', undefined, 'form-segmentado comparar-modos'); grupo.setAttribute('role', 'group'); grupo.setAttribute('aria-label', t('Comparar'));
+    const bd = botao(t('Documentos'), 'form-segmento'), bp = botao(t('Processos'), 'form-segmento'); grupo.append(bd, bp);
+    let carregado = false;
+    const mostrar = async modo => {
+      bd.setAttribute('aria-pressed', String(modo === 'documentos')); bp.setAttribute('aria-pressed', String(modo === 'processos'));
+      docs.hidden = modo !== 'documentos'; proc.hidden = modo !== 'processos';
+      if (modo === 'processos' && !carregado) {
+        carregado = true;
+        proc.replaceChildren(await Q.processos.montar(casoId, {aoComparar: () => mostrar('documentos'),
+          criarHipotese: c => Q.formularios?.abrirNoPainel({tipo: 'hipotese', abaId: 'comparador', casoId, inicial: Q.formularios.hipoteseDaComparacao(c)})}));
+      }
+    };
+    bd.addEventListener('click', () => mostrar('documentos')); bp.addEventListener('click', () => mostrar('processos'));
+    bd.setAttribute('aria-pressed', 'true'); bp.setAttribute('aria-pressed', 'false');
+    return [grupo, docs, proc];
+  }
   Q.registrarAba({id: 'comparador', rotulo: t('Comparador'), carregar: Q.quadro('quadros_evidencia', async (painel, casoId, vigente) => {
     const inventario = await api('inventario', {caso: casoId});
     if (!vigente()) return;
     const rodadas = (typeof cases !== 'undefined' ? cases : []).find(c => c.id === casoId)?.rodadas || [];
-    if (!rodadas.length) { Q.estado(painel, 'vazio', t('Esta apuração ainda não tem análise com documentos preservados para comparar.'), {titulo: t('Nada para comparar ainda'), acao: Q.perguntar()}); return; }
+    if (!rodadas.length) { const vazio = element('div'); Q.estado(vazio, 'vazio', t('Esta apuração ainda não tem análise com documentos preservados para comparar.'), {titulo: t('Nada para comparar ainda'), acao: Q.perguntar()}); Q.montarQuadro(painel, comModos(casoId, vazio)); return; }
     const form = element('form', undefined, 'comparar-form');
     const rodada = element('select'); rodada.id = 'comparar-rodada';
     rodada.replaceChildren(...rodadas.map(r => new Option(t('Análise {id}', {id: r.id}), r.id))); rodada.value = rodadas.at(-1).id;
@@ -92,7 +112,8 @@
       } catch (erro) { Q.estado(saida, 'erro', erro.message); }
       finally { enviar.disabled = false; }
     });
-    painel.replaceChildren(element('p', t('Compara o texto extraído de dois documentos da mesma análise. As diferenças aparecem com o contexto de cada lado; confira valores e tabelas no original.'), 'small'), form, saida);
+    const docs = element('div', undefined, 'comparar-docs'); docs.append(element('p', t('Compara o texto extraído de dois documentos da mesma análise. As diferenças aparecem com o contexto de cada lado; confira valores e tabelas no original.'), 'small'), form, saida);
+    Q.montarQuadro(painel, comModos(casoId, docs));
   })});
 
   // ---------- Verifiable tables: a source per cell, corrected cells, calculation panel ----------
@@ -111,7 +132,8 @@
     if (!expressao) return {expressao: String(calc.expressao), resultado: String(calc.resultado)};
     return {expressao, resultado: formatarNumero(calc.resultado)};
   }
-  function detalheCelula(saida, linha, coluna, celula) {
+  function detalheCelula(saida, linha, coluna, celula, ctx = {}) {
+    if (saida.dataset.editando) return;
     saida.replaceChildren(element('p', t('Célula {linha} · {coluna}', {linha, coluna: coluna.nome}), 'eyebrow'));
     saida.append(dado('p', celula.valor === null ? t('(vazia)') : `${valorCelula(coluna, celula.valor)}${unidadeColuna(coluna) ? ' ' + unidadeColuna(coluna) : ''}`, 'tabela-valor'),
       element('p', t('Estado: {estado}', {estado: t(ESTADO_CELULA[celula.estado] || celula.estado)}), 'small'));
@@ -126,8 +148,20 @@
         c.valor_anterior === null || c.valor_anterior === undefined ? element('span', t('(vazio)')) : dado('span', valorCelula(coluna, c.valor_anterior)), '.');
       saida.append(linha, dado('p', t('Justificativa: {j}', {j: c.justificativa}), 'small'));
     }
+    // Corrigir a célula: só para quem pode mudar a tabela; o painel fica travado enquanto o formulário está aberto.
+    if (ctx.tabela && Q.formularios?.podeAtualizar('tabelas')) {
+      const corrigir = botao(t('Corrigir esta célula'), 'tabela-corrigir'); corrigir.setAttribute('aria-label', `${t('Corrigir esta célula')}: ${linha} · ${coluna.nome}`);
+      corrigir.addEventListener('click', () => {
+        saida.dataset.editando = '1';
+        const fechar = () => { delete saida.dataset.editando; detalheCelula(saida, linha, coluna, celula, ctx); saida.querySelector('.tabela-corrigir')?.focus(); };
+        const form = Q.formularios.corrigirCelula({tabela: ctx.tabela, linha, coluna, celula, casoId: ctx.casoId, aoCancelar: fechar,
+          aoSalvar: async () => { delete saida.dataset.editando; Q.sugestoes?.anunciar(t('Correção salva. O valor anterior fica guardado.')); await ctx.recarregar?.(); }});
+        saida.replaceChildren(form); form.querySelector('.form-titulo')?.focus();
+      });
+      saida.append(corrigir);
+    }
   }
-  function grade(tabela, saida) {
+  function grade(tabela, saida, ctx = {}) {
     const wrap = element('div', undefined, 'tabela-rolagem');
     const tab = element('table', undefined, 'tabela-conferivel');
     const legenda = dado('caption', tabela.titulo); tab.append(legenda);
@@ -143,7 +177,7 @@
         td.tabIndex = (i === 0 && j === 0) ? 0 : -1; td.dataset.linha = linha.id; td.dataset.coluna = coluna.id;
         td.append(dado('span', cel.valor === null ? '—' : valorCelula(coluna, cel.valor)));
         if (cel.estado !== 'extraido') td.append(element('span', ` (${t(ESTADO_CELULA[cel.estado])})`, 'tabela-marca'));
-        const mostrar = () => detalheCelula(saida, linha.id, coluna, cel);
+        const mostrar = () => detalheCelula(saida, linha.id, coluna, cel, {...ctx, tabela});
         td.addEventListener('focus', mostrar); td.addEventListener('mouseenter', mostrar); td.addEventListener('click', () => td.focus());
         td.addEventListener('keydown', evento => {
           const passo = {ArrowRight: [0, 1], ArrowLeft: [0, -1], ArrowDown: [1, 0], ArrowUp: [-1, 0]}[evento.key];
@@ -194,17 +228,26 @@
   Q.registrarAba({id: 'tabelas', rotulo: t('Tabelas'), carregar: Q.quadro('tabelas_apuracao', async (painel, casoId, vigente) => {
     const lista = await api('tabelas-listar', {caso: casoId});
     if (!vigente()) return;
-    if (!lista.tabelas.length) { Q.estado(painel, 'vazio', t('Uma tabela conferível reúne números tirados dos documentos, cada um com a sua fonte.'), {titulo: t('Nenhuma tabela ainda'), acao: Q.perguntar()}); return; }
+    const nova = Q.formularios?.botaoNovo('tabela', 'tabelas', casoId);
+    if (!lista.tabelas.length) {
+      const primeira = Q.formularios?.botaoNovo('tabela', 'tabelas', casoId, undefined, 'Criar a primeira tabela');
+      const vazio = element('div'); Q.estado(vazio, 'vazio', t('Uma tabela conferível reúne números tirados dos documentos, cada um com a sua fonte.'), {titulo: t('Nenhuma tabela ainda'), acao: primeira ? [{no: primeira}, {...Q.perguntar(), secundaria: true}] : Q.perguntar()});
+      Q.montarQuadro(painel, [vazio]); return;
+    }
     const escolha = element('select'); escolha.id = 'tabelas-escolha';
     escolha.replaceChildren(...lista.tabelas.map(tb => { const o = new Option(`${tb.titulo} · ${t('{n} linhas', {n: tb.total_linhas})}`, tb.id); o.setAttribute('translate', 'no'); return o; }));
     const area = element('div', undefined, 'tabela-area');
+    // duas escolhas seguidas com o servidor lento: só a última resposta é pintada
+    let pedidoAbrir = 0;
     async function abrir() {
+      const pedido = ++pedidoAbrir;
       Q.estado(area, 'carregando', t('Carregando…'));
       try {
         const tabela = await api('tabelas-detalhe', {caso: casoId, id: escolha.value});
+        if (pedido !== pedidoAbrir || !vigente()) return;
         const fonte = element('aside', undefined, 'tabela-fonte'); fonte.setAttribute('aria-live', 'polite'); fonte.id = 'tabela-fonte';
         fonte.append(element('p', t('Leve o foco a uma célula para ver a fonte, o estado e a última correção.'), 'small'));
-        const {wrap, celulas} = grade(tabela, fonte);
+        const {wrap, celulas} = grade(tabela, fonte, {casoId, recarregar: abrir});
         const n = tabela.celulas_por_estado || {};
         const contar = (q, um, varios) => t(q === 1 ? um : varios, {n: q});
         area.replaceChildren(element('p', [contar(n.extraido || 0, '{n} com fonte', '{n} com fonte'), contar(n.corrigido_manual || 0, '{n} corrigida', '{n} corrigidas'),
@@ -212,10 +255,15 @@
           element('p', t('Use as setas para andar pelas células.'), 'small'), element('div', undefined, 'tabela-layout'));
         area.lastChild.append(wrap, fonte);
         area.append(painelCalculo(tabela, celulas), element('p', t(tabela.aviso || ''), 'small quadro-aviso'));
-      } catch (erro) { Q.estado(area, 'erro', erro.message); }
+      } catch (erro) { if (pedido === pedidoAbrir && vigente()) Q.estado(area, 'erro', erro.message); }
     }
-    escolha.addEventListener('change', abrir);
-    painel.replaceChildren(campo(t('Tabela'), escolha), area);
+    if (Q.tabelaEscolhida && lista.tabelas.some(tb => tb.id === Q.tabelaEscolhida)) escolha.value = Q.tabelaEscolhida;
+    Q.tabelaEscolhida = null;
+    const editar = element('div', undefined, 'quadro-acoes'); if (nova) editar.append(nova);
+    const editarAtual = () => { editar.querySelector('.quadro-editar')?.remove(); const b = Q.formularios?.botaoEditar('tabela', 'tabelas', casoId, escolha.value, escolha.selectedOptions?.[0]?.textContent || ''); if (b) editar.append(b); };
+    escolha.addEventListener('change', () => { editarAtual(); abrir(); });
+    editarAtual();
+    Q.montarQuadro(painel, [campo(t('Tabela'), escolha), ...(editar.children.length ? [editar] : []), area]);
     await abrir();
   })});
 
@@ -226,14 +274,38 @@
     grafia_parecida: 'Grafia parecida', identificador_igual: 'Identificador igual'};
   const SIT_HOM = {pendente: 'Conferência pendente', mesma_entidade: 'Decidido: mesma entidade (as duas continuam no mapa)', entidade_distinta: 'Decidido: entidades distintas',
     indeterminado: 'Indeterminado', decisoes_divergentes: 'Decisões divergentes'};
-  const traco = sit => sit === 'documentada' ? 'solido' : sit === 'inferida' ? 'tracejado' : 'pontilhado';
+  const traco = sit => sit === 'documentada' ? 'solido' : sit === 'inferida' ? 'tracejado' : sit === 'sugestao' ? 'sugestao' : 'pontilhado';
+  // Sugestões da IA abertas entram no desenho no lugar que teriam como item (P45): pessoa e organização viram nós; a ligação só se desenha quando as duas
+  // pontas existem (item confirmado ou outra sugestão aberta), senão fica na lista de sugestões. O rótulo começa por "IA ·".
+  function comSugestoes(mapa, abertas) {
+    const entidades = [...mapa.entidades], relacoes = [...mapa.relacoes], ids = new Set(entidades.map(e => e.id));
+    for (const sug of abertas) if (sug.tipo === 'pessoa' || sug.tipo === 'organizacao') { entidades.push({id: sug.id, nome: sug.campos.nome, tipo: sug.tipo, sugestao: sug}); ids.add(sug.id); }
+    for (const sug of abertas) if (sug.tipo === 'ligacao') {
+      const origem = sug.campos.origem || sug.pontas?.origem?.sugestao_id, destino = sug.campos.destino || sug.pontas?.destino?.sugestao_id;
+      if (ids.has(origem) && ids.has(destino) && origem !== destino) relacoes.push({id: sug.id, origem, destino, tipo: `IA · ${sug.campos.tipo}`, situacao: 'sugestao', sugestao: sug});
+    }
+    return {...mapa, entidades, relacoes};
+  }
   function detalheRelacao(casoId, saida, r, nomes) {
     saida.replaceChildren(dado('h4', `${nomes[r.origem]} — ${r.tipo} — ${nomes[r.destino]}`),
       element('p', t('Situação: {s}', {s: t(SIT_RELACAO[r.situacao] || r.situacao)}), 'small'));
     if (r.descricao) saida.append(dado('p', r.descricao, 'small'));
+    const origem = Q.sugestoes?.nota('mapa', r.id); if (origem) saida.append(origem);
+    // Suporte só da IA (componentes.md#suporte-so-da-ia): "✓ n evidências conferidas no original" fica para o que uma pessoa conferiu; o suporte que veio só da revisão
+    // da IA vai na pílula da P20a ("IA · n evidências sustentadas"), sem a cor nem o sinal da conferência humana. Havendo as duas coisas, as duas pílulas.
+    const evs = r.evidencias || [], conferidas = evs.filter(v => v.conferencia_humana?.estado === 'conferida_no_original').length;
+    const soIA = evs.filter(v => v.suporte_so_da_ia === true && v.suporte === 'sustentado').length;
+    if (conferidas || soIA) {
+      const selos = element('p', undefined, 'mapa-selos small');
+      if (conferidas) selos.append(element('span', `✓ ${t(conferidas === 1 ? '{n} evidência conferida no original' : '{n} evidências conferidas no original', {n: conferidas})}`, 'human-review-badge human-conferida_no_original'));
+      if (soIA) selos.append(element('span', t(soIA === 1 ? 'IA · {n} sustentada' : 'IA · {n} evidências sustentadas', {n: soIA}), 'support-badge ai-support'));
+      saida.append(selos);
+    }
     const lista = element('ul', undefined, 'quadro-lista');
-    for (const v of r.evidencias || []) lista.append(Q.evidencia(casoId, v));
+    for (const v of evs) lista.append(Q.evidencia(casoId, v));
     saida.append(lista);
+    const editar = r.sugestao ? null : Q.formularios?.botaoEditar('ligacao', 'mapa', casoId, r.id, `${nomes[r.origem]} — ${r.tipo}`, () => ({entidades: Object.entries(nomes).filter(([id]) => id[0] === 'P').map(([id, nome]) => ({id, nome}))}));
+    if (editar) saida.append(editar);
   }
   // Ícone do tipo de relação, pelo texto livre do tipo (sócio, parentesco, cargo, pagamento, contrato); o rótulo sempre leva o texto também.
   const semAcento = texto => String(texto || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -443,25 +515,26 @@
     return {L, A, pos: melhor.pos, pilulas: melhor.pilulas, custo: melhor.custo, centro};
   }
   Q.dispor = dispor;   // exposto para o teste: nenhuma pílula cobre nó nem outra ligação
-  function diagrama(casoId, mapa, nomes, saida) {
+  function diagrama(casoId, mapa, nomes, saida, abrirSugestao) {
     const {L, A, pos, pilulas} = Q.dispor(mapa), LARG = NO_L, ALT = NO_A;
     const desenho = svg('svg', {viewBox: `0 0 ${L} ${A}`, class: 'mapa-svg', role: 'group', 'aria-label': t('Diagrama do mapa. A lista ao lado traz as mesmas ligações.')});
     const rotulos = [];
     for (const r of mapa.relacoes) {
       const [x1, y1] = pos[r.origem] || [cx, cy], [x2, y2] = pos[r.destino] || [cx, cy];
-      const g = svg('g', {class: `mapa-ligacao traco-${traco(r.situacao)}`, tabindex: '0', role: 'button', 'aria-pressed': 'false',
-        'aria-label': `${nomes[r.origem]} — ${r.tipo} — ${nomes[r.destino]}: ${t(SIT_RELACAO[r.situacao] || r.situacao)}`});
+      const g = svg('g', {class: `mapa-ligacao traco-${traco(r.situacao)}${r.sugestao ? ' is-sugestao' : ''}`, tabindex: '0', role: 'button', 'aria-pressed': 'false',
+        'aria-label': r.sugestao ? Q.sugestoes.rotuloAcessivel(r.sugestao) : `${nomes[r.origem]} — ${r.tipo} — ${nomes[r.destino]}: ${t(SIT_RELACAO[r.situacao] || r.situacao)}`});
       g.dataset.relacao = r.id;
       g.append(svg('line', {x1, y1, x2, y2, class: 'mapa-linha'}), svg('line', {x1, y1, x2, y2, class: 'mapa-alvo'}));
       // Rótulo da ligação: pílula com o ícone do tipo e o texto do tipo, no meio da linha; segue a ligação (ativa, foco).
       const texto = cortar(r.tipo, 22), {x: mx, y: my, largura} = pilulas[r.id];
-      const pilula = svg('g', {class: `mapa-pilula traco-${traco(r.situacao)}`, transform: `translate(${mx - largura / 2} ${my - 14})`, 'aria-hidden': 'true'});
+      const pilula = svg('g', {class: `mapa-pilula traco-${traco(r.situacao)}${r.sugestao ? ' is-sugestao' : ''}`, transform: `translate(${mx - largura / 2} ${my - 14})`, 'aria-hidden': 'true'});
       pilula.append(svg('rect', {width: largura, height: 28, rx: 14, class: 'mapa-pilula-fundo'}), icone(iconeRelacao(r.tipo), 17, 14, 14, 'mapa-pilula-icone'));
       const rotuloTexto = svg('text', {x: 30, y: 19, class: 'mapa-pilula-texto', translate: 'no'}); rotuloTexto.textContent = texto; pilula.append(rotuloTexto);
       const abrir = () => {
         for (const outro of desenho.querySelectorAll('.mapa-ligacao')) { outro.classList.remove('is-ativa'); outro.setAttribute('aria-pressed', 'false'); }
         for (const outra of desenho.querySelectorAll('.mapa-pilula')) outra.classList.remove('is-ativa');
-        g.classList.add('is-ativa'); pilula.classList.add('is-ativa'); g.setAttribute('aria-pressed', 'true'); detalheRelacao(casoId, saida, r, nomes);
+        g.classList.add('is-ativa'); pilula.classList.add('is-ativa'); g.setAttribute('aria-pressed', 'true');
+        if (r.sugestao) abrirSugestao(r.sugestao, g); else detalheRelacao(casoId, saida, r, nomes);
       };
       pilula.addEventListener('click', abrir);
       // Focus only highlights the line (CSS); the live detail panel changes on Enter, Space or click.
@@ -471,14 +544,28 @@
     }
     // Nós por cima das linhas e abaixo dos rótulos: caixa em HTML (o texto quebra e corta com reticências), ícone do tipo na forma do tipo.
     for (const e of mapa.entidades) {
-      const [x, y] = pos[e.id], g = svg('g', {class: `mapa-no ${e.tipo}`});
+      const [x, y] = pos[e.id], g = svg('g', {class: `mapa-no ${e.tipo}${e.sugestao ? ' is-sugestao' : ''}`});
+      g.dataset.entidade = e.id;
       const fo = svg('foreignObject', {x: x - LARG / 2, y: y - ALT / 2, width: LARG, height: ALT});
       const cartao = element('div', undefined, 'mapa-cartao');
       const forma = element('span', undefined, 'mapa-ico'); forma.setAttribute('aria-hidden', 'true'); forma.append(Q.icone(iconeNo(e), 'mapa-ico-svg'));
       const textos = element('span', undefined, 'mapa-cartao-texto');
-      textos.append(dado('b', e.nome, 'mapa-nome'), element('span', e.tipo === 'organizacao' ? t('Organização') : t('Pessoa'), 'mapa-sub'));
+      // Sugestão: o selo "IA · sugestão" vai no lugar de "Pessoa · 3 documentos"; o tipo e a origem ficam no nome acessível e no painel.
+      const sub = e.sugestao ? Q.seloSugestao() : element('span', e.tipo === 'organizacao' ? t('Organização') : t('Pessoa'), 'mapa-sub');
+      if (e.sugestao) sub.setAttribute('aria-hidden', 'true');
+      textos.append(dado('b', e.nome, 'mapa-nome'), sub);
       cartao.append(forma, textos); fo.append(cartao); g.append(fo, svg('title'));
-      g.lastChild.textContent = e.nome;
+      g.lastChild.textContent = e.sugestao ? Q.sugestoes.rotuloAcessivel(e.sugestao) : e.nome;
+      if (e.sugestao) {
+        g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button'); g.setAttribute('aria-pressed', 'false'); g.setAttribute('aria-label', Q.sugestoes.rotuloAcessivel(e.sugestao));
+        const abrir = () => {
+          for (const o of desenho.querySelectorAll('.mapa-ligacao,.mapa-no.is-sugestao')) { o.classList.remove('is-ativa'); if (o.hasAttribute('aria-pressed')) o.setAttribute('aria-pressed', 'false'); }
+          for (const o of desenho.querySelectorAll('.mapa-pilula')) o.classList.remove('is-ativa');
+          g.classList.add('is-ativa'); g.setAttribute('aria-pressed', 'true'); abrirSugestao(e.sugestao, g);
+        };
+        g.addEventListener('click', abrir);
+        g.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); abrir(); } });
+      }
       desenho.append(g);
     }
     // Os rótulos das ligações vão por cima dos nós (as linhas ficam por baixo, saindo do centro de cada um).
@@ -492,6 +579,7 @@
       const li = element('li', undefined, `mapa-entidade ${e.tipo}`);
       li.append(dado('h4', e.nome), element('p', `${e.tipo === 'organizacao' ? t('Organização') : t('Pessoa')} · ${t({com_evidencia: 'Com evidência', evidencia_indisponivel: 'Evidência indisponível', sem_evidencia: 'Sem evidência'}[e.situacao] || e.situacao)}`, 'small'));
       if (e.identificadores?.length) li.append(dado('p', e.identificadores.map(i => `${i.tipo.toUpperCase()} ${i.valor_exibicao}`).join(' · '), 'small'));
+      const origem = e.sugestao ? null : Q.sugestoes?.nota('mapa', e.id); if (origem) li.append(origem);
       const ligacoes = mapa.relacoes.filter(r => r.origem === e.id || r.destino === e.id);
       const sub = element('ul', undefined, 'mapa-ligacoes');
       for (const r of ligacoes) {
@@ -503,7 +591,9 @@
         item.append(ver); sub.append(item);
       }
       if (!ligacoes.length) sub.append(element('li', t('Sem ligações registradas.'), 'small'));
-      li.append(sub); lista.append(li);
+      li.append(sub);
+      const editar = Q.formularios?.botaoEditar('entidade', 'mapa', casoId, e.id, e.nome); if (editar) li.append(editar);
+      lista.append(li);
     }
     return lista;
   }
@@ -533,27 +623,52 @@
     l.setAttribute('aria-label', t('Legenda'));
     const itens = [['pessoa', 'Pessoa'], ['organizacao', 'Organização'], ['traco-solido', 'Ligação com documento'], ['traco-tracejado', 'A confirmar, sem documento']];
     if (mapa.relacoes.some(r => traco(r.situacao) === 'pontilhado')) itens.push(['traco-pontilhado', 'Suporte parcial ou não revisado']);
+    if (mapa.entidades.some(e => e.sugestao) || mapa.relacoes.some(r => r.sugestao)) itens.push(['sugestao', 'Sugestão da IA']);
     for (const [classe, texto] of itens) l.append(element('li', t(texto), `legenda-${classe}`));
     return l;
   }
   Q.registrarAba({id: 'mapa', rotulo: t('Mapa de relações'), carregar: Q.quadro('quadros_evidencia', async (painel, casoId, vigente) => {
     const mapa = await api('mapa-ver', {caso: casoId});
+    const S = Q.sugestoes ? await Q.sugestoes.listar(casoId, 'mapa') : {abertas: [], descartadas: []};
     if (!vigente()) return;
-    if (!mapa.entidades.length) { Q.estado(painel, 'vazio', t('O mapa mostra as pessoas e organizações que os documentos citam e como elas se ligam.'), {titulo: t('Nenhuma ligação ainda'), acao: Q.perguntar()}); return; }
-    const nomes = Object.fromEntries(mapa.entidades.map(e => [e.id, e.nome]));
+    if (!mapa.entidades.length && !S.abertas.length && !S.descartadas.length) {
+      // mapa vazio: criar a primeira entidade (uma ligação precisa de duas) e fazer uma pergunta; o formulário abre no painel do quadro
+      const primeira = Q.formularios?.botaoNovo('entidade', 'mapa', casoId, undefined, 'Criar a primeira entidade');
+      const vazio = element('div'); Q.estado(vazio, 'vazio', t('O mapa mostra as pessoas e organizações que os documentos citam e como elas se ligam.'), {titulo: t('Nenhuma ligação ainda'), acao: primeira ? [{no: primeira}, {...Q.perguntar(), secundaria: true}] : Q.perguntar()});
+      Q.montarQuadro(painel, [vazio]); return;
+    }
+    const visual_ = comSugestoes(mapa, S.abertas);
+    const nomes = Object.fromEntries(visual_.entidades.map(e => [e.id, e.nome]));
     const saida = element('section', undefined, 'mapa-detalhe'); saida.tabIndex = -1; saida.setAttribute('aria-live', 'polite');
     saida.append(element('p', t('Escolha uma ligação para ver as evidências.'), 'small'));
+    // Nomes das pontas de uma sugestão de ligação: o item confirmado ou a outra sugestão, nunca um id.
+    for (const sug of S.abertas) if (sug.tipo === 'ligacao') for (const ponta of ['origem', 'destino']) if (sug.pontas?.[ponta]) sug.pontas[ponta].nome ||= nomes[sug.campos[ponta]] || '';
+    const reais = () => ({entidades: mapa.entidades.map(e => ({id: e.id, nome: e.nome}))});
+    const ctx = Q.sugestoes ? Q.sugestoes.contexto(casoId, 'mapa', Q.formularios ? {corrigir: sug => Q.formularios.abrirNoPainel({tipo: sug.tipo === 'ligacao' ? 'ligacao' : 'entidade', abaId: 'mapa', casoId, sugestao: sug, ...reais()})} : {}) : null;
+    const abrirSugestao = (sug, origem) => painel.__lateral.abrir([Q.sugestoes.painel(sug, ctx)], {origem});
     const layout = element('div', undefined, 'mapa-layout');
     const visual = element('div', undefined, 'mapa-visual');
     // O desenho só existe de 1024 px para cima (abaixo, o mapa se lê como a lista): não se calcula a disposição com ele oculto, e ele se monta
     // se a janela passar a ser larga.
     const consulta = window.matchMedia?.('(min-width:1024px)');
-    const desenhar = () => { if (visual.dataset.pronto) return; visual.dataset.pronto = 'sim'; visual.append(diagrama(casoId, mapa, nomes, saida), legenda(mapa)); };
+    const desenhar = () => { if (visual.dataset.pronto) return; visual.dataset.pronto = 'sim'; visual.append(diagrama(casoId, visual_, nomes, saida, abrirSugestao), legenda(visual_)); };
     if (!consulta || consulta.matches) desenhar();
     else consulta.addEventListener?.('change', evento => { if (evento.matches) desenhar(); });
     const lado = element('div', undefined, 'mapa-lateral');
-    lado.append(element('h4', t('Lista de pessoas e organizações')), listaMapa(casoId, mapa, nomes, saida), homonimos(mapa));
+    lado.append(element('h4', t('Lista de pessoas e organizações')), listaMapa(casoId, mapa, nomes, saida));
+    const secao = Q.sugestoes?.secao(S.abertas, abrirSugestao, 'mapa-sugestoes');
+    if (secao) lado.append(secao);
+    lado.append(homonimos(mapa));
     layout.append(visual, lado);
-    painel.replaceChildren(element('p', t(mapa.aviso || ''), 'small quadro-aviso'), layout, saida);
+    const conta = element('p', undefined, 'small quadro-conta');
+    const np = mapa.entidades.length, nr = mapa.relacoes.length;
+    conta.append(`${t(np === 1 ? '{n} pessoa ou organização' : '{n} pessoas e organizações', {n: np})} · ${t(nr === 1 ? '{n} ligação' : '{n} ligações', {n: nr})}`);
+    if (S.abertas.length) conta.append(element('span', Q.sugestoes.contagemTexto(S.abertas.length), 'quadro-conta-sugestoes'));
+    const novos = ['entidade', 'ligacao'].map(tp => Q.formularios?.botaoNovo(tp, 'mapa', casoId, reais)).filter(Boolean);
+    const corpo = [...(novos.length ? [element('div', undefined, 'quadro-acoes')] : []), element('p', t(mapa.aviso || ''), 'small quadro-aviso'), conta, layout, saida];
+    if (novos.length) corpo[0].append(...novos);
+    const descartadas = Q.sugestoes?.descartadas(S.descartadas, ctx);
+    if (descartadas) corpo.push(descartadas);
+    Q.montarQuadro(painel, corpo);
   })});
 })();

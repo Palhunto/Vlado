@@ -441,9 +441,9 @@ Resolvedor `caso` em todas.
 
 | Operação | Tipo | D | E | R | L | C |
 |---|---|---|---|---|---|---|
-| `hipoteses-listar`, `hipoteses-detalhe`, `hipoteses-quadro`, `linha-tempo-listar`, `linha-tempo-detalhe`, `comparar-evidencias`, `comparar-documentos`, `mapa-ver`, `mapa-homonimos`, `tabelas-listar`, `tabelas-detalhe`, `tabelas-historico-celula`, `tabelas-calcular` | L | sim | sim | sim | sim | — |
+| `hipoteses-listar`, `hipoteses-detalhe`, `hipoteses-quadro`, `linha-tempo-listar`, `linha-tempo-detalhe`, `comparar-evidencias`, `comparar-documentos`, `mapa-ver`, `mapa-homonimos`, `tabelas-listar`, `tabelas-detalhe`, `tabelas-historico-celula`, `tabelas-calcular`, `evidencia-buscar`, `sugestoes-listar`, `comparar-processos` | L | sim | sim | sim | sim | — |
 | `tabelas-exportar` | B | sim | sim | sim | sim | — |
-| `hipoteses-criar`, `hipoteses-atualizar`, `linha-tempo-criar`, `linha-tempo-atualizar`, `mapa-entidade-criar`, `mapa-entidade-atualizar`, `mapa-relacao-criar`, `mapa-relacao-atualizar`, `tabelas-criar`, `tabelas-atualizar`, `tabelas-corrigir` | E | sim | sim | sim | — | — |
+| `hipoteses-criar`, `hipoteses-atualizar`, `linha-tempo-criar`, `linha-tempo-atualizar`, `mapa-entidade-criar`, `mapa-entidade-atualizar`, `mapa-relacao-criar`, `mapa-relacao-atualizar`, `tabelas-criar`, `tabelas-atualizar`, `tabelas-corrigir`, `sugestoes-confirmar`, `sugestoes-corrigir`, `sugestoes-descartar`, `sugestoes-restaurar`, `mapa-entidade-detalhe` | E | sim | sim | sim | — | — |
 
 ### 5.12 Texto da matéria e entrevistas
 
