@@ -11,15 +11,18 @@ ERRO_TEXTO = '[ERRO DE EXTRACAO NESTA PAGINA]'
 # treated as lacking usable native text and become OCR candidates.
 MINIMO_ALFANUMERICOS_NATIVO = 10
 # L7: a scanned page often carries a native footer (electronic signature, verification code, page number)
-# with more than the minimum above, and its body, an image, was never read. A page whose images cover at
-# least COBERTURA_MINIMA_IMAGEM of its area, whose native text is short and lies ONLY in the header and
-# footer bands (the top and bottom FAIXA_CABECALHO_RODAPE of the page) is also a candidate. Native text in
-# the body keeps the page native (B3 of the review): a letter on a full-page letterhead image has its
-# body as native text, and the OCR would replace it with a reading that can err.
+# with more than the minimum above, and its body, an image, was never read. A page that draws an image,
+# whose native text is short and lies ONLY in the header and footer bands (the top and bottom
+# FAIXA_CABECALHO_RODAPE of the page) is also a candidate. Native text in the body keeps the page native
+# (B3 of the review): a letter on a full-page letterhead image has its body as native text, and the OCR
+# would replace it with a reading that can err.
+# R11 (P51): how much of the page the image covers no longer counts. The 60% minimum was a stand-in for "the
+# body is an image", which the body-word test above now says directly; it let through 4 of the 36 footer-only
+# pages of the TCE-MT corpus, whose pieces paste the image between wide margins (40% to 55% of the page, and
+# 25% in a calculation table), and any fixed value would just move the cut to the next layout.
 # Even then the OCR reading replaces the native one only when it brings at least GANHO_MINIMO_OCR more
 # alphanumeric characters (about a sentence), so a page with a large photo and a footer caption keeps its text.
 MAXIMO_ALFANUMERICOS_RODAPE = 400
-COBERTURA_MINIMA_IMAGEM = 0.6
 FAIXA_CABECALHO_RODAPE = 0.15
 GANHO_MINIMO_OCR = 50
 
@@ -118,8 +121,8 @@ def _rodape(result: dict) -> str:
     paginas = result.get('paginas_imagem_com_rodape')
     if not paginas:
         return ''
-    return (' e nas paginas ' + ', '.join(map(str, paginas)) + ', cobertas por imagem com so um rodape de texto '
-            'nativo')
+    return (' e nas paginas ' + ', '.join(map(str, paginas)) + ', com imagem e texto nativo so no cabecalho e no '
+            'rodape')
 
 
 def _metodo(pypdf_version: str, result: dict) -> str:
@@ -197,7 +200,7 @@ def extrair_pdf(source: Path, identifier: str, target: Path, *, ocr_ativo: bool 
     curtas = [n for n in range(1, count + 1) if n not in candidates and n not in native_errors
               and _alfanumericos(native[n]) <= MAXIMO_ALFANUMERICOS_RODAPE]
     analise = imagem_e_corpo(source, curtas) if ocr_ativo else {}
-    rodape = sorted(n for n, (fracao, corpo) in analise.items() if fracao >= COBERTURA_MINIMA_IMAGEM and not corpo)
+    rodape = sorted(n for n, (fracao, corpo) in analise.items() if fracao > 0 and not corpo)
     if rodape:
         result['paginas_imagem_com_rodape'] = rodape
         candidates = sorted(candidates + rodape)
