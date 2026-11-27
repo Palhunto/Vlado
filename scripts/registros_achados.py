@@ -2,14 +2,16 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import copy
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import re
 import sys
 import uuid
 
-from comum import dentro, escrever_json, ler_json, sha256, pasta_preparacao
+from comum import dentro, em_pedido, escrever_json, ler_json, memo, sha256, pasta_preparacao
 from indice_sqlite import (_entradas, _adaptar, caminho_rodada, ler_passagem,
                            ID_GERACAO)
 
@@ -116,6 +118,24 @@ def recibo(run, operation, **values):
     return result
 
 
+# Pages of a PDF by the SHA-256 of its content, already checked against the evidence (_arquivo) before it is used:
+# the same bytes always have the same page count, so inside a server request (comum.pedido) it is kept for the
+# process (pypdf reopened a 40 MB original for each visual evidence). Outside a request, pypdf reads it every time.
+_PAGINAS_PDF: dict = {}
+
+
+def _paginas_pdf(path, digest):
+    if not em_pedido():
+        from pypdf import PdfReader
+        return len(PdfReader(path).pages)
+    if digest not in _PAGINAS_PDF:
+        from pypdf import PdfReader
+        if len(_PAGINAS_PDF) >= 2000:
+            _PAGINAS_PDF.clear()
+        _PAGINAS_PDF[digest] = len(PdfReader(path).pages)
+    return _PAGINAS_PDF[digest]
+
+
 def _arquivo(run, relative, digest):
     path = dentro(run, relative)
     if not path.is_file() or sha256(path) != digest:
@@ -131,10 +151,24 @@ def _fontes(run, caso, rodada):
 def conferir_evidencia(root, caso, rodada, evidence, sources=None, *, registrar=False):
     """Technical check of one recorded evidence against the frozen round. ``registrar=True`` only when a person asks
     for the context (``indice_achados.evidencia``: 'Ver contexto' in Conferir): that reading goes to the raw query
-    record. Loads, boards and publication re-check without writing (T1, SEG-06)."""
-    """Validate frozen source identity and observable positions, including non-FTS sources."""
+    record. Loads, boards and publication re-check without writing (T1, SEG-06). Inside a server request
+    (``comum.pedido``) the same evidence against the same sources is checked once: the revisions of a round repeat
+    their evidences, and one evidencia-buscar re-checked each of them up to three times."""
     run = caminho_rodada(root, caso, rodada)
     sources = _fontes(run, caso, rodada) if sources is None else sources
+    checked = None if registrar else memo('evidencias_conferidas')
+    if checked is None:
+        return _conferir_evidencia(root, caso, rodada, run, evidence, sources, registrar)
+    key = (os.fspath(run), caso, rodada, json.dumps(evidence, sort_keys=True, ensure_ascii=False),
+           json.dumps([sources.get(evidence.get('original')), sources.get(evidence.get('fonte_textual'))],
+                      sort_keys=True, ensure_ascii=False))
+    if key not in checked:
+        checked[key] = _conferir_evidencia(root, caso, rodada, run, evidence, sources, registrar)
+    return copy.deepcopy(checked[key])
+
+
+def _conferir_evidencia(root, caso, rodada, run, evidence, sources, registrar):
+    """Validate frozen source identity and observable positions, including non-FTS sources."""
     original = sources.get(evidence['original'])
     if (not original or original['tipo'] != 'original'
             or original['documento_id'] != evidence['documento_id']
@@ -147,8 +181,7 @@ def conferir_evidencia(root, caso, rodada, evidence, sources=None, *, registrar=
             raise ValueError('Evidência visual requer localizador visual e não recebe referência textual.')
         if original_path.suffix.lower() == '.pdf':
             try:
-                from pypdf import PdfReader
-                count = len(PdfReader(original_path).pages)
+                count = _paginas_pdf(original_path, evidence['original_sha256'])
             except Exception as exc:
                 raise ValueError('Página visual não validável: PDF ilegível/protegido ou pypdf indisponível.') from exc
             if type(loc['pagina_pdf']) is not int or not 1 <= loc['pagina_pdf'] <= count:

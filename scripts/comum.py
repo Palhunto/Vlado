@@ -1,12 +1,15 @@
 """File integrity helpers. No model or network calls."""
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import json
+import os
 from pathlib import Path
 from contextlib import contextmanager
 import shutil
 import stat
+import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,12 +24,79 @@ PARTES = (
 )
 
 
-def sha256(path: Path) -> str:
+# One server request (the boards and the evidence selector; ``pedido``). With a real case, a single
+# evidencia-buscar re-checked the frozen inputs of the round once per evidence: 10,872 checks, 13,176 hashes and
+# 65,892 path resolutions, 86 s on the Sinfra case (Maestro, 27/11). Inside a request: ``dentro`` resolves each
+# (root, relative) once, the modules keep their checks in ``memo`` (the round's inputs, the index, each evidence),
+# and ``sha256`` reuses a hash while the file keeps its identity (path, size, mtime_ns, ctime_ns, inode). A file
+# changed afterwards changes its identity and is hashed again, so it is refused as before. Two limits, accepted:
+# a change inside the same request is seen by the next one; and a same-size change whose mtime is put back by
+# hand is seen on Linux (ctime changes) but not on Windows (ctime is the creation time) until the process restarts.
+# Outside a request (tests, command line, the extraction worker) nothing is remembered.
+_PEDIDO = contextvars.ContextVar('vlado_pedido', default=None)
+_HASHES: dict = {}
+MAXIMO_HASHES = 20000
+# The racy-git rule: a file modified in the last FOLGA_HASH_NS could change again within the same mtime tick
+# without changing its identity, so its hash is not kept.
+FOLGA_HASH_NS = 2_000_000_000
+
+
+@contextmanager
+def pedido():
+    """The scope of one server request (see above). A nested scope uses the outer one."""
+    if _PEDIDO.get() is not None:
+        yield
+        return
+    token = _PEDIDO.set({})
+    try:
+        yield
+    finally:
+        _PEDIDO.reset(token)
+
+
+def em_pedido() -> bool:
+    return _PEDIDO.get() is not None
+
+
+def memo(nome: str):
+    """The request's dict for ``nome`` (a module's per-request checks), or None outside a request."""
+    scope = _PEDIDO.get()
+    return None if scope is None else scope.setdefault(nome, {})
+
+
+def _hash_do_arquivo(path) -> str:
     digest = hashlib.sha256()
-    with path.open('rb') as stream:
+    with open(path, 'rb') as stream:
         for block in iter(lambda: stream.read(1024 * 1024), b''):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _identidade(info):
+    return (info.st_size, info.st_mtime_ns, info.st_ctime_ns, info.st_ino, info.st_dev)
+
+
+def sha256(path: Path) -> str:
+    if _PEDIDO.get() is None:
+        return _hash_do_arquivo(path)
+    key = os.fspath(path)
+    try:
+        before = _identidade(os.stat(key))
+    except OSError:
+        return _hash_do_arquivo(path)  # raises as before
+    known = _HASHES.get(key)
+    if known is not None and known[0] == before:
+        return known[1]
+    digest = _hash_do_arquivo(path)
+    try:
+        after = os.stat(key)
+    except OSError:
+        return digest
+    if _identidade(after) == before and time.time_ns() - after.st_mtime_ns > FOLGA_HASH_NS:
+        if len(_HASHES) >= MAXIMO_HASHES:
+            _HASHES.clear()
+        _HASHES[key] = (before, digest)
+    return digest
 
 
 def dentro(root: Path, relative: str) -> Path:
@@ -34,10 +104,20 @@ def dentro(root: Path, relative: str) -> Path:
     rel = Path(relative)
     if not relative or rel.is_absolute() or rel.drive or '..' in rel.parts:
         raise ValueError(f'Caminho nao relativo ao projeto: {relative}')
-    resolved_root = root.resolve()
+    resolved = memo('dentro')
+    key = (os.fspath(root), os.fspath(relative))
+    if resolved is not None and key in resolved:
+        return resolved[key]
+    resolved_root = resolved.get(os.fspath(root)) if resolved is not None else None
+    if resolved_root is None:
+        resolved_root = root.resolve()
+        if resolved is not None:
+            resolved[os.fspath(root)] = resolved_root
     target = (resolved_root / rel).resolve()
     if not target.is_relative_to(resolved_root):
         raise ValueError(f'Caminho fora do projeto: {relative}')
+    if resolved is not None:
+        resolved[key] = target
     return target
 
 

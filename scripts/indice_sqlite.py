@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import closing
+import copy
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -13,7 +14,7 @@ import uuid
 
 import unicodedata
 
-from comum import dentro, escrever_json, ler_json, sha256, pasta_preparacao
+from comum import dentro, escrever_json, ler_json, memo, sha256, pasta_preparacao
 from comum import documentos_e_capturas  # no network code: keeps the portable banco.py copy working
 
 # Copies of the working-copy markers, so banco.py + indice_sqlite.py + comum.py stay a
@@ -111,8 +112,20 @@ def _caminho_caso(relative, caso):
 
 
 def _entradas(run: Path, caso: str, rodada: str):
-    """Use frozen authorization only; never consult a live manifest or inactive case."""
+    """Use frozen authorization only; never consult a live manifest or inactive case. Checked once per server
+    request (``comum.pedido``); a failure is never kept."""
     _validar_ids(caso, rodada)
+    checked = memo('indice_entradas')
+    key = (os.fspath(run), caso, rodada)
+    if checked is not None and key in checked:
+        return copy.deepcopy(checked[key])
+    result = _entradas_conferidas(run, caso, rodada)
+    if checked is not None:
+        checked[key] = copy.deepcopy(result)
+    return result
+
+
+def _entradas_conferidas(run: Path, caso: str, rodada: str):
     record = ler_json(dentro(run, 'registro.json'))
     if record.get('caso_id') != caso or record.get('rodada') != rodada:
         raise ValueError('Caso/rodada divergem do registro congelado.')
@@ -405,17 +418,17 @@ def construir_indice(root: Path, caso: str, rodada: str, geracao='v1') -> dict:
 
 def _abrir(run: Path, caso, rodada, geracao):
     _validar_ids(caso, rodada, geracao)
-    _, expected = _entradas(run, caso, rodada)
-    folder = dentro(run, f'indice/{geracao}')
-    db = dentro(folder, 'apuracao.sqlite')
-    if not db.is_file() or not (folder / 'manifesto.json').is_file():
-        raise ValueError('Indice inexistente; construir explicitamente a geracao solicitada.')
-    manifest = ler_json(dentro(folder, 'manifesto.json'))
-    if (manifest.get('esquema') != ESQUEMA or manifest.get('geracao') != geracao
-            or manifest.get('descriptor') != expected or manifest.get('indice_id') != _identidade(expected)):
-        raise ValueError('Indice pertence a outro caso/rodada ou a outras entradas/regras.')
-    if sha256(db) != manifest.get('banco_sha256'):
-        raise ValueError('Hash do banco divergente; preservar o artefato e investigar.')
+    checked = memo('indice_aberto')  # the file checks once per server request (comum.pedido)
+    key = (os.fspath(run), caso, rodada, geracao)
+    if checked is not None and key in checked:
+        # Read-only from here on (_base copies scalars; cobertura only reads and returns it): a shallow copy keeps a
+        # caller's top-level change out of the request's record, without copying the whole coverage each time.
+        db, manifest, expected = checked[key]
+        manifest = dict(manifest)
+    else:
+        db, manifest, expected = _conferir_indice(run, caso, rodada, geracao)
+        if checked is not None:
+            checked[key] = (db, copy.deepcopy(manifest), expected)
     con = sqlite3.connect(db.resolve().as_uri() + '?mode=ro', uri=True)
     try:
         descriptor = con.execute('SELECT valor FROM metadados WHERE chave=?', ('descriptor',)).fetchone()
@@ -427,6 +440,21 @@ def _abrir(run: Path, caso, rodada, geracao):
         con.close()
         raise
     return con, manifest
+
+
+def _conferir_indice(run: Path, caso, rodada, geracao):
+    _, expected = _entradas(run, caso, rodada)
+    folder = dentro(run, f'indice/{geracao}')
+    db = dentro(folder, 'apuracao.sqlite')
+    if not db.is_file() or not (folder / 'manifesto.json').is_file():
+        raise ValueError('Indice inexistente; construir explicitamente a geracao solicitada.')
+    manifest = ler_json(dentro(folder, 'manifesto.json'))
+    if (manifest.get('esquema') != ESQUEMA or manifest.get('geracao') != geracao
+            or manifest.get('descriptor') != expected or manifest.get('indice_id') != _identidade(expected)):
+        raise ValueError('Indice pertence a outro caso/rodada ou a outras entradas/regras.')
+    if sha256(db) != manifest.get('banco_sha256'):
+        raise ValueError('Hash do banco divergente; preservar o artefato e investigar.')
+    return db, manifest, expected
 
 
 def _cobertura(con):
